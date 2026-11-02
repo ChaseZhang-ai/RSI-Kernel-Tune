@@ -1,0 +1,15 @@
+SWEEP kernel_file=flash_attn_dsl/flash_bwd.py criterion=min same-job ratio above floor variants: base tile64 tile128
+SWEEP ROUND 0 base pass=True device=3.4052 vs_ref_device=1.02
+SWEEP ROUND 0 tile64 pass=True device=3.11 vs_ref_device=1.12
+SWEEP ROUND 0 tile128 pass=True device=3.35 vs_ref_device=1.05
+SWEEP ROUND 1 base pass=True device=3.39 vs_ref_device=1.01
+SWEEP ROUND 1 tile64 pass=True device=3.12 vs_ref_device=1.11
+SWEEP ROUND 1 tile128 pass=True device=3.36 vs_ref_device=1.06
+SWEEP ROUND 2 base pass=True device=3.41 vs_ref_device=1.02
+SWEEP ROUND 2 tile64 pass=True device=3.10 vs_ref_device=1.12
+SWEEP ROUND 2 tile128 pass=True device=3.34 vs_ref_device=1.05
+SWEEP name=base ratio=1.02 floor=0.84% delta=n/a ms=3.4017 ok=pass
+SWEEP name=tile64 ratio=1.12 floor=0.84% delta=+9.49% ms=3.11 ok=pass
+SWEEP name=tile128 ratio=1.05 floor=0.84% delta=+2.94% ms=3.35 ok=pass
+SWEEP-OK variants=2 rounds=3 base_ms=3.4017
+SWEEP-WINNER name=tile64

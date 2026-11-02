@@ -1,0 +1,5 @@
+{"kernel_file": "flash_attn_dsl/flash_bwd.py", "rounds": 3,
+ "criterion": "min same-job ratio above floor",
+ "variants": [
+   {"name": "tile64", "edits": [{"old": "STAGE_TILE = 128", "new": "STAGE_TILE = 64"}]},
+   {"name": "tile128", "edits": [{"old": "STAGE_TILE = 128", "new": "STAGE_TILE = 128 /* widened */"}]}]}

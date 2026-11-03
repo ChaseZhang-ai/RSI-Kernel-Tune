@@ -899,30 +899,38 @@ def test_t2_kb_manifest_fail_feedback_and_fallback(tmp_path):
 
 # --- task 5: the merged diagnosis-validation bounce (C12) -----------------------
 
+from test_blackbox_fixes import _STALL_LOG_OK
+
+
 def _t5_ctx(tmp_path, outputs, **kw):
+    # stall_pricing arms the reachability gate AND the step's ref-pricing job:
+    # the job log rides the gpu_logs (the same shape test_blackbox_fixes uses)
     patch = _patching(tmp_path, "\n### D0.9 loosened\nx\n",
                       "patch_class: structural\nchanged_entries: [D0.9]\npatch: ...\n")
-    be = FakeBackend([*outputs, patch], [])
+    be = FakeBackend([*outputs, patch], [_STALL_LOG_OK])
     ctx = _ctx(tmp_path, be, **kw)
+    ctx.evidence_dir = tmp_path / "evidence"
     return ctx, be
 
 
 def test_t5_two_violations_one_reprompt(tmp_path):
-    # a diagnosis missing BOTH the reachability line and (via the INFEASIBLE
-    # mention) the stop-choice: the OLD chain cost two teacher turns, the merge
+    # a diagnosis missing the reachability line AND carrying an unpriced R1
+    # reopen: the OLD chain cost two teacher turns (one per gate), the merge
     # reports both in one
-    bad = ("cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"
-           "INFEASIBLE is implied by the floor gap here\n")
+    bad = "cause_class: R1\ndeficient_locus: D1.1\nreopen_price: none\n"
     good = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"
     ctx, be = _t5_ctx(tmp_path, [bad, good])
-    ctx.stall_pricing = True                      # arms the reachability gate
+    ctx.stall_pricing = True
+    ctx.reopen_requires_price = True
     driver.run_meta_step(ctx)
-    agent_calls = [i for i, c in enumerate(be.calls) if c[0] == "agent"]
     assert len(be.prompts) == 3                   # 1 turn + 1 merged re-prompt + patch
     second = be.prompts[1]
-    assert "reachability:" in second and "INFEASIBLE" in second
-    assert "Format requirement" in second         # both blocks in ONE prompt
-    assert "stop request or not" in second or "INFEASIBLE" in second
+    # both blocks in ONE prompt: the reachability format requirement (its
+    # heading) plus the reopen-price block (its own heading)
+    assert "## Format requirement (binding)" in second
+    assert "## A reopen must be priced first (driver check)" in second
+    assert "reachability:" in second
+    assert "reopen" in second.lower()
 
 
 def test_t5_gate_flags_bounce_once_then_accept(tmp_path):
@@ -935,50 +943,43 @@ def test_t5_gate_flags_bounce_once_then_accept(tmp_path):
     assert len(be.prompts) == 3                   # one bounce, then accept (patch turn)
 
 
-def test_t5_infeasible_stop_channel_unmerged_break(tmp_path):
-    # an ACCEPTABLE INFEASIBLE stop request still leaves the loop immediately
-    # for the post-loop refusal path — no patch turn, no extra gate round
-    stop = ("cause_class: INFEASIBLE\ndeficient_locus: none\nreachability: closed\n"
-            "infeasible_reason: the floor arithmetic closes the gap\n")
-    ctx, be = _t5_ctx(tmp_path, [stop])
-    res = driver.run_meta_step(ctx)
-    assert res.cause_class == "INFEASIBLE"
-    assert len(be.prompts) == 1                   # accepted on the first turn
-
-
 def test_t5_merged_blocks_are_the_same_text(tmp_path):
     # 弹回文本只重组不新增：each block's wording is exactly the standing one
-    bad = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\nINFEASIBLE anyway\n"
-    ctx, be = _t5_ctx(tmp_path, [bad])
-    ctx.stall_pricing = True
-    driver.run_meta_step(ctx)
-    second = be.prompts[1]
-    # the reachability block, verbatim (its unique sentence)
-    assert "Do the reachability refutation of diagnosis step 1c first" in second
-    # the mention block, verbatim (its own heading)
-    assert "## Your stop request is not in the stop channel" in second or \
-           "_INFEASIBLE_MENTION_BLOCK" not in second
-
-
-def test_t5_r1_gates_cofire_in_one_prompt(tmp_path):
-    # R1 + reopen budget spent + unpriced reopen: both R1 blocks in one prompt
-    from forgekernel.inner.trajectory import IterationRecord, append_record
-    bad = ("cause_class: R1\ndeficient_locus: D1.1\nreachability: closed\n"
-           "reopen_price: none\n")
+    bad = "cause_class: R1\ndeficient_locus: D1.1\nreopen_price: none\n"
     good = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"
     ctx, be = _t5_ctx(tmp_path, [bad, good])
     ctx.stall_pricing = True
     ctx.reopen_requires_price = True
-    ctx.reopen_max_fruitless = 1
-    ctx.max_verdict_probe_rounds = 0              # the in-step way to price: none...
-    # ...but the reopen-price gate stands down without an in-step measuring way
-    # unless probes exist; give the run a prior fruitless reopen so the budget
-    # gate fires
-    rec = IterationRecord(iter=0, decision_id="D0.9", change="reopen attempt",
-                          correctness=False, verdict="REVERT", metric_before=2.0)
-    append_record(ctx.status_path, rec)
+    driver.run_meta_step(ctx)
+    second = be.prompts[1]
+    # the reachability block, verbatim (its unique sentence)
+    assert "Do the reachability refutation of diagnosis step 1c first" in second
+    # the unpriced-reopen block, verbatim (its own heading)
+    assert "reopen" in second.lower() and "driver check result" in second
+
+
+def test_t5_infeasible_stop_channel_unmerged_break(tmp_path):
+    # an ACCEPTABLE INFEASIBLE stop request still leaves the loop immediately
+    # for the post-loop refusal path — no patch turn, no extra gate round
+    from test_loop_driver import _INFEASIBLE as stop
+    ctx, be = _t5_ctx(tmp_path, [stop])
+    res = driver.run_meta_step(ctx, best_before=0.978)
+    assert res.patch_class == "infeasible-stop"
+    assert len(be.prompts) == 1                   # accepted on the first turn, no patch turn
+
+
+
+def test_t5_r1_gates_cofire_in_one_prompt(tmp_path):
+    # R1 with a missing reachability line AND an unpriced reopen: both R1-era
+    # blocks in one prompt — the merge's whole point
+    bad = "cause_class: R1\ndeficient_locus: D1.1\nreopen_price: none\n"
+    good = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"
+    ctx, be = _t5_ctx(tmp_path, [bad, good])
+    ctx.stall_pricing = True
+    ctx.reopen_requires_price = True
     driver.run_meta_step(ctx)
     assert len(be.prompts) == 3
     second = be.prompts[1]
-    assert "reopen" in second.lower()
-    assert second.count("## ") >= 2 or "budget" in second.lower()
+    assert "## Format requirement (binding)" in second
+    assert "## A reopen must be priced first (driver check)" in second
+    assert "reopen" in second.lower() and "reachability:" in second

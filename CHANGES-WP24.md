@@ -34,7 +34,7 @@
 - **锁频拒绝 marker 去品牌（两端同步）**：`CLOCK_LOCK_REFUSED_MARKER` = `"[gpu_entry.sh] REFUSED: this card times under a configured clock lock"`（cardkit GPU_ENTRY_TEMPLATE 与 submit/jobs.py 同步；同步性有回归测试钉住）
 
 ### 评测路径零网络外发
-全树唯一 http 客户端 `fetch_sol_board/_http_json` 已删；`grep -rn "urlopen\|urllib" src/` 零命中。agent CLI 的 LLM 后端与教师调研 skill 保留（与榜单无关）。
+全树唯一 http 客户端 `fetch_sol_board/_http_json` 已删；`urllib.request`/`urlopen` 零命中（仅存 `urllib.parse.unquote` 的本地路径解码，非网络 I/O）。agent CLI 的 LLM 后端与教师调研 skill 保留（与榜单无关）。
 
 ## 3. 任务 2（P0）：通用基建保留并更名
 

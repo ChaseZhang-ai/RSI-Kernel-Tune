@@ -70,13 +70,40 @@ def test_attention_causal_charges_the_masked_half() -> None:
                            "dtype": "bfloat16"} for n in ("q", "k", "v")],
                   outputs=[{"name": "o", "shape": ["batch", "seq", "heads", "dim"],
                             "dtype": "bfloat16"}])
+    half = 2 * (8 * 16) * 4096 * 4096 * 128       # the masked half
     causal = af.floor_for(_problem(family="attention", name="attn_bwd_causal", **common))
-    assert causal["flops"] == 2 * (8 * 16) * 4096 * 4096 * 128
+    assert causal["flops"] == half
     # KV re-read conservative bound: each byte once
     assert causal["bytes_min"] == 4 * 8 * 4096 * 16 * 128 * 2
-    plain = af.floor_for(_problem(family="attention", name="attn_full", **common))
-    assert plain["flops"] == 2 * causal["flops"]
-    assert plain["floor_ms"] >= causal["floor_ms"]
+    # UNDECLARED causality charges the half too: a correct kernel may be causal,
+    # so the full table could sit above its necessary work (unprovable floor).
+    # The undeclared case reads exactly like the declared-causal one.
+    undeclared = af.floor_for(_problem(family="attention", name="attn_full", **common))
+    assert undeclared["flops"] == causal["flops"] == half
+    assert undeclared["floor_ms"] == causal["floor_ms"]
+
+
+def test_attention_explicit_non_causal_charges_the_full_table() -> None:
+    """axes["causal"] is boolean False -> the full table is provable (a non-causal
+    kernel must compute every score entry). A truthy-string / 0 value counts as
+    undeclared, not as a verdict."""
+    axes = {"batch": 8, "heads": 16, "seq": 4096, "dim": 128}
+    common = dict(axes=axes,
+                  inputs=[{"name": n, "shape": ["batch", "seq", "heads", "dim"],
+                           "dtype": "bfloat16"} for n in ("q", "k", "v")],
+                  outputs=[{"name": "o", "shape": ["batch", "seq", "heads", "dim"],
+                            "dtype": "bfloat16"}])
+    full = 4 * (8 * 16) * 4096 * 4096 * 128
+    declared = af.floor_for(_problem(family="attention", name="attn_full",
+                                     axes={**axes, "causal": False}, **{
+                                         k: v for k, v in common.items() if k != "axes"}))
+    assert declared["flops"] == full
+    # a string "false" is not a verdict: undeclared -> the half
+    strfalse = af.floor_for(_problem(family="attention", name="attn_full",
+                                     axes={**axes, "causal": "false"}, **{
+                                         k: v for k, v in common.items() if k != "axes"}))
+    assert strfalse["flops"] == full // 2
+    assert declared["floor_ms"] >= strfalse["floor_ms"]
 
 
 def test_attention_axis_aliases_resolve() -> None:
@@ -86,7 +113,8 @@ def test_attention_axis_aliases_resolve() -> None:
                           "dtype": "float16"}],
                  outputs=[])
     f = af.floor_for(p)
-    assert f["flops"] == 4 * (2 * 4) * 1024 * 1024 * 64
+    # causality undeclared -> the masked half (the provable direction)
+    assert f["flops"] == 2 * (2 * 4) * 1024 * 1024 * 64
 
 
 def test_attention_without_axes_falls_back_to_bytes() -> None:

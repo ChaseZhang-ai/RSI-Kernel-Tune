@@ -262,12 +262,18 @@ def _attention_flops(problem: dict, axes: dict, assumptions: list[str]) -> int |
         assumptions.append("attention: batch/heads/seq/dim axes not resolvable — flops not charged")
         return None
     bh = batch * heads
-    # Score + AV matmuls, 2 FLOP/MAC: 4·BH·L²·d full, the masked half when causal.
-    # Causality is not always declared: charging the HALF keeps the floor provable
-    # (a non-causal kernel then has softmax and its extra half uncharged; the
-    # reverse would put the floor above what a causal kernel must do).
-    causal = bool(axes.get("causal")) or "causal" in str(problem.get("name", "")).lower()
-    factor = 2 if causal else 4
+    # Score + AV matmuls, 2 FLOP/MAC. Three states, every one provable:
+    #   axes["causal"] explicitly False -> the full table, 4·BH·L²·d (a non-causal
+    #     kernel must compute every score entry);
+    #   causal (declared truthy, or the problem name says so) -> the masked half,
+    #     2·BH·L²·d, exactly what a causal kernel must do;
+    #   UNDECLARED -> the half as well: a correct kernel may be causal, so the
+    #     full table could sit ABOVE its necessary work — an unprovable floor,
+    #     and "a wrong one poisons every gate that cites it". A non-causal kernel
+    #     then has softmax and its extra half uncharged: the floor under-counts,
+    #     never over-counts. (Any value other than the boolean False — "false",
+    #     0, "" — counts as undeclared; only a real False proves non-causality.)
+    factor = 4 if axes.get("causal") is False else 2
     return factor * bh * seq * seq * dim
 
 

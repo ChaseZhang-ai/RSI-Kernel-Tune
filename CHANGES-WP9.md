@@ -53,7 +53,7 @@ gate 读数（target/plateau/verdict）全部来自 **timing**（measure_paired 
 | 族 | flops | bytes 下界 | 来源 |
 |---|---|---|---|
 | gemm | `2mnk`（每个 MAC 一次） | A+B+C 各一次 | GEMM 定义 |
-| attention | `2·BH·L²·d`（causal，mask 半边）或 `4·BH·L²·d`（非 causal）；**causality 未声明时取半（可证方向）**；投影/softmax 不计 | Q/K/V/O 各一次（KV 重读保守下界 = 1×） | score+PV 两个矩阵乘 |
+| attention | `2·BH·L²·d`（mask 半边）——显式 causal、或名字含 causal、或**未声明**（可证方向：正确 kernel 也可能是 causal 的，收全量会把 floor 抬到 causal kernel 必要功之上）都收半边；仅 `axes["causal"]` **显式为布尔 False**（非 causal kernel 必做全表，可证）收 `4·BH·L²·d`；"false"/0 等非布尔值按未声明处理。投影/softmax 不计 | Q/K/V/O 各一次（KV 重读保守下界 = 1×） | score+PV 两个矩阵乘 |
 | conv | `2·N·H_out·W_out·C_out·C_in·k_h·k_w(·k_d)`（im2col MAC 计数） | in+W+out 各一次 | im2col 形式化 |
 | norm / elementwise | None（字节流主导，不计 flops 保持可证） | x(+w)+y | — |
 | reduction | 元素数（树形下界 n−1≈n，单输入可数时） | in+out | 树形归约 |
@@ -81,16 +81,35 @@ flops 类按**操作数字节最大的 dtype 类**选（fp8 GEMM 的 fp32 scale�
 kernel                                               arch     floor_ms   best_ms   ratio  band
 ----------------------------------------------------------------------------------------------------
 attention/attn_fwd_gqa16/h100/gen0                   sm90       0.5556         — no-data  fill best_ms from the run archive
+attention/attn_fwd_gqa16/h100/gen1                   sm90       0.5556         — no-data  fill best_ms from the run archive
+attention/attn_fwd_gqa16/h100/gen2                   sm90       0.5556         — no-data  fill best_ms from the run archive
+attention/attn_fwd_gqa16/h100/from_agent             sm90       0.5556         — no-data  fill best_ms from the run archive
 attention/attn_bwd_mha/h100                          sm90       0.5556         — no-data  fill best_ms from the run archive
 attention/attn_bwd_mha/b200                          sm100      0.2443         — no-data  fill best_ms from the run archive
+attention/attn_bwd_gqa8/h100                         sm90       0.5556         — no-data  fill best_ms from the run archive
 attention/gqa_paged_decode/h100                      sm90       2.4073         — no-data  fill best_ms from the run archive
+attention/mla_paged_decode/h100                      sm90       1.3546         — no-data  fill best_ms from the run archive
+attention/mla_paged_prefill/h100                     sm90       1.2502         — no-data  fill best_ms from the run archive
+sparse_attention/dsa_sparse_bwd/h100                 sm90            —         — no-data  contract on file does not pin the axes
+sparse_attention/dsa_score_recompute/h100            sm90            —         — no-data  contract on file does not pin the axes
+sparse_attention/dsa_indexer_bwd/h100                sm90            —         — no-data  contract on file does not pin the axes
+sparse_attention/dsv41_fused_attn_rope_cast/b200     sm100           —         — no-data  contract on file does not pin the axes
+linear_attention/gdn_prefill_fwd/h100/gen0           sm90       0.5556         — no-data  fill best_ms from the run archive
+linear_attention/gdn_prefill_fwd/h100/from_agent     sm90       0.5556         — no-data  fill best_ms from the run archive
+linear_attention/gdn_prefill_bwd/h100                sm90       0.5556         — no-data  fill best_ms from the run archive
+linear_attention/gdn_prefill_varlen/b200             sm100      0.0065         — no-data  fill best_ms from the run archive
+linear_attention/recurrent_kda_prefill/b200          sm100      0.1282         — no-data  fill best_ms from the run archive
 gemm/gemm_fp16/h100                                  sm90       1.1113         — no-data  fill best_ms from the run archive
 gemm/fp8_gemm/h100                                   sm90       0.0695         — no-data  fill best_ms from the run archive
-gemm/fp4_grouped_gemm/b200                           sm100     13.7439         — no-data  fill best_ms from the run archive
+gemm/fp4_grouped_gemm/b200                           sm100      0.4887         — no-data  fill best_ms from the run archive
+conv/conv2d_wgrad/h100                               sm90       0.1196         — no-data  fill best_ms from the run archive
+conv/conv2d_dgrad/h100                               sm90       0.4786         — no-data  fill best_ms from the run archive
 conv/conv3d_fwd/h100                                 sm90       0.0224         — no-data  fill best_ms from the run archive
-（…全部 25 行；3 个 DSA 条目 + dsv41 契约未记轴 → "contract on file does not pin the axes"）
-0 ratio(s) computed, 0 below 1.0
+----------------------------------------------------------------------------------------------------
+0 ratio(s) computed, 0 below 1.0; the rest of the table has no measured best on file (repo records relative speedups only) — fill best_ms in floor_backtest.json to widen the gate
 ```
+
+> **勘误（本表 vs 更早贴出的版本）**：旧表 `gemm/fp4_grouped_gemm/b200` 行的 `floor=13.7439` 不是脚本输出（陈旧数据），本次已按脚本实际输出更正为 **0.4887 ms**，可手工复算：2·32768·4096·4096 = 1.0995e12 FLOPs，flops 类由操作数字节最大的 dtype 决定（bf16 输出 C 268 MB 主导 → fp16 类，sm100 峰值 2250 TFLOPS），1.0995e12 ÷ 2250e12 ≈ 0.4887 ms。其余各行本就与脚本输出一致。
 
 附注：attention flops 公式计价 fwd score+AV 链；bwd kernel 实际功 ≈2.5×，floor 刻意低估（比值偏高但方向永不 <1，manifest note 写明）。H100 若干成绩在 SM 1590 MHz 锁频下测得（README），paper-peak 在 boost 下定义——只会放宽健康带。
 

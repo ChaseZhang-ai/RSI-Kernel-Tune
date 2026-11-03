@@ -111,6 +111,7 @@ from __future__ import annotations
 
 import inspect
 import math
+import os
 import statistics
 import time
 import warnings
@@ -123,6 +124,150 @@ DEVICE_BATCH = 50     # back-to-back calls inside one amortized window
 DEVICE_REPS = 5       # windows measured; median of the per-call amortizations
 HOST_ENQUEUE_ITERS = 50   # enqueue-only samples for the precondition check
 PREP_ITERS = 10           # samples of the window-outside prep step (reported, never gated)
+
+# --- WP11 (task 6): SPRT sequential early stop at device-window boundaries -----
+#
+# Opt-in (default OFF). The outcome distribution of loop iterations is mostly
+# REVERTs, and a losing iteration pays the full fixed sample budget the same as
+# a winning one. When the run arms this (loop.toml [loop] sprt_early_stop = true;
+# the flag reaches the job as FK_SPRT_EARLY_STOP=1), the PAIRED measurement may
+# stop taking device windows once the accumulated same-job paired readings'
+# confidence interval sits ENTIRELY BELOW the noise band — a reading already
+# clearly a loss does not get more precise with more windows (see the safety
+# paragraph below for why the rule is loss-only by design). THE WINDOW PROTOCOL
+# IS UNTOUCHED: measure_paired still runs burn-in + A B B A, each window is
+# still a full DEVICE_BATCH back-to-back batch, and the decision happens only
+# at a window BOUNDARY (shall the next window run).
+#
+# The bandwidth is self-estimated from the accumulated paired ratios with the
+# same statistic family the driver's resolvable_diff uses — MAD x 1.4826 x 3,
+# clamped to the same [floor, cap] bounds. The two formulas are kept side by side
+# for drift comparison (this file cannot import forgekernel — it is copied
+# verbatim into job tarballs):
+#
+#   timing.py (here):        band = clamp(3 * 1.4826 * MAD(ratios), 0.005, 0.015)
+#   loop/parse.py resolvable_diff: min(cap, max(floor, 3.0 * 1.4826 * mad))
+#   with RESOLVABLE_DIFF_FLOOR == SPRT_BAND_FLOOR == 0.005 and
+#   RESOLVABLE_DIFF_CAP == SPRT_BAND_CAP == 0.015 (the _LEVER_NOISE_DEFAULT_PCT
+#   == lever_pricing_run.NOISE_FLOOR_PCT precedent).
+#
+# Stopping is LOSS-ONLY, which makes the rule safe by construction, not by
+# tuning: a measurement that never stopped early IS the full-sampling
+# measurement (same windows, same medians, same verdict), and a stop fires only
+# when the accumulated paired readings' interval sits entirely BELOW the noise
+# band — a clear loss. Early stopping can therefore only turn a full-sampling
+# KEEP into an early REVERT (the conservative direction — it may throw a
+# borderline win away, which scripts/backtest_early_stop.py bounds at <2% and
+# the loop re-derives from the next iteration anyway), and it can NEVER
+# manufacture a KEEP: the false-win direction is structurally impossible, not
+# merely rare. Winning iterations keep their full sample budget — they are the
+# minority, and their readings are the ones worth paying for.
+SPRT_EARLY_STOP = os.environ.get("FK_SPRT_EARLY_STOP", "") == "1"
+SPRT_MIN_PAIRED = 4        # resolvable_diff's own minimum: fewer cannot speak
+SPRT_MIN_WINDOWS = 2       # and at least this many distinct window indices paired
+SPRT_BAND_FLOOR = 0.005    # == loop/parse.py RESOLVABLE_DIFF_FLOOR (drift pair)
+SPRT_BAND_CAP = 0.015      # == loop/parse.py RESOLVABLE_DIFF_CAP (drift pair)
+
+
+def sprt_stop_verdict(ratio, ratios, *, floor: float = SPRT_BAND_FLOOR,
+                      cap: float = SPRT_BAND_CAP) -> bool:
+    """Whether the candidate measurement reads a CLEAR LOSS under the verdict's
+    own estimator (the only direction this rule may stop on — see the block
+    comment above).
+
+    ``ratio``: the candidate measurement's gate ratio, computed EXACTLY as the
+    bench reports it (the mean of the mirrored halves' device medians, ref over
+    kernel). ``ratios``: the candidate's ref/kernel per-window pairs — the band
+    is their median absolute deviation x 1.4826 x 3, clamped to [floor, cap],
+    the resolvable_diff family. True = even the interval's TOP sits below
+    parity (ratio + band < 1). Deciding with the verdict's own ratio on the
+    verdict's own data is what makes the false-win direction arithmetically
+    impossible: a measurement that never stopped IS the full measurement
+    (identical ratio, identical verdict), and a stopped one carries
+    ratio < 1 - band <= 1 - floor, which no margin >= 0 can score KEEP."""
+    ratios = [float(r) for r in (ratios or ()) if isinstance(r, (int, float))
+              and not isinstance(r, bool) and float(r) > 0.0]
+    if len(ratios) < SPRT_MIN_PAIRED:
+        return False
+    mad = statistics.median(abs(r - statistics.median(ratios)) for r in ratios)
+    band = min(max(3.0 * 1.4826 * mad, floor), cap)
+    return ratio + band < 1.0
+
+
+class _SprtController:
+    """Accumulates the paired measurement's per-window readings and decides, at
+    each window boundary, whether the next window is worth taking. Armed only
+    by measure_paired when SPRT_EARLY_STOP is on and a reference rides the job
+    (without a reference there are no paired readings, and no decision).
+
+    Decision point and data (why this shape): the rule decides only at the
+    SECOND REF half's boundaries — the first moment the candidate n-window
+    protocol's complete pair set exists — and evaluates the CANDIDATE protocol
+    only (windows with index < the candidate count), with the gate ratio
+    computed exactly as the bench reports it. The decided candidate is then
+    what every side is trimmed to, so the reading the bench reports carries the
+    very ratio the decision read: the stop and the gate verdict can never
+    contradict each other. Earlier halves run in full (the A B B A order is
+    fixed); what the rule saves is the tail of the second half — the windows an
+    already-clear loss does not need."""
+
+    def __init__(self):
+        # per side, the window readings in index order (sides = the A B B A
+        # sequence: first ref, first kernel, second kernel, second ref)
+        self.sides: dict[str, list[float]] = {"r1": [], "k1": [], "k2": [], "r2": []}
+        self.decided: int | None = None   # window count everything stops at
+
+    def _side(self, side: str, second_half: bool) -> str:
+        if side == "ref":
+            return "r2" if second_half else "r1"
+        return "k2" if second_half else "k1"
+
+    def _candidate_ratio(self, n: int) -> float | None:
+        """The candidate n-window measurement's gate ratio, exactly as the bench
+        reports it: mean of the mirrored halves' device medians, ref over
+        kernel. None while any side has fewer than n windows (the candidate
+        protocol is not yet defined)."""
+        meds = {}
+        for key in ("r1", "k1", "k2", "r2"):
+            readings = self.sides[key][:n]
+            if len(readings) < n:
+                return None
+            meds[key] = statistics.median(readings)
+        denom = meds["k1"] + meds["k2"]
+        if not denom:
+            return None
+        return (meds["r1"] + meds["r2"]) / denom
+
+    def _candidate_pairs(self, n: int) -> list[float]:
+        """ref/kernel per window index with index < n (both halves)."""
+        out = []
+        for i in range(n):
+            for ref_key, ker_key in (("r1", "k1"), ("r2", "k2")):
+                if len(self.sides[ref_key]) > i and len(self.sides[ker_key]) > i:
+                    out.append(self.sides[ref_key][i] / self.sides[ker_key][i])
+        return out
+
+    def on_window(self, side: str, second_half: bool, index: int, ms: float) -> bool:
+        """One device window finished. True = take the next one; False = stop."""
+        if self.decided is not None:
+            # decided: every remaining side runs to EXACTLY the decided count —
+            # no re-evaluation at its own boundaries (a side stopping one window
+            # short of the count would leave the medians incommensurate)
+            return index + 1 < self.decided
+        key = self._side(side, second_half)
+        self.sides[key].append(ms)
+        if not second_half or side != "ref":
+            return True   # decisions happen only at the second ref half
+        candidate = index + 1
+        if candidate < SPRT_MIN_WINDOWS:
+            return True   # the floors: never decide below a 2-window protocol
+        ratio = self._candidate_ratio(candidate)
+        if ratio is None:
+            return True
+        if sprt_stop_verdict(ratio, self._candidate_pairs(candidate)):
+            self.decided = candidate    # clear loss on the candidate's own data
+            return False
+        return True
 
 # host_bound_ratio at or above this means the device window is measuring the host
 # rather than the kernel. Deliberately conservative: a healthy GPU-bound kernel
@@ -270,7 +415,7 @@ def time_e2e(fn, *, warmup: int = WARMUP_ITERS, iters: int = E2E_ITERS) -> list[
 
 
 def time_device(fn, *, warmup: int = WARMUP_ITERS, batch: int = DEVICE_BATCH,
-                reps: int = DEVICE_REPS) -> list[float]:
+                reps: int = DEVICE_REPS, on_window=None) -> list[float]:
     """Amortized per-call times in ms from pipelined batch windows (≈ device time).
 
     One event pair brackets ``batch`` back-to-back launches; the batch keeps the
@@ -280,20 +425,28 @@ def time_device(fn, *, warmup: int = WARMUP_ITERS, batch: int = DEVICE_BATCH,
     Valid only while the host can enqueue faster than the device drains — check
     that with ``time_host_enqueue`` / ``host_bound_ratio`` before reading the
     result as kernel time.
-    """
+
+    ``on_window(index, ms) -> bool`` (WP11 task 6): consulted at the window
+    BOUNDARY, after a window completed and before the next begins — False stops
+    the remaining windows. Default None keeps the loop byte-identical to before;
+    the SPRT controller passes one only when the run armed sequential early stop.
+    The window itself (warmup, batch, event pairs, one sync per window) never
+    changes."""
     for _ in range(warmup):
         fn()
     torch.cuda.synchronize()
     start = torch.cuda.Event(enable_timing=True)
     stop = torch.cuda.Event(enable_timing=True)
     samples = []
-    for _ in range(reps):
+    for index in range(reps):
         start.record()
         for _ in range(batch):
             fn()
         stop.record()
         torch.cuda.synchronize()
         samples.append(start.elapsed_time(stop) / batch)
+        if on_window is not None and not on_window(index, samples[-1]):
+            break
     return samples
 
 
@@ -426,10 +579,10 @@ def _bind_prep(fn, prep):
     return state.call(fn), state
 
 
-def _measure(call) -> dict:
+def _measure(call, on_window=None) -> dict:
     e2e = time_e2e(call)
     record_gpu_state()   # WP1 telemetry: once after each window measurement
-    dev = time_device(call)
+    dev = time_device(call, on_window=on_window)
     record_gpu_state()
     device_median = statistics.median(dev)
     host_ms = time_host_enqueue(call)
@@ -440,10 +593,16 @@ def _measure(call) -> dict:
     ratio = host_bound_ratio(host_ms, device_median)
     if ratio is not None:
         out["host_bound_ratio"] = ratio
+    if on_window is not None:
+        # the SPRT flow needs the raw window list so a decided early stop can
+        # TRIM every side to the decided count (one n-window protocol, all sides
+        # commensurate) before any median is mirrored. Key is private; a
+        # standalone measure_windows (no hook) never carries it.
+        out["_device_samples"] = list(dev)
     return out
 
 
-def measure_windows(fn, *, prep=None) -> dict:
+def measure_windows(fn, *, prep=None, on_window=None) -> dict:
     """Both windows plus the device window's precondition check, for one callable.
 
     Keys: "median_ms", "min_ms" (e2e), "device_median_ms", and the check —
@@ -460,15 +619,18 @@ def measure_windows(fn, *, prep=None) -> dict:
     every tensor it produced), ``mutated`` (names the timed calls changed; must
     be empty) plus the step's own ``median_ms`` / ``device_median_ms`` — for the
     bench to place in the eval JSON verbatim.
+
+    ``on_window``: the SPRT boundary hook (see time_device); measure_paired
+    supplies it, nothing else does.
     """
     call, state = _bind_prep(fn, prep)
-    out = _measure(call)
+    out = _measure(call, on_window)
     if state is not None:
         out["prep"] = state.block()
     return out
 
 
-def measure_windows_rotating(fns, *, prep=None) -> dict:
+def measure_windows_rotating(fns, *, prep=None, on_window=None) -> dict:
     """measure_windows, but successive calls rotate through ``fns`` — one
     callable per pre-built input buffer (e.g. 4 clones of the input tensor).
 
@@ -484,7 +646,8 @@ def measure_windows_rotating(fns, *, prep=None) -> dict:
     import itertools
 
     it = itertools.cycle(list(fns))
-    return measure_windows(lambda *saved: next(it)(*saved), prep=prep)
+    return measure_windows(lambda *saved: next(it)(*saved), prep=prep,
+                           on_window=on_window)
 
 
 # --- paired in-job reference: same job, same warm plateau ---------------------
@@ -562,10 +725,10 @@ def _as_fns(fns) -> list:
     return list(fns)
 
 
-def _measure_side(fns: list, prep) -> dict:
+def _measure_side(fns: list, prep, on_window=None) -> dict:
     if len(fns) == 1:
-        return measure_windows(fns[0], prep=prep)
-    return measure_windows_rotating(fns, prep=prep)
+        return measure_windows(fns[0], prep=prep, on_window=on_window)
+    return measure_windows_rotating(fns, prep=prep, on_window=on_window)
 
 
 def _mirrored(first: dict, second: dict) -> dict:
@@ -588,13 +751,24 @@ def _mirrored(first: dict, second: dict) -> dict:
 
 
 def measure_paired(kernel_fns, ref_fns=None, *, prep=None,
-                   burn_in_s: float = BURN_IN_S) -> dict:
+                   burn_in_s: float = BURN_IN_S, early_stop: bool | None = None) -> dict:
     """Kernel and in-job reference on one warm plateau: burn-in, then A B B A.
 
     ``kernel_fns`` / ``ref_fns``: a callable, or a list of callables to rotate
     through (one per pre-built input buffer, as ``measure_windows_rotating``).
     ``ref_fns`` may be None (no reference rides this job). ``prep`` as in
     ``measure_windows``, applied to every window of both sides.
+
+    ``early_stop`` (WP11 task 6, default None = the module's SPRT_EARLY_STOP):
+    arm the sequential boundary controller for THIS measurement — device
+    windows stop early only when the accumulated same-job paired readings'
+    interval sits entirely BELOW the noise band (a clear loss; wins and
+    straddles always sample full), and only after >= SPRT_MIN_PAIRED paired
+    readings across >= SPRT_MIN_WINDOWS window indices. A decided stop holds
+    every side to exactly the decided window count, so the reading is a clean
+    n-window measurement. The A B B A order, the burn-in and every window's
+    internals are untouched; only how MANY windows run can change. Without a
+    reference there are no paired readings and nothing ever stops early.
 
     Returns::
 
@@ -614,24 +788,46 @@ def measure_paired(kernel_fns, ref_fns=None, *, prep=None,
     order: list[str] = []
     rounds = _burn_in_with(kernels[0], prep, burn_in_s)
 
+    armed = SPRT_EARLY_STOP if early_stop is None else bool(early_stop)
+    ctl = _SprtController() if armed and refs else None
+
+    def _hook(side: str, second_half: bool):
+        if ctl is None:
+            return None
+        return lambda index, ms: ctl.on_window(side, second_half, index, ms)
+
     ref_first = ref_error = None
     if refs:
         try:
-            ref_first = _measure_side(refs, prep)
+            ref_first = _measure_side(refs, prep, _hook("ref", False))
             order.append("ref")
         except Exception as exc:  # noqa: BLE001 — the reference is a foreign callable
             ref_error = f"{type(exc).__name__}: {exc}"
-    kernel_first = _measure_side(kernels, prep)
+    kernel_first = _measure_side(kernels, prep, _hook("kernel", False))
     order.append("kernel")
-    kernel_second = _measure_side(kernels, prep)
+    kernel_second = _measure_side(kernels, prep, _hook("kernel", True))
     order.append("kernel")
     ref_second = None
     if ref_first is not None:
         try:
-            ref_second = _measure_side(refs, prep)
+            ref_second = _measure_side(refs, prep, _hook("ref", True))
             order.append("ref")
         except Exception as exc:  # noqa: BLE001
             ref_error = f"{type(exc).__name__}: {exc}"
+
+    if ctl is not None and ctl.decided is not None:
+        # The protocol stopped early at ``decided`` windows: every side is held
+        # to exactly that count, so all medians and every index-aligned pair
+        # describe the SAME n-window measurement (a side that ran further keeps
+        # no private extra sample the decision did not cover).
+        for side in (ref_first, kernel_first, kernel_second, ref_second):
+            if side is not None and isinstance(side.get("_device_samples"), list):
+                samples = side["_device_samples"][:ctl.decided]
+                if samples:
+                    side["device_median_ms"] = statistics.median(samples)
+    for side in (ref_first, kernel_first, kernel_second, ref_second):
+        if isinstance(side, dict):
+            side.pop("_device_samples", None)
 
     ref = None
     if ref_first is not None and ref_second is not None:

@@ -178,6 +178,10 @@ def write_card(run, task, check, machine) -> Path:
     entry = op_dir / "gpu_entry.sh"
     text = lbmod.GPU_ENTRY_TEMPLATE.format(
         name=task.name, suite=SUITE, arch=CUTE_ARCH.get(task.arch, task.arch + "a"),
+        # WP11: the merged eval+NCU task and the build-cache block ride every
+        # generated card (both are dormant without their env/config switches).
+        wp11_cache_block=lbmod._WP11_CACHE_BLOCK,
+        wp11_allncu_case=lbmod._WP11_ALLNCU_CASE,
         **entry_args)
     entry.write_text(text.replace("--launch-count 24", f"--launch-count {ncu_launch_count(problem)}"),
                      encoding="utf-8")

@@ -21,3 +21,8 @@ gpu = "0"                       # CUDA device index
 
 [env]
 PYTHONUNBUFFERED = "1"
+# FK_BUILD_CACHE = "1"          # WP11: content-addressed build cache (default OFF;
+#                               # ~/.cache/forgekernel-build, key = tree sha + nvcc + torch).
+#                               # NOT for board-protocol cards or sealed-reference trees.
+# FK_INPUTS_SYNC = "0"          # WP11: disable content-addressed input transport (local
+#                               # delivery only; default on, tree stays byte-identical).

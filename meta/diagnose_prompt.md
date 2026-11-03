@@ -76,6 +76,9 @@ defect right now**. **Do not** write the full patch text (that is a later step) 
    tiling/ordering defect, not a bandwidth wall. Then locate the **current real bottleneck** from the hardware ground truth —
    high `bankconf_*` ⇒ a degenerate/conflicting layout (points to G3/KB); high `spill_*`+`regs_per_thread` ⇒ register-bound
    (points to an R1 foundation); low `tensor_pct`/`warp_active_pct` ⇒ latency-bound; high `dram_pct` ⇒ bandwidth-bound.
+   When `regs_per_thread` reads ≥ 0.9× of an architecture's per-SM register tier (sm100's tiers: 128 / 168 / 255), price a
+   `--maxrregcount` scan across the tiers FIRST (a flags lever, see the Hard rules) — a spill-cliff kernel sitting one tier
+   below its pressure point is a compile-flags decision, not a structural one.
    **Look longitudinally at whether the metric a decision should have moved actually moved after it landed** (whether the lever binds). The trajectory is **objective-only** (no student
    prose), so your diagnosis **must** be supported by NCU metrics + objective results (correctness/perf/error); **REVERT iterations carry
    NCU too** (the driver records successful and failed iterations alike), and the hardware ground truth of failed iterations must be read as well. If a round truly has no NCU (e.g. probe-blocked,
@@ -205,6 +208,19 @@ confidence:        high | medium | low + a one-sentence reason
   When the same-position segment comparison is present, the aligned reading takes precedence: **the same-segment share difference + the dominant stall category difference** are the first criteria for the locus and
   cause_class (especially G5 vs R1/R2).
   Ledger rows marked "self-check failed" are downgraded to supporting evidence, and `confidence` is lowered accordingly, honestly.
+- **Flags are a lever axis** (a CUDA kernel carrying a `// fk-cuda-cflags:` line): a compile flag is legal lever material —
+  the lever is the text edit pair ON that line, designed and priced in the round like any lever, landed like any lever.
+  Whitelist (code-generation / diagnostics only; the card refuses anything else before a build): `-O[0-3]`, `--ftz=(true|false)`,
+  `--prec-div=(true|false)`, `--prec-sqrt=(true|false)`, `--fmad=(true|false)`, `--extra-device-vectorization`,
+  `--maxrregcount=N`, `-lineinfo`. `--use_fast_math` may be listed, but its numerics are arbitrated by the precision gate and
+  the risk is yours. Typical prices to chase: a register-tier `regs_per_thread` (see 1b) prices a `--maxrregcount` gradient;
+  denormal-heavy math prices `--ftz=false`; a fused-multiply question prices `--fmad`; a spill cliff prices the tier first.
+- **Stagnation is a measured constraint** (when the driver injects a `## Stagnation` block): its attempt/gain lines are the
+  driver's aggregation of the trajectory and your meta memory — the last K parameter-level attempts each measured inside the
+  run's resolution band while a real gap to the target remains (the parameter-level local optimum signature). Answer inside
+  the block's constraint: a structural route (R1 priced / R2-structural priced / ARCH_PROBE_REQUEST or survey request), or
+  `stagnation_override: <reason>` argued in `confidence` — the override is recorded in the meta trajectory, and a run of
+  overrides is itself evidence the parameter space is exhausted.
 - **Pricing-table alignment** (when the `Pricing table` is present): the driver has already moved each candidate lever you listed in the previous turn once on the best tree
   and measured it (add-one / remove-one / all-on, same-job paired). `deficient_locus` and `patch_direction` must agree with the
   table: `independent` items are ranked by add, and the largest is the preferred locus; a `coupled` item (≈ 0 alone, a loss when removed from all-on)

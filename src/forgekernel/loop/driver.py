@@ -667,6 +667,29 @@ class LoopContext:
     # unchanged best cannot change the answer except by further drift — reuse the
     # verdict instead of re-buying ref jobs at every subsequent plateau.
     reanchor_memo: "tuple[float, str] | None" = None
+    # --- WP10 ----------------------------------------------------------------
+    # ARCHITECTURE ESCAPE TRIGGER. How many consecutive parameter-level attempts
+    # (inner deliveries / sweep winners / additive meta patches, each read against
+    # the sitting best) must land inside the run's own resolution band
+    # (resolvable_diff) while a real gap to the target remains, before the
+    # diagnosis prompt is injected a STAGNATION block demanding a structural
+    # route (R1 / R2-structural with a measured price, or a probe/survey request).
+    # Pressure only — the block never machine-changes a cause_class; the teacher
+    # may answer `stagnation_override: <reason>`. 0 disables the trigger.
+    # loop.toml [loop] stagnation_k (the per-card override surface; the global
+    # layer's loop.toml takes [target]/[budget] only — the WP1 precedent. The
+    # [loop] key is wired in cli.py's LoopContext(...) — added at the integration
+    # step, the m0_probe_rounds precedent; the default 3 governs launches that
+    # don't set the key).
+    stagnation_k: int = 3
+    # MC-DELIVERY cap. The ceiling a milestone's `multi_candidate:` field may ask
+    # for (the driver clamps the authorization to this): at most this many
+    # student-written skeleton variants of one decision are prescreened in the
+    # iteration's single prescreen job (latency + correctness smoke), the winner
+    # alone becomes the delivery and takes the standard full gate. 2 = the floor
+    # that makes a fan-out meaningful; 0 disables the channel entirely.
+    # loop.toml [loop] multi_candidate_max (same wiring note as stagnation_k).
+    multi_candidate_max: int = 3
 
 
 # --- prompt rendering -------------------------------------------------------
@@ -2533,6 +2556,17 @@ def run_inner_iteration(
         rec = _archive_reused_reading(ctx, iter_no, record, sha, base_sha, base,
                                       metric_before)
         return _declared_gate_close(ctx, record, rec, iter_no) or rec
+    # --- WP10 (MC-DELIVERY): at an authorized decision the driver prescreens the
+    # student's variant implementations in ONE job and applies the winner before
+    # the eval — the winner alone takes the full gate below; a no-winner outcome
+    # is the ordinary REVERT (returned here, no eval bought). Not authorized, or
+    # fewer than two variant files: None — everything below runs as before.
+    variant_timings = None   # WP10: the objective variant table, banked on the record
+    if (mc := _mc_deliver(ctx, be, iter_no, record, base_sha, last_good_ref,
+                          metric_before)) is not None:
+        variant_timings = mc["rows"] or None
+        if mc["revert"] is not None:
+            return mc["revert"]
     branch = f"{ctx.branch_prefix}-i{iter_no}"
     be.push_branch(branch)
     _log(f"iter {iter_no}: decision {record.decision_id} committed; evaluating on GPU…")
@@ -2590,6 +2624,7 @@ def run_inner_iteration(
             orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
             prep=ev.prep or {}, precision=precision,
             gpu_state=ev.gpu_state or {},   # WP1 telemetry: objective, rides every eval
+            variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
         )
         append_record(ctx.status_path, rec)
         return rec
@@ -2623,6 +2658,7 @@ def run_inner_iteration(
         # reading's SM clock sat >2% off the best's (such a row must not take the
         # watermark on its own — it went through the confirmation above if it did).
         gpu_state=ev.gpu_state or {}, clock_drift=clock_drift,
+        variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
     )
     _wp4_note_regression(ctx, rec, iter_no, cluster)   # WP4: slow-decision bookkeeping (prior only)
     append_record(ctx.status_path, rec)
@@ -5593,6 +5629,616 @@ def _wp4_remove_candidates_block(records: list, known_levers: list) -> str:
             "automatic revert is implied.\n")
 
 
+# --- WP10: the architecture-escape trigger (STAGNATION) ---------------------------
+#
+# A parameter-level local optimum had no machine criterion: WP5's governance reads
+# floor_opt (a target-side estimate) and detect_plateau only hands the run to meta —
+# nothing told the teacher "the last K parameter-level attempts each read inside the
+# run's own resolution band while a real gap remains", which is the matvec case
+# (heuristics pinned at 2.09 ms until a skeleton change reached 1.95 ms). The reading
+# below aggregates that history off sources that already exist; the diagnose step
+# renders ONE STAGNATION block from it. Pressure only — it never machine-changes a
+# cause_class and never skips the teacher's diagnosis; the escape is the teacher's
+# own structural route (R1 / R2-structural with a measured price, a probe / survey
+# request) or the `stagnation_override:` release valve.
+# C1: the band is WP1's resolvable_diff, imported directly — no second copy.
+
+_STAG_OVERRIDE_RE = re.compile(r"stagnation_override\s*[:：]\s*([^\n]*)")
+_STAG_GATE_ROW = re.compile(r"M\d+-gate$")
+_STAG_PART_STEP = re.compile(r"\s*part\s+\d+\s+of\s+\d+", re.I)
+
+
+def _attempt_gain_pct(rec, gate_window: str) -> float | None:
+    """One delivered attempt's actual gain against the best it was built on, in
+    percent (positive = faster). Primary source: WP4's per-decision ledger
+    (``regression_vs_best_pct`` — kept slow, so the gain is its negative). Fallback
+    for rows the ledger never wrote (keeps inside the band, new bests, pre-field
+    rows): the row's own metric_before vs its gate reading. A judged perf REVERT
+    reads 0 — the attempt did not move the best."""
+    if getattr(rec, "regression_vs_best_pct", None) is not None:
+        return -float(rec.regression_vs_best_pct)
+    if rec.verdict == "REVERT":
+        return 0.0
+    ms, mb = gate_ms(rec, gate_window), getattr(rec, "metric_before", None)
+    if ms is None or not mb:
+        return None
+    return 100.0 * (mb - ms) / mb
+
+
+def _stagnation_attempts(ctx: LoopContext, records, meta_recs) -> list:
+    """The parameter-level attempt sequence, oldest first: every evaluated inner
+    delivery that is not bookkeeping (gate rows, REOPENs, companion-group steps
+    judged jointly, archived re-reads) — sweep winners and lever-bundle landings
+    included, they are ordinary decision rows — plus every closed additive meta
+    patch (KEEP_PATCH with its best_before→best_after gain; REVERT_PATCH reads 0).
+    A meta outcome's clock is the newest inner row built on the same best
+    (metric_before == the record's best_before): its segment ended there. No
+    match (or a best the inner rows never carried) places it newest — the
+    outcome is judged after its segment, so late is the honest side."""
+    attempts = []
+    for r in records:
+        did = r.decision_id or ""
+        if _STAG_GATE_ROW.match(did) or did in ("REOPEN", "REOPEN-REVERT"):
+            continue
+        if _STAG_PART_STEP.match(r.change or ""):
+            continue
+        if getattr(r, "reading_of", None) is not None:
+            continue
+        if r.verdict == "KEEP" or (r.verdict == "REVERT" and r.correctness is True):
+            attempts.append({"clock": float(r.iter), "kind": "inner", "iter": r.iter,
+                             "label": did, "gain": _attempt_gain_pct(r, ctx.gate_window)})
+    for m in meta_recs or []:
+        if getattr(m, "patch_class", "") != "additive":
+            continue
+        if m.outcome == "KEEP_PATCH":
+            bb, ba = m.best_before, m.best_after
+            gain = (100.0 * (bb - ba) / bb) if (bb and ba is not None and bb > 0) else None
+        elif m.outcome == "REVERT_PATCH":
+            gain = 0.0
+        else:
+            continue
+        clock = _meta_outcome_clock(m, records)
+        attempts.append({"clock": clock, "kind": "patch", "iter": m.meta_step,
+                         "label": f"step{m.meta_step} additive patch {m.outcome}",
+                         "gain": gain})
+    attempts.sort(key=lambda a: a["clock"])
+    return attempts
+
+
+def _meta_outcome_clock(m, records) -> float:
+    if getattr(m, "best_before", None) is None:
+        return float("inf")
+    bb = float(m.best_before)
+    hits = [float(r.iter) for r in records
+            if getattr(r, "metric_before", None) is not None
+            and abs(float(r.metric_before) - bb) <= 1e-9 * max(1.0, bb)]
+    return (max(hits) + 0.5) if hits else float("inf")
+
+
+def _stagnation_report(ctx: LoopContext, records, meta_recs) -> dict | None:
+    """The trigger, or None: the last `stagnation_k` attempts of
+    `_stagnation_attempts` all read |gain| < resolvable_diff AND the current best
+    still sits a resolvable distance above the target (a real gap — the point is
+    to escape a parameter optimum, not to stop a finished run). No best, no
+    target, fewer than K attempts, or [loop] stagnation_k = 0: no trigger."""
+    k = max(0, int(getattr(ctx, "stagnation_k", 3) or 0))
+    if k <= 0:
+        return None
+    attempts = _stagnation_attempts(ctx, records, meta_recs)
+    if len(attempts) < k:
+        return None
+    band = float(resolvable_diff(records, ctx.gate_window,
+                                 floor=ctx.resolvable_floor, cap=ctx.resolvable_cap))
+    tail = attempts[-k:]
+    if any(a["gain"] is None or abs(a["gain"]) / 100.0 >= band for a in tail):
+        return None
+    best_ms, target = _best_ms(records, ctx.gate_window), _resolve_target(ctx)
+    if not best_ms or not target or target <= 0:
+        return None
+    gap_pct = 100.0 * (best_ms - target) / target
+    if gap_pct / 100.0 <= band:
+        return None
+    return {"k": k, "attempts": tail, "n": len(attempts),
+            "band_pct": band * 100.0, "gap_pct": gap_pct,
+            "overrides": sum(1 for m in (meta_recs or [])
+                             if "[stagnation_override]" in (m.patch_direction or ""))}
+
+
+def _stagnation_block(rep: dict) -> str:
+    """The injected STAGNATION section (contract C3: one subsection, ≤10 lines).
+    Lists the attempts and their gains, the band, the gap, and the two legal
+    answers — a structural route, or the override line."""
+    shown = rep["attempts"][-6:]
+    lines = [f"- {a['label']}: {_fmt_pct(a['gain'])}" for a in shown]
+    hidden = len(rep["attempts"]) - len(shown)
+    if hidden > 0:
+        lines.append(f"- (+{hidden} earlier flat attempts)")
+    return (
+        "\n## Stagnation (driver-read: the last "
+        f"{rep['k']} parameter-level attempts all measured inside the resolution band)\n"
+        + "\n".join(lines) + "\n"
+        f"(band = resolvable_diff {_fmt_pct(rep['band_pct'])}; every |gain| above sits inside it; "
+        f"gap to target = {_fmt_pct(rep['gap_pct'])} — a real, measurable gap remains)\n"
+        "Constraint on THIS diagnosis only: `cause_class` must be a structural route — R1 with a "
+        "priced `reopen_price:`, R2-structural with a measured price, or an ARCH_PROBE_REQUEST / "
+        "survey request for the skeleton question — because more parameter-level walking is "
+        "measured to pay nothing. To insist on a parameter-level direction anyway, write "
+        "`stagnation_override: <reason>` and explain in `confidence` why this attempt differs "
+        "from the flat ones above (the override lifts the constraint this step and is recorded).\n"
+        f"Past stagnation overrides: {rep['overrides']}.\n")
+
+
+def _parse_stagnation_override(text: str) -> str | None:
+    """The reason on the diagnosis's `stagnation_override:` line, or None. The
+    line is honored only on a step whose prompt carried the STAGNATION block."""
+    m = _STAG_OVERRIDE_RE.search(text or "")
+    return m.group(1).strip() if m and m.group(1).strip() else None
+
+
+# --- WP10: MC-DELIVERY (student structure fan-out, prescreened) --------------------
+#
+# One decision, several STRUCTURAL routes: the milestone's decision line may carry
+# `multi_candidate: 2|3` (the patch writes it; clamped to [loop]
+# multi_candidate_max). The student then delivers that decision as its own
+# standard single commit holding kernel_v0/v1/v2.<ext> — each a complete
+# same-interface implementation it wrote itself (L0 unchanged: no oracle text can
+# reach these files through the driver). The driver prescreens them in ONE job
+# (notes/mc_prescreen.py, generated by the driver over the vendored pricing
+# timing kernel — the sweep's reuse pattern; the SWEEP branch itself is
+# untouched, contract C4): a correctness smoke per variant first (a failing
+# variant is a DNF and never reaches the timing), then base-vs-survivors
+# interleaved timing. The latency-best smoke-passing variant is APPLIED by the
+# driver (written into the kernel file, the other variants archived under
+# notes/variants/<iter>/) and ONLY it takes the standard full eval gate —
+# correctness + precision + measure_paired exactly as any delivery. The record
+# keeps the objective variant table (IterationRecord.variant_timings); the
+# teacher reads timings, never a second delivery. "One iteration = one delivery"
+# stands: the winner is the delivery.
+
+_MC_FIELD_RE = re.compile(r"multi_candidate\s*[:：]\s*([0-9]+)")
+_MC_LINE_RE = re.compile(
+    r"^MC name=(?P<name>\S+) smoke=(?P<smoke>\S+) ms=(?P<ms>\S+) ratio=(?P<ratio>\S+)"
+    r"(?: delta=(?P<delta>\S+))?", re.M)
+_MC_WINNER_RE = re.compile(r"^MC-WINNER name=(?P<name>\S+)", re.M)
+_MC_OK_RE = re.compile(r"^MC-OK variants=(?P<n>\d+) rounds=(?P<r>\d+)"
+                       r"(?: base_ms=(?P<base_ms>\S+))?(?: winner=(?P<winner>\S+))?", re.M)
+_MC_FAIL_RE = re.compile(r"^MC-FAIL reason=(?P<reason>.*)$", re.M)
+_MC_CMD = "cmd:python3 notes/mc_prescreen.py"
+_MC_MAX_VARIANTS = 3          # == multi_candidate_max's default; the clamp is the ctx key
+_MC_ROUNDS = 2                # interleaved rounds per surviving variant (prescreen grade)
+_MC_BENCH_TIMEOUT = 900       # one bench call — the sweep/pricing precedent
+_MC_SMOKE_TIMEOUT = 600       # the correctness smoke: one quick call
+_MC_BUDGET_S = 3600           # the whole pass, clamped to the job clock
+
+
+def _milestone_multi_candidate(ctx: LoopContext, decision_id: str) -> int:
+    """The `multi_candidate:` authorization pre-written on the milestone decision
+    line, or 0. Read from the milestone file itself (the teacher's), the same
+    channel and shape as a sweep recipe; the driver clamps it to
+    multi_candidate_max before anything runs."""
+    try:
+        text = Path(ctx.milestone).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return 0
+    from forgekernel.milestone import DECISIONS_ENDS, DECISIONS_SECTION, _decision_blocks, _section_body
+    sec = _section_body(text, DECISIONS_SECTION, DECISIONS_ENDS)
+    if not sec:
+        return 0
+    block = dict(_decision_blocks(sec)).get(decision_id)
+    if not block:
+        return 0
+    m = _MC_FIELD_RE.search(block)
+    return int(m.group(1)) if m else 0
+
+
+def _mc_variant_files(ctx: LoopContext, n: int) -> list:
+    """The student's variant files that exist for an n-way authorization:
+    `<kernel stem>_v0.<ext>` .. `<stem>_v<n-1>.<ext>` beside the kernel file (its
+    own directory, same stem and suffix — flash_bwd_v0.py on a DSL kernel,
+    kernel_v0.cu on a CUDA one). Workspace-relative paths, only files that
+    exist, in index order."""
+    kf = Path(ctx.kernel_file)
+    base = kf.parent
+    out = []
+    for i in range(max(0, n)):
+        rel = str(base / f"{kf.stem}_v{i}{kf.suffix}")
+        if (Path(ctx.workspace) / rel).is_file():
+            out.append(rel)
+    return out
+
+
+_MC_PRESCREEN_SRC = '''"""Driver-generated MC-DELIVERY prescreen — time the student-written
+skeleton variants of ONE decision in a single GPU job, after a correctness
+smoke, and name the latency-best smoke-passing variant.
+
+Submitted by the loop driver at an authorized decision (the milestone line
+carries `multi_candidate: n`): `cmd:python3 notes/mc_prescreen.py
+notes/__mc_<decision>.json`, cwd = repo root. NOT a decision about the
+milestone and not a delivery: the winner is merely WHICH of the student's own
+variants takes the standard full eval gate this iteration. The timing, node
+hygiene and noise reading are lever_pricing_run's, imported from the sibling
+seeded file — the same reuse pattern as the sweep tool (whose branch semantics
+are untouched).
+
+Spec file (JSON, written by the driver at submit time):
+    {"kernel_file": "kernel.py", "variants": ["kernel_v0.py", "kernel_v1.py"],
+     "rounds": 2, "workload": "representative" | ""}
+
+Machine-readable output (the driver parses these):
+    MC name=<v> smoke=<pass|dnf> ms=<m|n/a> ratio=<r|n/a> delta=<+x.xx%|n/a>
+    MC-WINNER name=<v|none>
+    MC-OK variants=<n> rounds=<r> base_ms=<..> winner=<..>
+    MC-FAIL reason=<...>
+"""
+import json
+import os
+import sys
+import time
+
+try:                                    # vendored flat in notes/ (notes/ on sys.path)
+    import lever_pricing_run as lpr
+except ImportError:                     # the harness imports it as a skill
+    from forgekernel.skills import lever_pricing_run as lpr
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_KERNEL = "kernel.py"
+# the prescreen's own budgets (the pricing tool's precedents; driver-side defaults
+# live in the loop driver — the spec carries rounds, the script carries the caps)
+_MC_BENCH_TIMEOUT = 900       # one timed bench call
+_MC_SMOKE_TIMEOUT = 600       # the correctness smoke: one quick call
+_MC_BUDGET_S = 3600           # the whole pass, clamped to the job clock
+
+
+def _tok(name):
+    return name.replace(" ", "_")
+
+
+def _num(x):
+    return "n/a" if x is None else repr(round(x, 4)) if isinstance(x, float) else str(x)
+
+
+def _pct(x):
+    return "n/a" if x is None else f"{x:+.2f}%"
+
+
+def main(argv=None) -> int:
+    t_job0 = time.monotonic()
+    args = list(sys.argv[1:] if argv is None else argv)
+    spec_path = args[0] if args else os.path.join("notes", "mc.json")
+    try:
+        spec = json.load(open(os.path.join(ROOT, spec_path)))
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"MC-FAIL reason=spec-unreadable ({e})", flush=True)
+        return 0
+    kernel = str(spec.get("kernel_file") or DEFAULT_KERNEL)
+    variants = [str(v) for v in (spec.get("variants") or [])]
+    rounds = max(1, int(spec.get("rounds", 2)))
+    if str(spec.get("workload") or ""):
+        # single-workload prescreen on a group card (smoke AND timed calls) — the
+        # winner still takes the full eval over every workload, so this is only
+        # the ranking pass
+        lpr._SCOPE_WANT["name"] = str(spec["workload"])
+    if not variants:
+        print("MC-FAIL reason=no-variants", flush=True)
+        return 0
+    kpath = os.path.join(ROOT, kernel)
+    try:
+        base_src = open(kpath).read()
+    except OSError as e:
+        print(f"MC-FAIL reason=kernel-unreadable ({kernel}: {e})", flush=True)
+        return 0
+    sources = {}
+    for v in variants:
+        try:
+            sources[v] = open(os.path.join(ROOT, v)).read()
+        except OSError as e:
+            print(f"MC name={_tok(v)} smoke=dnf ms=n/a ratio=n/a delta=n/a "
+                  f"(unreadable: {e})", flush=True)
+    print(f"MC kernel_file={kernel} variants: {' '.join(sources) or '(none)'}", flush=True)
+    if not sources:
+        print("MC-OK variants=0 rounds=0 winner=none", flush=True)
+        print("MC-WINNER name=none (no variant file was readable)", flush=True)
+        return 0
+    # phase 1 — correctness smoke, one quick call per variant: a variant that
+    # cannot produce correct output is a DNF and never reaches the timing (the
+    # delivery must not be spent on a variant the gate would only revert)
+    smoke = {}
+    for v, src in sources.items():
+        open(kpath, "w").write(src)
+        j = lpr.run_bench(v, keep_cubin=False, timeout=_MC_SMOKE_TIMEOUT)
+        if lpr.node_dirty():
+            print(f"MC-FAIL reason=node-dirty ({lpr.node_dirty()})", flush=True)
+            open(kpath, "w").write(base_src)
+            return 0
+        smoke[v] = bool(j and j.get("correctness", {}).get("pass"))
+        print(f"MC name={_tok(v)} smoke={'pass' if smoke[v] else 'dnf'} ms=n/a ratio=n/a "
+              f"delta=n/a", flush=True)
+    alive = [v for v, okk in smoke.items() if okk]
+    if not alive:
+        print("MC-OK variants=0 rounds=0 winner=none", flush=True)
+        print("MC-WINNER name=none (every variant failed the correctness smoke)", flush=True)
+        open(kpath, "w").write(base_src)      # leave the tree as we found it
+        return 0
+    # phase 2 — base vs survivors, interleaved rounds, the pricing kernel
+    order = ["base"] + alive
+    dev = {v: [] for v in order}
+    ratio = {v: [] for v in order}
+    ok = {v: True for v in order}
+    budget = float(_MC_BUDGET_S)
+    left = lpr.job_seconds_left(t_job0)
+    if left is not None:
+        budget = max(0.0, min(budget, left - lpr.ROLE_PASS_MARGIN_S))
+    t0 = time.monotonic()
+    done = 0
+    try:
+        rnd = 0
+        while rnd < rounds:
+            if time.monotonic() - t0 > budget:
+                print(f"MC ROUND {rnd} skipped: pass budget {budget:.0f}s spent", flush=True)
+                break
+            for v in order:
+                open(kpath, "w").write(base_src if v == "base" else sources[v])
+                j = lpr.run_bench(v, keep_cubin=False, timeout=_MC_BENCH_TIMEOUT)
+                if lpr.node_dirty():
+                    print(f"MC-FAIL reason=node-dirty ({lpr.node_dirty()})", flush=True)
+                    return 0
+                if j is None or not j.get("correctness", {}).get("pass"):
+                    ok[v] = False
+                    print(f"MC ROUND {rnd} {v} pass=False", flush=True)
+                    if v == "base":
+                        print("MC-FAIL reason=base-failed-correctness", flush=True)
+                        return 0
+                    continue
+                perf = j.get("performance") or {}
+                dev[v].append(perf.get("device_median_ms"))
+                ratio[v].append(lpr.ratio_reading(perf))
+                done += 1
+                print(f"MC ROUND {rnd} {v} pass=True device={perf.get('device_median_ms')} "
+                      f"vs_ref_device={lpr.ratio_reading(perf)}", flush=True)
+            rnd += 1
+        score, delta, use_ratio = lpr.make_scorer(order, ok, dev, ratio)
+        noise = lpr.noise_floor(order, ok, dev)
+        winner = None
+        best_score = None
+        for v in alive:
+            if not ok.get(v):
+                continue
+            s = score(v)
+            print(f"MC name={_tok(v)} smoke=pass ms={_num(lpr.med(dev[v]))} "
+                  f"ratio={_num(lpr.med(ratio[v]) if use_ratio else None)} "
+                  f"delta={_pct(delta(v, 'base'))}", flush=True)
+            if s is not None and (best_score is None or s > best_score):
+                winner, best_score = v, s
+        print(f"MC-OK variants={len(alive)} rounds={len(dev['base'])} "
+              f"base_ms={_num(lpr.med(dev['base']))} winner={_tok(winner) if winner else 'none'} "
+              f"floor={noise:.2f}%", flush=True)
+        print(f"MC-WINNER name={_tok(winner) if winner else 'none'}", flush=True)
+    finally:
+        open(kpath, "w").write(base_src)      # leave the tree as we found it
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+def parse_mc_results(log: str) -> "tuple[list, str | None, str | None]":
+    """(rows, winner, fail_reason) from an mc_prescreen.py log. Rows are the
+    per-variant objective readings the record banks (variant_timings); the
+    winner is the variant the driver applies."""
+    rows = [{"name": m["name"], "smoke": m["smoke"] == "pass",
+             "smoke_raw": m["smoke"],
+             "ms": _float_or_none(m["ms"]) if m["ms"] not in (None, "n/a") else None,
+             "ratio": _float_or_none(m["ratio"]) if m["ratio"] not in (None, "n/a") else None,
+             "delta_pct": _pct_or_none(m["delta"])}
+            for m in _MC_LINE_RE.finditer(log)]
+    winner = None
+    for m in _MC_WINNER_RE.finditer(log):
+        winner = None if m["name"] == "none" else m["name"]
+    fail = None
+    for m in _MC_FAIL_RE.finditer(log):
+        fail = m["reason"].strip()
+    if fail is None and not rows:
+        fail = "no MC line in the job log"
+    return rows, winner, fail
+
+
+def _mc_log_verdict(log: str) -> str | None:
+    """The closing verdict an mc_prescreen log carries, None when it carries none."""
+    if _MC_OK_RE.search(log or ""):
+        return "MC-OK"
+    if _MC_FAIL_RE.search(log or ""):
+        return "MC-FAIL"
+    return None
+
+
+def _mc_log_settled(be, log: str, what: str) -> str:
+    """``log`` once it carries an MC verdict: as read, or the job's archive read
+    again (the sweep/pricing checker's free recovery)."""
+    if _mc_log_verdict(log) is not None:
+        return log
+    job = str(getattr(be, "last_job_id", "") or "")
+    reread = getattr(be, "reread_log", None)
+    if not job or not callable(reread):
+        return log
+    _log(f"{what}: job {job} log carries no MC verdict — re-reading the archive")
+    try:
+        again = reread(job)
+    except BackendError as e:
+        _log(f"{what}: re-read of job {job} failed ({e})")
+        return log
+    return again if len(again or "") > len(log or "") else log
+
+
+def _mc_job(be, branch: str, cmd: str, what: str, rerun: bool = True) -> "tuple[str, str]":
+    """One prescreen job, settled: (log, job id). Re-bought once when its GPU was
+    left dirty (mc_prescreen reuses the pricing tool's node hygiene) or its log
+    still carries no MC verdict (a crashed tool is not re-bought)."""
+    attempts = 2 if rerun else 1
+    log = ""
+    for attempt in range(attempts):
+        log = _mc_log_settled(be, be.submit_gpu(branch, cmd), what)
+        last = attempt == attempts - 1
+        if not last and (dirty := _node_dirty_reason(None, log)):
+            _log(f"{what}: {dirty} — re-running the same prescreen once")
+            continue
+        if not last and _mc_log_verdict(log) is None and _TOOL_TRACEBACK not in log:
+            _log(f"{what}: job {getattr(be, 'last_job_id', '') or '?'} log still carries no "
+                 f"MC verdict — resubmitting the same prescreen once")
+            continue
+        break
+    return log, str(getattr(be, "last_job_id", "") or "")
+
+
+def _mc_seed_toolkit(ctx: LoopContext, be) -> None:
+    """Vendor lever_pricing_run (the timing kernel) and write the driver-generated
+    prescreen into notes/, committing what changed — the job runs what is
+    committed in the tree (the sweep toolkit's discipline)."""
+    import importlib
+    changed = []
+    vendor = importlib.import_module("forgekernel.skills.lever_pricing_run")
+    text = Path(vendor.__file__).read_text()
+    dst = Path(ctx.workspace) / "notes" / Path(vendor.__file__).name
+    if not (dst.exists() and dst.read_text() == text):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(text)
+        changed.append(dst.name)
+    dst = Path(ctx.workspace) / "notes" / "mc_prescreen.py"
+    if not (dst.exists() and dst.read_text() == _MC_PRESCREEN_SRC):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(_MC_PRESCREEN_SRC, encoding="utf-8")
+        changed.append("mc_prescreen.py")
+    if changed:
+        be.commit("notes: vendor " + ", ".join(changed) + " (driver-generated MC prescreen)")
+
+
+def _mc_timings_rows(rows: list, winner: str | None) -> list:
+    """The objective per-variant table the record banks (variant_timings):
+    smoke verdict, latency readings, and which variant became the delivery.
+    The winner flag rides the variant's LAST row (its timed summary), so the
+    table names the delivery exactly once."""
+    last_of: dict = {}
+    for i, r in enumerate(rows):
+        last_of[r["name"]] = i
+    return [{"variant": r["name"], "smoke": r["smoke"], "ms": r["ms"],
+             "ratio": r["ratio"], "delta_vs_base_pct": r["delta_pct"],
+             "winner": r["name"] == winner and last_of[r["name"]] == i}
+            for i, r in enumerate(rows)]
+
+
+def _mc_archive_variants(ctx: LoopContext, be, iter_no: int, variants: list,
+                         winner: str | None) -> None:
+    """Move the variant files out of the delivery tree: the non-winners under
+    notes/variants/<iter>/ (the objective record of what was measured), the
+    winner too (its content now lives in the kernel file). Without this the
+    next iteration inherits stale kernel_v*.py files that a later authorized
+    delivery would misread as its own variants."""
+    root = Path(ctx.workspace)
+    dst_dir = root / "notes" / "variants" / f"iter{iter_no}"
+    moved = []
+    for rel in variants:
+        src, dst = root / rel, dst_dir / Path(rel).name
+        if not src.is_file():
+            continue
+        try:
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            src.replace(dst)
+            moved.append(rel)
+        except OSError as e:
+            _log(f"iter {iter_no}: mc archive of {rel} failed ({e}) — left in place")
+    if moved:
+        _log(f"iter {iter_no}: mc variants archived under notes/variants/iter{iter_no}/ "
+             f"({', '.join(moved)})")
+
+
+def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
+                last_good_ref: str | None, metric_before: float | None) -> dict | None:
+    """The MC-DELIVERY path of one delivery, or None (not authorized / nothing
+    to fan out — the caller proceeds exactly as before). Authorized with ≥2
+    variant files present: ONE prescreen job, then either the winner applied
+    (returns {"rows", "winner"} — the caller's eval measures the winner tree),
+    or the all-DNF ordinary REVERT (returns {"rows", "revert"} with the record
+    appended and the workspace reset; the caller returns it). A job that cannot
+    run at all (BackendError) never blocks the delivery: the caller's ordinary
+    eval proceeds on the tree as committed."""
+    did = record.decision_id or ""
+    if _GATE_ROW.search(did) or did in ("REOPEN", "REOPEN-REVERT"):
+        return None
+    n = min(_milestone_multi_candidate(ctx, did), max(0, int(ctx.multi_candidate_max)))
+    if n < 2:
+        return None
+    variants = _mc_variant_files(ctx, n)
+    if len(variants) < 2:
+        if variants:
+            _log(f"iter {iter_no}: {did} carries multi_candidate: {n} but only "
+                 f"{len(variants)} variant file(s) exist — ordinary delivery")
+        return None
+    spec_path = Path(ctx.workspace) / "notes" / (
+        "__mc_" + re.sub(r"[^A-Za-z0-9_.\-]", "_", did) + ".json")
+    workload = ""
+    try:
+        shapes = meta_shapes.card_meta_workloads(ctx.workspace)
+        workload = shapes[0] if shapes else ""
+    except Exception:  # noqa: BLE001 — a card that cannot name workloads times all of it
+        workload = ""
+    spec = {"kernel_file": str(ctx.kernel_file), "variants": variants,
+            "rounds": _MC_ROUNDS, "workload": workload}
+    _log(f"iter {iter_no}: {did} authorized multi_candidate: {n} — one prescreen job "
+         f"({len(variants)} variants{', workload ' + workload if workload else ''})")
+    try:
+        _mc_seed_toolkit(ctx, be)
+        spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
+        be.commit(f"mc: prescreen spec for {did}")
+        branch = f"{ctx.branch_prefix}-i{iter_no}mc"
+        be.push_branch(branch)
+        log, _job = _mc_job(be, branch, f"{_MC_CMD} notes/{spec_path.name}",
+                            f"iter{iter_no}: mc prescreen {did}")
+    except BackendError as e:
+        _log(f"iter {iter_no}: mc prescreen job failed ({e}) — delivering as committed")
+        return None
+    finally:
+        try:
+            spec_path.unlink()
+        except OSError:
+            pass
+    rows, winner, fail = parse_mc_results(log)
+    timings = _mc_timings_rows(rows, winner)
+    if winner is not None:
+        try:
+            winner_src = (Path(ctx.workspace) / winner).read_text(encoding="utf-8")
+        except OSError as e:
+            _log(f"iter {iter_no}: mc winner {winner} unreadable ({e}) — treated as no winner")
+            winner = None
+    if winner is None:
+        why = fail or ("every variant failed the prescreen"
+                       if rows else "the prescreen produced no reading")
+        _log(f"iter {iter_no}: {did} multi-candidate prescreen -> no winner ({why}); "
+             f"ordinary REVERT (no eval spent)")
+        _mc_archive_variants(ctx, be, iter_no, variants, None)
+        be.commit(f"mc: variants of {did} archived (no winner)")
+        be.reset(last_good_ref or base_sha)
+        rec = IterationRecord(
+            iter=iter_no, decision_id=did, change=record.change,
+            correctness=None, verdict="REVERT", metric_before=metric_before,
+            error=f"multi-candidate: no variant passed the prescreen ({why})",
+            profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
+            variant_timings=timings or None,
+        )
+        append_record(ctx.status_path, rec)
+        return {"rows": timings, "winner": None, "revert": rec}
+    # the winner becomes THIS iteration's delivery: written into the kernel file,
+    # the other variants archived, one driver bookkeeping commit (the delivery
+    # itself is still one implementation, judged by the standard gate)
+    Path(ctx.workspace, ctx.kernel_file).write_text(winner_src, encoding="utf-8")
+    _mc_archive_variants(ctx, be, iter_no, variants, winner)
+    be.commit(f"mc: winner {Path(winner).name} of {did} applied (driver-selected "
+              f"from the prescreen; judged by the standard gate)")
+    _log(f"iter {iter_no}: {did} mc prescreen -> winner={Path(winner).name} "
+         + "; ".join(f"{r['name']}={_fmt_pct(r['delta_pct'])}" for r in rows if r["smoke"]))
+    return {"rows": timings, "winner": winner, "revert": None}
+
+
 def _normalise_ablations(ctx: LoopContext, ablations: list, known_ids: set) -> list:
     """The teacher's ablations the way the tool and the table will see them:
     at most _LEVER_MAX_ABLATIONS, one-token names, `decisions` restricted to
@@ -7350,6 +7996,17 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     # lever instead of building on a liability. Own subsection only.
     if remove_block := _wp4_remove_candidates_block(live_records, known_levers):
         diagnose_extra += remove_block
+    # --- WP10: STAGNATION — the architecture-escape trigger. The last K
+    # parameter-level attempts read inside the run's own resolution band while a
+    # real gap remains: say so, and constrain THIS diagnosis to a structural
+    # route (or the `stagnation_override:` release valve). Pressure only: the
+    # block never machine-changes a cause_class, and the diagnosis turn below is
+    # the teacher's, as always.
+    if stagnation := _stagnation_report(ctx, live_records, prior_records):
+        _log(f"meta: stagnation — the last {stagnation['k']} parameter-level attempts read "
+             f"inside the {_fmt_pct(stagnation['band_pct'])} band with a "
+             f"{_fmt_pct(stagnation['gap_pct'])} gap to target -> injecting the STAGNATION block")
+        diagnose_extra += _stagnation_block(stagnation)
     # PHASE EXHAUSTION: the table priced on the current best is a batch
     # measurement of the phase's own knobs; when they all read null the phase's
     # remaining walk is a re-measurement, and the diagnosis must say so (close
@@ -7645,6 +8302,15 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     # memory rows read "D0.19(C"
     locus = re.split(r"[（(]", _parse_field(diagnosis, "deficient_locus"))[0]
     direction = _parse_line(diagnosis, "patch_direction")
+    # --- WP10: the override release valve of the STAGNATION block (honored only
+    # on a step whose prompt carried it). The constraint is pressure, never a
+    # machine gate, so there is nothing to lift mechanically — but the override
+    # is RECORDED: the marker rides patch_direction into meta_status.jsonl, so
+    # the reflection and the next STAGNATION block show how often parameter-level
+    # insisting has happened (a run of overrides is itself diagnostic evidence).
+    if stagnation is not None and (ov := _parse_stagnation_override(diagnosis)):
+        _log(f"meta: stagnation_override written ({ov[:80]}) — recorded in the meta trajectory")
+        direction = f"{direction} [stagnation_override]".strip()
     reachability = _parse_reachability(diagnosis)
     if reachability:
         _log(f"meta: reachability -> {reachability}")

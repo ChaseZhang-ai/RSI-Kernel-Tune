@@ -95,6 +95,12 @@ notes:           <why this is foundation-first / how it stays shape-free / which
 - **Do not over-patch**: fix only the single defect of the diagnosis. **Exception**: when the diagnosis has, per the pricing table, combined several measured small levers into one
   ⊗ bundle, the patch lands the whole bundle as one group of additive decisions in the last phase (`patch_class: additive`, no reopen,
   no resume), and the bundle's first item states that the gain is realized when the bundle is complete.
+- **Structural fan-out authorization (`multi_candidate:`)**: when ONE decision has two or three genuinely different structural
+  routes (loop organisation / stage partition / role partition), you may write `multi_candidate: 2` or `3` on that decision's
+  line — the student then delivers the decision as that many complete same-interface implementations of its own (files named
+  `{kernel stem}_v0/_v1/_v2.<ext>` beside the kernel file), the driver prescreens them in one job, and only the latency-best
+  smoke-passing variant takes the standard gate. Variants must differ in **structure**, not in parameter values — parameter
+  differences belong in a `sweep:` recipe. The field authorizes the student's own fan-out; it never carries code (L0 stands).
 - **Gate payoff contract**: in the rebuild segment after the patch lands, the driver compares every `M<k>-gate` row as it lands against **the same
   gate of the previous segment**; without a declaration it expects parity (plus a 1.5% noise tolerance), and anything beyond that is judged REVERT_PATCH on the spot, without waiting for a
   plateau. If your structural patch **deliberately** lets some gate regress first and realizes the gain at a later gate (an exchange-face atom changing layout,

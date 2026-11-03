@@ -117,14 +117,21 @@ def _mean(vals):
     return round(sum(vals) / len(vals), 1) if vals else None
 
 
-def merged_floor(floors) -> float:
+def merged_floor(floors, floor: float | None = None) -> float:
     """The noise floor of a mean over workloads read independently, each at its own
     floor (3 sd of its delta): 3 sd of the mean = sqrt(sum f^2) / k, never below the
-    tool's own floor."""
+    tool's own floor.
+
+    WP15 constant migration: ``floor`` is the RUN's own resolution band as a
+    percent (driver: resolvable_diff x 100) — the merged floor never reads below
+    what the run can actually resolve; None keeps the historical constant
+    (NOISE_FLOOR_PCT) exactly as before. The constant stays the lower bound in
+    both cases: a quiet run does not get a wider floor than its tool's own."""
+    base = NOISE_FLOOR_PCT if floor is None else max(NOISE_FLOOR_PCT, float(floor))
     fs = [float(f) for f in floors if f is not None]
     if not fs:
-        return NOISE_FLOOR_PCT
-    return max(NOISE_FLOOR_PCT, math.sqrt(sum(f * f for f in fs)) / len(fs))
+        return base
+    return max(base, math.sqrt(sum(f * f for f in fs)) / len(fs))
 
 
 def is_split(readings, floors) -> bool:
@@ -162,7 +169,8 @@ def _dec_reasons(tok: str | None) -> dict:
     return out
 
 
-def merge_lever_logs(shapes: list, *, missing: dict | None = None) -> str:
+def merge_lever_logs(shapes: list, *, missing: dict | None = None,
+                     floor: float | None = None) -> str:
     """One lever_pricing_run log from per-workload jobs: ``shapes`` = [(workload name, log,
     job id)], the representative first, every log a table with a verdict. The merged log
     carries the lines the driver parses (LEVER / VARIANT / STACK / ABLATE / PRICE / the
@@ -171,7 +179,10 @@ def merge_lever_logs(shapes: list, *, missing: dict | None = None) -> str:
     (the workloads, their jobs, the ones ``missing`` maps to why). The ablations merge
     over the workloads whose ablation pass closed (ABLATE-OK); the others are named on
     ABLATE-SHAPES with why ("cut": no verdict, the job's clock or a kill ended it first;
-    "fail:<reason>": ABLATE-FAIL) -- a missing reading, never a flat one."""
+    "fail:<reason>": ABLATE-FAIL) -- a missing reading, never a flat one.
+
+    WP15: ``floor`` is the run's own resolution band as a percent (the merged
+    floor never reads below it; None = the historical constant)."""
     from forgekernel.loop.driver import (_ABLATE_FAIL_RE, _ABLATE_OK_RE, _PRICE_OK_RE,
                                          _PRICE_SCOPE_RE, parse_lever_prices)
     from forgekernel.skills.lever_pricing_run import lever_class
@@ -204,7 +215,7 @@ def merge_lever_logs(shapes: list, *, missing: dict | None = None) -> str:
     if rep["header"]:
         out.append(rep["header"])
     floors = [p["noise"] for p in per]
-    noise = merged_floor(floors)
+    noise = merged_floor(floors, floor)
 
     lever_rows = {}
     for name, r0 in rep["levers"].items():

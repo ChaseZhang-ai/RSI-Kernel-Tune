@@ -165,8 +165,89 @@ PREP_ITERS = 10           # samples of the window-outside prep step (reported, n
 SPRT_EARLY_STOP = os.environ.get("FK_SPRT_EARLY_STOP", "") == "1"
 SPRT_MIN_PAIRED = 4        # resolvable_diff's own minimum: fewer cannot speak
 SPRT_MIN_WINDOWS = 2       # and at least this many distinct window indices paired
+SPRT_MIN_WINDOWS_FAMILY = 3  # WP15: a pooled (multi-workload) controller stops
+#                            no earlier than the 3rd window — half the evidence
+#                            of a single measurement is not enough when the
+#                            card's geomean verdict amplifies one workload's drag
 SPRT_BAND_FLOOR = 0.005    # == loop/parse.py RESOLVABLE_DIFF_FLOOR (drift pair)
 SPRT_BAND_CAP = 0.015      # == loop/parse.py RESOLVABLE_DIFF_CAP (drift pair)
+#
+# WP15 STOP-BAND CALIBRATION (107 ruling B1 correction — an earlier draft of
+# this block claimed the loss stop decides on an UNCLAMPED band; that form was
+# a shadowed dead definition and never ran): the LOSS stop decides on the
+# clamped band [SPRT_BAND_FLOOR, SPRT_BAND_CAP], the resolvable_diff family —
+# the mixed configuration every deployed job runs, and the one the backtest's
+# AR(1) + family cells are the flip record for (worst family win-lost 1.35% at
+# 2% noise, inside the 2% gate). The WIN stop reads the unclamped honest band
+# (sprt_band below) and is safe only under the driver's C14 confirmation.
+#
+# WP15 PERSISTENCE: a loss stop must hold at the current candidate AND the
+# previous one (the previous protocol's ratio is recomputed from the same sides
+# trimmed to n-1 — no extra windows run). One transient dip in one candidate
+# protocol stopped the measurement on data full sampling would have recovered
+# from; the backtest's family cell priced that at 4% family win-lost.
+#
+# WP15 (N-B14, contract C14): WIN-direction early stop. Default OFF — the
+# loss-only rule above is safe by arithmetic; the win direction is only safe
+# UNDER THE COUPLING: a win-stopped reading is a TRUNCATED draw that beat the
+# margin, so the driver re-measures it through the standing watermark
+# confirmation before it can take the watermark, enter the plateau window or
+# price a lever (the eval JSON's "sprt" block is how the driver sees it). The
+# margin the interval's BOTTOM must clear is the driver's watermark band
+# (FK_SPRT_WIN_MARGIN), so the stop never fires on a win the confirmation
+# protocol would not re-examine anyway.
+SPRT_WIN_STOP = os.environ.get("FK_SPRT_WIN_STOP", "") == "1"
+SPRT_WIN_MARGIN = float(os.environ.get("FK_SPRT_WIN_MARGIN", "") or 0.03)
+# WP15: MULTI-WORKLOAD BAND POOLING. Each workload arms its own controller, so
+# a 3-workload card's decision rode 4-8 pairs each — a band fitted to 4 pairs
+# is unstable. When the job runs several workloads, every controller's decided
+# pairs pool here and every later controller's band reads the pooled MAD (up
+# to SPRT_POOL_MAX pairs) — the same statistic over more data, no window
+# protocol change (each workload still runs its own A B B A; only the BAND's
+# sample grows). First workload behaves exactly as before (empty pool).
+_SPRT_POOL: list = []
+_SPRT_POOL_MAX = 12
+_SPRT_FAMILY_JOB = False   # set by measure_windows_workloads: this job is a card
+
+
+def sprt_band(ratios, *, floor: float = SPRT_BAND_FLOOR) -> float | None:
+    """The WIN-stop band (WP15 N-B14): MAD x 1.4826 x 3, floored, NOT capped —
+    the win direction's interval must not under-state the noise it actually
+    saw. The LOSS stop decides on the clamped resolvable_diff family band
+    [floor, cap] instead (computed inline in sprt_stop_verdict below — 107
+    ruling B1: the unclamped loss-side form was a shadowed dead definition and
+    is gone; the clamped semantics are what every deployed job ran). None
+    below SPRT_MIN_PAIRED pairs (cannot speak)."""
+    vals = [float(r) for r in (ratios or ()) if isinstance(r, (int, float))
+            and not isinstance(r, bool) and float(r) > 0.0]
+    if len(vals) < SPRT_MIN_PAIRED:
+        return None
+    mad = statistics.median(abs(r - statistics.median(vals)) for r in vals)
+    return max(3.0 * 1.4826 * mad, floor)
+
+
+def sprt_win_stop_verdict(ratio, ratios, margin: float = SPRT_WIN_MARGIN) -> bool:
+    """Whether the candidate measurement reads a CLEAR WIN (WP15 N-B14): even
+    the interval's BOTTOM sits above parity by more than the confirmation band
+    (ratio - band > 1 + margin), on the same honest unclamped band. Stopping
+    here saves the tail of a won measurement — but the reading is a truncated
+    draw, flagged direction="win" in the eval JSON's sprt block, and the DRIVER
+    holds it to the watermark confirmation protocol before it counts (contract
+    C14). A stop fired only when the win already clears the confirmation margin
+    cannot save any win the protocol would have accepted unconfirmed anyway."""
+    band = sprt_band(ratios)
+    return band is not None and margin > 0 and ratio - band > 1.0 + margin
+
+
+# The last controller decision on this job ({"decided", "direction", "windows",
+# "measurement"}): how the bench JSON's sprt block reaches paired_performance
+# without measure_paired growing a return field (its body stays byte-identical).
+# ``measurement`` carries the decision's measurement epoch (bumped by every
+# _measure call): paired_performance reports a decision ONLY from the epoch it
+# is reporting on — a job that runs several paired measurements (sweep/pricing
+# variants) must never see one variant's decision ride another's block.
+_last_sprt_decision: dict = {}
+_SPRT_MEASUREMENT_ID = 0
 
 
 def sprt_stop_verdict(ratio, ratios, *, floor: float = SPRT_BAND_FLOOR,
@@ -216,6 +297,7 @@ class _SprtController:
         # sequence: first ref, first kernel, second kernel, second ref)
         self.sides: dict[str, list[float]] = {"r1": [], "k1": [], "k2": [], "r2": []}
         self.decided: int | None = None   # window count everything stops at
+        self.direction: str | None = None  # "loss" (WP11) | "win" (WP15 N-B14)
 
     def _side(self, side: str, second_half: bool) -> str:
         if side == "ref":
@@ -247,6 +329,23 @@ class _SprtController:
                     out.append(self.sides[ref_key][i] / self.sides[ker_key][i])
         return out
 
+    def _band_pairs(self, n: int) -> list[float]:
+        """The pairs the BAND is read from: this measurement's own pairs, plus
+        (WP15 pooling) the earlier workloads' decided pairs of the same job —
+        one statistic over more data; this workload's own pairs always ride
+        first, so a first workload on an empty pool reads exactly the old band."""
+        pairs = self._candidate_pairs(n)
+        if _SPRT_POOL:
+            pairs = pairs + _SPRT_POOL[-_SPRT_POOL_MAX:]
+        return pairs
+
+    def _min_windows(self) -> int:
+        """The FAMILY FLOOR (WP15): a multi-workload job's controllers stop no
+        earlier than the 3rd window; a single measurement keeps the 2-window
+        floor (half the evidence is not enough when the card's geomean verdict
+        amplifies one workload's drag)."""
+        return SPRT_MIN_WINDOWS_FAMILY if _SPRT_FAMILY_JOB else SPRT_MIN_WINDOWS
+
     def on_window(self, side: str, second_half: bool, index: int, ms: float) -> bool:
         """One device window finished. True = take the next one; False = stop."""
         if self.decided is not None:
@@ -259,13 +358,43 @@ class _SprtController:
         if not second_half or side != "ref":
             return True   # decisions happen only at the second ref half
         candidate = index + 1
-        if candidate < SPRT_MIN_WINDOWS:
-            return True   # the floors: never decide below a 2-window protocol
+        if candidate < self._min_windows():
+            return True   # the floors: never decide below the protocol's floor
         ratio = self._candidate_ratio(candidate)
         if ratio is None:
             return True
-        if sprt_stop_verdict(ratio, self._candidate_pairs(candidate)):
+        pairs = self._candidate_pairs(candidate)
+        if sprt_stop_verdict(ratio, self._band_pairs(candidate)):
+            # WP15 PERSISTENCE: the loss must also hold at the previous
+            # candidate — one transient dip stops nothing (its protocol
+            # recovers, and on a family card the geomean amplifies a premature
+            # drag; the backtest priced the unpersisted rule at 4% family
+            # win-lost). The previous protocol's ratio comes from the same
+            # sides trimmed to n-1: no extra windows, no protocol change.
+            if candidate > SPRT_MIN_WINDOWS:
+                prev = self._candidate_ratio(candidate - 1)
+                if prev is None or not sprt_stop_verdict(prev,
+                                                         self._band_pairs(candidate - 1)):
+                    return True
             self.decided = candidate    # clear loss on the candidate's own data
+            self.direction = "loss"
+            _last_sprt_decision.update(decided=candidate, direction="loss",
+                                       windows=len(self.sides["r1"]),
+                                       measurement=_SPRT_MEASUREMENT_ID)
+            _SPRT_POOL.extend(pairs)
+            del _SPRT_POOL[:-_SPRT_POOL_MAX]
+            return False
+        # WP15 N-B14: the win direction stops only when the env arms it — and a
+        # win-stopped reading is flagged for the driver's confirmation (C14), so
+        # a truncated draw can never take the watermark unconfirmed.
+        if SPRT_WIN_STOP and sprt_win_stop_verdict(ratio, self._band_pairs(candidate)):
+            self.decided = candidate
+            self.direction = "win"
+            _last_sprt_decision.update(decided=candidate, direction="win",
+                                       windows=len(self.sides["r1"]),
+                                       measurement=_SPRT_MEASUREMENT_ID)
+            _SPRT_POOL.extend(pairs)
+            del _SPRT_POOL[:-_SPRT_POOL_MAX]
             return False
         return True
 
@@ -377,7 +506,12 @@ def gpu_state_report(readings=None, *, query=None) -> dict:
     """The eval JSON's top-level ``gpu_state`` block: per-field means over the
     samples taken around this bench's windows (``record_gpu_state``), or over the
     ``readings`` given. Nothing readable is reported as field-None with the
-    reason in ``note`` — an absent verdict, never a failure."""
+    reason in ``note`` — an absent verdict, never a failure.
+
+    WP15 (逐窗遥测): ``window_readings`` carries the ordered per-sample readings
+    (bounded at the last 16) beside the means — the job-level mean hid a
+    last-window downclock inside its average, and the driver's clock-band check
+    reads the LAST window against the mean (report-only telemetry)."""
     if readings is None:
         readings = list(_gpu_state_samples)
     readings = [r for r in (readings or ()) if isinstance(r, dict)]
@@ -386,6 +520,9 @@ def gpu_state_report(readings=None, *, query=None) -> dict:
         vals = [r[f] for r in readings
                 if isinstance(r.get(f), (int, float)) and not isinstance(r.get(f), bool)]
         out[f] = (sum(vals) / len(vals)) if vals else None
+    if readings:
+        out["window_readings"] = [{f: r.get(f) for f in GPU_STATE_FIELDS}
+                                  for r in readings[-16:]]
     if not readings:
         out["note"] = ("no gpu_state samples: the timed windows did not run through "
                        "timing.py, or neither pynvml nor nvidia-smi answered")
@@ -580,6 +717,8 @@ def _bind_prep(fn, prep):
 
 
 def _measure(call, on_window=None) -> dict:
+    global _SPRT_MEASUREMENT_ID
+    _SPRT_MEASUREMENT_ID += 1
     e2e = time_e2e(call)
     record_gpu_state()   # WP1 telemetry: once after each window measurement
     dev = time_device(call, on_window=on_window)
@@ -884,6 +1023,15 @@ def paired_performance(paired: dict, *, e2e_key: str = "bwd_median_ms",
         # numbers as one measurement condition.
         "gpu_state": gpu_state_report(),
     }
+    # WP15 (N-B14): the job's sequential-stop decision, when one fired — the
+    # driver holds a direction="win" reading to the watermark confirmation
+    # before it counts (contract C14); "loss" is the WP11 rule (informational).
+    decision = paired.pop("_sprt_decision", None) if isinstance(paired, dict) else None
+    if decision is None and _last_sprt_decision.get("decided") is not None \
+            and _last_sprt_decision.get("measurement") == _SPRT_MEASUREMENT_ID:
+        decision = _last_sprt_decision   # single-measurement bench: decision is ours
+    if decision:
+        out["sprt"] = {k: v for k, v in decision.items() if k != "measurement"}
     r = paired.get("ref")
     if r:
         out.update({
@@ -1003,11 +1151,30 @@ def measure_windows_workloads(workloads, *, prep=None,
         _check_workload_prep(prep)
     preps = {n: (_workload_prep(prep, n) if prep is not None else None) for n in names}
     rounds = _burn_in_with(first[0], preps[names[0]], burn_in_s)
+    # WP15: one job's controllers pool their decided pairs (the band's MAD reads
+    # every workload's pairs, not just its own 4-8) and hold the FAMILY FLOOR
+    # (a 3-window minimum stop), and the sprt block reports per workload. All
+    # reset here — a pool from a previous job must never leak.
+    global _SPRT_FAMILY_JOB
+    _SPRT_FAMILY_JOB = True
+    del _SPRT_POOL[:]
     results = []
-    for name, kernel_fns, ref_fns in items:
-        paired = measure_paired(kernel_fns, ref_fns, prep=preps[name], burn_in_s=0.0)
-        paired["name"] = name
-        results.append(paired)
+    try:
+        for name, kernel_fns, ref_fns in items:
+            _last_sprt_decision.clear()
+            paired = measure_paired(kernel_fns, ref_fns, prep=preps[name], burn_in_s=0.0)
+            paired["name"] = name
+            # WP15: the sprt block is reported by workloads_performance LATER
+            # (after every workload ran) — attach THIS workload's decision to
+            # its own paired dict now, or the last workload's decision would
+            # ride every earlier block (the deferred report defeats any global
+            # cursor). Popped by paired_performance; never reaches the JSON.
+            if _last_sprt_decision.get("decided") is not None:
+                paired["_sprt_decision"] = dict(_last_sprt_decision)
+            results.append(paired)
+    finally:
+        _SPRT_FAMILY_JOB = False
+        _last_sprt_decision.clear()
     return {"workloads": results, "burn_in_rounds": rounds}
 
 

@@ -328,20 +328,25 @@ def test_band_confirmation_triggers_inside_margin_and_records_the_median(tmp_pat
     ctx = _wm_ctx(tmp_path, be)
     _seed_ratios(ctx, [1.20, 1.2005, 1.2002, 1.2008, 1.2001, 1.2004])
     ev = parse_eval(_EVAL_DW(2.4, 1.976))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
     assert out.device_median_ms == pytest.approx((1.976 + 2.0) / 2)
+    assert info["confirm_jobs"] == 1
+    assert info["confirm_readings"] == [1.976, 2.0]
+    assert info["low_confidence"] is False
     assert be.submitted == ["all"]
 
 
 def test_band_confirmation_disagreement_settles_on_the_median_without_tiebreak(tmp_path):
     # budget 1: a dissenting confirmation is the END of it — median of the two
-    # draws, no tie-break job (the band must stay cheap)
+    # draws, no tie-break job (the band must stay cheap); the disagreement marks
+    # the reading low-confidence (WP15: the spread exceeds what the run resolves)
     be = _GpuLogBackend([_EVAL_DW(2.6, 2.3)])
     ctx = _wm_ctx(tmp_path, be)
     _seed_ratios(ctx, [1.20, 1.2005, 1.2002, 1.2008, 1.2001, 1.2004])
     ev = parse_eval(_EVAL_DW(2.4, 1.976))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
     assert out.device_median_ms == pytest.approx((1.976 + 2.3) / 2)
+    assert info["low_confidence"] is True   # 16% spread >> the 0.5% band
     assert be.submitted == ["all"]
 
 
@@ -351,32 +356,40 @@ def test_band_raises_the_budget_with_config(tmp_path):
     ctx.confirm_budget_per_iter = 2
     _seed_ratios(ctx, [1.20, 1.2005, 1.2002, 1.2008, 1.2001, 1.2004])
     ev = parse_eval(_EVAL_DW(2.4, 1.976))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
     assert out.device_median_ms == pytest.approx(2.28)  # median of 1.976/2.3/2.28
+    assert info["confirm_jobs"] == 2
     assert be.submitted == ["all", "all"]
 
 
-def test_sub_resolution_improvement_triggers_nothing(tmp_path):
-    # 0.3% improvement (1.994 vs 2.0): under a quiet run's 0.5% resolution this is
-    # noise, exactly as it was under the old constant — no job, reading stands
-    be = _GpuLogBackend([])
+def test_sub_resolution_improvement_confirms_once_the_a1_routine(tmp_path):
+    # WP15 A1: the best is a ratchet — a 0.3% improvement (1.994 vs 2.0, under a
+    # quiet run's 0.5% resolution) used to take the watermark FREE. Now every
+    # new best confirms once at the standing budget; the median of the two
+    # independent draws is what the trajectory banks.
+    be = _GpuLogBackend([_EVAL_DW(2.4, 2.0)])
     ctx = _wm_ctx(tmp_path, be)
     _seed_ratios(ctx, [1.20, 1.2005, 1.2002, 1.2008, 1.2001, 1.2004])
     ev = parse_eval(_EVAL_DW(2.4, 1.994))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
-    assert out.device_median_ms == 1.994
-    assert be.submitted == []
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
+    assert out.device_median_ms == pytest.approx((1.994 + 2.0) / 2)
+    assert info["confirm_jobs"] == 1
+    assert "every new best confirms once" in info["why"]
+    assert be.submitted == ["all"]
 
 
 def test_band_stays_free_when_the_run_has_no_ratio_history(tmp_path):
-    # the old fixtures: no paired ratios anywhere -> resolvable_diff falls back to
-    # the 1.5% cap, which no sub-margin improvement clears — old behavior, zero cost
-    be = _GpuLogBackend([])
+    # no paired ratios anywhere -> resolvable_diff falls back to the 1.5% cap;
+    # the 1.2% improvement sits inside it, so the A1 near-best routine confirms
+    # it once (the sub-margin free pass is gone; the data-poor fallback band is
+    # what keeps the budget-limited trigger from misfiring on noise)
+    be = _GpuLogBackend([_EVAL_DW(2.4, 2.0)])
     ctx = _wm_ctx(tmp_path, be)
     ev = parse_eval(_EVAL_DW(2.4, 1.976))  # 1.2% improvement, no ratios on file
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
-    assert out.device_median_ms == 1.976
-    assert be.submitted == []
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
+    assert out.device_median_ms == pytest.approx((1.976 + 2.0) / 2)
+    assert info["confirm_jobs"] == 1
+    assert be.submitted == ["all"]
 
 
 def test_margin_jump_keeps_its_two_job_protocol(tmp_path):
@@ -384,7 +397,7 @@ def test_margin_jump_keeps_its_two_job_protocol(tmp_path):
     be = _GpuLogBackend([_EVAL_DW(2.6, 2.3), _EVAL_DW(2.5, 2.35)])
     ctx = _wm_ctx(tmp_path, be)
     ev = parse_eval(_EVAL_DW(2.4, 2.0))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 3.0, profiler={})
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 3.0, profiler={})
     assert out.device_median_ms == pytest.approx(2.3)  # median of 2.0/2.3/2.35
     assert be.submitted == ["all", "all"]
 
@@ -511,23 +524,29 @@ def test_drifted_reading_is_confirmed_even_below_resolution(tmp_path):
     # 0.3% improvement (sub-resolution: no ratios -> cap 1.5%) while the SM clock
     # sat 5% below the best's: the reading must not take the watermark alone —
     # one budget-limited confirmation, median recorded, row flagged clock_drift.
+    # (WP15 promoted the drift check to a flat trigger — it no longer depends on
+    # sitting below the band; this fixture is below it either way.)
     be = _GpuLogBackend([_EVAL_DW(2.4, 2.0)])
     ctx = _wm_ctx(tmp_path, be)
     _seed_best_with_state(ctx, ms=2.0, sm=2000.0)
     ev = parse_eval(_gpustate_eval(2.4, 1.994, 1900.0))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
     assert out.device_median_ms == pytest.approx((1.994 + 2.0) / 2)
+    assert "clock move" in info["why"]
     assert be.submitted == ["all"]
 
 
-def test_same_clock_sub_resolution_improvement_stays_free(tmp_path):
-    be = _GpuLogBackend([])
+def test_same_clock_sub_resolution_improvement_confirms_once_a1(tmp_path):
+    # WP15 A1: same clock, sub-resolution improvement — the old free pass is
+    # gone; every new best confirms once.
+    be = _GpuLogBackend([_EVAL_DW(2.4, 2.0)])
     ctx = _wm_ctx(tmp_path, be)
     _seed_best_with_state(ctx, ms=2.0, sm=2000.0)
     ev = parse_eval(_gpustate_eval(2.4, 1.994, 2000.0))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
-    assert out.device_median_ms == 1.994
-    assert be.submitted == []
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0, profiler={})
+    assert out.device_median_ms == pytest.approx((1.994 + 2.0) / 2)
+    assert info["confirm_jobs"] == 1
+    assert be.submitted == ["all"]
 
 
 def test_run_inner_iteration_flags_clock_drift_on_the_record(tmp_path):
@@ -543,18 +562,26 @@ def test_run_inner_iteration_flags_clock_drift_on_the_record(tmp_path):
     assert rec.gpu_state["sm_clock_mhz"] == pytest.approx(1900.0)
     # the drifted 0.3% reading was confirmed before it took the watermark
     assert rec.device_median_ms == pytest.approx((1.994 + 2.0) / 2)
+    # WP15: the confirmation accounting rides the row
+    assert rec.confirm_jobs == 1
+    assert rec.confirm_readings == [1.994, 2.0]
 
 
-def test_run_inner_iteration_same_clock_leaves_the_flag_off(tmp_path):
+def test_run_inner_iteration_same_clock_confirms_once_a1(tmp_path):
+    # WP15 A1: the sub-resolution improvement confirms once; the row banks the
+    # median of the two independent draws (not the lucky first one).
     from test_loop_driver import EVAL_DW, FakeBackend, NCU, REC, _ctx
-    be = FakeBackend([REC("D1", 1.994)], [_gpustate_eval(2.4, 1.994, 2000.0), NCU])
+    be = FakeBackend([REC("D1", 1.994)],
+                     [_gpustate_eval(2.4, 1.994, 2000.0), NCU, _EVAL_DW(2.4, 2.0)])
     ctx = _ctx(tmp_path, be)
     ctx.gate_window = "device"
     ctx.watermark_margin = 0.03
     _seed_best_with_state(ctx, ms=2.0, sm=2000.0)
     rec = drv.run_inner_iteration(ctx, 1, metric_before=2.0)
     assert rec.clock_drift is False
-    assert rec.device_median_ms == 1.994
+    assert rec.device_median_ms == pytest.approx((1.994 + 2.0) / 2)
+    assert rec.confirm_jobs == 1
+    assert rec.best_low_confidence is False
 
 
 def test_record_round_trips_gpu_state_and_clock_drift(tmp_path):

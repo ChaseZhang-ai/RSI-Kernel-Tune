@@ -154,6 +154,21 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_KERNEL = "kernel.py"
 NOISE_FLOOR_PCT = 0.5
+# WP15 (constant migration): the driver may RAISE this tool's floor to the run's
+# OWN resolution band (resolvable_diff as a percent, written into the levers.json
+# spec it builds — "noise_floor_pct"). A run whose same-job ratios only resolve
+# 1.2% must not price a +0.8% lever LANDABLE because 0.5% is the hardcoded floor;
+# the spec value never LOWERS the constant (max, not replace — the constant stays
+# the floor for quiet runs). None = the spec carried nothing (an older driver):
+# the historical constant, exactly as before.
+_SPEC_FLOOR_PCT = None
+
+
+def floor_pct() -> float:
+    """The tool's noise floor for THIS run: max(constant, spec override)."""
+    if _SPEC_FLOOR_PCT is None:
+        return NOISE_FLOOR_PCT
+    return max(NOISE_FLOOR_PCT, _SPEC_FLOOR_PCT)
 # The lever floor is a NOISE_SIGMAS test on the difference of two medians of R
 # rounds: sd(median of R) ≈ 1.2533 σ/√R for normal draws. The old floor, 3 ×
 # the widest single variant's range, sat near 9σ on a 15-variant table: real
@@ -859,6 +874,10 @@ def main(argv=None) -> int:
     except (OSError, json.JSONDecodeError) as e:
         print(f"PRICE-FAIL reason=levers-unreadable ({e})", flush=True)
         return 0
+    global _SPEC_FLOOR_PCT
+    _v = spec.get("noise_floor_pct")
+    _SPEC_FLOOR_PCT = float(_v) if isinstance(_v, (int, float)) and not isinstance(_v, bool) \
+        and _v > 0 else None
     levers = spec.get("levers") or []
     ablations = spec.get("ablations") or []
     rounds = int(spec.get("rounds", 3))
@@ -1136,7 +1155,7 @@ def time_ablations(ablations, abl_variants, rounds, kpath, base_src, budget_s=No
                                        "base-not-timed (ncu produced no duration for base)"), flush=True)
         return
     spreads = [spread_pct(ncu[v]) for v in names if any(x is not None for x in ncu[v])]
-    noise = max(NOISE_FLOOR_PCT, 3.0 * max(spreads)) if spreads else NOISE_FLOOR_PCT
+    noise = max(floor_pct(), 3.0 * max(spreads)) if spreads else floor_pct()
     base_ms = med(dev["base"])
     n_ok = 0
     for a in ablations:
@@ -1212,9 +1231,9 @@ def noise_floor(order, ok, dev):
     √2 × 1.2533 σ/√R, never below NOISE_FLOOR_PCT."""
     sigma, rounds, _ = pooled_sigma(order, ok, dev)
     if sigma is None:
-        return NOISE_FLOOR_PCT
+        return floor_pct()
     floor = NOISE_SIGMAS * math.sqrt(2.0) * _MEDIAN_SD_FACTOR * sigma / math.sqrt(rounds)
-    return max(NOISE_FLOOR_PCT, floor)
+    return max(floor_pct(), floor)
 
 
 def lever_class(add, rem, *, noise, ok_add=True, same=False, all_in_spec=False,

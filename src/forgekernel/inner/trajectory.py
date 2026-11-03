@@ -178,6 +178,31 @@ class IterationRecord:
     # teacher-curated message. None = no multi-candidate delivery this row (or a
     # row from before the field existed).
     variant_timings: list | None = None
+    # --- WP15: best meta-analysis accounting (objective; acceptance-mandated) ----
+    #
+    # How many INDEPENDENT confirmation jobs this row's gate reading consumed
+    # (the confirm_budget_per_iter account — every near-best reading is now
+    # confirmed once, and the budget must be visible in the trajectory, not only
+    # in the log). 0 = the row was never confirmed (not near the best, or the
+    # confirmation backend failed on the first draw).
+    confirm_jobs: int = 0
+    # The independent job readings behind this row's gate value, in draw order
+    # (the row's own job first, then the confirmation jobs). The recorded gate
+    # value is their median (median-of-medians: each job's reading is already a
+    # median); [] = single unconfirmed draw. This is what best_standard_error
+    # reads for the between-job se — kept on the row so the statistic and the
+    # bar always describe the same draws.
+    confirm_readings: list = field(default_factory=list)
+    # The row's confirmation draws DISAGREED (spread > the band it was judged
+    # against): the reading is one the run's own resolution cannot settle — the
+    # digest flags it, plateau/meta read it with that caution, and the next
+    # confirmation of the same sha is bought from the disputed loop rather than
+    # assumed unnecessary. False = draws agreed (or never confirmed).
+    best_low_confidence: bool = False
+    # Log-domain standard error of this row's gate reading across its
+    # independent draws (best_standard_error's per-row number, banked so the
+    # digest need not re-derive it). None = fewer than two draws.
+    best_standard_error: float | None = None
 
     def __post_init__(self):
         if self.verdict not in ("KEEP", "REVERT", "NEUTRAL"):
@@ -317,6 +342,41 @@ def sol_header(records: list[IterationRecord]) -> dict:
     return {}
 
 
+def clock_header(records: list[IterationRecord]) -> dict:
+    """The newest measured iteration's LAST-WINDOW clock band (WP15, report-only).
+
+    The job-level means the gpu_state block carries hide a last-window downclock
+    inside the average (the exact blind spot 42-report §6 named); timing.py's
+    per-window telemetry keeps the ordered samples, and this header surfaces the
+    most recent one beside the mean it used to hide behind. {} when no row
+    carried telemetry."""
+    for r in reversed(records):
+        gs = r.gpu_state or {}
+        if not isinstance(gs, dict) or not gs.get("available", True):
+            continue
+        windows = gs.get("window_readings")
+        last = None
+        if isinstance(windows, list):
+            for s in reversed(windows):
+                if isinstance(s, dict) and isinstance(s.get("sm_clock_mhz"), (int, float)):
+                    last = s
+                    break
+        if last is None and isinstance(gs.get("sm_clock_mhz"), (int, float)):
+            last = gs   # pre-WP15 row: the mean is all there is
+        if last is None:
+            continue
+        out = {"iter": r.iter, "sm_clock_mhz": last.get("sm_clock_mhz")}
+        if isinstance(gs.get("sm_clock_mhz"), (int, float)) \
+                and last is not gs and gs["sm_clock_mhz"] > 0:
+            out["job_mean_mhz"] = gs["sm_clock_mhz"]
+            out["last_vs_mean_pct"] = round((last["sm_clock_mhz"] / gs["sm_clock_mhz"] - 1.0)
+                                            * 100.0, 2)
+        if last.get("temperature_c") is not None:
+            out["temperature_c"] = last.get("temperature_c")
+        return out
+    return {}
+
+
 def build_digest(records: list[IterationRecord], target: dict,
                  gate_window: str = GATE_WINDOW_DEFAULT) -> dict:
     """Assemble the Layer-1 digest (target/achieved/curve/decisions/regressions/profiler).
@@ -353,6 +413,16 @@ def build_digest(records: list[IterationRecord], target: dict,
             achieved["aggregate"] = f"geomean over {best.n_workloads} workloads"
             achieved["workloads"] = [{k: v for k, v in w.items()
                                       if "readings" not in k} for w in best.workloads]
+        # WP15 (objective statistic row, contract C8's new-name family): the best
+        # is min-of-draws — this says how wide its luck is, so a later gain is
+        # judged against the bar WITH its error, not against the bare number.
+        # Report-only: nothing gates on it.
+        from forgekernel.loop.parse import best_standard_error
+        bse = best_standard_error(records, gate_window)
+        if bse is not None:
+            achieved["best_ci95"] = bse.get("ci95")
+            achieved["best_standard_error"] = bse.get("se_log")
+            achieved["best_low_confidence"] = bool(bse.get("best_low_confidence"))
     return {
         # TOP of the digest: the SOL roofline header (WP2 telemetry) — the diagnosis's
         # first reading. Which side of the machine saturates first (compute vs memory
@@ -361,6 +431,10 @@ def build_digest(records: list[IterationRecord], target: dict,
         # them (KEEP and REVERT alike); empty until a card/NCU reports the new metrics
         # — records from before the telemetry expansion leave it {}, not missing.
         "sol": sol_header(records),
+        # WP15: the last measured window's clock/thermal state beside the job mean
+        # it used to hide inside — the reading a cross-job comparison checks FIRST
+        # before treating two numbers as one condition. Report-only.
+        "clock": clock_header(records),
         "target": target,
         "achieved": achieved,
         "curve": [{"iter": r.iter, "bwd_median_ms": r.bwd_median_ms,

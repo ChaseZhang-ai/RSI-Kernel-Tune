@@ -93,11 +93,45 @@ INPUTS_SYNC_MIN_BYTES = 1 << 20   # files at/above this ride the store (the tax 
 INPUTS_DIR_SEGMENT = "inputs"     # a path component: <...>/inputs/<...> is input-tensor territory
 INPUTS_STORE_ENV = "FK_INPUTS_STORE"
 INPUTS_SYNC_ENV = "FK_INPUTS_SYNC"
+# --- WP19 (task 1 附, 甲G24/乙B7): inputs manifest 降本 ------------------------
+# Every job used to read every input file twice in full (the source-side sha,
+# then the store-side recheck) — GB-scale tensors, per job. The source-side
+# hash is now memoized in a manifest keyed by (path, size, mtime_ns): an
+# unchanged file is not re-read. The store-side recheck becomes a SAMPLED full
+# hash (restore still hash-verifies every byte it copies, and the job falls
+# back to the full archive on any mismatch, so a corrupted store entry can
+# never reach a tree — the sampling only decides whether to re-copy). Any
+# manifest trouble (missing, corrupt, unwritable) falls back to the full hash:
+# the memo is a cache, never a correctness single point.
+INPUTS_MANIFEST_NAME = "source-manifest.json"
+INPUTS_VERIFY_SAMPLE_STRIDE = 4   # full-hash this store entry in 1 of every N jobs
 
 
 def inputs_store_dir() -> Path:
     env = os.environ.get(INPUTS_STORE_ENV, "").strip()
     return Path(env) if env else Path.home() / ".cache" / "forgekernel-inputs"
+
+
+def _inputs_manifest_path(store: Path) -> Path:
+    return store / INPUTS_MANIFEST_NAME
+
+
+def _inputs_load_manifest(store: Path) -> dict:
+    try:
+        with open(_inputs_manifest_path(store), encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _inputs_save_manifest(store: Path, data: dict) -> None:
+    try:
+        tmp = _inputs_manifest_path(store).with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        os.replace(tmp, _inputs_manifest_path(store))
+    except OSError:
+        pass
 
 
 def _inputs_sync_enabled(cfg: SubmitConfig) -> bool:
@@ -115,14 +149,27 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _inputs_manifest_entry(op_dir: Path, path: Path) -> dict | None:
-    """One sync candidate: ``{path (in-tree), sha256, size}``, or None."""
+def _inputs_manifest_entry(op_dir: Path, path: Path, memo: dict) -> dict | None:
+    """One sync candidate: ``{path (in-tree), sha256, size}``, or None.
+
+    WP19 (task 1 附): the source-side hash is memoized by (size, mtime_ns) —
+    an unchanged file is not re-read. A stat mismatch, a missing memo or ANY
+    trouble falls back to the full hash (and refreshes the memo)."""
     try:
         rel = path.relative_to(op_dir).as_posix()
-        h = _file_sha256(path)
+        st = path.stat()
+        size, mtime = st.st_size, st.st_mtime_ns
+        cached = memo.get(rel)
+        if (isinstance(cached, dict) and cached.get("size") == size
+                and cached.get("mtime_ns") == mtime
+                and isinstance(cached.get("sha256"), str)):
+            h = cached["sha256"]
+        else:
+            h = _file_sha256(path)
+            memo[rel] = {"size": size, "mtime_ns": mtime, "sha256": h}
     except (OSError, ValueError):
         return None
-    return {"path": rel, "sha256": h, "size": path.stat().st_size}
+    return {"path": rel, "sha256": h, "size": size}
 
 
 def sync_inputs_to_store(cfg: SubmitConfig, store: Path | None = None) -> list | None:
@@ -131,9 +178,12 @@ def sync_inputs_to_store(cfg: SubmitConfig, store: Path | None = None) -> list |
     Returns the manifest ([{path, sha256}, ...]) when there is something to sync
     (the caller then archives with the inputs excluded), [] when the tree has no
     such files (archive everything, as always), None when sync is disabled. An
-    existing store entry with the matching hash is left alone; anything that
-    cannot be synced is left OUT of the manifest, so the archive keeps that file
-    (partial sync degrades file-by-file, never to a broken tree)."""
+    existing store entry with the matching hash is left alone (WP19: the
+    recheck is sampled — every INPUTS_VERIFY_SAMPLE_STRIDE-th candidate gets a
+    full hash, the rest a size check; restore's own hash-verified copy is the
+    safety net); anything that cannot be synced is left OUT of the manifest, so
+    the archive keeps that file (partial sync degrades file-by-file, never to a
+    broken tree)."""
     if not _inputs_sync_enabled(cfg):
         return None
     op_dir = Path(cfg.op_dir)
@@ -144,17 +194,26 @@ def sync_inputs_to_store(cfg: SubmitConfig, store: Path | None = None) -> list |
         store.mkdir(parents=True, exist_ok=True)
     except OSError:
         return None
+    memo = _inputs_load_manifest(store)
     manifest: list[dict] = []
-    for path in sorted(op_dir.rglob("*")):
+    for idx, path in enumerate(sorted(op_dir.rglob("*"))):
         if not path.is_file() or path.stat().st_size < INPUTS_SYNC_MIN_BYTES:
             continue
         if INPUTS_DIR_SEGMENT not in path.relative_to(op_dir).parts:
             continue
-        entry = _inputs_manifest_entry(op_dir, path)
+        entry = _inputs_manifest_entry(op_dir, path, memo)
         if entry is None:
             continue
         dest = store / entry["sha256"]
-        if not (dest.is_file() and _file_sha256(dest) == entry["sha256"]):
+        ok = dest.is_file()
+        if ok and idx % INPUTS_VERIFY_SAMPLE_STRIDE == 0:
+            ok = _file_sha256(dest) == entry["sha256"]   # sampled full recheck
+        elif ok:
+            try:
+                ok = dest.stat().st_size == entry["size"]
+            except OSError:
+                ok = False
+        if not ok:
             tmp = dest.with_name(f".{dest.name}.tmp.{os.getpid()}")
             try:
                 shutil.copyfile(path, tmp)
@@ -162,6 +221,7 @@ def sync_inputs_to_store(cfg: SubmitConfig, store: Path | None = None) -> list |
             except OSError:
                 continue   # this file rides the archive instead
         manifest.append(entry)
+    _inputs_save_manifest(store, memo)
     return manifest
 
 

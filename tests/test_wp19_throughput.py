@@ -23,6 +23,7 @@ from pathlib import Path
 
 from forgekernel.inner.trajectory import load_records
 from forgekernel.loop import driver
+from forgekernel.submit import direct
 
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx, _MILESTONE
 from test_wp11_throughput import _WP11_TELEMETRY
@@ -399,3 +400,250 @@ fi
                         capture_output=True, text=True, env=_bash_env(), cwd=tree,
                         timeout=60)
     assert "BUILT" in r3.stdout                  # a tampered entry is a fresh build
+
+
+# --- task 1 附 (甲G24/乙B7): the inputs manifest memo --------------------------
+
+def _b7_op(tmp_path: Path, n: int = 2) -> tuple[Path, "direct.SubmitConfig"]:
+    import subprocess as sp
+    d = tmp_path / "operators" / "op"
+    (d / "eval" / "problem" / "inputs" / "s1").mkdir(parents=True)
+    (d / "gpu_entry.sh").write_text("#!/bin/bash\necho ok\n")
+    (d / "kernel.py").write_text("x = 1\n")
+    for i in range(n):
+        (d / "eval" / "problem" / "inputs" / "s1" / f"g{i}.safetensors").write_text(
+            f"I{i}" * (direct.INPUTS_SYNC_MIN_BYTES // 2 + 100), encoding="utf-8")
+    (d / "submit.toml").write_text(
+        '[job]\ntimeout = 60\n[repo]\ndelivery = "local"\nbranch = "main"\n'
+        '[exec]\ngpu = "0"\n', encoding="utf-8")
+    for args in (["init", "-q", "-b", "main"], ["add", "-A"],
+                 ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"]):
+        sp.run(["git", "-C", str(d), *args], check=True, capture_output=True)
+    return d, direct.SubmitConfig(branch="main", op_dir=str(d), base_dir=str(tmp_path),
+                                  timeout=60, delivery="local", exec_gpu="0")
+
+
+def test_b7_manifest_memo_hit_and_mtime_miss(tmp_path):
+    # 命中：同一文件第二次同步不再全量读源（mtime/size 未变 → 用 memo 的 sha）
+    d, cfg = _b7_op(tmp_path, n=4)
+    store = tmp_path / "store"
+    m1 = direct.sync_inputs_to_store(cfg, store)
+    assert m1 and len(m1) == 4
+    memo = direct._inputs_load_manifest(store)
+    # the memo is keyed by in-tree path; every synced file is memoized
+    assert set(memo.keys()) <= {e["path"] for e in m1}
+    reads = {"n": 0}
+    real_sha = direct._file_sha256
+
+    def counting_sha(path):
+        reads["n"] += 1
+        return real_sha(path)
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(direct, "_file_sha256", counting_sha)
+    try:
+        m2 = direct.sync_inputs_to_store(cfg, store)
+    finally:
+        monkey.undo()
+    assert m2 == m1
+    # the sampled recheck (idx 0) reads one store entry; the SOURCES are all memoized
+    assert reads["n"] == 1, f"expected 1 sampled store read, got {reads['n']}"
+    # mtime 变更 → miss：重算源 sha 并刷新 memo
+    g = d / "eval" / "problem" / "inputs" / "s1" / "g1.safetensors"
+    st = g.stat()
+    import os as _os
+    _os.utime(g, ns=(st.st_atime_ns, st.st_mtime_ns + 1))
+    reads["n"] = 0
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(direct, "_file_sha256", counting_sha)
+    try:
+        m3 = direct.sync_inputs_to_store(cfg, store)
+    finally:
+        monkey.undo()
+    assert m3 == m1                      # same content, refreshed memo, same manifest
+    assert reads["n"] == 2               # touched source re-hashed + idx-0 sampled store recheck
+
+
+def test_b7_sampled_recheck_captures_corruption(tmp_path):
+    # 损坏注入 → 抽样复核捕获（idx 0 恒为抽样位）
+    d, cfg = _b7_op(tmp_path, n=4)
+    store = tmp_path / "store"
+    m1 = direct.sync_inputs_to_store(cfg, store)
+    sha0 = m1[0]["sha256"]
+    (store / sha0).write_text("corrupted\n", encoding="utf-8")
+    m2 = direct.sync_inputs_to_store(cfg, store)
+    assert m2 == m1
+    assert (store / sha0).read_text(encoding="utf-8") != "corrupted\n"   # re-copied
+    # restore 仍逐字节校验（安全网原样）：篡改一个非抽样位的 store 条目，
+    # 预检放行、restore 的哈希复核抓住并使整个 job 回退全量 archive
+    sha3 = m1[3]["sha256"]
+    (store / sha3).write_text("corrupted\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="input store hash mismatch"):
+        direct.restore_inputs_from_store(tmp_path / "tree", m1, store)
+
+
+def test_b7_manifest_corrupt_falls_back_to_full_hash(tmp_path):
+    # manifest 损坏 → 全量重算（memo 永不是正确性单点）
+    d, cfg = _b7_op(tmp_path, n=2)
+    store = tmp_path / "store"
+    m1 = direct.sync_inputs_to_store(cfg, store)
+    (store / direct.INPUTS_MANIFEST_NAME).write_text("{not json", encoding="utf-8")
+    reads = {"n": 0}
+    real_sha = direct._file_sha256
+
+    def counting_sha(path):
+        reads["n"] += 1
+        return real_sha(path)
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(direct, "_file_sha256", counting_sha)
+    try:
+        m2 = direct.sync_inputs_to_store(cfg, store)
+    finally:
+        monkey.undo()
+    assert m2 == m1
+    assert reads["n"] == 3               # 2 sources re-hashed + 1 sampled store recheck
+
+
+# --- task 1 附 (乙B6): fail-fast ------------------------------------------------
+
+def test_b6_rendered_template_carries_preflight_and_valid_bash(tmp_path):
+    import subprocess
+    text = _rendered_gpu_entry()
+    p = tmp_path / "gpu_entry.sh"
+    p.write_text(text, encoding="utf-8")
+    subprocess.run(["bash", "-n", str(p)], check=True)
+    assert "cuda_compile_preflight_maybe" in text
+    assert "FK_CUDA_PRECHECK:-0" in text          # default OFF
+    # only the timing tasks run it; a probe's cmd task keeps the ordinary path
+    assert "perf|all|cardref|allncu) cuda_compile_preflight" in text
+
+
+_WP19_PRECHECK_HARNESS = r"""
+set -uo pipefail
+harness_script="$1"; task="$2"; workdir="$3"
+source "$harness_script"
+TASK="$task"
+cd "$workdir"
+cuda_compile_preflight_maybe
+echo "PREFLIGHT-RC=$?"
+"""
+
+
+def _precheck_tree(tmp_path: Path, kernel_src: str) -> Path:
+    """A tree whose problem.json points at a .cu and whose benchkit stub's
+    builder succeeds/fails per the kernel source (a fake cpp_extension-free
+    stand-in: the pre-pass only needs load_cuda_entry to exist and to raise)."""
+    tree = tmp_path / "tree"
+    (tree / "eval").mkdir(parents=True)
+    (tree / "eval" / "problem").mkdir()
+    (tree / "eval").joinpath("benchkit.py").write_text(
+        "def load_cuda_entry(path, entry):\n"
+        "    src = open(path).read()\n"
+        "    if 'BROKEN' in src:\n"
+        "        raise RuntimeError('nvcc fake error: syntax problem')\n"
+        "    return lambda *a: None\n", encoding="utf-8")
+    (tree / "eval" / "problem").joinpath("problem.json").write_text(
+        '{"kernel_file": "kernel.cu", "entry": "run"}', encoding="utf-8")
+    (tree / "kernel.cu").write_text(kernel_src, encoding="utf-8")
+    return tree
+
+
+def _run_precheck(tmp_path: Path, tree: Path, task: str, **env):
+    import subprocess
+    script = _cache_functions_script(tree)
+    h = tmp_path / "pre.sh"
+    h.write_text(_WP19_PRECHECK_HARNESS, encoding="utf-8")
+    e = {**_bash_env(), **{k: str(v) for k, v in env.items()}}
+    return subprocess.run(["bash", str(h), str(script), task, str(tree)],
+                          capture_output=True, text=True, env=e, cwd=tree, timeout=60)
+
+
+def test_b6_preflight_off_by_default(tmp_path):
+    # FK_CUDA_PRECHECK unset: no preflight output at all (the baseline job shape)
+    tree = _precheck_tree(tmp_path, "BROKEN kernel")
+    r = _run_precheck(tmp_path, tree, "all")
+    assert r.returncode == 0 and "cuda preflight" not in r.stdout
+
+
+def test_b6_preflight_fails_fast_on_broken_kernel(tmp_path):
+    tree = _precheck_tree(tmp_path, "BROKEN kernel")
+    r = _run_precheck(tmp_path, tree, "all", FK_CUDA_PRECHECK=1)
+    assert r.returncode != 0, r.stdout
+    assert "failing before the timing protocol" in r.stdout
+    assert "fake error" in r.stderr or "fake error" in r.stdout
+
+
+def test_b6_preflight_passes_and_continues_on_good_kernel(tmp_path):
+    tree = _precheck_tree(tmp_path, "__global__ void k(){}")
+    r = _run_precheck(tmp_path, tree, "all", FK_CUDA_PRECHECK=1)
+    assert r.returncode == 0, r.stderr
+    assert "build OK" in r.stdout
+
+
+def test_b6_preflight_timeout_is_not_a_failure(tmp_path):
+    tree = tmp_path / "slowtree"
+    (tree / "eval").mkdir(parents=True)
+    (tree / "eval" / "problem").mkdir()
+    (tree / "eval").joinpath("benchkit.py").write_text(
+        "import time\n"
+        "def load_cuda_entry(path, entry):\n"
+        "    time.sleep(5)\n", encoding="utf-8")
+    (tree / "eval" / "problem").joinpath("problem.json").write_text(
+        '{"kernel_file": "kernel.cu", "entry": "run"}', encoding="utf-8")
+    (tree / "kernel.cu").write_text("__global__ void k(){}\n", encoding="utf-8")
+    r = _run_precheck(tmp_path, tree, "perf", FK_CUDA_PRECHECK=1,
+                      FK_CUDA_PRECHECK_TIMEOUT=1)
+    assert r.returncode == 0, r.stderr
+    assert "timed out" in r.stdout
+
+
+def test_b6_preflight_skips_non_timing_tasks_and_python_kernels(tmp_path):
+    tree = _precheck_tree(tmp_path, "BROKEN kernel")
+    for task in ("cmd", "ncu", "ref"):
+        r = _run_precheck(tmp_path, tree, task, FK_CUDA_PRECHECK=1)
+        assert r.returncode == 0, (task, r.stdout)
+        assert "cuda preflight" not in r.stdout
+    # a python kernel: the pre-pass is a CUDA-build concept, never runs
+    pytree = tmp_path / "pytree"
+    (pytree / "eval" / "problem").mkdir(parents=True)
+    (pytree / "eval").joinpath("benchkit.py").write_text(
+        "def load_cuda_entry(path, entry):\n    raise RuntimeError('nope')\n",
+        encoding="utf-8")
+    (pytree / "eval" / "problem").joinpath("problem.json").write_text(
+        '{"kernel_file": "kernel.py", "entry": "run"}', encoding="utf-8")
+    (pytree / "kernel.py").write_text("x = 1\n", encoding="utf-8")
+    r = _run_precheck(tmp_path, pytree, "all", FK_CUDA_PRECHECK=1)
+    assert r.returncode == 0 and "cuda preflight" not in r.stdout
+
+
+def test_b6_driver_ast_preflight_warns_but_never_verdicts(tmp_path, capsys):
+    # a python kernel with a syntax error: one WARN line, zero record impact
+    be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    (ctx.workspace / "flash_attn_dsl").mkdir(exist_ok=True)
+    (ctx.workspace / "flash_attn_dsl" / "flash_bwd.py").write_text(
+        "def broken(:\n", encoding="utf-8")
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    out = capsys.readouterr().out
+    assert "WARNING ast preflight" in out and "does not parse" in out
+    rows = [{k: v for k, v in r.__dict__.items() if k not in _WP11_TELEMETRY}
+            for r in load_records(ctx.status_path)]
+    assert rows[0]["verdict"] == "KEEP"      # the warn changed nothing
+
+
+def test_b6_driver_ast_preflight_silent_on_good_kernel_and_cuda_mode(tmp_path, capsys):
+    # a parseable kernel: no warning; a .cu kernel file: skipped (job-side domain)
+    be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    (ctx.workspace / "flash_attn_dsl").mkdir(exist_ok=True)
+    (ctx.workspace / "flash_attn_dsl" / "flash_bwd.py").write_text(
+        "x = 1\n", encoding="utf-8")
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    assert "ast preflight" not in capsys.readouterr().out
+    (tmp_path / "cu").mkdir()
+    ctx2 = _ctx(tmp_path / "cu", FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU]))
+    ctx2.kernel_file = "kernel.cu"           # CUDA mode: the preflight owns it
+    (tmp_path / "cu" / "kernel.cu").write_text("void broken(:\n", encoding="utf-8")
+    driver._ast_preflight_warn(ctx2, 0)
+    assert "ast preflight" not in capsys.readouterr().out

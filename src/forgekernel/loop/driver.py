@@ -27,6 +27,7 @@ import inspect
 import json
 import os
 import re
+import ast
 import shlex
 import statistics
 import time
@@ -2552,6 +2553,27 @@ def _harness_hygiene(ctx: LoopContext, iter_no: int) -> None:
          f"files that reached the workspace outside a delivery")
 
 
+def _ast_preflight_warn(ctx: LoopContext, iter_no: int) -> None:
+    """WP19 (task 1 附, 乙B6): a python kernel that does not parse fails in-job
+    anyway; this pre-submit parse only says so one round-trip earlier. WARN
+    only — never a verdict, never a gate (a false positive must not kill a
+    good REVERT, and the eval job stays the single failure judge). CUDA-mode
+    runs are skipped: their build failures belong to the job-side compile
+    preflight."""
+    if _is_cuda(ctx):
+        return
+    path = Path(ctx.workspace) / str(ctx.kernel_file)
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    try:
+        ast.parse(source)
+    except SyntaxError as e:
+        _log(f"iter {iter_no}: WARNING ast preflight: {ctx.kernel_file} does not "
+             f"parse ({e.msg}, line {e.lineno}) — the eval job will confirm")
+
+
 def _harness_edit_revert(ctx: LoopContext, iter_no: int, record, sha: str, base_sha: str,
                          metric_before) -> "IterationRecord | None":
     """REVERT a delivery whose commits (probe commits included) edit the card-owned
@@ -2785,6 +2807,7 @@ def run_inner_iteration(
         return rec
 
     sha = be.commit(f"{record.decision_id}: {record.change[:60]}")
+    _ast_preflight_warn(ctx, iter_no)
     if (rec := _harness_edit_revert(ctx, iter_no, record, sha, base_sha,
                                     metric_before)) is not None:
         return rec

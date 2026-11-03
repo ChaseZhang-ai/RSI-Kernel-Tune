@@ -288,6 +288,7 @@ NCU_METRICS="gpu__time_active.sum,launch__registers_per_thread,l1tex__t_sectors_
 
 fk_build_cache_setup
 fk_build_cache_prewarm
+cuda_compile_preflight_maybe
 
 case "$TASK" in
     correctness) run_with_timeout python3 eval/bench.py --mode correctness ;;
@@ -643,8 +644,66 @@ FKPRE
     return 0
 }'''
 
-# The rendered block: the WP19 enumerator first, then the WP11 cache contract.
-_WP11_CACHE_BLOCK = _WP19_KEY_ENUMERATOR + _WP11_CACHE_BLOCK_BODY
+# --- WP19 (task 1 附, 乙B6): the CUDA compile preflight (default OFF) ----------
+_WP19_PRECHECK_BLOCK = r'''cuda_compile_preflight() {
+    # WP19 (task 1 附, 乙B6): a CUDA kernel that cannot build used to pay the
+    # full correctness+timing protocol before its compile error surfaced. This
+    # pre-pass builds the kernel through the bench engine's own builder — the
+    # exact flags and the same build directory the timed run reuses — under a
+    # short timeout; a build failure fails the job here, producing the same
+    # verdict the in-bench build failure would produce (no eval JSON + the
+    # compiler's error in the log tail), just earlier. A pre-pass timeout is
+    # NOT a failure (the ordinary path decides). FK_CUDA_PRECHECK=1 opts in;
+    # the default stays the baseline behavior (the flip belongs to the
+    # integration step, one switch at a time).
+    [ "${FK_CUDA_PRECHECK:-0}" = "1" ] || return 0
+    [ -f eval/problem/problem.json ] || return 0
+    command -v python3 >/dev/null 2>&1 || return 0
+    if timeout "${FK_CUDA_PRECHECK_TIMEOUT:-300}" python3 - <<'FKPC'
+import importlib.util, json, pathlib, sys
+prob = json.load(open("eval/problem/problem.json"))
+kf = prob.get("kernel_file", "kernel.py")
+if not str(kf).endswith(".cu"):
+    raise SystemExit(3)              # the pre-pass is a CUDA-build concept
+if not pathlib.Path(kf).is_file():
+    raise SystemExit(3)              # nothing to build here; the task decides
+spec = importlib.util.spec_from_file_location("fk_benchkit_preflight", "eval/benchkit.py")
+bk = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bk)
+bk.load_cuda_entry(pathlib.Path(kf), prob.get("entry", "run"))
+FKPC
+    then
+        echo "[gpu_entry.sh] cuda preflight: build OK (the timed run reuses it)"
+    else
+        rc=$?
+        if [ "$rc" = "3" ]; then
+            return 0                     # not a CUDA-build job: silently the ordinary path
+        fi
+        if [ "$rc" = "124" ]; then
+            echo "[gpu_entry.sh] cuda preflight: timed out — continuing to the ordinary path"
+        else
+            echo "[gpu_entry.sh] cuda preflight: the kernel build FAILED (rc=$rc) — failing before the timing protocol"
+            exit 1
+        fi
+    fi
+    return 0
+}
+
+cuda_compile_preflight_maybe() {
+    # only the tasks that would run the full correctness+timing protocol: a
+    # probe's cmd task keeps the ordinary path (its own build failure surfaces
+    # in the probe verdict, where it always did)
+    case "${TASK:-}" in
+        perf|all|cardref|allncu) cuda_compile_preflight ;;
+    esac
+}'''
+
+# The rendered block: the WP19 enumerator, then the WP11 cache contract, then
+# the WP19 CUDA compile preflight (a newline joins each pair: the fragments'
+# last lines are function-closing braces).
+_WP11_CACHE_BLOCK = ("\n".join(filter(None, (_WP19_KEY_ENUMERATOR,
+                                             _WP11_CACHE_BLOCK_BODY,
+                                             _WP19_PRECHECK_BLOCK))))
 
 
 def render_gpu_entry(*, name: str, suite: str, arch: str, clock: str = "",

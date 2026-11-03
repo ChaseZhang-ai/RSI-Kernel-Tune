@@ -22,15 +22,30 @@ student):
        {"name": "tile64", "edits": [{"old": "<exact text>", "new": "<replacement>"}, ...]},
        ...]}
 
-At most 8 variants (the driver refuses more). Each variant is a list of
-exact-text replacements applied to the kernel file in order — the same edit
-discipline as a pricing lever: every `old` must occur exactly once at apply
-time, a no-op variant is refused, and a variant that fails its edit refuses
-the whole sweep (SWEEP-FAIL reason=sweep-edit). `criterion` is carried for the
-log; the mechanical rule is fixed: the winner is the variant whose same-job
-paired ratio against base (vs_ref_device when the bench carries a reference,
-inverted device ms otherwise) is best among those whose delta clears the job's
-own noise floor — the same reading discipline as the pricing table.
+At most 8 variants (the driver refuses more; a `halving: true` recipe may
+carry up to 32 — the driver expands it and its refusal ceiling moves with it).
+Each variant is a list of exact-text replacements applied to the kernel file in
+order — the same edit discipline as a pricing lever: every `old` must occur
+exactly once at apply time, a no-op variant is refused, and a variant that
+fails its edit refuses the whole sweep (SWEEP-FAIL reason=sweep-edit).
+`criterion` is carried for the log; the mechanical rule is fixed: the winner is
+the variant whose same-job paired ratio against base (vs_ref_device when the
+bench carries a reference, inverted device ms otherwise) is best among those
+whose delta clears the job's own noise floor — the same reading discipline as
+the pricing table.
+
+Successive-Halving (WP16, 乙A4; spec key `"halving": true`): after each
+completed round but the last, the worst-performing half of the surviving
+variants is eliminated (correctness-dead variants were already kicked; `base`
+is never eliminated) and the freed budget goes to the survivors — the recipe's
+rounds still run, and leftover pass budget buys the survivors extra interleaved
+rounds while two or more remain. The elimination is a BUDGET routing only: it
+decides who is timed next round, never a verdict — the final table and winner
+are read over every variant that ever produced a reading, exactly as without
+halving (a variant eliminated at round one on one noisy draw can still win).
+Each elimination prints a line the driver logs:
+
+    SWEEP HALVING round=<r> kept=<a,b,...> eliminated=<x,y,...>
 
 Machine-readable output (the driver parses these):
 
@@ -64,6 +79,8 @@ except ImportError:                     # the harness imports it as a skill
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_KERNEL = "kernel.py"
 MAX_VARIANTS = 8
+MAX_VARIANTS_HALVING = 32     # a `halving` recipe's ceiling (the driver's
+                              # _SWEEP_MAX_VARIANTS gate moves with this flag)
 CRITERION = "min same-job ratio above floor"
 # one bench call / the whole timed pass: the pricing tool's NCU_TIME_TIMEOUT /
 # ABLATION_BUDGET_S precedent, both clamped to what the job clock still leaves
@@ -76,12 +93,14 @@ def sweep_name(variant: dict) -> str:
     return re.sub(r"\s+", "_", str(variant.get("name", "")).strip()) or "unnamed"
 
 
-def build_variants(base_src: str, variants: list) -> dict:
-    """name -> source. Refuses (raises) on more than MAX_VARIANTS entries, a
-    duplicate / reserved name, a non-unique edit or a no-op variant — the
-    sweep measures exactly the teacher's recipe, nothing derived."""
-    if len(variants) > MAX_VARIANTS:
-        raise ValueError(f"{len(variants)} variants (max {MAX_VARIANTS})")
+def build_variants(base_src: str, variants: list, *, halving: bool = False) -> dict:
+    """name -> source. Refuses (raises) on more than MAX_VARIANTS entries
+    (MAX_VARIANTS_HALVING under a `halving` recipe), a duplicate / reserved
+    name, a non-unique edit or a no-op variant — the sweep measures exactly
+    the teacher's recipe, nothing derived."""
+    ceiling = MAX_VARIANTS_HALVING if halving else MAX_VARIANTS
+    if len(variants) > ceiling:
+        raise ValueError(f"{len(variants)} variants (max {ceiling})")
     out = {"base": base_src}
     seen = set()
     for var in variants:
@@ -107,6 +126,7 @@ def main(argv=None) -> int:
         return 0
     variants = spec.get("variants") or []
     rounds = max(1, int(spec.get("rounds", 3)))
+    halving = bool(spec.get("halving"))
     kernel = str(spec.get("kernel_file") or DEFAULT_KERNEL)
     criterion = str(spec.get("criterion") or CRITERION)
     if not variants:
@@ -119,17 +139,19 @@ def main(argv=None) -> int:
         print(f"SWEEP-FAIL reason=kernel-unreadable ({kernel}: {e})", flush=True)
         return 0
     try:
-        sources = build_variants(base_src, variants)
+        sources = build_variants(base_src, variants, halving=halving)
     except ValueError as e:
         print(f"SWEEP-FAIL reason=sweep-edit ({e})", flush=True)
         return 0
     order = list(sources)           # base, then the recipe's variants in order
-    print(f"SWEEP kernel_file={kernel} criterion={criterion} variants: {' '.join(order)}",
+    print(f"SWEEP kernel_file={kernel} criterion={criterion}"
+          f"{' halving=on' if halving else ''} variants: {' '.join(order)}",
           flush=True)
     dev = {v: [] for v in order}
     ratio = {v: [] for v in order}
     ok = {v: True for v in order}
     dead = set()
+    eliminated = set()
     # the pass's own budget, never more than the job's clock leaves (the closing
     # lines must land before gpu_entry's kill — the ablation pass's precedent)
     budget = float(SWEEP_BUDGET_S)
@@ -139,12 +161,20 @@ def main(argv=None) -> int:
     t0 = time.monotonic()
     try:
         rnd = 0
-        while rnd < rounds:
+        # WP16 (乙A4): a halving pass keeps its recipe's rounds, and the budget
+        # the eliminated variants free up buys the survivors extra interleaved
+        # rounds (capped at 2x the recipe's rounds — the budget guard bounds it
+        # either way).
+        max_rounds = rounds * 2 if halving else rounds
+        while rnd < max_rounds:
             if time.monotonic() - t0 > budget:
                 print(f"SWEEP ROUND {rnd} skipped: pass budget {budget:.0f}s spent", flush=True)
                 break
+            alive = [v for v in order[1:] if v not in dead and v not in eliminated]
+            if halving and rnd >= rounds and len(alive) < 2:
+                break
             for v in order:
-                if v in dead:
+                if v in dead or v in eliminated:
                     continue
                 open(kpath, "w").write(sources[v])
                 j = lpr.run_bench(v, keep_cubin=False, timeout=SWEEP_BENCH_TIMEOUT)
@@ -168,6 +198,13 @@ def main(argv=None) -> int:
                 print(f"SWEEP ROUND {rnd} {v} pass=True device={perf.get('device_median_ms')} "
                       f"vs_ref_device={lpr.ratio_reading(perf)}", flush=True)
             rnd += 1
+            if halving:
+                cut = halving_cut(order, ok, dev, ratio, dead, eliminated)
+                if cut:
+                    eliminated |= cut
+                    kept = [v for v in order[1:] if v not in dead and v not in eliminated]
+                    print(f"SWEEP HALVING round={rnd} kept={','.join(kept) or 'none'} "
+                          f"eliminated={','.join(sorted(cut))}", flush=True)
         score, delta, use_ratio = _make_scorer(order, ok, dev, ratio)
         noise = lpr.noise_floor(order, ok, dev)
         for v in order:
@@ -207,6 +244,36 @@ def _num(x):
 
 def _pct(x):
     return "n/a" if x is None else f"{x:+.2f}%"
+
+
+def halving_cut(order, ok, dev, ratio, dead, eliminated) -> set:
+    """WP16 (乙A4): the worst half of the still-timed variants, NOISE-GATED.
+    `base` and the already-gone are never touched; fewer than four survivors
+    cut nobody; a first round with a single reading per variant cuts nobody
+    (one draw names no rank); and a variant sitting within the job's own noise
+    floor of the cut line survives the cut — a within-noise gap is a dice
+    roll, not a ranking (the MC prescreen defense's discipline, read through
+    lpr.noise_floor, the final table's same rule). At a noisy node the cut
+    therefore stands down and the pass degenerates toward the plain sweep —
+    the safe direction. A budget ROUTING only: the cut decides who is timed
+    next round, never a verdict (the final winner is read over every variant
+    that ever produced a reading, exactly as without halving)."""
+    alive = [v for v in order if v != "base" and v not in dead and v not in eliminated]
+    if len(alive) < 4:
+        return set()
+    if any(len(dev[v]) < 2 for v in alive):
+        return set()                      # one draw per variant names no rank
+    score, _delta, _use = _make_scorer(order, ok, dev, ratio)
+    floor = lpr.noise_floor(order, ok, dev)     # percent; the final table's rule
+    ranked = sorted(alive, key=lambda v: (score(v) is None, -(score(v) or 0.0)))
+    line = (len(ranked) + 1) // 2
+    cut = [v for v in ranked[line:]]
+    boundary = score(ranked[line - 1])
+    if boundary is None:
+        return set()
+    cut = [v for v in cut if score(v) is None
+           or 100.0 * (boundary / score(v) - 1.0) > floor]
+    return set(cut)
 
 
 def _winner(order, score, delta, noise) -> str | None:

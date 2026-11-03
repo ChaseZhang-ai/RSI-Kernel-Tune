@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import math
 import os
 import re
 import shlex
@@ -82,6 +83,9 @@ from forgekernel.baseline import RefBaseline, workloads_mismatch
 from forgekernel.resume import Decision, compute_reopen, compute_resume
 # a group card's meta readings, one workload per job
 from forgekernel.loop import meta_shapes
+# WP16: the sub-noise compounding pool — pure functions, one implementation;
+# the driver is its only writer and its only job runner.
+from forgekernel.loop import lever_pool
 
 
 class DriverBackend(Protocol):
@@ -560,6 +564,35 @@ class LoopContext:
     # the cut recorded, it never spends jobs it does not have).
     m0_probe_candidates: int = 2
     probe_battles: dict[str, ProbeBattle] = field(default_factory=dict)
+    # --- WP16: active search & population governance ---------------------------
+    # Every key resolves from the card layer's loop.toml ([loop] table,
+    # free-form read — _wp16_apply_cfg, the WP5 shape; contract C17: no cli.py
+    # growth). None = resolve from config, an explicit value (tests, callers)
+    # wins and is never clobbered; every default is a documented WP16 default.
+    # [loop] pattern_search_budget (default 2): driver-run shrink-grid searches
+    #   per run, armed at a STAGNATION / phase-exhaustion trigger. Its OWN
+    #   budget class: it never spends probe rounds, student rounds or the
+    #   confirmation budget. 0 disables the channel.
+    pattern_search_budget: int | None = None
+    # [loop] pattern_search_stages (default 3, clamped 1..3): contraction
+    #   stages per search (one sweep-style job each).
+    pattern_search_stages: int | None = None
+    # [loop] pool_age_trigger (default 2): combo-pool meta steps before a
+    #   forced bundle pricing even without a plateau; 0 disables the age path
+    #   (the plateau path does not depend on it).
+    pool_age_trigger: int | None = None
+    # [loop] reprice_climb_streak (default 2): consecutive 1-3% KEEP gains that
+    #   drop the re-price gain gate to 0 for the next new-best step (0 = off,
+    #   the historical reprice_min_gain_pct gate stands).
+    reprice_climb_streak: int | None = None
+    # [loop] runner_up_pool_k (default 3): KEEP trees the runner-up pool keeps
+    #   (rank 1 is the sitting best; a restart target needs rank 2 to exist).
+    runner_up_pool_k: int | None = None
+    # WP16 runtime state (not config): the STAGNATION block was held one step
+    # because the combo pool still had unmeasured combinations; cleared the
+    # moment the pool is empty (red line ③-⑤: pressure routing only — the
+    # pool-empty behavior is the pre-WP16 behavior byte for byte).
+    wp16_pool_deferred: bool = False
     # --- WP9: measurement anchoring (analytic floor; both opt-ins default off) ---
     # The machine denominator behind the teacher's hand-estimated floor_opt
     # (forgekernel.loop.analytic_floor): bytes/FLOPs computed from the card's
@@ -2611,6 +2644,14 @@ def run_inner_iteration(
         base_sha = be.head() or ""       # the tree this iteration builds on
     except Exception:  # noqa: BLE001 — lineage is bookkeeping, never a precondition
         base_sha = ""
+    # --- WP16: a revival audit line when this delivery re-bases on a pooled
+    # runner-up tree — 复活必重验 rides the delivery's own full gate (see
+    # _revival_note); the pool-empty state logs nothing.
+    try:
+        if note := _revival_note(ctx, base_sha, load_records(ctx.status_path)):
+            _log(f"iter {iter_no}: {note}")
+    except (OSError, ValueError):
+        pass
 
     record: Record | None = None
     last_probe: str = ""
@@ -2750,6 +2791,12 @@ def run_inner_iteration(
         # budget exhausted with no landed decision (probe never certified, or the
         # student never emitted a parseable decision). Objective REVERT, roll back.
         kept = _keep_probe_across_reset(ctx, last_probe) if last_probe else None
+        # --- WP16: the pooled trees carry named branches across this reset — a
+        # REVERT no longer orphans the runner-ups the run already paid for.
+        try:
+            _preserve_runner_up_trees(ctx, be, load_records(ctx.status_path))
+        except (BackendError, OSError, ValueError) as e:
+            _log(f"iter {iter_no}: runner-up preservation skipped ({e})")
         if last_good_ref:
             be.reset(last_good_ref)
         if kept is not None:
@@ -2954,6 +3001,11 @@ def run_inner_iteration(
         # harness-level rejection (forbidden-op scan) behind 14h of phantom-bug chasing.
         detail = f"correctness FAIL: {ev.error}" if ev.error else "correctness FAIL"
         _log(f"iter {iter_no}: {record.decision_id} REVERT ({detail})")
+        # --- WP16: pooled trees carry named branches across this reset.
+        try:
+            _preserve_runner_up_trees(ctx, be, load_records(ctx.status_path))
+        except (BackendError, OSError, ValueError) as e:
+            _log(f"iter {iter_no}: runner-up preservation skipped ({e})")
         if last_good_ref:
             be.reset(last_good_ref)
         rec = IterationRecord(
@@ -2983,6 +3035,11 @@ def run_inner_iteration(
         detail = (f"fresh_recheck FAIL (mode={mode}): the correctness verdict did not "
                   f"reproduce on fresh inputs after timing — {layers}")
         _log(f"iter {iter_no}: {record.decision_id} REVERT ({detail})")
+        # --- WP16: pooled trees carry named branches across this reset.
+        try:
+            _preserve_runner_up_trees(ctx, be, load_records(ctx.status_path))
+        except (BackendError, OSError, ValueError) as e:
+            _log(f"iter {iter_no}: runner-up preservation skipped ({e})")
         if last_good_ref:
             be.reset(last_good_ref)
         rec = IterationRecord(
@@ -3059,6 +3116,13 @@ def run_inner_iteration(
              f"(timing.measure_windows_workloads)")
     new_ms = gate_ms(ev, ctx.gate_window)
     ctx.sass_serial_note = _sass_serial_status(ctx, serial_raw, exclude_iter=iter_no)
+    # --- WP16: the runner-up pool snapshot refreshes on every KEEP — a tree
+    # the run paid its eval for stays addressable even once it is no longer the
+    # best (the pool file, not the reset, is the paper trail now).
+    try:
+        _write_runner_up_pool(ctx, load_records(ctx.status_path))
+    except (OSError, ValueError) as e:
+        _log(f"iter {iter_no}: runner-up pool refresh skipped ({e})")
     if new_ms is not None and (metric_before is None or new_ms < metric_before):
         # the tree the milestone's cited prices were read on just changed under
         # them: re-price those citations here, on the tree they now apply to
@@ -3066,6 +3130,13 @@ def run_inner_iteration(
             _reprice_cited_levers(ctx, rec)
         except (BackendError, OSError, ValueError) as e:
             _log(f"iter {iter_no}: price-check skipped ({e})")
+        # --- WP16 (甲G12): winners the milestone never cited used to die
+        # silently on the new tree — an EXPIRED verdict in the revision store
+        # says so, once, where the teacher already reads.
+        try:
+            _mark_expired_levers(ctx, rec)
+        except (BackendError, OSError, ValueError) as e:
+            _log(f"iter {iter_no}: expired-lever check skipped ({e})")
     if _timeline_on(ctx):
         # a delivery that closes its phase is read like the gate row it files
         is_gate = bool(_GATE_ROW.search(rec.decision_id or "")) or bool(
@@ -4862,6 +4933,10 @@ _LEVER_MAX_SUBSETS = 6
 # teacher-authored in the milestone decision line; the driver only executes it
 # (hash-checked) and the student lands only the winner, through the standard gate.
 _SWEEP_MAX_VARIANTS = 8        # == sweep_run.MAX_VARIANTS
+# == sweep_run.MAX_VARIANTS_HALVING — a `halving: true` recipe may name up to
+# this many points: successive halving re-funds the eliminated half's budget
+# into the survivors, so the same job clock covers a wider grid.
+_SWEEP_MAX_VARIANTS_HALVING = 32
 _SWEEP_CRITERION = "min same-job ratio above floor"   # == sweep_run.CRITERION
 _SWEEP_CMD = "cmd:python3 notes/sweep_run.py"
 
@@ -5213,8 +5288,10 @@ def _landable_line(stack: dict | None, table: list) -> str:
             "学生按 rung 一次交付（普通 bundle 交付，标准 eval gate 判定）。\n")
 
 
-def _lever_price_block(table: list) -> str:
-    """The measured price table for the diagnose prompt, with the reading rules."""
+def _lever_price_block(table: list, specs: "list | None" = None) -> str:
+    """The measured price table for the diagnose prompt, with the reading rules.
+    ``specs`` (the banked recipes of this table) add the coupling-graph edges —
+    absent (or empty) the block renders exactly as before."""
     levers = [t for t in table if t.get("kind") == "lever"]
     stack = next((t for t in table if t.get("kind") == "stack"), None)
     rows = ["| lever | add-one | remove-one | class | Δspin(ns, +L) | Δspin(ns, all−L) |",
@@ -5301,8 +5378,72 @@ def _lever_price_block(table: list) -> str:
         "The ceiling of the pricing table: the spin exposure that all-on still leaves belongs to "
         "something outside this batch of candidates; the diagnosis must say whose it is.\n")
     block += meta_shapes.shape_block(table)
+    if specs:
+        block += _lever_edges_block(specs, table)
     block += _ablation_block(table)
     return block
+
+
+def _lever_edges_block(specs: list, table: list) -> str:
+    """WP16 (甲G17): the lever coupling graph the teacher wrote on the recipes
+    (`requires` / `conflicts`), rendered as an edge table inside the existing
+    price block, with the delivery advice the edges imply — re-price and land a
+    lever's prerequisites first; mutually exclusive levers ride separate
+    deliveries, never one bundle. Report-only (red line ③-①): the edges order
+    suggestions, the measured table stays the judge; an all-on that measured a
+    conflict pair together already says the edge went stale. Capped: at most
+    three edges per kind render, so the block cannot grow a hairball."""
+    names = {str(lv.get("name")) for lv in table if lv.get("kind") == "lever"}
+    req: list = []
+    conf: set = set()
+    unknown: list = []
+    for sp in specs or []:
+        a = str(sp.get("name") or "")
+        if not a:
+            continue
+        for d in sp.get("requires") or []:
+            d = str(d)
+            (req.append((d, a)) if d in names else unknown.append((a, d)))
+        for d in sp.get("conflicts") or []:
+            d = str(d)
+            (conf.add(tuple(sorted((a, d)))) if d in names else unknown.append((a, d)))
+    if not req and not conf and not unknown:
+        return ""
+    lines = ["\n**Lever coupling graph (driver-read from the recipes)**:"]
+    for before, after in req[:3]:
+        lines.append(f"- `{before}` → `{after}` (requires): price and land `{before}` first — "
+                     f"a `{after}` citation with `{before}` unlanded is unbacked.")
+    if len(req) > 3:
+        lines.append(f"- (+{len(req) - 3} more requires edges)")
+    for a, b in sorted(conf)[:3]:
+        lines.append(f"- `{a}` >< `{b}` (mutually exclusive): separate deliveries, never one "
+                     f"bundle; an all-on above that contains both says this edge went stale.")
+    if len(conf) > 3:
+        lines.append(f"- (+{len(conf) - 3} more conflict edges)")
+    for a, d in unknown[:2]:
+        lines.append(f"- (`{a}` names `{d}` on an edge, but the table has no such lever — "
+                     f"edge dropped.)")
+    return "\n".join(lines) + "\n"
+
+
+def _last_banked_specs(ctx: LoopContext) -> list:
+    """The recipe list banked with the most recent teacher table (the coupling
+    edges ride it), or []."""
+    ev = _evidence_dir(ctx, create=False)
+    if ev is None or not (ev / "lever_prices.jsonl").is_file():
+        return []
+    try:
+        for line in reversed((ev / "lever_prices.jsonl").read_text(encoding="utf-8")
+                             .splitlines()):
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            if rec.get("reprice"):
+                continue
+            return list(rec.get("spec_levers") or [])
+    except (OSError, ValueError) as e:
+        _log(f"price-check: could not read lever_prices.jsonl ({e})")
+    return []
 
 
 def _ablation_block(table: list) -> str:
@@ -5699,14 +5840,22 @@ def _milestone_sweep_recipe(ctx: LoopContext, decision_id: str) -> dict | None:
 
 def _sweep_spec_refused(recipe: dict) -> str | None:
     """Why the driver would not run ``recipe`` as written, or None: at most
-    _SWEEP_MAX_VARIANTS variants, one-token unique names (never `base`), every
-    variant carrying at least one edit pair, and the criterion — when spelled —
-    the one mechanical rule the sweep implements."""
+    _SWEEP_MAX_VARIANTS variants (_SWEEP_MAX_VARIANTS_HALVING under a
+    `halving` recipe — the eliminated half's budget is re-funded into the
+    survivors), one-token unique names (never `base`), every variant carrying
+    at least one edit pair, and the criterion — when spelled — the one
+    mechanical rule the sweep implements. A `halving` recipe may give value
+    RANGES (`axes`) instead of enumerated points; the driver expands them at
+    submit time and validates the axis form here."""
+    if recipe.get("halving") and recipe.get("axes") and not recipe.get("variants"):
+        return _sweep_axes_refused(recipe)
     variants = recipe.get("variants")
     if not isinstance(variants, list) or not variants:
         return "recipe names no variants"
-    if len(variants) > _SWEEP_MAX_VARIANTS:
-        return f"{len(variants)} variants (max {_SWEEP_MAX_VARIANTS})"
+    ceiling = (_SWEEP_MAX_VARIANTS_HALVING if recipe.get("halving")
+               else _SWEEP_MAX_VARIANTS)
+    if len(variants) > ceiling:
+        return f"{len(variants)} variants (max {ceiling})"
     seen = set()
     for var in variants:
         if not isinstance(var, dict):
@@ -5721,6 +5870,93 @@ def _sweep_spec_refused(recipe: dict) -> str | None:
     if (crit := recipe.get("criterion")) and str(crit).strip() != _SWEEP_CRITERION:
         return f"unknown criterion {crit!r}"
     return None
+
+
+def _sweep_axes_refused(recipe: dict) -> "str | None":
+    """Why a `halving` recipe's ``axes`` (value ranges, not points) would not
+    run, or None: 1..2 axes — the halving walk is coordinate-wise — each with
+    a name, an exact `old`, a `{v}` template, and points from `values` (2..7)
+    or `range`+[`points`] (2..16, expanded deterministically). The TOTAL
+    expanded points stay within _SWEEP_MAX_VARIANTS_HALVING."""
+    axes = recipe.get("axes")
+    if not isinstance(axes, list) or not axes:
+        return "a halving recipe names no axes"
+    if len(axes) > 2:
+        return f"{len(axes)} axes (max 2)"
+    total = 0
+    for ax in axes:
+        if not isinstance(ax, dict):
+            return "an axis must be an object"
+        name = re.sub(r"\s+", "_", str(ax.get("name", "")).strip())
+        if not name:
+            return "an axis has no name"
+        if not isinstance(ax.get("old"), str) or not ax["old"]:
+            return f"axis {name!r} has no `old` text"
+        new = ax.get("new")
+        if not isinstance(new, str) or new.count("{v}") != 1:
+            return f"axis {name!r}'s `new` template must hold exactly one `{{v}}`"
+        if ax.get("values") is not None:
+            vals = ax["values"]
+            if not isinstance(vals, list) or not 2 <= len(vals) <= 7:
+                return f"axis {name!r} needs 2..7 values"
+            for v in vals:
+                if isinstance(v, bool) or not isinstance(v, (int, float)) \
+                        or not math.isfinite(float(v)):
+                    return f"axis {name!r} carries a non-numeric value"
+            total += len(vals)
+        elif ax.get("range") is not None:
+            rng = ax["range"]
+            if (not isinstance(rng, list) or len(rng) != 2
+                    or any(isinstance(x, bool) or not isinstance(x, (int, float))
+                           or not math.isfinite(float(x)) for x in rng)):
+                return f"axis {name!r}'s `range` must be two numbers"
+            lo, hi = float(rng[0]), float(rng[1])
+            if hi <= lo:
+                return f"axis {name!r}'s `range` is empty"
+            pts = int(ax.get("points", 8) or 8)
+            if not 2 <= pts <= 16:
+                return f"axis {name!r} needs 2..16 range points"
+            total += pts
+        else:
+            return f"axis {name!r} gives neither `values` nor `range`"
+    if total > _SWEEP_MAX_VARIANTS_HALVING:
+        return f"{total} expanded points (max {_SWEEP_MAX_VARIANTS_HALVING})"
+    return None
+
+
+def _expand_sweep_axes(recipe: dict) -> list:
+    """The points a `halving` recipe's ``axes`` expand into — one single-axis
+    variant per value (a halving grid walks one axis at a time), names
+    `{axis}_{value}` (duplicates get `_b` suffixed), edits in the recipe's own
+    exact-once discipline. Deterministic: a `range` expands to evenly spaced
+    points, integers contracting in integers (a tile axis never grows .5)."""
+    out: list = []
+    seen: set = set()
+    for ax in recipe.get("axes") or []:
+        name = re.sub(r"\s+", "_", str(ax.get("name", "")).strip())
+        old, new = ax["old"], ax["new"]
+        if ax.get("values") is not None:
+            raw = sorted({float(v) for v in ax["values"]})
+        else:
+            lo, hi = float(ax["range"][0]), float(ax["range"][1])
+            pts = int(ax.get("points", 8) or 8)
+            step = (hi - lo) / (pts - 1)
+            raw = [lo + i * step for i in range(pts)]
+            if all(float(v).is_integer() for v in (lo, hi)) and all(
+                    float(v).is_integer() for v in raw):
+                raw = [float(int(v)) for v in raw]
+        vals: list = []
+        for v in raw:
+            if v not in vals:
+                vals.append(v)
+        for v in vals:
+            vname = f"{name}_{_ps_fmt(v)}"
+            if vname in seen:
+                vname += "_b"
+            seen.add(vname)
+            out.append({"name": vname,
+                        "edits": [{"old": old, "new": new.replace("{v}", _ps_fmt(v))}]})
+    return out
 
 
 def _seed_sweep_toolkits(ctx: LoopContext, be) -> None:
@@ -5885,9 +6121,18 @@ def _run_sweep_request(ctx: LoopContext, be, iter_no: int, path: str) -> str:
     # so kernel_file / rounds are injected at SUBMIT time, never written into the
     # student's file (the hash above stays the milestone's)
     spec = dict(submitted)
+    if spec.get("halving") and spec.get("axes") and not spec.get("variants"):
+        # --- WP16 (乙A4): a range recipe is expanded HERE — the student's
+        # hash-checked file stays the milestone's, the transient spec carries
+        # the points.
+        expanded = _expand_sweep_axes(spec)
+        spec["variants"] = expanded
+        _log(f"iter {iter_no}: sweep {path} halving recipe expanded to "
+             f"{len(expanded)} point(s) from {len(spec.get('axes') or [])} axis(es)")
     spec.setdefault("kernel_file", str(ctx.kernel_file))
     _log(f"iter {iter_no}: sweep {path} verified against the milestone recipe — "
-         f"one sweep job ({len(spec.get('variants') or [])} variants)")
+         f"one sweep job ({len(spec.get('variants') or [])} variants)"
+         + (", halving on" if spec.get("halving") else ""))
     spec_path = Path(ctx.workspace) / "notes" / f"__sweep_{decision_id}.json"
     try:
         _seed_sweep_toolkits(ctx, be)
@@ -6145,6 +6390,824 @@ def _parse_stagnation_override(text: str) -> str | None:
     line is honored only on a step whose prompt carried the STAGNATION block."""
     m = _STAG_OVERRIDE_RE.search(text or "")
     return m.group(1).strip() if m and m.group(1).strip() else None
+
+
+# --- WP16: active search & population governance --------------------------------
+#
+# Four channels, one discipline: every search job here is a READING PRODUCER,
+# never a decider (contract C9 / red line ③-②). Search winners render as
+# LANDABLE-style rows for the teacher; a landing goes teacher → student patch →
+# full gate; the driver never writes kernel edits. Population memory (the
+# runner-up pool, the arch graveyard) is teacher-side information; reviving any
+# stored tree rides the ordinary gated delivery, so the full re-verification
+# suite (watermark / clock-drift / fresh-recheck) applies on every revival — a
+# revived reading is never taken on trust (red line ③-②, 复活必重验). The
+# compounding pool (loop/lever_pool.py — the ONE implementation, the driver is
+# its only writer and job runner) is pressure routing only: an empty pool
+# regresses to the pre-WP16 behavior byte for byte (red line ③-⑤).
+
+_WP16_CFG_DEFAULTS = {"pattern_search_budget": 2, "pattern_search_stages": 3,
+                      "pool_age_trigger": 2, "reprice_climb_streak": 2,
+                      "runner_up_pool_k": 3}
+
+
+def _wp16_apply_cfg(ctx: LoopContext) -> None:
+    """Resolve every WP16 config field still at its None sentinel from loop.toml
+    (card layer over global — ``_wp5_cfg_sections``). Called once at
+    run_two_layer entry; an explicitly set field (tests, callers) wins and is
+    never clobbered; a bad value leaves the documented default (contract C17:
+    the keys ride the card layer's free-form [loop] table, cli.py stays put)."""
+    cfg = _wp5_cfg_sections(ctx)
+    loop_cfg = cfg.get("loop") if isinstance(cfg.get("loop"), dict) else {}
+    for attr, default in _WP16_CFG_DEFAULTS.items():
+        if getattr(ctx, attr, None) is not None:
+            continue
+        raw = loop_cfg.get(attr, default)
+        try:
+            val = int(raw)
+        except (TypeError, ValueError):
+            val = default
+        if isinstance(raw, bool) or val < 0:
+            val = default
+        setattr(ctx, attr, val)
+
+
+def _wp16_cfg_int(ctx: LoopContext, attr: str) -> int:
+    """The resolved WP16 key (the config apply has run by the time any consumer
+    fires; a direct-run caller without it still gets the documented default)."""
+    val = getattr(ctx, attr, None)
+    return int(_WP16_CFG_DEFAULTS[attr] if val is None else val)
+
+
+# --- WP16: the sub-noise compounding pool (driver glue) -------------------------
+#
+# notes/lever_pool.jsonl is the pool's on-run face; loop/lever_pool.py owns the
+# semantics. The driver admits null-priced levers when a table is banked, fires
+# the bundle pricing when the pool must, books combo-null rows when the bundle
+# also reads null, and renders the injected block. Nothing here touches a
+# verdict; a pool that never fills leaves every path byte-identical.
+
+_POOL_FILE = "lever_pool.jsonl"
+
+
+def _pool_path(ctx: LoopContext) -> Path:
+    return Path(ctx.workspace) / "notes" / _POOL_FILE
+
+
+def _pool_load(ctx: LoopContext) -> list:
+    try:
+        return lever_pool.parse_pool(_pool_path(ctx).read_text(encoding="utf-8"))
+    except OSError:
+        return []
+
+
+def _pool_save(ctx: LoopContext, rows: list) -> None:
+    try:
+        p = _pool_path(ctx)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(lever_pool.serialize_pool(rows), encoding="utf-8")
+    except OSError as e:
+        _log(f"meta/lever-price: could not write {_POOL_FILE} ({e})")
+
+
+def _pool_current_step(ctx: LoopContext) -> int:
+    """The meta-step clock the pool ages against — the same counter the
+    diagnose step renders (``_plateau_diagnoses`` over the META trajectory on
+    file; the pool's steps are meta steps, not inner iterations)."""
+    try:
+        prior = load_meta_records(ctx.meta_status_path) if ctx.meta_status_path else []
+        return _plateau_diagnoses(prior) + 1
+    except (OSError, ValueError):
+        return 0
+
+
+def _pool_admit_table(ctx: LoopContext, table: list, spec_levers: list | None,
+                      best_ref: str, job: str) -> None:
+    """The pool's bypass write, run as a teacher table is banked: its null-
+    priced levers (null ALONE — a dead end in isolation, unmeasured in
+    combination) join notes/lever_pool.jsonl with the recipes they were priced
+    with. Pricing itself does not notice this exists; a lever without a banked
+    recipe cannot be re-applied later and is not admitted."""
+    specs = {str(sp.get("name")): sp for sp in (spec_levers or []) if sp.get("name")}
+    if not specs:
+        return
+    rows = _pool_load(ctx)
+    step = _pool_current_step(ctx)
+    added: list = []
+    for row in table or []:
+        sp = specs.get(str(row.get("name")))
+        if sp is None:
+            continue
+        adm = lever_pool.admission(dict(row, spec=sp, priced_on=best_ref, job=job),
+                                   rows, ts=ctx.now(), step=step,
+                                   run=Path(ctx.workspace).name)
+        if adm is not None:
+            rows.append(adm)
+            added.append(adm["lever"])
+    if added:
+        _pool_save(ctx, rows)
+        _log(f"meta/lever-price: {len(added)} null lever(s) joined the combo pool "
+             f"[{', '.join(added)}] (notes/{_POOL_FILE}) — combinations stay open")
+
+
+def _run_pool_bundle(ctx: LoopContext, be, pool_rows: list) -> "dict | None":
+    """The forced all-on bundle pricing of the pool (the trigger's whole
+    point): ONE pricing job over the pooled levers — the tool's own STACK pass
+    times the all-on, the pool builds no second stacking implementation.
+    Returns the STACK reading {"all_pct", "noise_pct", "null"} or None (no job,
+    lost job, refused recipe): the pool then stays as it is — a lost bundle job
+    books nothing (no machine judgment off a missing measurement)."""
+    levers = lever_pool.bundle_levers(pool_rows)
+    if len(levers) < 2:
+        return None
+    if ctx.now() > ctx.deadline_epoch - 3600:
+        _log("meta/lever-price: the combo pool's bundle pricing is due but < 60 min of "
+             "budget remain — deferred (the pool keeps its entries)")
+        return None
+    records = load_records(ctx.status_path)
+    best = _best_keep_record(records, ctx.gate_window)
+    target = best.sha if best is not None and best.sha else ""
+    if not target:
+        return None
+    bundle = None
+    pre_head = be.head()
+    try:
+        be.reset(target)
+        _seed_pricing_toolkits(Path(ctx.workspace), be)
+        shapes = meta_shapes.card_meta_workloads(ctx.workspace)
+        spec = {"levers": levers, "variants": [],
+                "rounds": meta_shapes.rounds_for(ctx.lever_pricing_rounds, len(shapes)),
+                "roles": False, "kernel_file": str(ctx.kernel_file)}
+        spec_path = Path(ctx.workspace) / "notes" / _LEVER_SPEC_NAME
+        spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
+        be.commit(f"combo-pool: all-on bundle pricing of {len(levers)} pooled null lever(s)")
+        branch = f"{ctx.branch_prefix}-poolbundle"
+        be.push_branch(branch)
+        _log(f"meta/lever-price: combo pool trigger fired — pricing the all-on bundle of "
+             f"[{', '.join(lv['name'] for lv in levers)}] on {target[:10]} (one STACK job, "
+             + (f"one per workload of {', '.join(shapes)}" if shapes else "one job") + ")")
+        log, job = _lever_price_submit(ctx, be, branch, _LEVER_PRICING_CMD,
+                                       "combo-pool bundle", rerun=False)
+        _parsed, stack, fail = parse_lever_prices(log)
+        if fail:
+            _log(f"meta/lever-price: combo-pool bundle PRICE-FAIL ({fail}) — the pool "
+                 f"keeps its entries (no machine judgment off a refused job)")
+        elif _price_log_verdict(log) is None:
+            _log(f"meta/lever-price: combo-pool bundle job {job or '?'} produced no PRICE "
+                 f"verdict — the pool keeps its entries")
+        elif stack:
+            noise = float(stack.get("noise_pct") if stack.get("noise_pct") is not None
+                          else _LEVER_NOISE_DEFAULT_PCT)
+            all_pct = stack.get("all_pct")
+            all_pos = stack.get("all_pos_pct")
+            pays = ((all_pos is not None and all_pos > noise)
+                    or (all_pos is None and all_pct is not None and all_pct > noise))
+            bundle = {"all_pct": all_pct, "noise_pct": noise, "null": not pays}
+            _persist_lever_table(ctx, list(_parsed) + [dict(stack, kind="stack")],
+                                 target, job, spec_levers=levers, reprice=True)
+            if pays:
+                _log(f"meta/lever-price: combo-pool bundle PAYS (all={_fmt_pct(all_pct)}, "
+                     f"noise {noise:.2f}%) — the reading rides the COMBO-POOL block; landing "
+                     f"is the teacher's, through the normal gate")
+                # the combination is now MEASURED: the entries leave the pending
+                # pool (a second bundle job would only re-read the same STACK)
+                _pool_save(ctx, lever_pool.consume(pool_rows, [lv["name"] for lv in levers],
+                                                   outcome="priced"))
+            else:
+                _log(f"meta/lever-price: combo-pool bundle reads null (all={_fmt_pct(all_pct)}, "
+                     f"noise {noise:.2f}%) — booking combo-null rows and clearing the pool")
+    except BackendError as e:
+        _log(f"meta/lever-price: combo-pool bundle job failed ({e}) — the pool keeps its entries")
+    finally:
+        try:
+            be.reset(pre_head)
+        except BackendError as e:
+            _log(f"meta/lever-price: could not restore head {pre_head[:10]} ({e})")
+    return bundle
+
+
+def _book_combo_null(ctx: LoopContext, pool_rows: list, bundle_delta_pct: "float | None",
+                     noise_pct: float) -> None:
+    """The null bundle's double booking: combo-null rows into the cross-run
+    falsified ledger (the combination is closed, not just the single levers —
+    but only because a MEASUREMENT said so), then the pool clears."""
+    rows = lever_pool.combo_null_ledger_rows(
+        pool_rows, bundle_delta_pct=bundle_delta_pct, noise_pct=noise_pct,
+        op_family=ctx.op, arch=str(getattr(ctx, "kb_arch", "") or ""),
+        run=Path(ctx.workspace).name,
+        date=time.strftime("%Y-%m-%d", time.gmtime(ctx.now())))
+    if not rows:
+        return
+    path = _falsified_ledger_path(ctx)
+    seen: set = set()
+    try:
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    try:
+                        rec = json.loads(line)
+                    except ValueError:
+                        continue
+                    if rec.get("class") == "combo-null":
+                        seen.add((str(rec.get("run")), str(rec.get("lever"))))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            for rec in rows:
+                key = (rec["run"], rec["lever"])
+                if key not in seen:
+                    seen.add(key)
+                    fh.write(json.dumps(rec, sort_keys=True, ensure_ascii=False) + "\n")
+        _log(f"meta/lever-price: {len(rows)} combo-null row(s) booked to {path.name}; "
+             f"the combo pool clears")
+    except OSError as e:
+        _log(f"meta/lever-price: could not book combo-null rows ({e})")
+        return
+    _pool_save(ctx, lever_pool.consume(pool_rows, [r["lever"] for r in rows],
+                                       outcome=lever_pool.POOL_STATUS_COMBO_NULL))
+
+
+# --- WP16: pattern search (乙A3) -------------------------------------------------
+#
+# The parameter-level local optimum's first ACTIVE escape. At a STAGNATION or
+# phase-exhaustion trigger, the driver walks a shrink grid over ≤ 2 numeric
+# axes the teacher named on the milestone (`pattern_search:` recipe, the sweep
+# recipe's channel and edit discipline): stage 1 times the teacher's values,
+# every later stage times the midpoints between the stage winner and its
+# nearest measured neighbors — the radius halves because the spacing does. One
+# sweep-style job per stage (sweep_run's interleaved kernel — WP17's screening
+# primitive does not exist on this baseline yet; the integration step folds
+# this onto it). Budget: its own class, [loop] pattern_search_budget searches
+# per run, 0 disables. The winner is a LANDABLE row — readings, never a
+# landing (contract C9).
+
+_PS_FIELD_RE = re.compile(r"pattern_search\s*[:：]\s*")
+_PS_MAX_AXES = 2
+_PS_MAX_VALUES = 7            # per axis: keeps a stage-1 job within MAX_VARIANTS
+_PS_STATE_FILE = "pattern_search.json"
+
+
+def _ps_state_path(ctx: LoopContext) -> Path:
+    return Path(ctx.workspace) / "notes" / _PS_STATE_FILE
+
+
+def _ps_state_load(ctx: LoopContext) -> dict:
+    try:
+        state = json.loads(_ps_state_path(ctx).read_text(encoding="utf-8"))
+        if isinstance(state, dict):
+            state.setdefault("runs_used", 0)
+            state.setdefault("history", [])
+            return state
+    except (OSError, ValueError):
+        pass
+    return {"runs_used": 0, "history": []}
+
+
+def _ps_state_save(ctx: LoopContext, state: dict) -> None:
+    try:
+        p = _ps_state_path(ctx)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(state, sort_keys=True, ensure_ascii=False, indent=1),
+                     encoding="utf-8")
+    except OSError as e:
+        _log(f"meta: could not write {_PS_STATE_FILE} ({e})")
+
+
+def _milestone_pattern_search_recipe(ctx: LoopContext) -> "tuple[str, dict] | None":
+    """The `pattern_search:` recipe pre-written on a milestone decision line
+    (the sweep recipe's channel: teacher-authored, read from the milestone
+    file itself), or None. The FIRST decision block carrying a parseable
+    recipe wins — the trigger is phase-level, the axes are whoever's the
+    teacher named."""
+    try:
+        text = Path(ctx.milestone).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    from forgekernel.milestone import DECISIONS_ENDS, DECISIONS_SECTION, _decision_blocks, _section_body
+    sec = _section_body(text, DECISIONS_SECTION, DECISIONS_ENDS)
+    if not sec:
+        return None
+    for did, block in _decision_blocks(sec):
+        m = _PS_FIELD_RE.search(block)
+        if not m:
+            continue
+        try:
+            recipe, _ = json.JSONDecoder().raw_decode(block[m.end() - 1:])
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(recipe, dict):
+            return str(did), recipe
+    return None
+
+
+def _ps_recipe_refused(recipe: dict) -> "str | None":
+    """Why the driver would not run ``recipe`` as written, or None: 1..2 axes,
+    each with a one-token name, an exact `old` text, a `{v}` template with
+    exactly one placeholder, and 2.._PS_MAX_VALUES finite numbers (duplicates
+    collapse); stages clamp to 1..3."""
+    axes = recipe.get("axes")
+    if not isinstance(axes, list) or not axes:
+        return "recipe names no axes"
+    if len(axes) > _PS_MAX_AXES:
+        return f"{len(axes)} axes (max {_PS_MAX_AXES})"
+    for ax in axes:
+        if not isinstance(ax, dict):
+            return "an axis must be an object"
+        name = re.sub(r"\s+", "_", str(ax.get("name", "")).strip())
+        if not name:
+            return "an axis has no name"
+        old = ax.get("old")
+        if not isinstance(old, str) or not old:
+            return f"axis {name!r} has no `old` text"
+        new = ax.get("new")
+        if not isinstance(new, str) or new.count("{v}") != 1:
+            return (f"axis {name!r}'s `new` template must hold exactly one `{{v}}` "
+                    f"placeholder")
+        values = ax.get("values")
+        if not isinstance(values, list) or not 2 <= len(values) <= _PS_MAX_VALUES:
+            return f"axis {name!r} needs 2..{_PS_MAX_VALUES} values"
+        vals = []
+        for v in values:
+            if isinstance(v, bool) or not isinstance(v, (int, float)) \
+                    or not math.isfinite(float(v)):
+                return f"axis {name!r} carries a non-numeric value {v!r}"
+            fv = float(v)
+            if fv not in vals:
+                vals.append(fv)
+        if len(vals) < 2:
+            return f"axis {name!r} collapses to fewer than two distinct values"
+    return None
+
+
+def _ps_fmt(v: float) -> str:
+    """A value as it is substituted into the axis template (and into variant
+    names): integers stay integers, floats keep 6 decimals."""
+    return str(int(v)) if float(v).is_integer() else repr(round(float(v), 6))
+
+
+def ps_next_points(measured: "list[float]", winner: float) -> "list[float]":
+    """The next contraction points around ``winner``: the midpoints to its
+    nearest measured neighbors below and above (the radius halves because the
+    spacing between adjacent measured points does). Pure — the grid unit test
+    walks a known response surface with this. Integers contract in integers
+    (a tile axis never grows a .5); adjacent integers yield no new point."""
+    lo = max((p for p in measured if p < winner), default=None)
+    hi = min((p for p in measured if p > winner), default=None)
+    out: list = []
+    for other in (lo, hi):
+        if other is None or other == winner:
+            continue
+        both_int = float(other).is_integer() and float(winner).is_integer()
+        if both_int:
+            a, b = int(other), int(winner)
+            if abs(a - b) <= 1:
+                continue
+            mid = (a + b) // 2
+        else:
+            mid = (other + winner) / 2.0
+        if mid not in measured and mid != winner:
+            out.append(mid)
+    return out
+
+
+def ps_stage_variants(states: dict, stage: int) -> "tuple[list, dict]":
+    """(variants, mapping) for contraction ``stage``: stage 1 times every
+    teacher value of every axis; stage > 1 times only the new midpoints around
+    each axis's measured winner. Pure; ``mapping`` names each variant's
+    (axis, value) so the driver can read the readings back. A variant whose
+    name collides with an earlier stage's gains an ``_r<stage>`` suffix."""
+    variants: list = []
+    mapping: dict = {}
+    for ax_name, ax in states.items():
+        if stage <= 1:
+            points = list(ax["values"])
+        else:
+            winner = ax.get("winner")
+            points = ps_next_points(sorted(ax["measured"]), winner) \
+                if winner is not None else []
+        for v in points:
+            name = f"{ax_name}_{_ps_fmt(v)}"
+            if any(q["name"] == name for q in variants):
+                name = f"{name}_r{stage}"
+            variants.append({"name": name, "edits": [
+                {"old": ax["old"], "new": ax["new"].replace("{v}", _ps_fmt(v))}]})
+            mapping[name] = (ax_name, float(v))
+    return variants, mapping
+
+
+def _run_pattern_search(ctx: LoopContext, be, trigger: str) -> "dict | None":
+    """The shrink-grid search itself, or None (budget spent, no recipe, no
+    best tree, no budget clock — each logged once it matters). Readings only:
+    the tree is restored whatever the jobs did, and the only lasting outputs
+    are the returned table and the state file's budget count."""
+    budget = _wp16_cfg_int(ctx, "pattern_search_budget")
+    if budget <= 0:
+        return None
+    state = _ps_state_load(ctx)
+    if int(state.get("runs_used", 0)) >= budget:
+        return None
+    found = _milestone_pattern_search_recipe(ctx)
+    if found is None:
+        return None
+    decision_id, recipe = found
+    if why := _ps_recipe_refused(recipe):
+        _log(f"meta: pattern search refused the milestone recipe on `{decision_id}` ({why})")
+        return None
+    records = load_records(ctx.status_path)
+    best = _best_keep_record(records, ctx.gate_window)
+    if best is None or not best.sha:
+        return None
+    if ctx.now() > ctx.deadline_epoch - 3600:
+        _log("meta: pattern search armed but < 60 min of budget remain — skipped")
+        return None
+    stages = min(3, max(1, _wp16_cfg_int(ctx, "pattern_search_stages")))
+    states: dict = {}
+    for ax in recipe["axes"]:
+        name = re.sub(r"\s+", "_", str(ax["name"]).strip())
+        states[name] = {"old": ax["old"], "new": ax["new"],
+                        "values": sorted({float(v) for v in ax["values"]}),
+                        "measured": [], "winner": None}
+    rows: list = []
+    vmap: dict = {}
+    stages_run = 0
+    jobs = 0
+    pre_head = be.head()
+    branch = f"{ctx.branch_prefix}-psearch"
+    spec_path = Path(ctx.workspace) / "notes" / "__pattern_search.json"
+    try:
+        be.reset(best.sha)
+        _seed_sweep_toolkits(ctx, be)
+        for stage in range(1, stages + 1):
+            variants, mapping = ps_stage_variants(states, stage)
+            if not variants:
+                break
+            vmap.update(mapping)
+            spec = {"kernel_file": str(ctx.kernel_file), "criterion": _SWEEP_CRITERION,
+                    "rounds": 2, "variants": variants}
+            spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=1),
+                                 encoding="utf-8")
+            be.commit(f"pattern-search: stage {stage} of the {trigger} trigger "
+                      f"({len(variants)} point(s))")
+            be.push_branch(branch)
+            log, _job = _sweep_job(be, branch, f"{_SWEEP_CMD} notes/{spec_path.name}",
+                                   f"pattern-search stage {stage}")
+            jobs += 1
+            stages_run = stage
+            srows, _swinner, sfail = parse_sweep_results(log)
+            floor_pct = next((r.get("floor_pct") for r in srows
+                              if r.get("floor_pct") is not None), None)
+            for r in srows:
+                rows.append(r)
+                loc = vmap.get(r["name"])
+                if loc is None or not r.get("ok"):
+                    continue
+                ax = states[loc[0]]
+                d = r.get("delta_pct")
+                ax["measured"].append(loc[1])
+                if d is not None and (ax["winner"] is None or d > ax["winner_delta"]):
+                    ax["winner"], ax["winner_delta"] = loc[1], d
+            if sfail and not srows:
+                _log(f"meta: pattern search stage {stage} produced no reading ({sfail})")
+                break
+    except BackendError as e:
+        _log(f"meta: pattern search job failed ({e}) — readings so far stand")
+    finally:
+        try:
+            spec_path.unlink()
+        except OSError:
+            pass
+        try:
+            be.reset(pre_head)
+        except BackendError as e:
+            _log(f"meta: pattern search could not restore head {pre_head[:10]} ({e})")
+    if jobs == 0:
+        return None
+    state["runs_used"] = int(state.get("runs_used", 0)) + 1
+    state["history"].append({"ts": ctx.now(), "trigger": trigger, "decision_id": decision_id,
+                             "best_sha": best.sha, "stages_run": stages_run, "jobs": jobs})
+    _ps_state_save(ctx, state)
+    best_row = None
+    for r in rows:
+        if not r.get("ok") or r.get("delta_pct") is None:
+            continue
+        floor_here = (r.get("floor_pct") if r.get("floor_pct") is not None
+                      else _LEVER_NOISE_DEFAULT_PCT)
+        if r["delta_pct"] <= floor_here:
+            continue
+        if best_row is None or r["delta_pct"] > best_row["delta_pct"]:
+            best_row = r
+    winner = None
+    if best_row is not None and (loc := vmap.get(best_row["name"])) is not None:
+        winner = {"name": best_row["name"], "axis": loc[0], "value": loc[1],
+                  "delta_pct": best_row["delta_pct"]}
+    return {"trigger": trigger, "decision_id": decision_id, "rows": rows,
+            "stages_run": stages_run, "jobs": jobs, "winner": winner,
+            "best_sha": best.sha}
+
+
+def _pattern_search_block(res: dict) -> str:
+    """The injected readings table (contract C9 discipline spelled out on it:
+    the winner is a LANDABLE row, the landing is the teacher's and the
+    student's, the gate judges it — and no reading here flips a verdict)."""
+    lines = [f"\n## Pattern search (driver-run shrink grid on best `{str(res['best_sha'])[:10]}` "
+             f"— readings only)", "", "| point | same-job ratio | Δ vs base | ms | floor | ok |",
+             "|---|---|---|---|---|---|"]
+    for r in res["rows"]:
+        lines.append(f"| `{r['name']}` | {r['ratio'] if r['ratio'] is not None else 'n/a'} | "
+                     f"{_fmt_pct(r['delta_pct'])} | {r['ms'] if r['ms'] is not None else 'n/a'} | "
+                     f"{_fmt_pct(r['floor_pct'])} | {'pass' if r['ok'] else 'fail'} |")
+    lines.append("")
+    if res["winner"] is not None:
+        w = res["winner"]
+        lines.append(
+            f"**LANDABLE: pattern-search `{w['name']}` (axis {w['axis']} = {_ps_fmt(w['value'])}) "
+            f"expected={_fmt_pct(w['delta_pct'])}** over {res['stages_run']} contraction stage(s), "
+            f"{res['jobs']} job(s), armed by {res['trigger']}. Teacher: cite it in a milestone "
+            "patch (the winner's edit is the recipe's `old` → the winning value); the student "
+            "delivers it as an ordinary decision and the standard eval gate judges the landing "
+            "— the driver never applies kernel edits itself.\n")
+    else:
+        lines.append(
+            f"No point clears its job floor over {res['stages_run']} stage(s): the shrink grid "
+            f"measured the neighborhood flat around the best — the {res['trigger']} reading "
+            "stands as the evidence it is.\n")
+    return "\n".join(lines)
+
+
+# --- WP16: k-best runner-up pool, restart targets, arch graveyard ----------------
+
+_RUNNER_UP_FILE = "runner_up.jsonl"
+_GRAVEYARD_FILE = "arch_graveyard.jsonl"
+
+
+def _runner_up_pool(records, gate_window: str, k: int) -> list:
+    """The top-k KEEP trees by gate reading, best first. Rank 1 is the sitting
+    best (``_best_keep_record``'s identity rule); ranks 2..k are the runner-up
+    pool the run already paid its eval + NCU for. Deduped by sha, one row per
+    tree (a reused reading's ``reading_of`` rows are excluded — a pool entry is
+    a tree the run bought its own eval for); ties break on the older iter."""
+    kept: dict = {}
+    for r in records:
+        if r.verdict != "KEEP" or getattr(r, "reading_of", None) is not None:
+            continue
+        ms = gate_ms(r, gate_window)
+        sha = str(getattr(r, "sha", "") or "")
+        if ms is None or not sha:
+            continue
+        cur = kept.get(sha)
+        if cur is None or (ms, int(r.iter)) < (cur[0], int(cur[1].iter)):
+            kept[sha] = (ms, r)
+    ranked = sorted(kept.items(), key=lambda kv: (kv[1][0], kv[1][1].iter))[:max(0, int(k))]
+    best_ms = ranked[0][1][0] if ranked else None
+    return [{"rank": rank, "sha": sha, "iter": int(r.iter),
+             "decision_id": r.decision_id, "gate_ms": ms,
+             "delta_vs_best_pct": (100.0 * (ms - best_ms) / best_ms
+                                   if best_ms and rank > 1 else 0.0)}
+            for rank, (sha, (ms, r)) in enumerate(ranked, start=1)]
+
+
+def _write_runner_up_pool(ctx: LoopContext, records) -> None:
+    """The pool's on-disk snapshot (notes/runner_up.jsonl, deterministic):
+    the REVERT-reset no longer ends the runner-ups' paper trail — their sha,
+    gate reading and the price already paid stay addressable. A missing top-k
+    (no KEEP rows yet) leaves the file as it is."""
+    pool = _runner_up_pool(records, ctx.gate_window, _wp16_cfg_int(ctx, "runner_up_pool_k"))
+    if not pool:
+        return
+    try:
+        p = Path(ctx.workspace) / "notes" / _RUNNER_UP_FILE
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n"
+                             for r in pool), encoding="utf-8")
+    except OSError as e:
+        _log(f"meta: could not write {_RUNNER_UP_FILE} ({e})")
+
+
+def _preserve_runner_up_trees(ctx: LoopContext, be, records) -> None:
+    """The runner-up archive, refreshed BEFORE a reset can rewrite the story:
+    the pool file (notes/runner_up.jsonl) is what keeps a discarded tree
+    addressable — its sha stays in the git object store, and a revival is
+    ``be.reset(<pooled sha>)`` pointed at by the teacher's milestone patch.
+    (KEEP trees are ancestors of the best the run resets to, so the commits
+    survive the reset; what the file adds is the sha + reading + price ledger,
+    not reachability.) File-only bookkeeping: no backend calls, and the reset
+    that follows is untouched."""
+    _write_runner_up_pool(ctx, records)
+
+
+def _restart_target_lines(ctx: LoopContext, records) -> str:
+    """The STAGNATION block's restart target (≤ 6 lines, contract C10): who
+    the pooled #2 is, what it already cost, and the one discipline its
+    revival carries. The block format and the override channel above it are
+    WP10's and stay byte-identical — these lines only APPEND when a #2 exists."""
+    pool = _runner_up_pool(records, ctx.gate_window, _wp16_cfg_int(ctx, "runner_up_pool_k"))
+    if len(pool) < 2:
+        return ""
+    r2 = pool[1]
+    return (
+        "\n# --- WP16 --- restart target (driver-read: an optional route, never a machine "
+        "switch)\n"
+        f"- runner-up #2: `{r2['decision_id']}` tree `{r2['sha'][:10]}` gate "
+        f"{r2['gate_ms']:.6g} ms (+{r2['delta_vs_best_pct']:.2f}% vs the best — its eval "
+        f"and NCU are already paid).\n"
+        "- Re-basing the run on that tree is a legal structural answer here: point the "
+        "milestone patch at it and the student delivers on top of it.\n"
+        "- 复活必重验 (red line ③-②): the revived node re-passes the full suite with its "
+        "next gated delivery — watermark / clock-drift / fresh-recheck apply as to any "
+        "delivery — before any of its readings re-enter best, plateau or pricing.\n")
+
+
+def _revival_note(ctx: LoopContext, base_sha: str, records) -> str:
+    """WP16 (复活必重验): the audit line for a delivery that re-bases on a
+    pooled runner-up tree. The revival itself is the teacher's milestone patch
+    and the student's ordinary delivery — no separate pass exists, so the
+    marker's whole job is to say WHERE the re-verification happens: the
+    delivery's own full gate (watermark / clock-drift / fresh-recheck apply as
+    to any delivery) before any of the tree's readings re-enter best, plateau
+    or pricing. Empty when the base is not a pooled tree — the pool-empty
+    state renders nothing at all."""
+    if not base_sha:
+        return ""
+    pool = _runner_up_pool(records, ctx.gate_window, _wp16_cfg_int(ctx, "runner_up_pool_k"))
+    hit = next((r for r in pool if r["sha"] == base_sha), None)
+    if hit is None:
+        return ""
+    return (f"runner-up revival: this delivery re-bases on pooled tree {base_sha[:10]} "
+            f"(rank {hit['rank']}, `{hit['decision_id']}`) — its readings re-enter "
+            f"best/plateau/pricing only through this delivery's own full gate "
+            f"(watermark / clock-drift / fresh-recheck apply as always)")
+
+
+# --- WP16: reprice coverage (甲G12) + climb streak -------------------------------
+
+def _climb_streak(records, gate_window: str) -> int:
+    """Consecutive newest-first evaluated KEEP rows each gaining in [1%, 3%] —
+    the climbing-segment signature. A run taking several sub-gate steps moves
+    the best under the re-price gate's radar (the gate reads the gap since the
+    lever's tree, one 1-2% step at a time adds up); the count is the stand-down
+    signal. Reused readings are skipped (they are not new trees)."""
+    streak = 0
+    for r in reversed(records):
+        if getattr(r, "reading_of", None) is not None:
+            continue
+        if r.verdict != "KEEP":
+            break
+        ms, mb = gate_ms(r, gate_window), getattr(r, "metric_before", None)
+        if ms is None or not mb:
+            break
+        g = 100.0 * (mb - ms) / mb
+        if 1.0 <= g <= 3.0:
+            streak += 1
+        else:
+            break
+    return streak
+
+
+def _mark_expired_levers(ctx: LoopContext, rec) -> None:
+    """WP16 (甲G12): a WINNING lever the milestone does not cite used to die
+    silently on a new best — its positive price was read on a tree the run
+    left, nothing re-measured it, and no rendering said so. The revision store
+    already has the teacher's ear (the Price-tag review block): an `expired`
+    verdict per uncovered winner turns the silence into one line the teacher
+    reads at the step where the tree moved. Cited levers are the existing
+    re-price path's business; a lever already re-read on this tree is current,
+    not expired."""
+    if not (ctx.reprice_on_new_best and ctx.lever_pricing_rounds > 0 and ctx.stall_pricing):
+        return
+    if ctx.now() > ctx.deadline_epoch - 3600:
+        return          # the re-price path's own budget guard: near the deadline
+                        # neither a re-read nor the marker fires (the next new
+                        # best with budget marks them)
+    ev = _evidence_dir(ctx, create=False)
+    if ev is None or not (ev / "lever_prices.jsonl").is_file():
+        return
+    table_rec = None
+    try:
+        for line in (ev / "lever_prices.jsonl").read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            r2 = json.loads(line)
+            if not r2.get("reprice") and r2.get("table"):
+                table_rec = r2      # the LAST banked teacher table (file order)
+    except (OSError, ValueError) as e:
+        _log(f"price-check: could not read lever_prices.jsonl ({e})")
+        return
+    if not table_rec or str(table_rec.get("best_ref")) == str(rec.sha):
+        return                      # the table already describes this very tree
+    cited = set(_cited_levers(_read_milestone(ctx)))
+    table = table_rec.get("table") or []
+    noise = _table_noise_pct(table)
+    revisions: list = []
+    for lv in table:
+        if lv.get("kind") != "lever":
+            continue
+        name = str(lv.get("name") or "")
+        add, rem = _price_legs(lv)
+        if not name or name in cited or add is None or add <= noise:
+            continue
+        hist = _lever_price_history(ctx, name)
+        if hist and hist[-1]["best_ref"] == str(rec.sha):
+            continue
+        revisions.append({
+            "ts": ctx.now(), "iter": rec.iter, "lever": name,
+            "priced_on_before": str(lv.get("priced_on") or table_rec.get("best_ref") or ""),
+            "job_before": str(lv.get("job") or ""),
+            "before": {"add_pct": add, "remove_pct": rem,
+                       "delta_pct": lv.get("delta_pct"), "cls": lv.get("cls")},
+            "priced_on_now": str(rec.sha), "job_now": "", "now": None,
+            "verdict": "expired",
+            "note": (f"add {add:+.2f}% > noise {noise:.2f}% on the old tree; the milestone "
+                     f"does not cite it and no fresh reading covers it on the new best — "
+                     f"re-price it before citing it there"),
+            "retired": False})
+    if not revisions:
+        return
+    _append_revisions(ctx, revisions)
+    _log(f"iter {rec.iter}: {len(revisions)} uncited winning lever(s) marked EXPIRED on the "
+         f"new best [{', '.join(rv['lever'] for rv in revisions)}] — the Price-tag review "
+         f"block carries them")
+
+
+# --- WP16: MC prescreen noise defense (乙A6) -------------------------------------
+
+def _mc_top2_gap_pct(rows: list) -> "tuple[str, str, float] | None":
+    """(winner, runner_up, gap_pct) off an mc_prescreen row table: the two
+    smoke-passing variants holding device readings, winner = the lower ms, gap
+    = how much faster the winner read. None under two timed survivors — no
+    defense on an unmeasured pair."""
+    timed = sorted(((str(r["name"]), float(r["ms"])) for r in rows
+                    if r.get("smoke") and r.get("ms") is not None and float(r["ms"]) > 0),
+                   key=lambda nv: nv[1])
+    if len(timed) < 2:
+        return None
+    (w, wms), (ru, rums) = timed[0], timed[1]
+    return w, ru, 100.0 * (rums - wms) / wms
+
+
+# --- WP16: floor_progress advisory (丙) ------------------------------------------
+
+def _floor_progress_line(ctx: LoopContext, records) -> str:
+    """``floor_progress = floor_ms / best_ms`` — THIS run's parsed analytic
+    floor (WP9's floor_for, no second copy) over its own best. A pure internal
+    progress advisory rendered beside the floor line: report-only, no stop or
+    verdict reads it, and the default target (1.2x) is untouched. No external-
+    benchmark scoring concept — both numbers are this run's own."""
+    floor = _analytic_floor_ms(ctx)
+    if not floor or floor <= 0:
+        return ""
+    best = _best_ms(records, ctx.gate_window)
+    if not best or best <= 0:
+        return ""
+    return (f"floor_progress={floor / best:.3f} (analytic floor {floor:.6g} ms / best "
+            f"{best:.6g} ms) — report-only advisory; no stop or verdict reads it")
+
+
+# --- WP16: ARCH_PROBE graveyard helpers (甲G16+丙) --------------------------------
+
+def _arch_recipe_meta(ctx: LoopContext, path: str) -> dict:
+    """The candidate recipe's lineage fields, read tolerant: ``hybrid_of`` (the
+    parents a hybrid cites) and ``tunables_seen`` (the topology axes the
+    recipe names — teacher-supplied, else the rationale's tokens;
+    record-only, never judged)."""
+    try:
+        recipe = json.loads((Path(ctx.workspace) / path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {}
+    if not isinstance(recipe, dict):
+        return {}
+    out: dict = {}
+    hy = recipe.get("hybrid_of")
+    if isinstance(hy, list) and hy:
+        out["hybrid_of"] = [str(x) for x in hy]
+    tuns = recipe.get("tunables")
+    if isinstance(tuns, list) and tuns:
+        out["tunables_seen"] = [str(x) for x in tuns][:8]
+    else:
+        toks = sorted({w for w in re.findall(r"[A-Za-z_]{3,}",
+                                             str(recipe.get("rationale", "")))})[:8]
+        if toks:
+            out["tunables_seen"] = toks
+    return out
+
+
+def _arch_graveyard_append(ctx: LoopContext, entries: list) -> None:
+    """The ARCH_PROBE losers' structured archive (notes/arch_graveyard.jsonl,
+    append-only): candidate, readings, dead reason, tunables seen, hybrid
+    lineage. Only LOSERS land here — a clear winner's runner-up(s) and the
+    no-reading candidates; a decisive winner and an inconclusive pair are
+    alive (the stamp records them). Best-effort: bookkeeping failures are
+    logged, never raised."""
+    if not entries:
+        return
+    try:
+        p = Path(ctx.workspace) / "notes" / _GRAVEYARD_FILE
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as fh:
+            for row in entries:
+                fh.write(json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n")
+        _log(f"meta/distill: {len(entries)} ARCH_PROBE loser(s) archived to "
+             f"notes/{_GRAVEYARD_FILE}")
+    except OSError as e:
+        _log(f"meta/distill: could not write {_GRAVEYARD_FILE} ({e})")
 
 
 # --- WP10: MC-DELIVERY (student structure fan-out, prescreened) --------------------
@@ -6550,6 +7613,41 @@ def _mc_write_variant_archive(ctx: LoopContext, iter_no: int, sources: dict) -> 
              f"(uncommitted workspace record: {', '.join(written)})")
 
 
+def _mc_revote(ctx: LoopContext, be, iter_no: int, did: str,
+               variants: list) -> "tuple[list, str | None, str | None] | None":
+    """WP16 (乙A6): the near-tie defense's extra prescreen — the top-2
+    variants re-timed at ``_MC_ROUNDS + 1`` interleaved rounds, one more job in
+    the confirm-budget class (the same authorization the watermark-band
+    confirmations ride). Returns (rows, winner, fail), or None when the job
+    could not run (the caller keeps the first reading; nothing here blocks the
+    delivery). The toolkit is already seeded by the first job."""
+    workload = ""
+    try:
+        shapes = meta_shapes.card_meta_workloads(ctx.workspace)
+        workload = shapes[0] if shapes else ""
+    except Exception:  # noqa: BLE001 — a card that cannot name workloads times all of it
+        workload = ""
+    spec_path = Path(ctx.workspace) / "notes" / (
+        "__mc_" + re.sub(r"[^A-Za-z0-9_.\-]", "_", did) + "_revote.json")
+    spec = {"kernel_file": str(ctx.kernel_file), "variants": list(variants),
+            "rounds": _MC_ROUNDS + 1, "workload": workload}
+    try:
+        spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
+        be.commit(f"mc: near-tie revote spec for {did} (top-2, {_MC_ROUNDS + 1} rounds)")
+        branch = f"{ctx.branch_prefix}-i{iter_no}mc"
+        be.push_branch(branch)
+        log, _job = _mc_job(be, branch, f"{_MC_CMD} notes/{spec_path.name}",
+                            f"iter{iter_no}: mc revote {did}")
+    except BackendError:
+        raise
+    finally:
+        try:
+            spec_path.unlink()
+        except OSError:
+            pass
+    return parse_mc_results(log)
+
+
 def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
                 last_good_ref: str | None, metric_before: float | None) -> dict | None:
     """The MC-DELIVERY path of one delivery, or None (not authorized / nothing
@@ -6608,6 +7706,42 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
         except OSError:
             pass
     rows, winner, fail = parse_mc_results(log)
+    # --- WP16 (乙A6): the prescreen noise defense. A prescreen is 2 interleaved
+    # rounds — a winner and runner-up inside the run's resolution band may be
+    # noise twins, and the dice-rolled loser of that pair costs a full eval +
+    # NCU + the iteration. When the two best timed survivors sit inside the
+    # band and the confirm budget is open, ONE more prescreen (the top-2, at
+    # _MC_ROUNDS + 1 rounds — 2 -> 3) re-decides between exactly the two
+    # variants the first job measured. The all-DNF path below is untouched,
+    # and the revote never widens the choice, only re-draws it.
+    if winner is not None and int(ctx.confirm_budget_per_iter) > 0:
+        band = float(resolvable_diff(load_records(ctx.status_path), ctx.gate_window,
+                                     floor=ctx.resolvable_floor, cap=ctx.resolvable_cap))
+        top2 = _mc_top2_gap_pct(rows)
+        if top2 is not None and top2[2] / 100.0 < band:
+            w, ru, gap = top2
+            _log(f"iter {iter_no}: mc near-tie — {w} vs {ru} gap {gap:.2f}% < band "
+                 f"{band:.2%}; one more prescreen (rounds {_MC_ROUNDS} -> {_MC_ROUNDS + 1}, "
+                 f"confirm-budget class) re-decides")
+            revote = None
+            try:
+                revote = _mc_revote(ctx, be, iter_no, did, [w, ru])
+            except BackendError as e:
+                _log(f"iter {iter_no}: mc revote job failed ({e}) — the first reading stands")
+            if revote is not None:
+                r2rows, r2winner, r2fail = revote
+                by_name = {r["name"]: r for r in rows}
+                for r in r2rows or []:
+                    by_name[r["name"]] = r      # the re-drawn readings supersede
+                rows = [by_name[r["name"]] for r in rows if r["name"] in by_name]
+                if r2winner in (w, ru):
+                    if r2winner != winner:
+                        _log(f"iter {iter_no}: mc revote flips the winner: "
+                             f"{winner} -> {r2winner}")
+                    winner = r2winner
+                else:
+                    _log(f"iter {iter_no}: mc revote produced no usable winner "
+                         f"({r2fail or 'no verdict'}) — the first reading stands")
     timings = _mc_timings_rows(rows, winner)
     if winner is not None:
         try:
@@ -6724,7 +7858,12 @@ def _persist_lever_table(ctx: LoopContext, table: list, best_ref: str, job: str,
     if reprice:
         rec["reprice"] = True
     if spec_levers is not None:
-        rec["spec_levers"] = [{k: lv.get(k) for k in ("name", "edits", "in_stack", "expect", "decisions")
+        # WP16: `requires` / `conflicts` ride the banked recipe (the coupling
+        # graph the price block renders); `regime` is recorded verbatim, never
+        # judged (WP14's axis).
+        rec["spec_levers"] = [{k: lv.get(k) for k in ("name", "edits", "in_stack", "expect",
+                                                      "decisions", "requires", "conflicts",
+                                                      "regime")
                                if k in lv} for lv in spec_levers]
     try:
         with (ev / "lever_prices.jsonl").open("a", encoding="utf-8") as fh:
@@ -6734,6 +7873,10 @@ def _persist_lever_table(ctx: LoopContext, table: list, best_ref: str, job: str,
     else:
         _bank_evidence(ctx, "lever prices")
         _append_falsified_ledger(ctx, table, best_ref=best_ref, job=job, reprice=reprice)
+        if not reprice:
+            # --- WP16: the compounding pool's bypass write — null alone is not
+            # a dead end. Bookkeeping only; pricing never notices this exists.
+            _pool_admit_table(ctx, table, spec_levers, best_ref, job)
 
 
 # --- falsified-lever ledger (cross-run prior for the teacher) ------------------
@@ -7037,7 +8180,8 @@ _REPRICE_TAG = "RE-PRICED"
 _REVISIONS_NAME = "price_revisions.jsonl"
 # verdicts that change what a citation may be used for
 _REVISION_SUSPENDS = ("reversed", "faded")
-_REVISION_FLAGGED = _REVISION_SUSPENDS + ("emerged", "drifted", "unverifiable")
+_REVISION_FLAGGED = _REVISION_SUSPENDS + ("emerged", "drifted", "unverifiable",
+                                          "expired")
 
 
 def _stamp_price_row(row: dict, best_ref: str, job: str) -> dict:
@@ -7296,6 +8440,19 @@ def _reprice_cited_levers(ctx: LoopContext, rec) -> list:
         return []
     if not rec.sha:
         return []
+    # --- WP16 (甲G12): the climb streak. A run taking several 1-3% KEEP steps
+    # moves the best under the re-price gate's radar — each skip reads "within
+    # reprice_min_gain_pct of the lever's tree" while the tree walks away step
+    # by step. Enough consecutive sub-gate steps stand the gate down for this
+    # one re-price (the citations re-read before the drift compounds).
+    min_gain_pct = float(ctx.reprice_min_gain_pct)
+    streak_k = _wp16_cfg_int(ctx, "reprice_climb_streak")
+    if streak_k > 0 and _climb_streak(load_records(ctx.status_path),
+                                      ctx.gate_window) >= streak_k:
+        _log(f"iter {rec.iter}: climb streak — the last {streak_k} evaluated KEEP(s) each "
+             f"gained 1-3%, under the {ctx.reprice_min_gain_pct:g}% re-price gate; it stands "
+             f"down for this step")
+        min_gain_pct = 0.0
     ev = _evidence_dir(ctx, create=False)
     if ev is None or not (ev / "lever_prices.jsonl").is_file():
         return []
@@ -7319,13 +8476,13 @@ def _reprice_cited_levers(ctx: LoopContext, rec) -> list:
         # the lever was last read is not re-read (the teacher's entry prices it)
         last_ms = _ms_of_tree(ctx, latest["best_ref"]) or latest.get("base_ms")
         if (new_ms is not None and last_ms
-                and new_ms > last_ms * (1.0 - ctx.reprice_min_gain_pct / 100.0)):
+                and new_ms > last_ms * (1.0 - min_gain_pct / 100.0)):
             skipped.append(name)
             continue
         stale.append((name, cited, latest))
     if skipped:
         _log(f"iter {rec.iter}: new best {rec.sha[:10]} — cited lever price(s) {skipped} were read "
-             f"on a tree within {ctx.reprice_min_gain_pct:g}% of this one; not re-pricing them")
+             f"on a tree within {min_gain_pct:g}% of this one; not re-pricing them")
     if not stale:
         return []
     names = [n for n, _, _ in stale]
@@ -8319,6 +9476,11 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     # carries either line.
     if (line := _floor_teacher_line(ctx)):
         ncu_view += f"\n{line}\n"
+    # --- WP16 ---: floor_progress beside the floor line — the run's parsed
+    # floor over its own best (report-only; contract C10's floor/floor_progress
+    # position; no stop or verdict reads it).
+    if (line := _floor_progress_line(ctx, records)):
+        ncu_view += f"{line}\n"
     if (line := _mfu_teacher_line(records, ctx)):
         ncu_view += f"{line}\n"
     # The timed-window ledger: what each side's stopwatch covers, both
@@ -8488,7 +9650,7 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
             ctx, priced, bindings, diagnose_extra,
             prompt_file="m0_audit_prompt.md" if audit else "diagnose_prompt.md")
         if lever_table:
-            diagnose_extra += _lever_price_block(lever_table)
+            diagnose_extra += _lever_price_block(lever_table, _last_banked_specs(ctx))
         elif ctx.lever_price_lost:
             # a job was bought and its table lost (archive / tool): said once,
             # so the teacher does not read this entry as "pricing never ran"
@@ -8517,17 +9679,40 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     # lever instead of building on a liability. Own subsection only.
     if remove_block := _wp4_remove_candidates_block(live_records, known_levers):
         diagnose_extra += remove_block
+    # --- WP16: combo pool — the sub-noise compounding channel (contract C10
+    # position: after REMOVE_CANDIDATES, before STAGNATION). A null-priced
+    # lever may still pay in a later batch's company; when the pool must, ONE
+    # bundle pricing job measures the all-on (the pricing tool's STACK pass —
+    # never an assumed sum). Pressure and budget only: no verdict changes
+    # (red line ③-⑤), and an empty pool renders nothing at all (byte-for-byte
+    # the pre-WP16 prompt).
+    pool_rows = _pool_load(ctx)
+    pool_bundle = None
+    if len(lever_pool.pending(pool_rows)) >= 2:
+        plateau_now = detect_plateau(live_records, gate_window=ctx.gate_window,
+                                     floor=ctx.resolvable_floor, cap=ctx.resolvable_cap)
+        if lever_pool.should_trigger(pool_rows, plateau=plateau_now,
+                                     pool_age_trigger=_wp16_cfg_int(ctx, "pool_age_trigger"),
+                                     current_step=_pool_current_step(ctx)):
+            pool_bundle = _run_pool_bundle(ctx, be, pool_rows)
+            if pool_bundle is not None and pool_bundle.get("null"):
+                _book_combo_null(ctx, pool_rows, pool_bundle.get("all_pct"),
+                                 pool_bundle.get("noise_pct") or _LEVER_NOISE_DEFAULT_PCT)
+                pool_rows = _pool_load(ctx)
+    if lever_pool.pending(pool_rows):
+        diagnose_extra += lever_pool.combo_pool_block(pool_rows, bundle=pool_bundle)
+    if not lever_pool.pending(pool_rows):
+        ctx.wp16_pool_deferred = False
     # --- WP10: STAGNATION — the architecture-escape trigger. The last K
     # parameter-level attempts read inside the run's own resolution band while a
     # real gap remains: say so, and constrain THIS diagnosis to a structural
     # route (or the `stagnation_override:` release valve). Pressure only: the
     # block never machine-changes a cause_class, and the diagnosis turn below is
-    # the teacher's, as always.
-    if stagnation := _stagnation_report(ctx, live_records, prior_records):
-        _log(f"meta: stagnation — the last {stagnation['k']} parameter-level attempts read "
-             f"inside the {_fmt_pct(stagnation['band_pct'])} band with a "
-             f"{_fmt_pct(stagnation['gap_pct'])} gap to target -> injecting the STAGNATION block")
-        diagnose_extra += _stagnation_block(stagnation)
+    # the teacher's, as always. WP16 appends two things AROUND it, never inside
+    # it: the pattern-search readings block (when the escape ran) and the
+    # restart-target lines (when a pooled #2 exists); the block format and the
+    # override channel are byte-identical.
+    stagnation = _stagnation_report(ctx, live_records, prior_records)
     # PHASE EXHAUSTION: the table priced on the current best is a batch
     # measurement of the phase's own knobs; when they all read null the phase's
     # remaining walk is a re-measurement, and the diagnosis must say so (close
@@ -8540,6 +9725,48 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 if ctx.phase_close.get("stage") == "gate-failed"
                 else f"awaiting its {exhaustion['gate']} row, not asking again"))
         exhaustion = None
+    # --- WP16: pattern search (乙A3) — the active escape either trigger arms.
+    # Readings only; the winner is a LANDABLE row and landing stays teacher →
+    # student patch → full gate (contract C9).
+    ps_block = ""
+    if stagnation is not None or exhaustion is not None:
+        try:
+            ps_res = _run_pattern_search(ctx, be, "stagnation" if stagnation is not None
+                                         else "phase-exhaustion")
+        except (BackendError, OSError, ValueError) as e:
+            _log(f"meta: pattern search skipped ({e})")
+            ps_res = None
+        if ps_res is not None:
+            _log(f"meta: pattern search ran on the {ps_res['trigger']} trigger "
+                 f"({ps_res['stages_run']} stage(s), {ps_res['jobs']} job(s)) — winner "
+                 f"{ps_res['winner']['name'] if ps_res['winner'] else 'none'}")
+            ps_block = _pattern_search_block(ps_res)
+    if (stagnation is not None and len(lever_pool.pending(pool_rows)) >= 2
+            and not ctx.wp16_pool_deferred and pool_bundle is None):
+        # WP16 pool interaction (red line ③-⑤): the pool still holds unmeasured
+        # combinations, so the STAGNATION block waits ONE step — the bundle
+        # measurement may answer the pressure it would add. Routing only: the
+        # block's format and the override channel are untouched, an empty pool
+        # never defers (byte-for-byte the pre-WP16 path), and the override is
+        # not honored on a step whose prompt carried no block (the guard below).
+        ctx.wp16_pool_deferred = True
+        _log("meta: stagnation held one step — the combo pool still has unmeasured "
+             "combinations; the bundle measurement answers first")
+        stagnation = None
+    if stagnation is not None:
+        _log(f"meta: stagnation — the last {stagnation['k']} parameter-level attempts read "
+             f"inside the {_fmt_pct(stagnation['band_pct'])} band with a "
+             f"{_fmt_pct(stagnation['gap_pct'])} gap to target -> injecting the STAGNATION block")
+        if ps_block:
+            # the readings first: the shrink grid's table is the evidence the
+            # constraint below is judged against (a paying point IS the grounded
+            # `stagnation_override:` argument)
+            diagnose_extra += ps_block
+        diagnose_extra += _stagnation_block(stagnation)
+        diagnose_extra += _restart_target_lines(ctx, live_records)
+    elif ps_block:
+        # the phase-exhaustion trigger: the readings precede its block alike
+        diagnose_extra += ps_block
     if exhaustion:
         _log(f"meta: {exhaustion['phase']} levers {exhaustion['levers']} all null/noop on the "
              f"best tree -> phase exhausted; demanding a phase_verdict "
@@ -13963,6 +15190,10 @@ def _run_arch_probes(ctx: LoopContext) -> None:
         return
     branch = f"{ctx.branch_prefix}-archprobe"
     readings: dict = {}
+    # --- WP16: the graveyard's lineage fields (hybrid_of / tunables_seen) are
+    # read HERE — the probe commit is what carries the recipes, and the reset
+    # below rewinds the tree before the entries are written.
+    graveyard_meta = {path: _arch_recipe_meta(ctx, path) for path in probed}
     try:
         # The recipes travel only inside the probe commit: milestone + recipes +
         # runner ride one add -A snapshot, the jobs run on the -archprobe branch,
@@ -13977,6 +15208,11 @@ def _run_arch_probes(ctx: LoopContext) -> None:
             t = readings[path]
             _log(f"meta/distill: ARCH_PROBE {path} -> "
                  + (f"{t:.6g} ms" if t is not None else "no time reading"))
+            # --- WP16: a hybrid candidate's lineage is logged here and rides
+            # the graveyard rows (the stamp carries readings; lineage is
+            # provenance, recorded — never judged).
+            if (hy := _arch_recipe_meta(ctx, path).get("hybrid_of")):
+                _log(f"meta/distill: ARCH_PROBE candidate {path} is a hybrid of {hy}")
     except BackendError as e:
         _log(f"meta/distill: ARCH_PROBE job failed ({e}); freezing as authored")
     finally:
@@ -14007,6 +15243,34 @@ def _run_arch_probes(ctx: LoopContext) -> None:
                 ctx.candidate = winner
                 _log(f"meta/distill: candidate pinned to the ARCH_PROBE winner: "
                      f"{winner} ({'{CANDIDATE}'} now renders it)")
+        # --- WP16: the losers' structured archive — only a DECISIVE probe has
+        # losers (an inconclusive pair freezes the preferred candidate alive;
+        # both stay out of the graveyard). Candidates whose job produced no
+        # reading are archived too: they bought a job and said nothing, and the
+        # next run's teacher should know that before re-listing the skeleton.
+        clear = (len(decisive) >= 2 and decisive[0][1] > 0
+                 and (decisive[1][1] - decisive[0][1]) / decisive[0][1] > floor)
+        entries = []
+        for path in probed:
+            if clear and decisive and path == decisive[0][0]:
+                continue          # the winner: alive
+            t = readings.get(path)
+            meta_ = graveyard_meta.get(path) or {}
+            if t is None:
+                dead = "no time reading (the job produced no ARCH_PROBE line)"
+            elif clear:
+                gap = 100.0 * (t - decisive[0][1]) / decisive[0][1]
+                dead = (f"lost the probe: {gap:+.1f}% slower than {decisive[0][0]} "
+                        f"(floor {floor:.1%} from resolvable_diff)")
+            else:
+                continue          # inconclusive pair: nobody lost, nobody is buried
+            entries.append({"ts": ctx.now(), "op": ctx.op,
+                            "arch": str(getattr(ctx, "kb_arch", "") or ""),
+                            "candidate": Path(path).stem, "recipe_path": path,
+                            "ms": t, "dead_reason": dead,
+                            "hybrid_of": meta_.get("hybrid_of"),
+                            "tunables_seen": meta_.get("tunables_seen")})
+        _arch_graveyard_append(ctx, entries)
 
 
 # --- WP8: prior supply (teacher-side) ===========================================
@@ -14517,6 +15781,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
     """
     _wp5_apply_cfg(ctx)
     _wp11_apply_cfg(ctx)
+    _wp16_apply_cfg(ctx)
     meta_steps = 0
     # --- WP5 (task 2): the meta cap breathes with the wall clock left. max_meta
     # stays the configured floor; a long remaining budget lifts the cap so a run

@@ -82,3 +82,10 @@ material — never delivered to the student (the probe workspace is reset away a
 never a gate: they inform the freeze decision only, and everything downstream still goes through the standard
 correctness + precision gates. Skips are recorded in the milestone head ("M0 probes skipped (budget)" and alike), so
 an unprobed freeze is visible to the M0 audit, which names it as a risk item.
+
+**WP16 reading blocks** (when the driver renders them, the same ownership applies): a `## Pattern search` block is a
+driver-run shrink grid over the axes you named in the milestone's `pattern_search:` recipe — its readings are yours to
+cite like any measured number (a winner is a LANDABLE row: cite it in a milestone patch; the student delivers, the gate
+judges). A `## Combo pool` block lists the run's null-priced levers whose combinations were never measured; the driver
+prices the all-on bundle automatically at the trigger, and that bundle's STACK reading is likewise a measured number —
+cite it with `priced_by=` only after it exists. Never assume a combination's price before a job printed it.

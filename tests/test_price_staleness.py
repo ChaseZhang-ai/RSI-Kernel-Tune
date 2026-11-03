@@ -194,26 +194,32 @@ def test_no_reprice_when_the_price_is_fresh_uncited_or_the_budget_is_short(tmp_p
     rec = run_inner_iteration(ctx, 1, metric_before=0.9)
     assert rec.sha == "sha1" and [c for c in be.calls if c[0] == "gpu"] == [("gpu", "all"), ("gpu", "ncu")]
     assert _revisions(ctx) == [] and _price_revision_note(ctx) == ""
-    # uncited: a stale table whose lever the milestone never cites
+    # uncited: a stale table whose lever the milestone never cites — WP16 (甲G12)
+    # marks the uncovered winner EXPIRED in the revision store instead of the old
+    # silence (a re-price job is still not bought: no gpu call beyond eval+ncu)
     be = FakeBackend([REC("D2.3", 0.5)], [EVAL(0.5), NCU])
     ctx = _priced_ctx(tmp_path, be, milestone=_MILESTONE)
     _bank(ctx, "sha_old", "1", _OLD_ROWS, _OLD_SPEC)
     run_inner_iteration(ctx, 1, metric_before=0.9)
     assert [c for c in be.calls if c[0] == "gpu"] == [("gpu", "all"), ("gpu", "ncu")]
+    expired = _revisions(ctx)
+    assert [r["verdict"] for r in expired] == ["expired"]
     # not a new best: nothing changed under the prices
     be = FakeBackend([REC("D2.3", 0.95)], [EVAL(0.95), NCU])
     ctx = _priced_ctx(tmp_path, be)
     _bank(ctx, "sha_old", "1", _OLD_ROWS, _OLD_SPEC)
     run_inner_iteration(ctx, 1, metric_before=0.9)
     assert [c for c in be.calls if c[0] == "gpu"] == [("gpu", "all"), ("gpu", "ncu")]
-    # budget: < 60 min left — logged, no job, no revision
+    assert _revisions(ctx) == expired
+    # budget: < 60 min left — logged, no job, no revision (the EXPIRED marker
+    # rides the same budget guard: near the deadline neither fires)
     be = FakeBackend([REC("D2.3", 0.5)], [EVAL(0.5), NCU])
     ctx = _priced_ctx(tmp_path, be)
     ctx.deadline_epoch = 1000.0
     _bank(ctx, "sha_old", "1", _OLD_ROWS, _OLD_SPEC)
     run_inner_iteration(ctx, 1, metric_before=0.9)
     assert [c for c in be.calls if c[0] == "gpu"] == [("gpu", "all"), ("gpu", "ncu")]
-    assert _revisions(ctx) == []
+    assert _revisions(ctx) == expired
     # switched off per run
     be = FakeBackend([REC("D2.3", 0.5)], [EVAL(0.5), NCU])
     ctx = _priced_ctx(tmp_path, be)

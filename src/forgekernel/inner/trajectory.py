@@ -132,6 +132,22 @@ class IterationRecord:
     clock_drift: bool = False
     # WP4: a KEEP slower than the best, +x%
     regression_vs_best_pct: float | None = None
+    # --- WP11 (task 4): wall-clock composition telemetry -------------------------
+    #
+    # Where an iteration's wall clock actually went: the student's agent turns, the
+    # eval / NCU GPU jobs (submit -> terminal), the teacher's turns that led into
+    # this iteration, and the time the job sat waiting for the GPU. Measurement
+    # only — nothing reads these fields for a verdict, a budget or a stop; the
+    # run-end composition table is their only consumer. All None by default (a row
+    # recorded before the field existed, or a channel that cannot say — e.g.
+    # queue wait is only observable on the local delivery, and a scaffold row
+    # buys no job). Coexists with the WP1/WP2/WP4 field additions by the same
+    # append-only rule: load_records drops unknown keys of older files.
+    agent_turn_s: float | None = None
+    eval_job_s: float | None = None
+    ncu_job_s: float | None = None
+    teacher_s: float | None = None
+    queue_wait_s: float | None = None
 
     def __post_init__(self):
         if self.verdict not in ("KEEP", "REVERT", "NEUTRAL"):

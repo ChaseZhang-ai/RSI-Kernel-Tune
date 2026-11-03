@@ -1007,6 +1007,11 @@ ncu_filter_metrics() {{
 # string before WP2 — the sync test in tests/test_ncu.py holds them together).
 NCU_METRICS="gpu__time_active.sum,launch__registers_per_thread,l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum,l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st.sum,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld.sum,sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed,sm__warps_active.avg.pct_of_peak_sustained_elapsed,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio,smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio,dram__throughput.avg.pct_of_peak_sustained_elapsed,dram__bytes_read.sum,dram__bytes_write.sum,launch__shared_mem_per_block_static,launch__shared_mem_per_block_dynamic,sm__throughput.avg.pct_of_peak_sustained_elapsed,gpu__compute_memory_throughput.avg.pct_of_peak_sustained_elapsed,lts__t_sector_hit_rate.pct,launch__waves_per_multiprocessor,l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum,l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum,smsp__average_warps_issue_stalled_lg_throttle_per_issue_active.ratio"
 
+{wp11_cache_block}
+
+fk_build_cache_setup
+fk_build_cache_prewarm
+
 case "$TASK" in
     correctness) run_with_timeout python3 eval/bench.py --mode correctness ;;
     perf|all)    run_with_timeout python3 eval/bench.py --mode all ;;
@@ -1022,6 +1027,7 @@ case "$TASK" in
         ncu_bounded ncu --csv --target-processes all --profile-from-start off \
             --launch-count 24 --kill yes --metrics "$NCU_METRICS" python3 eval/ncu_run.py
         ;;
+{wp11_allncu_case}
     cmd)         run_with_timeout bash -c "$*" ;;
     help|*)
         sed -n '2,9p' "$0"
@@ -1033,6 +1039,177 @@ echo ""
 echo "[gpu_entry.sh] task=$TASK finished"
 '''
 
+
+# --- WP11 (task 1): the merged eval+NCU task -----------------------------------
+#
+# One GPU job runs the timing protocol FIRST, exactly as the `all` task runs it
+# (same bench process, same windows), then the NCU segment in its own process —
+# its own command when the caller passes one (the vendored orchestration census
+# runner, mirroring the cmd task's argv), else the plain `ncu` task's invocation
+# (same metrics filter, same flags — WP9 owns the flags, not this package).
+# Budgets stay per segment: TASK_TIMEOUT bounds the eval, NCU_TIMEOUT the NCU
+# segment; the runner (submit/direct.py) sizes its deadline to the SUM of the
+# two, so the single-segment timeout is never stretched over both.
+_WP11_ALLNCU_CASE = """    allncu)
+        # WP11 (task 1): the merged eval+NCU job — the timing protocol first,
+        # exactly as the `all` task runs it, then the NCU segment in its own
+        # process (its own command when the caller passes one — the vendored
+        # orchestration census runner — else the plain `ncu` task's invocation).
+        # Budgets stay per segment: TASK_TIMEOUT for the eval, NCU_TIMEOUT for
+        # the NCU segment; the runner sizes its deadline to the sum of the two.
+        run_with_timeout python3 eval/bench.py --mode all
+        echo "[gpu_entry.sh] allncu: eval segment done — starting the NCU segment"
+        if [ "$#" -gt 0 ]; then
+            ncu_bounded bash -c "$*"
+        else
+            NCU_METRICS_DESIRED="$NCU_METRICS"
+            NCU_METRICS="$(ncu_filter_metrics "$NCU_METRICS_DESIRED")" || NCU_METRICS="$NCU_METRICS_DESIRED"
+            if [ "$NCU_METRICS" != "$NCU_METRICS_DESIRED" ]; then
+                echo "[gpu_entry.sh] ncu: metrics filtered for this arch: $NCU_METRICS"
+            fi
+            ncu_bounded ncu --csv --target-processes all --profile-from-start off \\
+                --launch-count 24 --kill yes --metrics "$NCU_METRICS" python3 eval/ncu_run.py
+        fi
+        ;;
+"""
+
+
+# --- WP11 (task 2): the content-addressed build cache (default OFF) -------------
+#
+# FK_BUILD_CACHE=1 in the job env opts a card's jobs into a machine-level build
+# cache under ~/.cache/forgekernel-build/ (FK_BUILD_CACHE_DIR overrides). The
+# cache key is the CONTENT the build reads: the job tree's payload hash
+# (FK_TREE_SHA256, exported by the runner) plus the toolchain versions the build
+# links against (nvcc, torch). Same sha -> same build products, so a hit cannot
+# be a stale artifact; "never inherits build products" fences the TREE, which is
+# still extracted fresh every job — only the content-addressed build directory is
+# reused, and a hit is still self-checked against the recorded artifact hashes.
+# A miss, a mismatch or any cache trouble runs the ordinary full build: the cache
+# never blocks and is never a correctness single point. NOT for board-protocol
+# cards or sealed-reference trees.
+_WP11_CACHE_BLOCK = r'''# --- WP11: content-addressed build cache (default OFF) ------------------------
+# See the block's origin (leaderboard.py _WP11_CACHE_BLOCK) for the contract:
+# key = tree payload sha + nvcc + torch; hits are hash-verified; every failure
+# path is the ordinary full build.
+fk_build_cache_key() {
+    [ "${FK_BUILD_CACHE:-0}" = "1" ] || return 1
+    [ -n "${FK_TREE_SHA256:-}" ] || return 1
+    command -v python3 >/dev/null 2>&1 || return 1
+    # every probe is guarded: an unavailable tool is an empty key line, never a
+    # failed function (the script runs with set -o pipefail — an unguarded
+    # failing probe would kill the job the cache exists to speed up)
+    local nvcc_ver="" torch_ver=""
+    nvcc_ver="$(nvcc --version 2>/dev/null | tail -n 1 || true)"
+    torch_ver="$(python3 -c 'import torch; print(torch.__version__)' 2>/dev/null || true)"
+    printf '%s\n%s\n%s\n' "${FK_TREE_SHA256}" "${nvcc_ver}" "${torch_ver}" \
+        | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+}
+
+fk_build_cache_brain() {  # verify <root> <key> | promote <root> <key> <staging>
+python3 - "$@" <<'FKCACHE'
+import hashlib, json, os, sys
+
+def sha(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+op, root, key = sys.argv[1], sys.argv[2], sys.argv[3]
+entry = os.path.join(root, key)
+manifest_path = os.path.join(entry, "manifest.json")
+if op == "verify":
+    with open(manifest_path) as fh:
+        manifest = json.load(fh)
+    for rel, want in manifest.get("artifacts", {}).items():
+        p = os.path.join(entry, rel)
+        if not os.path.isfile(p) or sha(p) != want:
+            raise SystemExit(2)          # any mismatch -> the caller builds fresh
+    print(entry)
+elif op == "promote":
+    staging = sys.argv[4]
+    artifacts = {}
+    for dirpath, _, files in os.walk(staging):
+        for name in files:
+            if name.endswith((".so", ".o", ".a")):
+                p = os.path.join(dirpath, name)
+                artifacts[os.path.relpath(p, staging)] = sha(p)
+    if not artifacts:
+        raise SystemExit(3)              # nothing built here; nothing to cache
+    with open(os.path.join(staging, "manifest.json"), "w") as fh:
+        json.dump({"artifacts": artifacts}, fh)
+    if os.path.exists(entry):
+        raise SystemExit(0)              # another job cached this key first: same content
+    os.replace(staging, entry)
+FKCACHE
+}
+
+fk_build_cache_setup() {
+    key="$(fk_build_cache_key)" || return 0
+    root="${FK_BUILD_CACHE_DIR:-${HOME}/.cache/forgekernel-build}"
+    mkdir -p "$root" 2>/dev/null || return 0
+    FK_BUILD_CACHE_ROOT="$root"
+    FK_BUILD_CACHE_KEY="$key"
+    FK_CACHE_STAGING=""
+    if FK_CACHE_ENTRY="$(fk_build_cache_brain verify "$root" "$key" 2>/dev/null)" \
+            && [ -n "$FK_CACHE_ENTRY" ]; then
+        export FK_KERNEL_BUILD_DIR="$FK_CACHE_ENTRY"
+        echo "[gpu_entry.sh] build cache: HIT $key — build dir reused, artifacts hash-verified"
+    else
+        FK_CACHE_STAGING="$root/staging.$$"
+        mkdir -p "$FK_CACHE_STAGING" 2>/dev/null || return 0
+        export FK_KERNEL_BUILD_DIR="$FK_CACHE_STAGING"
+        echo "[gpu_entry.sh] build cache: MISS $key — building; a clean task backfills"
+    fi
+    trap fk_build_cache_exit EXIT
+}
+
+fk_build_cache_exit() {
+    # Staging backfills only after a clean task (rc 0); anything else — a failed
+    # task, a killed job, an already-cached key — is discarded. rc=$? is the
+    # script's exit status at trap time. lb_clocks_reset because this trap
+    # replaces the clock one when the cache is on (the clock lock is GPU state
+    # and must be cleared on every exit path, as before).
+    rc=$?
+    if [ -n "${FK_CACHE_STAGING:-}" ] && [ -d "$FK_CACHE_STAGING" ]; then
+        if [ "$rc" -eq 0 ]; then
+            fk_build_cache_brain promote "${FK_BUILD_CACHE_ROOT:-}" "${FK_BUILD_CACHE_KEY:-}" \
+                "$FK_CACHE_STAGING" >/dev/null 2>&1 || true
+        fi
+        rm -rf "$FK_CACHE_STAGING" 2>/dev/null || true
+    fi
+    lb_clocks_reset
+}
+
+fk_build_cache_prewarm() {
+    # cutedsl mode: one bounded import of the kernel module so the DSL's own JIT
+    # file cache (a user-level managed location outside this workspace) is warm
+    # before the timed process. Best effort; a failure falls through — the task
+    # imports the module itself either way.
+    [ "${FK_BUILD_CACHE:-0}" = "1" ] || return 0
+    [ -f problem.json ] || return 0
+    FK_EXIT_RC_PREWARM=0
+    timeout 300 python3 - <<'FKPRE' || FK_EXIT_RC_PREWARM=1
+import importlib, json, pathlib
+kf = json.load(open("problem.json")).get("kernel_file", "kernel.py")
+if not kf.endswith(".cu") and pathlib.Path(kf).is_file():
+    importlib.import_module(pathlib.Path(kf).stem)
+FKPRE
+    if [ "$FK_EXIT_RC_PREWARM" -ne 0 ]; then
+        echo "[gpu_entry.sh] build cache: DSL prewarm failed (continuing — the task imports it itself)"
+    fi
+    return 0
+}'''
+
+
+def render_gpu_entry(problem: Problem) -> str:
+    clock, mem_clock, require_lock, clock_note = SUITE_CLOCK[problem.suite]
+    return GPU_ENTRY_TEMPLATE.format(
+        name=problem.name, suite=problem.suite, arch="sm_100a", clock=clock,
+        mem_clock=mem_clock, require_lock=require_lock, clock_note=clock_note,
+        wp11_cache_block=_WP11_CACHE_BLOCK, wp11_allncu_case=_WP11_ALLNCU_CASE)
+
 # (SM MHz, memory MHz, require the lock for every task but help, note). SOL-ExecBench's board
 # locks B200 at its clock_lock preset and verifies it; FlashInfer-Bench runs unlocked.
 SUITE_CLOCK = {
@@ -1042,13 +1219,6 @@ SUITE_CLOCK = {
     SUITE_FIB: ("", "", "0", "FlashInfer-Bench runs unlocked; set LB_SM_CLOCK_MHZ (and "
                              "LB_MEM_CLOCK_MHZ) to pin one for steadier readings."),
 }
-
-
-def render_gpu_entry(problem: Problem) -> str:
-    clock, mem_clock, require_lock, clock_note = SUITE_CLOCK[problem.suite]
-    return GPU_ENTRY_TEMPLATE.format(
-        name=problem.name, suite=problem.suite, arch="sm_100a", clock=clock,
-        mem_clock=mem_clock, require_lock=require_lock, clock_note=clock_note)
 
 
 def render_window_toml(problem: Problem) -> str:

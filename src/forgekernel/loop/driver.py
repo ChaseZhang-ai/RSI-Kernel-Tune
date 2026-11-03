@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import os
 import re
 import shlex
 import statistics
@@ -667,6 +668,33 @@ class LoopContext:
     # unchanged best cannot change the answer except by further drift — reuse the
     # verdict instead of re-buying ref jobs at every subsequent plateau.
     reanchor_memo: "tuple[float, str] | None" = None
+    # --- WP11 -----------------------------------------------------------------
+    # MERGE EVAL + NCU INTO ONE GPU JOB (default on, kill switch). The committed
+    # iteration used to buy TWO full jobs — the eval (driver's submit at the
+    # iteration's eval site) and the NCU profile — each paying the whole cold
+    # start: fresh unpack, nvcc+CUTLASS build, job round trip. One job runs the
+    # timing protocol first (unchanged), then the NCU segment in its own process;
+    # loop.toml [loop] merge_eval_ncu = false restores the two-job path exactly
+    # (a card whose gpu_entry.sh predates the merged task falls back on its own).
+    # NCU still runs on EVERY committed iteration; ncu_on_revert semantics are
+    # unchanged. Resolved from loop.toml by _wp11_apply_cfg (WP5 pattern: an
+    # explicitly set field wins, loop.toml beneath, defaults are the historical
+    # behavior unless stated — here the default IS the new behavior, with the
+    # kill switch restoring it).
+    merge_eval_ncu: bool = True
+    # SPRT SEQUENTIAL EARLY STOP (opt-in, default off). In-job only: the card's
+    # timing module may stop taking device windows once the accumulated paired
+    # readings' confidence interval sits entirely in the clear-win or clear-loss
+    # region (loop/… driver never changes protocol). loop.toml [loop]
+    # sprt_early_stop = true arms it; the driver exports the flag into its own
+    # process environment so locally-delivered jobs inherit it (ssh delivery
+    # needs the same variable in submit.toml [env] — the env does not cross ssh).
+    sprt_early_stop: bool = False
+    # --- WP11 (task 4) runtime accumulators (not config; memory like
+    # wp5_blocked_uncaps_used): teacher turn seconds since the last appended
+    # iteration record, stamped onto that record as teacher_s.
+    wp11_teacher_pending_s: float = 0.0
+    wp11_teacher_measured: bool = False
 
 
 # --- prompt rendering -------------------------------------------------------
@@ -1897,6 +1925,71 @@ def _verdict_probe_feedback(path: str, pv: ProbeVerdict, log: str,
     return head + f"\n### Job log tail (your experiment's readings)\n```\n{tail}\n```\n"
 
 
+def _profiler_from_log(out: str) -> dict:
+    """One NCU job log (or a merged eval+NCU job log) -> the profiler digest:
+    the key metrics plus every fold-in the same log carries (kernel table,
+    res-usage of the dominant kernel, census fields, orchestration summary,
+    SASS precision). Pure parsing — no submit, no retry, no env notes.
+
+    WP11 (task 1): extracted verbatim from _ncu_profiler's body so the merged
+    single job parses EXACTLY what the second job used to; the census/resusage
+    readers are all line protocols over the whole log, and the eval segment's
+    output in a merged log carries no CSV header and no census line, so parsing
+    the whole merged log reads the same digest the two-job path produced."""
+    # Operand-source census (opt-in per operator): when the op's ncu task ran
+    # sass_census over the kernel dump, its fields join the digest so milestone
+    # gate lines can anchor [VERIFY: sass-derived] the way they anchor bankconf_st.
+    # Absent line -> absent fields; digests of census-less operators are unchanged.
+    prof = profiler_from_ncu(_without_census_lines(out))
+    if not prof:
+        return {}
+    # The whole decomposition (every launch of the window, by share) rides
+    # under a private key the iteration pops into IterationRecord.kernels —
+    # the timed-window contract prices the rebuild launches off it.
+    prof[_KERNELS_PROF_KEY] = kernel_rows = kernels_from_ncu(_without_census_lines(out))
+    # Build-time resource readings (cuobjdump -res-usage, printed as RES-USAGE
+    # protocol lines by the eval process whenever a job built/loaded the CUDA
+    # kernel — this one included): REG / static SMEM / per-thread STACK of the
+    # DOMINANT kernel join the flat profiler digest. A spill cliff (STACK > 0)
+    # and an smem blow-up are visible at COMPILE time, a whole iteration before
+    # NCU would confirm them. The full per-kernel list rides the eval JSON's
+    # top-level `resusage` key (loop/parse.py's schema, not read here); no
+    # RES-USAGE line, or none matching the dominant kernel, leaves prof as it was.
+    if (usage := match_resusage(parse_resusage_lines(out),
+                                kernel_rows[0]["name"] if kernel_rows else None)) is not None:
+        prof.update(resusage_fields(usage))
+        _log(f"{resusage_line(usage)}  [dominant kernel, cuobjdump -res-usage]")
+    prof.update(parse_census_line(out))
+    # The compiler's wgmma verdict (orch_census_run prints WGMMA-SERIAL off
+    # the same dump): waits per wgmma, plus whether the log carries ptxas's
+    # own "serialized due to" advisory. Flat digest fields, so the NCU
+    # thresholds flag ratio ~1 as the binding pathology of the round.
+    prof.update(parse_serial_line(out))
+    # The orchestration census (orch_census_run) rides the same log. Parked
+    # under a private key the iteration pops into IterationRecord.orch_summary
+    # — it must not join the flat profiler digest.
+    if (summ := _orch_summary(out)) is not None:
+        prof[_ORCH_PROF_KEY] = summ
+    # The kernel's MMA operand / accumulator types (the precision gate's SASS
+    # cross-check), printed even when the dump is too small for a dossier.
+    if (m := _SASS_PRECISION_RE.search(out)) is not None:
+        try:
+            prof[_SASS_PRECISION_PROF_KEY] = json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+    return prof
+
+
+def _ncu_env_note(ctx: LoopContext, prof: dict, out: str, *, correctness: bool) -> None:
+    """The NCU channel's env-failure bookkeeping (shared by both job shapes)."""
+    if not correctness:
+        return
+    if prof:
+        _note_env_ok(ctx, "ncu")
+    elif (why := env_failure(out)) is not None:
+        _note_env_failure(ctx, "ncu", why)
+
+
 def _ncu_profiler(ctx: LoopContext, branch: str, *, correctness: bool) -> dict:
     """Submit the NCU job and parse the profiler, retrying when a PASSING kernel comes
     back empty (best-effort NCU failed on the GPU side). A correctness-broken kernel
@@ -1905,59 +1998,164 @@ def _ncu_profiler(ctx: LoopContext, branch: str, *, correctness: bool) -> dict:
     import error, and the empty digest is the job's blindness, not the kernel's."""
     mode = _ncu_mode(ctx)
     out = ctx.backend.submit_gpu(branch, mode)
-    prof = profiler_from_ncu(_without_census_lines(out))
+    prof = _profiler_from_log(out)
     tries = 0
     while (not prof and correctness and tries < ctx.ncu_retries
            and env_failure(out) is None):
         tries += 1
         _log(f"ncu empty on a passing kernel -> retry {tries}/{ctx.ncu_retries}")
         out = ctx.backend.submit_gpu(branch, mode)
-        prof = profiler_from_ncu(_without_census_lines(out))
-    if correctness:
-        if prof:
-            _note_env_ok(ctx, "ncu")
-        elif (why := env_failure(out)) is not None:
-            _note_env_failure(ctx, "ncu", why)
-    # Operand-source census (opt-in per operator): when the op's ncu task ran
-    # sass_census over the kernel dump, its fields join the digest so milestone
-    # gate lines can anchor [VERIFY: sass-derived] the way they anchor bankconf_st.
-    # Absent line -> absent fields; digests of census-less operators are unchanged.
-    if prof:
-        # The whole decomposition (every launch of the window, by share) rides
-        # under a private key the iteration pops into IterationRecord.kernels —
-        # the timed-window contract prices the rebuild launches off it.
-        prof[_KERNELS_PROF_KEY] = kernel_rows = kernels_from_ncu(_without_census_lines(out))
-        # Build-time resource readings (cuobjdump -res-usage, printed as RES-USAGE
-        # protocol lines by the eval process whenever a job built/loaded the CUDA
-        # kernel — this one included): REG / static SMEM / per-thread STACK of the
-        # DOMINANT kernel join the flat profiler digest. A spill cliff (STACK > 0)
-        # and an smem blow-up are visible at COMPILE time, a whole iteration before
-        # NCU would confirm them. The full per-kernel list rides the eval JSON's
-        # top-level `resusage` key (loop/parse.py's schema, not read here); no
-        # RES-USAGE line, or none matching the dominant kernel, leaves prof as it was.
-        if (usage := match_resusage(parse_resusage_lines(out),
-                                    kernel_rows[0]["name"] if kernel_rows else None)) is not None:
-            prof.update(resusage_fields(usage))
-            _log(f"{resusage_line(usage)}  [dominant kernel, cuobjdump -res-usage]")
-        prof.update(parse_census_line(out))
-        # The compiler's wgmma verdict (orch_census_run prints WGMMA-SERIAL off
-        # the same dump): waits per wgmma, plus whether the log carries ptxas's
-        # own "serialized due to" advisory. Flat digest fields, so the NCU
-        # thresholds flag ratio ~1 as the binding pathology of the round.
-        prof.update(parse_serial_line(out))
-        # The orchestration census (orch_census_run) rides the same log. Parked
-        # under a private key the iteration pops into IterationRecord.orch_summary
-        # — it must not join the flat profiler digest.
-        if (summ := _orch_summary(out)) is not None:
-            prof[_ORCH_PROF_KEY] = summ
-        # The kernel's MMA operand / accumulator types (the precision gate's SASS
-        # cross-check), printed even when the dump is too small for a dossier.
-        if (m := _SASS_PRECISION_RE.search(out)) is not None:
-            try:
-                prof[_SASS_PRECISION_PROF_KEY] = json.loads(m.group(1))
-            except json.JSONDecodeError:
-                pass
+        prof = _profiler_from_log(out)
+    _ncu_env_note(ctx, prof, out, correctness=correctness)
     return prof
+
+
+# --- WP11 (task 1): the merged eval+NCU job -----------------------------------
+#
+# The committed iteration bought TWO full GPU jobs — eval, then NCU — each paying
+# the whole cold start (fresh unpack, nvcc+CUTLASS build, queue round trip; the
+# build alone read ~35-40 s and ~40% of a lever-pricing job's clock). The merged
+# job runs the timing protocol FIRST, exactly as the standalone eval does (same
+# bench process, same windows), then the NCU segment in its own process — the
+# gpu_entry.sh `allncu` task, which composes the existing `all` and `ncu` tasks'
+# commands with their existing per-segment timeouts (TASK_TIMEOUT for the eval
+# segment, NCU_TIMEOUT for the NCU segment; the runner's deadline is the SUM of
+# the two segment budgets — never the single-segment timeout stretched over both).
+# The NCU flags, the profiled entry point and the census runner (when seeded) are
+# whatever _ncu_mode names, unchanged (WP9 owns the flags, not this package).
+
+_MERGED_EVAL_NCU_TASK = "allncu"
+# The workspace's gpu_entry.sh carries this task only when the card was generated
+# (or overlaid) from a template that knows it — older cards fall back to the
+# two-job path on their own.
+_MERGED_TASK_RE = re.compile(rf"(?m)^\s*{_MERGED_EVAL_NCU_TASK}\)\s*$")
+
+
+def _merged_mode(ctx: LoopContext) -> str | None:
+    """The merged job's gpu_entry mode: ``allncu``, or ``allncu:<census cmd>``
+    when the per-iteration profile runs through the vendored census runner (the
+    ``cmd:`` payload carries the command, split like the runner's own cmd mode).
+    None = this run's NCU shape does not fit the merged task."""
+    mode = _ncu_mode(ctx)
+    if mode == "ncu":
+        return _MERGED_EVAL_NCU_TASK
+    if mode.startswith("cmd:"):
+        payload = mode[len("cmd:"):].strip()
+        return f"{_MERGED_EVAL_NCU_TASK}:{payload}" if payload else None
+    return None
+
+
+def _card_supports_merged_job(ctx: LoopContext) -> bool:
+    """Whether this run's job trees carry a gpu_entry.sh with the merged task.
+    The card's entry script is what every job runs (the harness overlay puts the
+    card's copy on every pushed sha), so the workspace's copy is the one to ask;
+    unreadable -> no (the two-job path, as before this package)."""
+    try:
+        text = (Path(ctx.workspace) / "gpu_entry.sh").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return _MERGED_TASK_RE.search(text) is not None
+
+
+def _use_merged_eval_ncu(ctx: LoopContext) -> bool:
+    return bool(ctx.merge_eval_ncu) and _card_supports_merged_job(ctx) \
+        and _merged_mode(ctx) is not None
+
+
+def _queue_wait_from_log(log: str) -> float | None:
+    """The GPU-lock wait the job's runner reported, in seconds (WP11 task 4).
+
+    submit/direct.py writes an ``acquired after <n>s wait`` line when a local
+    job sat behind another forgekernel run's GPU lock (poll granularity 30 s).
+    Absent line -> None: nothing waited (or the delivery cannot say)."""
+    m = re.search(r"^\[direct\] GPU \S+ acquired after ([0-9]+(?:\.[0-9]+)?)s wait",
+                  log, re.M)
+    return float(m.group(1)) if m else None
+
+
+def _wp11_wallclock_fields(ctx: LoopContext, *, agent_s: float, eval_s: float | None,
+                           ncu_s: float | None, queue_s: float | None) -> dict:
+    """The IterationRecord's wall-clock composition fields (WP11 task 4).
+
+    Measurement only: nothing gates, budgets or stops on these; the run-end
+    composition table is their consumer. A bucket nobody measured stays None
+    (the field default), never 0.0 — an absent measurement is not a fast one.
+    ``teacher_s`` is the teacher turn time accumulated since the last appended
+    record (the meta step that led into this iteration), read-and-reset here."""
+    teacher = getattr(ctx, "wp11_teacher_pending_s", 0.0)
+    measured = getattr(ctx, "wp11_teacher_measured", False)
+    ctx.wp11_teacher_pending_s = 0.0
+    ctx.wp11_teacher_measured = False
+    return {
+        "agent_turn_s": agent_s if agent_s > 0 else None,
+        "eval_job_s": eval_s if eval_s else None,
+        "ncu_job_s": ncu_s if ncu_s else None,
+        "teacher_s": teacher if measured and teacher > 0 else (
+            0.0 if measured else None),
+        "queue_wait_s": queue_s if queue_s else None,
+    }
+
+
+def _wp11_teacher_timed(ctx: LoopContext, fn, *args, **kwargs):
+    """Run one teacher agent turn, charging its wall clock to the next appended
+    iteration record (WP11 task 4). Only the inner loop's teacher turns (diagnose,
+    patch) are charged: distill / recon run outside the iteration structure."""
+    t0 = ctx.now()
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        ctx.wp11_teacher_pending_s += ctx.now() - t0
+        ctx.wp11_teacher_measured = True
+
+
+def _wp11_apply_cfg(ctx: LoopContext) -> None:
+    """Resolve the WP11 switches from loop.toml (the WP5 pattern: card layer's
+    [loop] over the global file, both reads best-effort; an explicitly set field
+    — tests, callers — wins and is never clobbered; a non-bool value leaves the
+    default).
+
+    ``merge_eval_ncu`` defaults True (the merged single job); ``false`` is the
+    kill switch that restores the two-job path. ``sprt_early_stop`` defaults
+    False; arming it exports FK_SPRT_EARLY_STOP=1 into THIS process's
+    environment so locally-delivered jobs inherit it (an ssh delivery's job env
+    does not cross the wire — put the same variable in submit.toml [env]
+    there)."""
+    cfg = _wp5_cfg_sections(ctx)
+    loop_cfg = cfg.get("loop") if isinstance(cfg.get("loop"), dict) else {}
+    if isinstance(loop_cfg.get("merge_eval_ncu"), bool):
+        ctx.merge_eval_ncu = loop_cfg["merge_eval_ncu"]
+    if isinstance(loop_cfg.get("sprt_early_stop"), bool):
+        ctx.sprt_early_stop = loop_cfg["sprt_early_stop"]
+    if ctx.sprt_early_stop:
+        os.environ["FK_SPRT_EARLY_STOP"] = "1"
+
+
+_WP11_TELEMETRY_FIELDS = ("agent_turn_s", "eval_job_s", "ncu_job_s",
+                          "teacher_s", "queue_wait_s")
+
+
+def _wp11_wallclock_summary(ctx: LoopContext) -> None:
+    """Print the run's wall-clock composition table (WP11 task 4).
+
+    Pure stdout, drawn from the iteration records' telemetry fields — nothing
+    gates, budgets or stops on it, and a run that measured nothing prints
+    nothing. Shares are over the SUM OF THE MEASURED BUCKETS (they do not
+    cover distill/recon or idle poll; this is a composition of what the loop
+    spent, not a full accounting of the wall clock)."""
+    try:
+        records = load_records(ctx.status_path)
+    except Exception:  # noqa: BLE001 — a summary must never break the run's exit
+        return
+    totals = {k: sum(getattr(r, k) or 0.0 for r in records) for k in _WP11_TELEMETRY_FIELDS}
+    overall = sum(totals.values())
+    if overall <= 0:
+        return
+    rows = [f"  {name:<12} {secs:>10.1f}s  {secs / overall:6.1%}"
+            for name, secs in totals.items() if secs > 0]
+    _log("[wp11] wall-clock composition of the loop (measurement only — no verdict "
+         f"reads this; shares over the {overall:.1f}s of measured buckets):")
+    for line in rows:
+        _log(line)
 
 
 def _note_env_failure(ctx: LoopContext, channel: str, why: str) -> None:
@@ -2318,8 +2516,11 @@ def run_inner_iteration(
     last_probe_passed = False
     last_pv, last_log = None, ""
     gate_refused = ""   # the last gate-row refusal (open placeholders), for the record
+    wp11_agent_s = 0.0   # WP11 (task 4): every student agent turn of this iteration
     for _ in range(ctx.max_probe_rounds):
+        _wp11_t0 = ctx.now()
         out = be.run_agent(prompt)
+        wp11_agent_s += ctx.now() - _wp11_t0
         if sweep_path := _sweep_request_path(out):
             # WP4: a sweep decision — the recipe is teacher-authored on the
             # milestone line and hash-checked before any job; the feedback hands
@@ -2536,7 +2737,20 @@ def run_inner_iteration(
     branch = f"{ctx.branch_prefix}-i{iter_no}"
     be.push_branch(branch)
     _log(f"iter {iter_no}: decision {record.decision_id} committed; evaluating on GPU…")
-    ev = parse_eval(be.submit_gpu(branch, "all"))
+    # --- WP11 (tasks 1+4): one merged job when the card supports it and the
+    # kill switch is off; otherwise the two-job path, byte-for-byte as before.
+    # Wall-clock telemetry (task 4) times BOTH paths at the same boundaries:
+    # the eval job's submit->terminal wall, the NCU job's, and the GPU-queue
+    # wait the job's own log reports.
+    merged_mode = _merged_mode(ctx) if _use_merged_eval_ncu(ctx) else None
+    eval_t0 = ctx.now()
+    if merged_mode is not None:
+        eval_log = be.submit_gpu(branch, merged_mode)
+    else:
+        eval_log = be.submit_gpu(branch, "all")
+    eval_job_s = ctx.now() - eval_t0
+    queue_wait_s = _queue_wait_from_log(eval_log)
+    ev = parse_eval(eval_log)
     ev = _enforce_single_ref(ctx, ev)
     ev = _enforce_prep_contract(ctx, ev)
     precision = _precision_reading(ctx, ev, iter_no)
@@ -2563,9 +2777,34 @@ def run_inner_iteration(
     # thinner revert evidence; the default keeps the framework's original
     # discipline untouched.
     if ev.correctness or _wp5_ncu_on_revert(ctx):
-        profiler = _ncu_profiler(ctx, branch, correctness=ev.correctness)
+        if merged_mode is not None:
+            # The merged job already carried the NCU segment: parse it out of the
+            # same log. When the segment came back empty on a PASSING kernel (the
+            # old path's retry condition), fall back to the old two-job path ONCE
+            # — _ncu_profiler keeps its own empty-retry discipline inside.
+            ncu_t0 = ctx.now()
+            profiler = _profiler_from_log(eval_log)
+            ncu_job_s = ctx.now() - ncu_t0   # parse wall only; the job already ran
+            if not profiler and ev.correctness:
+                _log(f"iter {iter_no}: merged job carried no NCU digest on a passing "
+                     f"kernel — falling back to the separate NCU job once")
+                ncu_t0 = ctx.now()
+                profiler = _ncu_profiler(ctx, branch, correctness=True)
+                ncu_job_s = ctx.now() - ncu_t0
+            else:
+                _ncu_env_note(ctx, profiler, eval_log, correctness=ev.correctness)
+        else:
+            ncu_t0 = ctx.now()
+            profiler = _ncu_profiler(ctx, branch, correctness=ev.correctness)
+            ncu_job_s = ctx.now() - ncu_t0
     else:
+        # ncu_on_revert = false and correctness failed: the NCU job is skipped by
+        # rule. A merged job ran its NCU segment anyway (the bench's verdict is not
+        # known before the job); its output is dropped here so the record carries
+        # exactly what the two-job path would have — the segment's GPU time is the
+        # documented cost of merging on this config shape.
         profiler = {}
+        ncu_job_s = None
     orch_summary = _pop_orch_summary(profiler)
     kernels = _pop_kernels(profiler)
     serial_raw = _parse_serial_census(profiler)
@@ -2590,6 +2829,8 @@ def run_inner_iteration(
             orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
             prep=ev.prep or {}, precision=precision,
             gpu_state=ev.gpu_state or {},   # WP1 telemetry: objective, rides every eval
+            **_wp11_wallclock_fields(ctx, agent_s=wp11_agent_s, eval_s=eval_job_s,
+                                     ncu_s=ncu_job_s, queue_s=queue_wait_s),
         )
         append_record(ctx.status_path, rec)
         return rec
@@ -2623,6 +2864,8 @@ def run_inner_iteration(
         # reading's SM clock sat >2% off the best's (such a row must not take the
         # watermark on its own — it went through the confirmation above if it did).
         gpu_state=ev.gpu_state or {}, clock_drift=clock_drift,
+        **_wp11_wallclock_fields(ctx, agent_s=wp11_agent_s, eval_s=eval_job_s,
+                                 ncu_s=ncu_job_s, queue_s=queue_wait_s),
     )
     _wp4_note_regression(ctx, rec, iter_no, cluster)   # WP4: slow-decision bookkeeping (prior only)
     append_record(ctx.status_path, rec)
@@ -7394,7 +7637,7 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     pre_probe_head = be.head()
     probes_run: list = []           # paths, so a probe with no verdict line is "ran, no reading"
     for _ in range(max(1, ctx.max_patch_rounds) + ctx.max_verdict_probe_rounds):
-        out = _teacher(be).run_agent(render_prompt(
+        out = _wp11_teacher_timed(ctx, _teacher(be).run_agent, render_prompt(
             _meta_prompt(ctx, prompt_file), bindings, extra=diagnose_extra))
         cause = _parse_cause_class(out, allow_ok=audit)
         # A turn carrying a valid cause_class IS the final diagnosis, even when the
@@ -7804,7 +8047,8 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
         if violations:
             extra += ("\n## Violations in your previous patch (fix them and resend)\n"
                       + "\n".join(f"- {v}" for v in violations) + "\n")
-        patch_out = _teacher(be).run_agent(render_prompt(_meta_prompt(ctx, "patch_prompt.md"), bindings, extra))
+        patch_out = _wp11_teacher_timed(ctx, _teacher(be).run_agent, render_prompt(
+            _meta_prompt(ctx, "patch_prompt.md"), bindings, extra))
         violations = _patch_landing_violations(
             at_entry, _read_milestone(ctx), _parse_list(patch_out, "changed_entries"))
         violations += _validate_milestone_file(ctx.milestone, baseline=at_entry)
@@ -11971,6 +12215,78 @@ def _marker_pm_interval(marker: Path) -> int:
 # status path so tests and runs sharing a process never see each other's.
 _STALL_PRICE_LOGS: "dict[tuple[str, str, str], tuple[str, str]]" = {}
 
+# WP11: the same cache, written through to the workspace's notes/ so a restarted
+# run reuses what the previous process banked (the dict above dies with the
+# process). The cache dir is untracked AND carries its own .gitignore, so it can
+# never ride a job payload (git archive ships committed files only, and even a
+# blanket `git add notes/` skips a gitignored tree). Best effort everywhere: any
+# read/write failure degrades to the in-memory cache — the pricing job is bought
+# again, exactly as before this cache existed.
+_STALL_PRICE_CACHE_DIRNAME = "wp11-stall-price"
+_STALL_PRICE_CACHE_CAP = 8          # newest readings win; the ledger grows slowly
+_STALL_PRICE_CACHE_INDEX = "index.json"
+
+
+def _stall_price_cache_dir(ctx: LoopContext) -> Path | None:
+    try:
+        return Path(ctx.workspace) / "notes" / _STALL_PRICE_CACHE_DIRNAME
+    except Exception:  # noqa: BLE001 — test doubles may carry no workspace
+        return None
+
+
+def _stall_price_cache_key_str(key: tuple[str, str, str]) -> str:
+    import hashlib as _hashlib
+    return _hashlib.sha1("\0".join(key).encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def _stall_price_cache_load(ctx: LoopContext,
+                            key: tuple[str, str, str]) -> "tuple[str, str] | None":
+    """The persisted stall-price reading for ``key``, or None."""
+    d = _stall_price_cache_dir(ctx)
+    if d is None:
+        return None
+    try:
+        idx = json.loads((d / _STALL_PRICE_CACHE_INDEX).read_text(encoding="utf-8"))
+        entry = idx.get(_stall_price_cache_key_str(key))
+        if not isinstance(entry, dict) or entry.get("key") != list(key):
+            return None
+        log = (d / f"{entry['id']}.log").read_text(encoding="utf-8")
+        return (log, str(entry.get("job") or "?"))
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _stall_price_cache_store(ctx: LoopContext, key: tuple[str, str, str],
+                             log: str, job: str) -> None:
+    """Write one stall-price reading through to notes/ (best effort, LRU-capped)."""
+    d = _stall_price_cache_dir(ctx)
+    if d is None:
+        return
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        (d / ".gitignore").write_text("*\n", encoding="utf-8")
+        idx_path = d / _STALL_PRICE_CACHE_INDEX
+        try:
+            idx = json.loads(idx_path.read_text(encoding="utf-8"))
+            if not isinstance(idx, dict):
+                idx = {}
+        except (OSError, ValueError):
+            idx = {}
+        kid = _stall_price_cache_key_str(key)
+        (d / f"{kid}.log").write_text(log, encoding="utf-8")
+        idx[kid] = {"key": list(key), "job": job, "id": kid}
+        # cap: drop the oldest entries beyond the cap (insertion order = age)
+        while len(idx) > _STALL_PRICE_CACHE_CAP:
+            old = next(iter(idx))
+            stale = idx.pop(old)
+            try:
+                (d / f"{stale.get('id', old)}.log").unlink(missing_ok=True)
+            except OSError:
+                pass
+        idx_path.write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass   # notes/ unwritable: the in-memory cache still serves this process
+
 _REF_PRICE_MAX_SUBMIT_FAILURES = 3
 _REF_PRICE_MARKER_NAMES = ("ref_price_job.log", "ref_price_job.2.log", "ref_price_job.3.log")
 
@@ -12013,6 +12329,12 @@ def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
     push_ref = getattr(be, "push_ref", None)
     key = (str(ctx.status_path), ref, cmd) if ref and push_ref is not None else None
     hit = _STALL_PRICE_LOGS.get(key) if key else None
+    if hit is None and key is not None:
+        # WP11: the in-memory dict dies with the process — a restarted run re-bought
+        # every stall price its predecessor had already paid. The cache writes
+        # through to notes/ (untracked, gitignored — it never rides a job payload)
+        # and is read back here, so a restart reuses what was banked.
+        hit = _stall_price_cache_load(ctx, key)
     if hit is not None:
         log, job = hit
         _log(f"meta/stall-price[{label}]: reusing the pricing of {ref[:10]} (job {job}) — "
@@ -12042,6 +12364,7 @@ def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
             # only a whole reading is kept: a job that came back without its
             # ledger, self-check or dossier is priced afresh next entry
             _STALL_PRICE_LOGS[key] = (log, job)
+            _stall_price_cache_store(ctx, key, log, job)
     roles = None
     rm = _ROLE_BLOCK_RE.search(log)
     if rm is not None and _ROLE_ANY.search(log) is not None:
@@ -12928,6 +13251,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
     open for a joint judgment once a metric exists.
     """
     _wp5_apply_cfg(ctx)
+    _wp11_apply_cfg(ctx)
     meta_steps = 0
     # --- WP5 (task 2): the meta cap breathes with the wall clock left. max_meta
     # stays the configured floor; a long remaining budget lifts the cap so a run
@@ -12993,6 +13317,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
             _log("meta/distill: no ref baseline and the operator does not declare one "
                  "-> refusing to distill. Add [loop] ref_cmd to operators/<op>/loop.toml "
                  "so the loop can measure it, or run `forge <op> baseline --ref-cmd ...`")
+            _wp11_wallclock_summary(ctx)   # WP11 (task 4): composition table, stdout only
             return {"stop": "no_ref_baseline", "meta_steps": 0}
         _log(f"meta/distill: ref baseline {ctx.ref_baseline.ms} ms "
              f"(job {ctx.ref_baseline.job or '?'}, ncu={'yes' if ctx.ref_baseline.has_ncu else 'no'})"
@@ -13019,6 +13344,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
         if distilled.milestone_violations:
             _log(f"meta/distill: v1 still non-conformant after {ctx.max_patch_rounds} "
                  f"round(s) -> refusing to start: {distilled.milestone_violations[:3]}")
+            _wp11_wallclock_summary(ctx)   # WP11 (task 4): composition table, stdout only
             return {"stop": "distill_malformed", "meta_steps": 0,
                     "violations": distilled.milestone_violations}
         # --- WP6: the freeze is the priced action. Before the v1 freeze takes
@@ -13146,6 +13472,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
         # route to the agent that can extend it rather than end the run with the meta
         # budget unspent.
         if reason not in _META_ACTIONABLE:
+            _wp11_wallclock_summary(ctx)   # WP11 (task 4): composition table, stdout only
             return {"stop": reason, "meta_steps": meta_steps}
         records = load_records(ctx.status_path)
         best_before = _best_ms(_on_cluster(records, ctx), ctx.gate_window)
@@ -13159,6 +13486,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
         # check the residual with.
         reanchored = _phantom_gap_reanchor(ctx, best_before)
         if reanchored is not None:
+            _wp11_wallclock_summary(ctx)   # WP11 (task 4): composition table, stdout only
             return {"stop": "target", "meta_steps": meta_steps,
                     "reanchor": reanchored}
         if meta_steps >= meta_cap:
@@ -13179,6 +13507,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
                      f"([budget] meta_ext_on_headroom; extra rounds used "
                      f"{max(0, meta_steps - max_meta)}/{_wp5_meta_ext_cap(ctx)})")
             else:
+                _wp11_wallclock_summary(ctx)   # WP11 (task 4): composition table, stdout only
                 return {"stop": "meta_budget", "meta_steps": meta_steps,
                         **_wp5_stop_fields(ctx, records, meta_steps, max_meta)}
         # The note (if a re-anchor confirmed the gap) rides every diagnosis of
@@ -13220,6 +13549,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
             if meta.patch_class == "infeasible-stop":
                 # the teacher's stop request ends the run here, budget unspent:
                 # the stop is the run's verdict, the notice its record.
+                _wp11_wallclock_summary(ctx)   # WP11 (task 4): composition table, stdout only
                 return {"stop": "infeasible", "meta_steps": meta_steps,
                         "notice": str(Path(ctx.milestone).parent / "infeasible_stop.md")}
             if meta.patch_class in ("unpriced-reopen", "reopen-capped"):
@@ -13227,6 +13557,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
                 # reflection, so retry the META step (not the segment — resuming
                 # the same plateaued state is predetermined), budget permitting
                 if meta_steps >= meta_cap:
+                    _wp11_wallclock_summary(ctx)   # WP11 (task 4): composition table, stdout only
                     return {"stop": "meta_budget", "meta_steps": meta_steps,
                             **_wp5_stop_fields(ctx, records, meta_steps, max_meta)}
                 _log("meta: UNPRICED_REOPEN — reopen refused for want of a measured "
@@ -13239,6 +13570,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
                 # same shape: the refused stop request is in the reflection,
                 # nothing landed — re-diagnose the same state, budget permitting
                 if meta_steps >= meta_cap:
+                    _wp11_wallclock_summary(ctx)   # WP11 (task 4): composition table, stdout only
                     return {"stop": "meta_budget", "meta_steps": meta_steps,
                             **_wp5_stop_fields(ctx, records, meta_steps, max_meta)}
                 _log("meta: INFEASIBLE_REFUSED — stop request refused by the reachability "
@@ -13273,6 +13605,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
             _log("meta: patch REVERT_PATCH (malformed milestone, never landed) "
                  "-> retrying the meta step on the restored state")
             if meta_steps >= meta_cap:
+                _wp11_wallclock_summary(ctx)   # WP11 (task 4): composition table, stdout only
                 return {"stop": "meta_budget", "meta_steps": meta_steps,
                         **_wp5_stop_fields(ctx, records, meta_steps, max_meta)}
             if fmt_only:

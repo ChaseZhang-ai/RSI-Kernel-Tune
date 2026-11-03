@@ -268,6 +268,47 @@ def describe_workload_readings(workloads: list) -> str:
     return "; ".join(parts)
 
 
+# --- WP11 (task 5): the eval failure's error bandwidth ------------------------
+#
+# A failing eval used to reach the record as one vague sentence ("no eval JSON
+# block in the job log (job died before the verdict?)") while the actual evidence
+# — the nvcc/ptxas error, the import traceback, the killed-job marker — sat in the
+# job log the parser was already holding. The verdict-probe channel has shipped a
+# bounded log-tail protocol since long ago; this is the same protocol copied here.
+# The constants mirror loop/driver.py's _VERDICT_PROBE_TAIL_LINES /
+# _VERDICT_PROBE_TAIL_CHARS (the probe keeps its own copy first; these were raised
+# to shared status by copying, per the probe's own file-boundary rule — this file
+# ships to job images only through the driver, so the two must be kept in sync by
+# this comment until a shared home is worth the churn).
+EVAL_TAIL_LINES = 150
+EVAL_TAIL_CHARS = 8000
+
+_EVAL_TAIL_MARK = "--- job log tail (last {n} lines, oldest first) ---"
+
+
+def job_log_tail(text: str, *, lines: int = EVAL_TAIL_LINES,
+                 chars: int = EVAL_TAIL_CHARS) -> str:
+    """The bounded tail of a job log, per the verdict-probe protocol: the last
+    ``lines`` lines, then clipped to the last ``chars`` characters."""
+    if not text:
+        return ""
+    tail = "\n".join(text.strip().splitlines()[-lines:])
+    return tail[-chars:]
+
+
+def _with_log_tail(error: str, text: str) -> str:
+    """``error`` with the job log's bounded tail attached (WP11 task 5).
+
+    Only failure paths call this. The tail is the student's own tree's job output
+    — objective fact about its own job, no reference surface. A marker line keeps
+    the tail tellable from the parser's own words, and an empty log attaches
+    nothing (the error stays exactly what it was)."""
+    tail = job_log_tail(text)
+    if not tail:
+        return error
+    return f"{error}\n{_EVAL_TAIL_MARK.format(n=EVAL_TAIL_LINES)}\n{tail}"
+
+
 def _last_json_object(text: str) -> dict | None:
     """The last JSON object carrying a 'correctness' or 'performance' key."""
     dec = json.JSONDecoder()
@@ -323,8 +364,13 @@ def parse_eval(text: str) -> EvalResult:
                               error=f"the job timed nothing: the board's clock lock did not "
                                     f"hold on its node (a node fault, not the kernel): "
                                     f"{why[:300]}")
+        # WP11 (task 5): the tail rides every failure error — the job died before
+        # its verdict, and its log is the only evidence of why. Same sentence as
+        # always, the evidence now attached.
         return EvalResult(correctness=False,
-                          error="no eval JSON block in the job log (job died before the verdict?)")
+                          error=_with_log_tail(
+                              "no eval JSON block in the job log (job died before the verdict?)",
+                              text))
     if scope := obj.get("workload_scope"):
         # a group card timed on part of its group (FK_LB_WORKLOAD_SCOPE, the seeded
         # meta tools' setting) — a pricing reading, never a gate: the gate is the
@@ -377,7 +423,10 @@ def parse_eval(text: str) -> EvalResult:
         n_workloads=n_wl,
         workloads=workloads,
         correctness=correct,
-        error="" if correct else _correctness_error(corr_obj),
+        # WP11 (task 5): a failing eval carries its job log's bounded tail — the
+        # COMPILE_ERROR verdict's nvcc/ptxas error and a numeric FAIL's surrounding
+        # output are in the log the parser holds, so the record now holds them too.
+        error="" if correct else _with_log_tail(_correctness_error(corr_obj), text),
         bwd_median_ms=float(ms) if ms is not None else None,
         mfu=float(mfu) if mfu is not None else None,
         ref_median_ms=_opt("ref_median_ms", "cublas_median_ms"),

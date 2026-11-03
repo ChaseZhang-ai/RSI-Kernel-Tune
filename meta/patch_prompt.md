@@ -48,6 +48,10 @@ write into the five-tuple of one group member **at which step of the group the g
 `part k of n`, n ≤ 4) — both the verdict lane (carry on the ledger) and the parking lane (no interruption) read this declaration;
 a coupled group that is not wired in gets vetoed layer by layer by per-round pricing, which is exactly the structural failure this rule prevents.
 
+A patch that adds a **shape-keyed decision** (a `per_shape: <lever>[<workload>]=<value>` value-range declaration, or a `regime: <axis-predicate>` line) keeps the ordinary landing path:
+the decision line declares the value ranges / the regime predicate (pure shape-axis function; the driver machine-checks mutual exclusion + coverage of every workload — a coverage failure bounces the patch),
+the student delivers the runtime shape-dispatch code as one ordinary decision, and the standard eval gate judges it whole (per-workload correctness and readings included) — no per-shape side gate exists.
+
 A patch **must not add a downgrade clause without a failure trigger** (POLICY §3 ③): "first use conservative form X to get first green, swap after green"
 may only be written as a fallback with a trigger condition ("If … FAILs twice in a row, you may temporarily use …"); the validator runs
 `downgrade_schedule_violations` on the lines the patch adds, and a hit is sent back for a resend.

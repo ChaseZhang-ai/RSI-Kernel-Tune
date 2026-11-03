@@ -55,6 +55,8 @@ from forgekernel.inner.trajectory import (
     constant_output_flag,
     gate_ms,
     load_records,
+    per_shape_ledger,
+    per_shape_best_readings,
 )
 from forgekernel.meta_trajectory import (
     MetaRecord,
@@ -871,6 +873,21 @@ class LoopContext:
     # FK_SPRT_WIN_STOP + FK_SPRT_WIN_MARGIN (the watermark margin the job-side
     # stop must clear) into the environment for local jobs.
     sprt_win_stop: bool = False
+    # --- WP14 (shape-regime decision channel) --------------------------------
+    # Per-regime NCU evidence budget: how many DISTINCT regimes the meta step may
+    # buy a scoped stall/SASS pricing job for (one workload each, named through
+    # the tool's --workload -> FK_LB_WORKLOAD_SCOPE), per best tree. Meta steps
+    # only — the eval path never runs it — and only when the milestone's decision
+    # lines carry `regime:` predicates; a run without them renders nothing and
+    # buys nothing (byte-identical to the pre-WP14 loop). 0 disables. loop.toml
+    # [loop] regime_ncu_max (card layer, like every [loop] key; the default 2 is
+    # the merged verdict's cap).
+    regime_ncu_max: int = 2
+    # Memo {(tree sha, workload): evidence note} of the regime NCU jobs already
+    # banked this run: a regime priced on a tree is not re-bought at the next
+    # meta step on the same tree (the pricing logs' own discipline). In-memory
+    # like the other pricing caches; a restart re-prices at most regime_ncu_max.
+    wp14_regime_evidence: dict = field(default_factory=dict)
     # --- WP11 (task 4) runtime accumulators (not config; memory like
     # wp5_blocked_uncaps_used): teacher turn seconds since the last appended
     # iteration record, stamped onto that record as teacher_s.
@@ -2902,6 +2919,12 @@ def _wp11_apply_cfg(ctx: LoopContext) -> None:
     else:
         os.environ.pop("FK_SPRT_WIN_STOP", None)
         os.environ.pop("FK_SPRT_WIN_MARGIN", None)
+    # --- WP14 (C17: the card layer's [loop] regime_ncu_max, resolved here so no
+    # new cli surface grows; an explicitly set field wins, a non-int leaves the
+    # default 2 — the merged verdict's cap).
+    if isinstance(loop_cfg.get("regime_ncu_max"), int) and not isinstance(
+            loop_cfg.get("regime_ncu_max"), bool):
+        ctx.regime_ncu_max = loop_cfg["regime_ncu_max"]
 
 
 def _wp19_apply_cfg(ctx: LoopContext) -> None:
@@ -3755,12 +3778,18 @@ def run_inner_iteration(
             _log(f"iter {iter_no}: runner-up preservation skipped ({e})")
         if last_good_ref:
             be.reset(last_good_ref)
+        # WP14: this row's own per-workload ratios; the best ledger inherits
+        # unchanged (a failed row never advances it).
+        _ps_ratios, _ps_best = per_shape_ledger(
+            load_records(ctx.status_path), ev.workloads, iter_no, improve=False,
+            gate_window=ctx.gate_window)
         rec = IterationRecord(
             iter=iter_no, decision_id=record.decision_id, change=record.change,
             correctness=False, verdict="REVERT", metric_before=metric_before,
             error=detail, profiler=profiler, cluster=cluster,
             orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
             prep=ev.prep or {}, precision=precision,
+            per_shape_ratios=_ps_ratios, per_shape_best=_ps_best,
             gpu_state=ev.gpu_state or {},   # WP1 telemetry: objective, rides every eval
             **_wp11_wallclock_fields(ctx, agent_s=wp11_agent_s, eval_s=eval_job_s,
                                      ncu_s=ncu_job_s, queue_s=queue_wait_s),
@@ -3789,12 +3818,16 @@ def run_inner_iteration(
             _log(f"iter {iter_no}: runner-up preservation skipped ({e})")
         if last_good_ref:
             be.reset(last_good_ref)
+        _ps_ratios, _ps_best = per_shape_ledger(
+            load_records(ctx.status_path), ev.workloads, iter_no, improve=False,
+            gate_window=ctx.gate_window)
         rec = IterationRecord(
             iter=iter_no, decision_id=record.decision_id, change=record.change,
             correctness=False, verdict="REVERT", metric_before=metric_before,
             error=detail, profiler=profiler, cluster=cluster,
             orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
             prep=ev.prep or {}, precision=precision,
+            per_shape_ratios=_ps_ratios, per_shape_best=_ps_best,
             gpu_state=ev.gpu_state or {},
             suspicious=True,      # WP9: the reward-hack marker
             variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
@@ -3818,6 +3851,12 @@ def run_inner_iteration(
     clock_drift = (_sm_clock_drift(
         ev.gpu_state, _best_keep_gpu_state(load_records(ctx.status_path),
                                            ctx.gate_window)) or 0.0) > _CLOCK_DRIFT_BAND
+    # WP14 per-shape ledger: this KEEP's per-workload ratios + the per-workload
+    # historical best snapshot it inherits/advances (trajectory.py's single
+    # definition; single-input benches get {} and the pre-WP14 fields stand).
+    _ps_ratios, _ps_best = per_shape_ledger(
+        load_records(ctx.status_path), ev.workloads, iter_no, improve=True,
+        gate_window=ctx.gate_window)
     rec = IterationRecord(
         iter=iter_no, decision_id=record.decision_id, change=record.change,
         correctness=True, verdict="KEEP", bwd_median_ms=ev.bwd_median_ms, mfu=ev.mfu,
@@ -3831,6 +3870,7 @@ def run_inner_iteration(
         metric_before=metric_before, profiler=profiler, sha=sha, cluster=cluster,
         orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
         prep=ev.prep or {}, n_workloads=ev.n_workloads, workloads=ev.workloads,
+        per_shape_ratios=_ps_ratios, per_shape_best=_ps_best,
         precision=precision,
         confirm_jobs=confirm_info["confirm_jobs"],
         confirm_readings=confirm_info["confirm_readings"],
@@ -6968,6 +7008,18 @@ def _run_sweep_request(ctx: LoopContext, be, iter_no: int, path: str) -> str:
     _log(f"iter {iter_no}: sweep {path} verified against the milestone recipe — "
          f"one sweep job ({len(spec.get('variants') or [])} variants)"
          + (", halving on" if spec.get("halving") else ""))
+    # --- WP14: a decision that declares shape-keyed value ranges (`per_shape:`)
+    # is priced PER SHAPE, not on the group/representative aggregate a single
+    # sweep job would read — the per-workload job discipline the lever-pricing
+    # channel already runs (one scoped job per workload, --workload ->
+    # FK_LB_WORKLOAD_SCOPE), carried over to the sweep. The feedback renders the
+    # per-shape columns; the cross-shape composition (which value on which
+    # regime) is the teacher's per_shape declaration, and the landing is still
+    # the student's ordinary delivery judged by the full eval gate.
+    shape_keys = _sweep_per_shape_workloads(ctx, decision_id)
+    if shape_keys:
+        return _run_sweep_request_per_shape(ctx, be, iter_no, path, decision_id,
+                                            spec, shape_keys)
     spec_path = Path(ctx.workspace) / "notes" / f"__sweep_{decision_id}.json"
     try:
         _seed_sweep_toolkits(ctx, be)
@@ -6994,6 +7046,144 @@ def _run_sweep_request(ctx: LoopContext, be, iter_no: int, path: str) -> str:
         _log(f"iter {iter_no}: sweep {decision_id} -> winner={winner or 'none'}; " + "; ".join(
             f"{r['name']}={_fmt_pct(r['delta_pct'])}" for r in rows))
     return _sweep_feedback(path, rows, winner, fail, log)
+
+
+def _sweep_per_shape_workloads(ctx: LoopContext, decision_id: str) -> list[str]:
+    """The workloads a sweep decision is priced per shape on ([] = not per-shape):
+    the decision's `per_shape:` keys that resolve to named workloads of the card
+    (the intersection with its meta workloads, the names the scoped tools accept),
+    or — when the decision declares per_shape keys that are shape-axis predicates
+    instead — the card's whole meta workload list. [] when the decision declares
+    no per_shape ranges, or the card is not a group card (nothing to split)."""
+    try:
+        text = Path(ctx.milestone).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    from forgekernel.milestone import parse_per_shape_declarations
+    keys = []
+    for did, pairs in parse_per_shape_declarations(text).items():
+        if did != decision_id:
+            continue
+        for k, _v in pairs:
+            m = re.match(r"^\S+?\[([^\[\]]+)\]$", k)
+            if m:
+                keys.append(m.group(1))
+    if not keys:
+        return []
+    meta = meta_shapes.card_meta_workloads(ctx.workspace)
+    if len(meta) < 2:
+        return []
+    named = [k for k in keys if k in meta]
+    if named:
+        # keep the card's own order so the merge reads stable (representative first)
+        return [wl for wl in meta if wl in named]
+    return meta
+
+
+def _sweep_scope_cmd(spec_name: str, workload: str) -> str:
+    """The per-workload sweep command: sweep_run itself reads no --workload — it
+    times whatever lever_pricing_run.run_bench scopes, and run_bench reads the
+    scope from lpr._SCOPE_WANT["name"], which lever_pricing_run.main sets from its
+    own --workload flag. The preamble does exactly that assignment (the tool's
+    own sanctioned code path, just driven from outside its main()), so the bench
+    narrows to ``workload`` and tags its JSON workload_scope. ``workload`` and
+    ``spec_name`` are [A-Za-z0-9_.-] tokens (validated upstream), shell-safe."""
+    return ("cmd:python3 -c \"import sys; sys.path.insert(0, 'notes'); "
+            f"import lever_pricing_run as l; l._SCOPE_WANT['name']={workload!r}; "
+            f"import sweep_run as s; sys.exit(s.main([{spec_name!r}]))\"")
+
+
+def _run_sweep_request_per_shape(ctx: LoopContext, be, iter_no: int, path: str,
+                                 decision_id: str, spec: dict,
+                                 workloads: list[str]) -> str:
+    """One per-shape SWEEP_REQUEST round: the teacher's recipe swept once per
+    workload of a `per_shape:`-declared decision (rounds clamped to the pricing
+    channel's META_ROUNDS, the same multi-workload budget discipline), the
+    per-shape columns merged into one table. No cross-job winner is picked —
+    same-job ratios from different jobs are not one measurement; the per-column
+    winners are the teacher's per_shape composition input, and the landing is
+    the student's ordinary delivery (full eval gate)."""
+    from forgekernel.skills.lever_pricing_run import META_ROUNDS  # the merge's clamp
+    spec = dict(spec)
+    spec["rounds"] = max(1, min(int(spec.get("rounds", 3)), META_ROUNDS))
+    spec_name = f"__sweep_{decision_id}.json"
+    spec_path = Path(ctx.workspace) / "notes" / spec_name
+    per_wl: dict = {}
+    try:
+        _seed_sweep_toolkits(ctx, be)
+        spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")
+        be.commit(f"sweep: {path} (per-shape: {', '.join(workloads)})")
+        branch = f"{ctx.branch_prefix}-i{iter_no}sweep"
+        be.push_branch(branch)
+        for wl in workloads:
+            try:
+                log, _job = _sweep_job(
+                    be, branch, _sweep_scope_cmd(spec_name, wl),
+                    f"iter{iter_no}: sweep {decision_id} [{wl}]")
+            except BackendError as e:
+                per_wl[wl] = {"fail": str(e)}
+                continue
+            rows, winner, fail = parse_sweep_results(log)
+            per_wl[wl] = {"rows": rows, "winner": winner, "fail": fail}
+    except BackendError as e:
+        _log(f"iter {iter_no}: per-shape sweep {decision_id} failed ({e})")
+        return _sweep_request_refusal(path, f"The sweep job failed ({e}).")
+    finally:
+        try:
+            spec_path.unlink()
+        except OSError:
+            pass
+    return _sweep_per_shape_feedback(path, decision_id, workloads, per_wl)
+
+
+def _sweep_per_shape_feedback(path: str, decision_id: str, workloads: list[str],
+                              per_wl: dict) -> str:
+    """The per-shape sweep feedback: one table, one column per workload (same-job
+    ratio / Δ vs base inside that job), the per-column winners named, and the
+    per_shape composition left to the teacher's declaration."""
+    head = (f"\n## Sweep decision `{path}` — per-shape (the decision declares "
+            f"`per_shape:` value ranges; one scoped sweep job per workload)\n")
+    any_rows = any(isinstance(v, dict) and v.get("rows") for v in per_wl.values())
+    if not any_rows:
+        tails = "; ".join(f"`{wl}`: {v.get('fail') or 'no reading'}"
+                          for wl, v in per_wl.items())
+        return (head + f"No sweep reading on any workload: {tails}. The recipe file "
+                f"was executed as written (the driver hash-checked it against the "
+                f"milestone); check the reasons and send SWEEP_REQUEST again if a "
+                f"re-run can fix it, or deliver the decision at its given starting "
+                f"value without the sweep.\n")
+    names: list = []
+    for v in per_wl.values():
+        for r in v.get("rows") or []:
+            if r["name"] not in names:
+                names.append(r["name"])
+    cols = " | ".join(f"`{wl}` ratio / Δ / winner" for wl in workloads)
+    body = (f"| variant | {cols} |\n|---|" + "---|" * len(workloads) + "\n")
+    for name in names:
+        cells = []
+        for wl in workloads:
+            v = per_wl.get(wl) or {}
+            r = next((x for x in (v.get("rows") or []) if x["name"] == name), None)
+            if r is None:
+                cells.append("—")
+                continue
+            cell = (f"{r['ratio'] if r['ratio'] is not None else 'n/a'} / "
+                    f"{_fmt_pct(r['delta_pct'])}")
+            if v.get("winner") == name:
+                cell += " **winner**"
+            cells.append(cell)
+        body += f"| `{name}` | " + " | ".join(cells) + " |\n"
+    winners = {wl: (per_wl.get(wl) or {}).get("winner") for wl in workloads}
+    win_txt = "; ".join(f"`{wl}` → `{w or 'none (keep base)'}`"
+                        for wl, w in winners.items())
+    body += (f"\n**Per-shape winners (each within its own job's same-job readings; "
+             f"cross-job ratios are not one measurement)**: {win_txt}. The dispatch "
+             f"composition is the decision's `per_shape:` declaration (the teacher "
+             f"patches it from these readings); the student lands it as an ordinary "
+             f"delivery — the runtime shape-dispatch code it spells — and the full "
+             f"eval gate judges it on the group geomean with per-workload "
+             f"correctness, as always.\n")
+    return head + body
 
 
 # --- WP4: slow-decision bookkeeping ----------------------------------------------
@@ -8369,7 +8559,10 @@ def _mc_timings_rows(rows: list, winner: str | None) -> list:
         last_of[r["name"]] = i
     return [{"variant": r["name"], "smoke": r["smoke"], "ms": r["ms"],
              "ratio": r["ratio"], "delta_vs_base_pct": r["delta_pct"],
-             "winner": r["name"] == winner and last_of[r["name"]] == i}
+             "winner": r["name"] == winner and last_of[r["name"]] == i,
+             # WP14 MC-DISPATCH: which workload's job produced the reading
+             # (None on the single-job path — per-workload scoping said there)
+             **({"workload": r["workload"]} if r.get("workload") else {})}
             for i, r in enumerate(rows)]
 
 
@@ -8456,6 +8649,116 @@ def _mc_revote(ctx: LoopContext, be, iter_no: int, did: str,
     return parse_mc_results(log)
 
 
+
+def _mc_deliver_per_shape(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
+                          last_good_ref: str | None, metric_before: float | None,
+                          variants: list, shape_wls: list[str]) -> dict:
+    """The MC-DISPATCH prescreen: one job per workload of a per_shape-declared
+    decision, the per-workload readings banked on the objective variant table.
+    A variant that wins on EVERY workload is the ordinary winner (applied by the
+    caller's shared tail via the same return contract); differing per-shape
+    winners take the ordinary no-winner REVERT — the composition is the
+    decision's per_shape declaration (the teacher's, from these readings; the
+    student delivers the dispatch code), never a driver-written merge (L0)."""
+    did = record.decision_id or ""
+    spec_name = "__mc_" + re.sub(r"[^A-Za-z0-9_.\-]", "_", did) + ".json"
+    spec_path = Path(ctx.workspace) / "notes" / spec_name
+    per_wl: dict = {}
+    try:
+        _mc_seed_toolkit(ctx, be)
+        be.commit(f"mc: prescreen spec for {did} (per-shape)")
+        branch = f"{ctx.branch_prefix}-i{iter_no}mc"
+        be.push_branch(branch)
+        for wl in shape_wls:
+            spec = {"kernel_file": str(ctx.kernel_file), "variants": variants,
+                    "rounds": _MC_ROUNDS, "workload": wl}
+            spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=1),
+                                 encoding="utf-8")
+            try:
+                log, _job = _mc_job(be, branch, f"{_MC_CMD} notes/{spec_name}",
+                                    f"iter{iter_no}: mc prescreen {did} [{wl}]")
+            except BackendError as e:
+                per_wl[wl] = {"rows": [], "winner": None, "fail": str(e)}
+                continue
+            rows, winner, fail = parse_mc_results(log)
+            for r in rows:
+                r["workload"] = wl        # the objective table reads per workload
+            per_wl[wl] = {"rows": rows, "winner": winner, "fail": fail}
+    except BackendError as e:
+        _log(f"iter {iter_no}: mc per-shape prescreen failed ({e}) — delivering as committed")
+        return {"rows": None, "winner": None, "revert": None, "git_moved": True}
+    finally:
+        try:
+            spec_path.unlink()
+        except OSError:
+            pass
+    winners = {wl: v["winner"] for wl, v in per_wl.items()}
+    distinct = {w for w in winners.values() if w}
+    if len(distinct) == 1 and all(winners.get(wl) == next(iter(distinct))
+                                  for wl in shape_wls):
+        winner = next(iter(distinct))
+        rows = [r for v in per_wl.values() for r in v["rows"]]
+        _log(f"iter {iter_no}: {did} mc per-shape prescreen -> {Path(winner).name} "
+             f"wins on every workload ({', '.join(shape_wls)}) — the ordinary "
+             f"winner path (full gate)")
+        timings = _mc_timings_rows(rows, winner)
+        return _mc_apply_winner(ctx, be, iter_no, record, base_sha, winner,
+                                variants, timings)
+    diff_txt = "; ".join(f"`{wl}` → `{winners.get(wl) or 'none'}`"
+                         for wl in shape_wls)
+    why = (f"the per-shape winners differ ({diff_txt}) — no single variant wins "
+           f"every workload; the dispatch composition is the decision's "
+           f"per_shape declaration (the teacher patches it from these readings; "
+           f"the student delivers the runtime shape-dispatch code, judged by the "
+           f"full eval gate)")
+    _log(f"iter {iter_no}: {did} mc per-shape prescreen -> no single winner "
+         f"({diff_txt}); ordinary REVERT (no eval spent)")
+    sources = {}
+    for rel in variants:
+        p = Path(ctx.workspace) / rel
+        if p.is_file():
+            try:
+                sources[rel] = p.read_text(encoding="utf-8")
+            except OSError as e:
+                _log(f"iter {iter_no}: mc archive of {rel} skipped ({e})")
+    be.reset(last_good_ref or base_sha)
+    _mc_write_variant_archive(ctx, iter_no, sources)
+    rows = [r for v in per_wl.values() for r in v["rows"]]
+    timings = _mc_timings_rows(rows, None)
+    rec = IterationRecord(
+        iter=iter_no, decision_id=did, change=record.change,
+        correctness=None, verdict="REVERT", metric_before=metric_before,
+        error=f"multi-candidate: per-shape winners differ — no variant to apply "
+              f"({why})",
+        profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
+        variant_timings=timings or None,
+    )
+    append_record(ctx.status_path, rec)
+    return {"rows": timings, "winner": None, "revert": rec, "git_moved": True}
+
+
+def _mc_apply_winner(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
+                     winner: str, variants: list, timings: list) -> dict:
+    """The MC winner tail shared by the single-job and per-shape prescreens:
+    the winner is written into the kernel file, the other variants archived,
+    one driver bookkeeping commit — the delivery is still one implementation,
+    judged by the standard gate."""
+    try:
+        winner_src = (Path(ctx.workspace) / winner).read_text(encoding="utf-8")
+    except OSError as e:
+        _log(f"iter {iter_no}: mc winner {winner} unreadable ({e}) — treated as no winner")
+        return {"rows": timings, "winner": None, "revert": None, "git_moved": True}
+    Path(ctx.workspace, ctx.kernel_file).write_text(winner_src, encoding="utf-8")
+    _mc_archive_variants(ctx, be, iter_no, variants, winner)
+    be.commit(f"mc: winner {Path(winner).name} of {record.decision_id or '?'} applied "
+              f"(driver-selected from the prescreen; judged by the standard gate)")
+    _log(f"iter {iter_no}: {record.decision_id} mc prescreen -> winner={Path(winner).name} "
+         + "; ".join(f"{r['variant']}={_fmt_pct(r['delta_vs_base_pct'])}"
+                     for r in timings if r.get("winner")))
+    return {"rows": timings, "winner": winner, "revert": None, "git_moved": True}
+
+
+
 def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
                 last_good_ref: str | None, metric_before: float | None) -> dict | None:
     """The MC-DELIVERY path of one delivery, or None (not authorized / nothing
@@ -8493,6 +8796,22 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
         workload = shapes[0] if shapes else ""
     except Exception:  # noqa: BLE001 — a card that cannot name workloads times all of it
         workload = ""
+    # --- WP14 (MC-DISPATCH, 乙A14): a decision whose line declares shape-keyed
+    # value ranges (`per_shape:`) is prescreened PER WORKLOAD — the structure
+    # dispatch case (a structural fork deeper than any lever-value fork, the
+    # teacher's opt-in). One prescreen job per workload (the toolkit's own
+    # spec["workload"] scope); a variant that wins on EVERY workload is the
+    # ordinary winner (the existing path below, judged by the full gate); when
+    # the per-shape winners differ, no mechanical winner exists — the
+    # composition is the decision's per_shape declaration (the teacher patches
+    # it from these readings; the student delivers the dispatch), and the
+    # iteration takes the ordinary no-winner REVERT with the per-workload
+    # readings banked.
+    shape_wls = _sweep_per_shape_workloads(ctx, did)
+    if len(shape_wls) >= 2:
+        return _mc_deliver_per_shape(ctx, be, iter_no, record, base_sha,
+                                     last_good_ref, metric_before, variants,
+                                     shape_wls)
     spec = {"kernel_file": str(ctx.kernel_file), "variants": variants,
             "rounds": _MC_ROUNDS, "workload": workload}
     _log(f"iter {iter_no}: {did} authorized multi_candidate: {n} — one prescreen job "
@@ -10484,6 +10803,11 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                if cwt["significant"]
                else "no consistent per-workload signal beyond the run's resolution")
             + f"\n{rows}\n")
+        # --- WP14 (contract C10): the per-shape rows of the workload readings —
+        # each workload's historical best beside the per-workload columns the
+        # pricing table renders. '' on a single-input bench (byte-identical).
+        if (shape_rows := _wp14_shape_ledger_block(ctx, live_records)):
+            diagnose_extra += shape_rows
     lever_table: list = []
     if priced is not None:
         # plateau OR audit: the audit is where structural reopens are decided,
@@ -10494,6 +10818,11 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
             prompt_file="m0_audit_prompt.md" if audit else "diagnose_prompt.md")
         if lever_table:
             diagnose_extra += _lever_price_block(lever_table, _last_banked_specs(ctx))
+            # --- WP14 (contract C10): the regime labels of the lever price block —
+            # which regime each per-workload column belongs to. '' with no regime
+            # lines on the milestone (byte-identical).
+            if (regime_line := _wp14_regime_label_line(ctx)):
+                diagnose_extra += regime_line
         elif ctx.lever_price_lost:
             # a job was bought and its table lost (archive / tool): said once,
             # so the teacher does not read this entry as "pricing never ran"
@@ -10620,6 +10949,12 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     # calibration only — never a price; empty inputs inject nothing.
     if _wp12_kb_menu_on(ctx):
         diagnose_extra += _wp12_kb_menu_block(ctx, live_records, prior_records)
+    # --- WP14 (contract C10): per-regime evidence lines LAST in the injection
+    # area — one scoped NCU pricing reading per regime, cap regime_ncu_max,
+    # memo per (tree, workload). '' with no regime lines (byte-identical).
+    if priced is not None:
+        if (regime_ev := _wp14_regime_evidence_block(ctx, priced, live_records)):
+            diagnose_extra += regime_ev
     prompt_file = "m0_audit_prompt.md" if audit else "diagnose_prompt.md"
     enum_help = ("`OK` `G1` `G2` `G3` `G4` `G5` `R1` `R2`" if audit
                  else "`G1` `G2` `G3` `G4` `G5` `R1` `R2` `INFEASIBLE`")
@@ -11124,6 +11459,11 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
         violations = _patch_landing_violations(
             at_entry, _read_milestone(ctx), _parse_list(patch_out, "changed_entries"))
         violations += _validate_milestone_file(ctx.milestone, baseline=at_entry)
+        # --- WP14: declarations the patch ADDED are held to the same coverage
+        # discipline (baseline-matched: a pre-rule milestone is never bounced
+        # for lines it already carried).
+        violations += _wp14_declaration_violations(ctx, _read_milestone(ctx),
+                                                   baseline=at_entry)
         if not violations:
             break
         _log(f"meta: patch has {len(violations)} violation(s) -> re-prompt: {violations[0]}")
@@ -16051,7 +16391,12 @@ _ARCH_PROBE_RUNNER_NAME = "arch_probe_run.py"
 # key-topology reading, written into the milestone by the teacher at authoring
 # time; the driver consumes the lines when it stamps the probe outcome.
 _ARCH_PROBE_REQUEST_RE = re.compile(r"(?mi)^\s*ARCH_PROBE_REQUEST\s*[:：]\s*(\S+)\s*$")
-_ARCH_CANDIDATES_RE = re.compile(r"(?mi)^\s*ARCH_CANDIDATES\s*[:：]\s*(\S+)\s*$")
+# `ARCH_CANDIDATES: <value>` — with the WP14 per-regime spelling the value may
+# carry a `regime=<shape-axis predicate>` annotation (the candidate's topology
+# reading is meant for that regime). The bare spelling is unchanged; the strip
+# line regex below still consumes both shapes whole.
+_ARCH_CANDIDATES_RE = re.compile(
+    r"(?mi)^\s*ARCH_CANDIDATES\s*[:：]\s*(?P<val>\S+?)(?:\s+regime=(?P<reg>.+?))?\s*$")
 _ARCH_PROBE_LINE_RE = re.compile(r"(?i)^\s*ARCH_(?:PROBE_REQUEST|CANDIDATES)\s*[:：]")
 # the runner's verdict line: `ARCH_PROBE <stem> ms=<float>` (or status=FAIL ...)
 _ARCH_PROBE_TIME_RE = re.compile(r"ARCH_PROBE\s+(\S+)\s+ms=([0-9]*\.?[0-9]+(?:[eE][-+]?\d+)?)")
@@ -16065,6 +16410,18 @@ def _parse_arch_probe_requests(milestone_text: str) -> list[str]:
         if path not in seen:
             seen.append(path)
     return seen
+
+
+def _parse_arch_candidates(milestone_text: str) -> list[tuple[str, str]]:
+    """[(value, regime)] per ARCH_CANDIDATES line ("" = no regime annotation) —
+    the WP14 per-regime spelling carries `regime=<predicate>`; a bare line reads
+    ("single"/"dual", ""). The probe verdict itself is unchanged (time-only on
+    what the recipes measure); the annotation rides the head note so a per-regime
+    freeze says which candidate belongs to which regime."""
+    out = []
+    for m in _ARCH_CANDIDATES_RE.finditer(milestone_text or ""):
+        out.append((m.group(1), m.group(2) or ""))
+    return out
 
 
 def _arch_probe_ms(log: str, stem: str) -> float | None:
@@ -16123,8 +16480,23 @@ def _seed_arch_probe_runner(ctx: LoopContext) -> str | None:
 
 
 def _arch_probe_stamp(requests: list[str], readings: dict, *, skipped: str = "",
-                      floor: float | None = None, note: str = "") -> list[str]:
-    """The head-note lines recording the ARCH_PROBE outcome. ``skipped`` short-
+                      floor: float | None = None, note: str = "",
+                      regime_note: str = "") -> list[str]:
+    """The head-note lines recording the ARCH_PROBE outcome — the base rendering
+    below, plus (WP14) one per-regime annotation line right under the marker
+    when the candidates carry `regime=` spellings. Everything else passes
+    through untouched: at ``regime_note=""`` the rendering is byte-identical to
+    the pre-WP14 one (the pinned two-candidate form included)."""
+    lines = _arch_probe_stamp_base(requests, readings, skipped=skipped, floor=floor,
+                                   note=note)
+    if regime_note:
+        lines = lines[:1] + [f"     {regime_note}"] + lines[1:]
+    return lines
+
+
+def _arch_probe_stamp_base(requests: list[str], readings: dict, *, skipped: str = "",
+                           floor: float | None = None, note: str = "") -> list[str]:
+    """The ARCH_PROBE head note exactly as WP6/WP8 render it. ``skipped`` short-
     circuits to a skip record; otherwise two readings above the resolution floor
     name the winner (the freeze follows it), anything else freezes the teacher's
     preferred candidate with the readings attached. ``note`` records a degraded
@@ -16328,18 +16700,29 @@ def _run_arch_probes(ctx: LoopContext) -> None:
         return
     text = _read_milestone(ctx)
     requests = _parse_arch_probe_requests(text)
+    # WP14: the candidates' per-regime annotations ("" on the bare spelling) —
+    # the head note records them so a freeze composed per regime says which
+    # candidate was written for which regime; probe verdicts are unchanged.
+    regime_note = ""
+    cands = _parse_arch_candidates(text)
+    if any(reg for _v, reg in cands):
+        regime_note = ("per-regime candidates: " + "; ".join(
+            f"{val}" + (f" regime={reg}" if reg else "") for val, reg in cands)
+            + " (the freeze composes per regime; the probes' time-only readings "
+              "above price each candidate as a whole)")
     if len(requests) < 2:
         if len(requests) == 1:
             _log("meta/distill: ARCH_PROBE skipped (only one candidate recipe "
                  "listed — nothing to compare); freezing as authored")
             _stamp_milestone_head(ctx, _arch_probe_stamp(
-                requests, {}, skipped="M0 probes skipped (only one candidate recipe)"))
+                requests, {}, skipped="M0 probes skipped (only one candidate recipe)",
+                regime_note=regime_note))
         return
     if ctx.m0_probe_rounds < 2:
         _log(f"meta/distill: ARCH_PROBE skipped (budget: {ctx.m0_probe_rounds} job(s) "
              "< 2 candidates); freezing as authored")
         _stamp_milestone_head(ctx, _arch_probe_stamp(
-            requests, {}, skipped="M0 probes skipped (budget)"))
+            requests, {}, skipped="M0 probes skipped (budget)", regime_note=regime_note))
         return
     # --- WP8: the candidate bracket (default 2 = the WP6 behavior) -----------
     want = max(2, int(ctx.m0_probe_candidates))
@@ -16376,7 +16759,8 @@ def _run_arch_probes(ctx: LoopContext) -> None:
         _log(f"meta/distill: ARCH_PROBE skipped (recipe file(s) missing: "
              f"{', '.join(missing)}); freezing as authored")
         _stamp_milestone_head(ctx, _arch_probe_stamp(
-            requests, {}, skipped="M0 probes skipped (recipe file missing)"))
+            requests, {}, skipped="M0 probes skipped (recipe file missing)",
+            regime_note=regime_note))
         return
     be = ctx.backend
     try:
@@ -16388,7 +16772,8 @@ def _run_arch_probes(ctx: LoopContext) -> None:
         _log("meta/distill: ARCH_PROBE skipped (runner script missing from the "
              "skills tree); freezing as authored")
         _stamp_milestone_head(ctx, _arch_probe_stamp(
-            requests, {}, skipped="M0 probes skipped (runner missing)"))
+            requests, {}, skipped="M0 probes skipped (runner missing)",
+            regime_note=regime_note))
         return
     branch = f"{ctx.branch_prefix}-archprobe"
     readings: dict = {}
@@ -16455,7 +16840,8 @@ def _run_arch_probes(ctx: LoopContext) -> None:
                                        tiers, jobs, reprobed)
         note = "; ".join(x for x in (cut_note, screening.floor_note(
             probed, lambda p: floors.get(p)) if ranked != requests else "") if x)
-        stamp_lines = _arch_probe_stamp(requests, readings, floor=floor, note=note)
+        stamp_lines = _arch_probe_stamp(requests, readings, floor=floor, note=note,
+                                        regime_note=regime_note)
         annotations = _arch_probe_stamp_annotations(tiers if any(
             t != "mock" for t in tiers.values()) else None, reprobed)
         if annotations:
@@ -16506,6 +16892,214 @@ def _run_arch_probes(ctx: LoopContext) -> None:
                             "hybrid_of": meta_.get("hybrid_of"),
                             "tunables_seen": meta_.get("tunables_seen")})
         _arch_graveyard_append(ctx, entries)
+
+
+# --- WP14: shape-regime decision channel =========================================
+# The shape axis is the one decision dimension the geomean gate can never name on
+# its own: a kernel that wins as structure A on small shapes and structure B on
+# large ones reads as one average number, and `shape_split` (meta_shapes) judged
+# the size-dependent lever with no receiver to land it in. WP14 gives it two:
+#
+#   * the per-shape ledger (trajectory.py, contract C8): each workload's
+#     historical best + each row's per-workload ratios, rendered to the teacher
+#     as the per-shape rows of the workload readings block;
+#   * the shape-keyed decision-line protocol (milestone.py): `per_shape:` value
+#     ranges and `regime:` predicates — pure shape-axis functions the driver
+#     holds to mutual exclusion + coverage of every workload (a coverage failure
+#     invalidates the freeze, bounced like any §9 violation).
+#
+# The landing NEVER changes shape: a per-shape/per-regime decision is the
+# student's own runtime shape-dispatch code in the same kernel file, delivered
+# as an ordinary decision and judged by the same full eval gate (per-workload
+# correctness and readings are already the gate's currency on a group card).
+# Driver-side NCU evidence per regime reuses the stall-pricing channel's
+# sanctioned per-workload scope (--workload -> FK_LB_WORKLOAD_SCOPE): meta steps
+# only, at most regime_ncu_max new jobs per step, nothing on a run whose
+# milestone carries no `regime:` lines (byte-identical injections then).
+
+_WP14_SHAPE_ROWS_MAX = 6      # contract C10: per-shape rows <= 6 lines per block
+
+
+def _wp14_regime_predicates(ctx: LoopContext, text: str | None = None) -> list:
+    """[(decision_id, expr)] of the milestone's `regime:` lines ([] = none)."""
+    from forgekernel.milestone import parse_regime_predicates
+    try:
+        t = _read_milestone(ctx) if text is None else text
+    except OSError:
+        return []
+    return parse_regime_predicates(t or "")
+
+
+def _wp14_regime_map(ctx: LoopContext, text: str | None = None) -> dict:
+    """{workload: "D0.3: m >= 1024"} — which regime each of the card's workloads
+    falls in, from the milestone's predicates + the card's shape axes. {} when
+    the milestone carries no regime lines or a workload matches none (a failed
+    family is the validator's bounce, not this map's problem)."""
+    preds = _wp14_regime_predicates(ctx, text)
+    if not preds:
+        return {}
+    from forgekernel.milestone import parse_regime_expr, regime_expr_matches
+    axes = meta_shapes.card_workload_axes(ctx.workspace)
+    if not axes:
+        return {}
+    parsed = []
+    for did, expr in preds:
+        try:
+            parsed.append((did, expr, parse_regime_expr(expr)))
+        except ValueError:
+            return {}
+    out = {}
+    for wl, ax in sorted(axes.items()):
+        hits = [f"{did}: {expr}" for did, expr, p in parsed
+                if regime_expr_matches(p, ax or {})]
+        if len(hits) == 1:
+            out[wl] = hits[0]
+    return out
+
+
+def _wp14_declaration_violations(ctx: LoopContext, text: str,
+                                 baseline: str | None = None) -> list[str]:
+    """Machine violations of the milestone's WP14 declarations ([] = holds).
+
+    Authoring (``baseline`` None): every regime/per_shape declaration is held —
+    a regime family that is not a pure shape-axis function, is not mutually
+    exclusive, or does not cover every workload makes the freeze invalid
+    (覆盖失败 = 冻结无效); a per_shape key that names neither a workload of the
+    card nor a parseable shape-axis predicate is a typo'd dispatch. Patch mode:
+    only declarations the patch ADDED (matched by their full line) — the same
+    grandfathering the gate-line hygiene follows, so a pre-rule milestone is
+    never read as "not distilled yet" by a later patch."""
+    from forgekernel.milestone import (parse_per_shape_declarations,
+                                       parse_regime_predicates, regime_coverage)
+    v: list[str] = []
+    preds = parse_regime_predicates(text or "")
+    if baseline is not None:
+        old = parse_regime_predicates(baseline or "")
+        preds = [p for p in preds if p not in old]
+    axes = meta_shapes.card_workload_axes(ctx.workspace)
+    v += regime_coverage(preds, axes)
+    decls = parse_per_shape_declarations(text or "")
+    if baseline is not None:
+        old_decls = parse_per_shape_declarations(baseline or "")
+        decls = {did: [p for p in pairs if p not in old_decls.get(did, [])]
+                 for did, pairs in decls.items()
+                 if [p for p in pairs if p not in old_decls.get(did, [])]}
+    for did, pairs in decls.items():
+        for key, raw in pairs:
+            if key == "":
+                v.append(f"per_shape:" + (f" (on §3 {did})" if did else "")
+                         + f" `{raw}` is not `lever[<workload>]=<value>` — a "
+                         f"shape-keyed value range names its lever and its shape")
+                continue
+            _lever, _, shape = key.partition("[")
+            shape = shape.rstrip("]")
+            if shape in axes:
+                continue
+            try:
+                from forgekernel.milestone import parse_regime_expr, regime_expr_matches
+                conjuncts = parse_regime_expr(shape)
+            except ValueError as e:
+                v.append(f"per_shape: `{key}`" + (f" (on §3 {did})" if did else "")
+                         + f" — `{shape}` names no workload of the card and is not "
+                         f"a shape-axis predicate either ({e})")
+                continue
+            # an axis-predicate key must name a NON-EMPTY shape set: a predicate
+            # matching no workload of the card is a typo'd dispatch, not a regime
+            if not any(regime_expr_matches(conjuncts, ax or {}) for ax in axes.values()):
+                v.append(f"per_shape: `{key}`" + (f" (on §3 {did})" if did else "")
+                         + f" — `{shape}` matches no workload of the card (empty "
+                         f"shape set; the value range would never apply)")
+    return v
+
+
+def _wp14_shape_ledger_block(ctx: LoopContext, records: list) -> str:
+    """The per-shape rows of the workload readings section (contract C10: <= 6
+    lines): each workload's historical best and the current best row's ratios —
+    the account a geomean cannot show, read beside the pricing table's per-
+    workload columns. '' for a single-input bench (nothing to split) and when
+    no evaluated row carried per-workload readings (byte-identical pre-WP14)."""
+    multi = any(r.workloads for r in records)
+    best = per_shape_best_readings(records, ctx.gate_window)
+    if not multi or not best:
+        return ""
+    newest = next((r for r in reversed(records) if r.per_shape_ratios), None)
+    lines = [f"\n## Per-shape ledger (driver, from the trajectory: each workload's "
+             f"historical best, gate window `{ctx.gate_window}`)"]
+    for wl in sorted(best, key=lambda w: float(best[w].get("ms") or 0))[:_WP14_SHAPE_ROWS_MAX]:
+        b = best[wl]
+        cur = (newest.per_shape_ratios or {}).get(wl) if newest else None
+        cur_s = f"; current best row x{cur:.4f}" if isinstance(cur, (int, float)) else ""
+        lines.append(f"- `{wl}` best {b['ms']:.4f} ms (iter {b['iter']}{cur_s})")
+    if len(best) > _WP14_SHAPE_ROWS_MAX:
+        lines.append(f"- (… {len(best) - _WP14_SHAPE_ROWS_MAX} further workloads omitted, "
+                     f"the trajectory's per-shape ledger holds them)")
+    lines.append("A lever/structure whose price splits by shape (`shape_split`) is "
+                 "declared per shape on the decision line (`per_shape: <lever>[<workload>]"
+                 "=<value>`) and lands as the student's runtime shape-dispatch code — "
+                 "same kernel, ordinary delivery, full eval gate.\n")
+    return "\n".join(lines) + "\n"
+
+
+def _wp14_regime_label_line(ctx: LoopContext, text: str | None = None) -> str:
+    """The regime labels of the lever price block (contract C10 lever-价格块
+    regime 标签): which regime each per-workload column belongs to. '' when the
+    milestone carries no regime lines (byte-identical pre-WP14)."""
+    rmap = _wp14_regime_map(ctx, text)
+    if not rmap:
+        return ""
+    cols = ", ".join(f"`{wl}` → regime `{expr}`" for wl, expr in sorted(rmap.items()))
+    return (f"\n**Regime labels (milestone `regime:` lines, driver-checked pure shape "
+            f"functions)**: {cols}. A lever whose per-workload readings above split "
+            f"along these regimes is a `per_shape:` candidate; a topology decision "
+            f"may carry the regime itself.\n")
+
+
+def _wp14_regime_evidence_block(ctx: LoopContext, priced: "PricedTrees",
+                                records: list) -> str:
+    """The per-regime NCU evidence lines (contract C10: last in the injection
+    area, <= 6 lines). For each distinct regime (at most ``regime_ncu_max`` NEW
+    jobs this step, memo per (best tree, workload)) the driver buys the tree's
+    stall/SASS pricing on one workload of that regime — the sanctioned
+    ``--workload`` scope (FK_LB_WORKLOAD_SCOPE), meta steps only. The readings
+    bank like any pricing job; this block names what was measured per regime.
+    '' when the channel is off / no regime lines / no budget (byte-identical
+    pre-WP14)."""
+    if ctx.regime_ncu_max <= 0 or not ctx.stall_pricing or priced is None:
+        return ""
+    rmap = _wp14_regime_map(ctx)
+    if not rmap:
+        return ""
+    sha = priced.best_sha or priced.head_sha
+    if not sha or ctx.now() > ctx.deadline_epoch - 1800:
+        return ""
+    lines = [f"\n## Per-regime NCU evidence (driver: one scoped pricing job per "
+             f"regime, cap {ctx.regime_ncu_max} this step, never a gate)"]
+    bought = 0
+    for wl in sorted(rmap):
+        expr = rmap[wl]
+        memo_key = (sha, wl)
+        if memo_key in ctx.wp14_regime_evidence:
+            lines.append(f"- regime `{expr}` on `{wl}`: {ctx.wp14_regime_evidence[memo_key]}")
+            continue
+        if bought >= ctx.regime_ncu_max:
+            lines.append(f"- regime `{expr}` on `{wl}`: not bought this step (the "
+                         f"regime_ncu_max={ctx.regime_ncu_max} cap — a later meta step "
+                         f"picks it up)")
+            continue
+        bought += 1
+        ledger, _segs, dossier, _roles = _run_stall_pricing(
+            ctx, ref=sha, bank_as=(), label=f"regime {wl}", workload=wl)
+        note = ("stall/SASS pricing measured (ledger and roles ride the workload "
+                "readings evidence)" if ledger is not None or dossier is not None
+                else "no reading this step (the pricing job failed or its self-check "
+                     "did not pass — evidence, not a precondition)")
+        ctx.wp14_regime_evidence[memo_key] = note
+        _log(f"meta/wp14: regime evidence [{wl}] ({expr}): {note}")
+        lines.append(f"- regime `{expr}` on `{wl}`: {note}")
+    # contract C10: the whole block stays within the per-regime evidence line
+    # budget (2 header + 4 evidence lines); regimes past it are picked up by a
+    # later meta step (the memo carries what was already banked).
+    return "\n".join(lines[:_WP14_SHAPE_ROWS_MAX]) + "\n"
 
 
 # --- WP8: prior supply (teacher-side) ===========================================
@@ -16725,6 +17319,14 @@ def run_distill_step(ctx: LoopContext) -> "MetaResult":
         else:
             dead_rounds = 0
         violations = _validate_milestone_file(ctx.milestone, authoring=True)
+        # --- WP14: the freeze's shape coverage is machine-held at authoring — a
+        # regime family that does not cover every workload (or is not a pure
+        # shape-axis function) invalidates the freeze and bounces here, like any
+        # §9 violation. Read fresh (the draft variable above is the PREVIOUS
+        # round's snapshot at this point). No regime/per_shape lines -> no
+        # violations (no-op).
+        violations += _wp14_declaration_violations(
+            ctx, _read_or_none(ctx.milestone) or "")
         try:
             draft = Path(ctx.milestone).read_text(encoding="utf-8")
         except OSError:

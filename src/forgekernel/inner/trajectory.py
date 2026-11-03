@@ -203,6 +203,24 @@ class IterationRecord:
     # independent draws (best_standard_error's per-row number, banked so the
     # digest need not re-derive it). None = fewer than two draws.
     best_standard_error: float | None = None
+    # --- WP14 (shape-regime decision channel) ------------------------------------
+    # The per-shape ledger (contract C8: THIS is the schema's single definition —
+    # every consumer reads these fields, only trajectory.py defines them). A group
+    # card's gate reading is a geomean over workloads of one kernel, so "小 shape
+    # 结构 A、大 shape 结构 B" is a combination the aggregate can never name: the
+    # ledger gives each workload its own measured history.
+    # per_shape_ratios: this row's per-workload vs-reference ratios keyed by the
+    # workload's name ({workload: ratio}), the same-job currency the pricing table
+    # reads (vs_ref_device, falling back to vs_ref). {} for a single-input bench
+    # (the top-level fields already are that one shape's reading) and for rows
+    # recorded before the field existed.
+    # per_shape_best: the running historical best per workload as of this row —
+    # {workload: {"ms": gate-window best ms, "iter": the row that set it}} —
+    # inherited across rows and moved only by a KEEP whose workload reading beats
+    # the incumbent (a REVERT row inherits unchanged). Snapshot arithmetic lives in
+    # per_shape_ledger() below; the read-side recompute is per_shape_best_readings().
+    per_shape_ratios: dict = field(default_factory=dict)
+    per_shape_best: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if self.verdict not in ("KEEP", "REVERT", "NEUTRAL"):
@@ -258,6 +276,91 @@ def gate_ms(rec, gate_window: str = GATE_WINDOW_DEFAULT) -> float | None:
 def append_record(path: str | Path, rec: IterationRecord) -> None:
     with open(path, "a") as fh:
         fh.write(json.dumps(asdict(rec), ensure_ascii=False) + "\n")
+
+
+# --- WP14: the per-shape ledger's arithmetic (single definition, contract C8) ----
+#
+# A group card's gate currency is the geomean over its workloads, and until now the
+# per-workload readings rode each row's ``workloads`` blocks with no account that
+# said which row was ever the best FOR EACH SHAPE. per_shape_ledger is the one
+# writer-side definition of that account; per_shape_best_readings is the one
+# reader-side definition (a recompute from the KEEP rows' own workload blocks, so
+# the digest never trusts a snapshot it can recompute).
+
+
+def _wl_gate_ms(w: dict, gate_window: str) -> float | None:
+    """One workload block's reading in the gate window (None when unmeasured)."""
+    if gate_window == GATE_WINDOW_DEVICE:
+        v = w.get("device_median_ms")
+    elif gate_window == GATE_WINDOW_E2E:
+        v = w.get("bwd_median_ms")
+    else:
+        raise ValueError(f"gate_window must be one of {GATE_WINDOWS}, got {gate_window!r}")
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def _wl_ratio(w: dict) -> float | None:
+    """One workload block's same-job vs-reference ratio (the pricing table's
+    currency: vs_ref_device, falling back to vs_ref)."""
+    v = w.get("vs_ref_device", w.get("vs_ref"))
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+
+def per_shape_ledger(records: list, workloads: list, iter_no: int, *, improve: bool,
+                     gate_window: str = GATE_WINDOW_DEFAULT) -> "tuple[dict, dict]":
+    """(per_shape_ratios, per_shape_best) for the row about to be appended.
+
+    ``workloads`` is the eval's per-workload blocks (IterationRecord.workloads
+    schema). The ratios are this row's own objective readings; the best snapshot
+    inherits the newest row that carries one, and — only when ``improve`` (a KEEP)
+    — moves a workload's entry whose gate-window reading beats the incumbent.
+    ([] workloads -> ({}, {}) : the single-input shape is the top-level fields.)
+    """
+    if not workloads:
+        return {}, {}
+    ratios = {}
+    for w in workloads:
+        name, r = str(w.get("name", "?")), _wl_ratio(w)
+        if r is not None:
+            ratios[name] = r
+    prev: dict = {}
+    for r in reversed(records):
+        if r.per_shape_best:
+            prev = dict(r.per_shape_best)
+            break
+    best = prev
+    if improve:
+        best = {k: dict(v) for k, v in prev.items()}
+        for w in workloads:
+            ms = _wl_gate_ms(w, gate_window)
+            if ms is None:
+                continue
+            name = str(w.get("name", "?"))
+            cur = best.get(name)
+            if cur is None or not isinstance(cur.get("ms"), (int, float)) or ms < cur["ms"]:
+                best[name] = {"ms": ms, "iter": int(iter_no)}
+    return ratios, best
+
+
+def per_shape_best_readings(records: list,
+                            gate_window: str = GATE_WINDOW_DEFAULT) -> dict:
+    """{workload: {"ms", "iter"}} — each workload's historical best, recomputed
+    from the KEEP rows' own workload blocks (the read-side definition; a run of
+    pre-WP14 rows is accounted too, from the same blocks the digest already read).
+    Workloads whose readings are missing from every KEEP row are absent."""
+    out: dict = {}
+    for r in records:
+        if r.verdict != "KEEP":
+            continue
+        for w in r.workloads or ():
+            ms = _wl_gate_ms(w, gate_window)
+            if ms is None:
+                continue
+            name = str(w.get("name", "?"))
+            cur = out.get(name)
+            if cur is None or ms < cur["ms"]:
+                out[name] = {"ms": ms, "iter": int(r.iter)}
+    return out
 
 
 def load_records(path: str | Path) -> list[IterationRecord]:
@@ -423,7 +526,7 @@ def build_digest(records: list[IterationRecord], target: dict,
             achieved["best_ci95"] = bse.get("ci95")
             achieved["best_standard_error"] = bse.get("se_log")
             achieved["best_low_confidence"] = bool(bse.get("best_low_confidence"))
-    return {
+    out = {
         # TOP of the digest: the SOL roofline header (WP2 telemetry) — the diagnosis's
         # first reading. Which side of the machine saturates first (compute vs memory
         # SOL), is the grid tail-bound (waves < 1), does a working set that should sit
@@ -437,6 +540,11 @@ def build_digest(records: list[IterationRecord], target: dict,
         "clock": clock_header(records),
         "target": target,
         "achieved": achieved,
+        # WP14 per-shape ledger: each workload's historical best (gate window), the
+        # account a geomean cannot show. {} until some KEEP row carried per-workload
+        # readings (a single-input bench stays {} — the top-level fields are that
+        # one shape's history).
+        "per_shape_best": per_shape_best_readings(records, gate_window),
         "curve": [{"iter": r.iter, "bwd_median_ms": r.bwd_median_ms,
                    **({"device_median_ms": r.device_median_ms}
                       if r.device_median_ms is not None else {}),
@@ -456,3 +564,4 @@ def build_digest(records: list[IterationRecord], target: dict,
         # red flags derived from the trajectory shape itself; empty list when clean
         "flags": [f for f in (constant_output_flag(records),) if f],
     }
+    return out

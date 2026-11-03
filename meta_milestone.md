@@ -676,6 +676,28 @@ a ruling value outside the vocabulary (values are exact lowercase words: `mbarri
 `named-barrier` / `prefetched` / `serial` / `ping-pong` / `convoy` / `none`; case is normalized, and
 an out-of-vocabulary spelling is reported separately as an "unknown value" rather than misreported as
 "no ruling").
+
+**Shape-regime decision lines (WP14 vocabulary)**: a §3 decision line — an M0 topology contract line
+included — may carry one of two shape-keyed declarations, both machine-checked by the driver
+(`src/forgekernel/milestone.py`, new names only; a milestone carrying neither validates exactly as before):
+- `regime: <axis-predicate>` — a **per-regime decision**: the predicate is a **pure function of the
+  problem's shape axes**, spelled as conjunctions of `<axis> (<|<=|==|>=|>|!=) <number>` (e.g.
+  `regime: m >= 1024`) — nothing else parses, by design (no data content, no timing reading, no
+  runtime state can become a dispatch judge). A family of regime predicates must be **mutually
+  exclusive and cover every workload of the card**; the driver holds the family against the card's
+  actual workloads (`regime_coverage`), and **a coverage failure invalidates the freeze** — bounced
+  at authoring like any §9 violation. The evidence face is per-regime too: one scoped NCU pricing
+  job per regime (cap `[loop] regime_ncu_max`, meta steps only), and the per-workload pricing
+  columns are read per regime, not as one average.
+- `per_shape: <lever>[<workload>]=<value range>, ...` — **shape-keyed lever value ranges** on one
+  decision (e.g. `per_shape: raster[prefill]={row,col}, raster[decode]=row`; the bracket key names a
+  workload, or a regime-style axis predicate over them). The pricing table's `shape_split` class is
+  this line's measured basis — its candidate spelling is a size dispatch declared here, with the
+  driver's **per-shape ledger** (each workload's historical best) readable beside the table.
+  **The landing form is always the student's own runtime shape-dispatch code in the same kernel
+  file**, delivered as an ordinary decision and judged by the same full eval gate (per-workload
+  correctness and readings are the gate's own currency on a group card) — no per-shape side gate
+  exists, and the driver never writes the dispatch for the student (L0 unchanged).
 Rulings are a **per-decision duty**: every decision involving a cross-role handoff / indirect feed /
 multi-consumer phase carries its own tag, and a tag's transcription duty is checked only **inside
 its own decision block** — another decision's prose does not do its homework for it.

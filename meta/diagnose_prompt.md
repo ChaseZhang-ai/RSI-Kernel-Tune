@@ -252,7 +252,7 @@ confidence:        high | medium | low + a one-sentence reason
   + the smallest + the largest in the group, plus the middle one of the group when the representative sits at an end) with one job each (each number is the geometric mean of the
   workloads that got priced; how many there actually are and which are missing is written above the table; per-workload readings are below the table):
   a `shape_split` item makes one workload faster beyond noise on add-one and another slower beyond noise (add-one only; inconsistency on remove-one does not count) — it is **not** null; its price varies with size,
-  so propose it as size-based dispatch (enabled only on the shape range where it is faster), and say on which workloads it holds when citing it; when some workload's
+  so declare it as a size dispatch on the decision line (`per_shape: <lever>[<workload>]=<value range>` — the driver renders the **Per-shape ledger** beside this table, each workload's historical best, so the split's two sides are readable against their own accounts) and say on which workloads it holds when citing it; when some workload's
   reading is opposite to the merged reading, the diagnosis must say whom it belongs to. Every price cited in the diagnosis must be a measured
   value from the table (add for independent items, −remove for companion items), pointed to with `priced_by=<lever name in the table>`; quantities outside the table may only be marked
   `est:<x>%` and must not be cited as measured. Levers priced in an earlier step (the
@@ -265,6 +265,7 @@ confidence:        high | medium | low + a one-sentence reason
   `old`/`new` pairs** (a reworded edit re-prices as a different lever). The driver does not apply the edits itself;
   the student delivers the rung as an ordinary bundle decision and the standard eval gate judges it — and once it
   lands and takes the best, the usual re-price mechanism re-verifies the combination on the new tree automatically.
+- **Shape regimes** (when the driver injects **Regime labels** / **Per-regime NCU evidence** / **Per-shape ledger**): the milestone's decisions may carry `regime: <axis-predicate>` lines — pure functions of the problem's shape axes (`m >= 1024`), machine-checked for mutual exclusion and coverage of every workload (a coverage failure invalidates the freeze). A decision that governs ONE regime names that regime on its own line, and the per-workload readings (pricing table columns, per-shape ledger, scoped NCU pricing jobs) are then read per regime, not as one average: a lever that pays on `m >= 1024` but not below is a `per_shape:` candidate, and a topology contract that must differ by regime is an M0-level `regime:` decision. The predicates may only read shape axes — no data content, no timing readings; the dispatch code itself is always the student's own implementation, judged by the full eval gate like any delivery.
 - **Role alignment** (when the `Role exposure ledger` is present): `deficient_locus` must fall on a decision governed by the role with the largest Δexposed
   (supply / exchange face / per-tile scheduling), or `evidence` must explain why that role's exposure cannot be moved.
   Tensor_active differing by < 2pp between the two sides while some role's Δexposed is still large ⇒ exposure moved between roles rather than differing in total; check that

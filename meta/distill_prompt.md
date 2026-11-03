@@ -153,6 +153,11 @@ to qualify for M0.
   lever-tuning decision in M1+** (five-tuple: which lever, the candidate value range, the trigger condition, the trade-off criterion) — the executor of "tunable"
   is still the decision graph, not the student's improvised parameter sweep. Of swizzle, only the half "pick a pattern within the instruction family's legal layout family
   once the contract has pinned the access atom" is a lever; the path itself belongs to the topology contract (see the next item).
+- **A topology that must differ by shape regime is an M0 contract per regime** (group cards): the decision line carries `regime: <axis-predicate>` (a pure function of
+  the problem's shape axes, e.g. `regime: m >= 1024`), and the contract lines under it govern that regime only. The family of regime predicates must be mutually
+  exclusive and cover every workload of the card — the driver machine-checks this, and a coverage failure invalidates the freeze and bounces the authoring. The
+  landing is still the student's own runtime shape-dispatch code, judged by the full eval gate; a lever whose value splits by workload is declared on its decision
+  line instead (`per_shape: <lever>[<workload>]=<value range>`).
 - **Intermediate consumption-path ledger (a required part of the contract, POLICY §3)**: for every intermediate tensor "produced by an MMA and consumed by an MMA as
   an operand", one row per consumer: the accumulator's actual orientation (as given by the M/N ownership actually computed,
   **not the orientation of the math notation** — a transpose symbol in the formula may cancel against the orientation the registers carry) / the A-operand
@@ -265,6 +270,8 @@ Put the **top-2 candidates** to the hardware before the freeze:
   never delivered to the student).
 - Then write the machine lines into the milestone, directly under the `# ` title: `ARCH_CANDIDATES: dual`, plus one
   `ARCH_PROBE_REQUEST: notes/arch_<n>.json` line per candidate (**exactly two**; the first is your preferred reading).
+  A candidate written for ONE shape regime may say so on the line (`ARCH_CANDIDATES: dual regime=m >= 1024`) — the
+  driver records the annotation in its head note, so a freeze composed per regime names which candidate belongs to which regime.
 - When every key-topology axis is settled by evidence, write `ARCH_CANDIDATES: single` and list no recipes — no probe
   runs, and the freeze proceeds on your reading.
 

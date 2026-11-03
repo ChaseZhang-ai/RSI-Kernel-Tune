@@ -170,6 +170,14 @@ class IterationRecord:
     ncu_job_s: float | None = None
     teacher_s: float | None = None
     queue_wait_s: float | None = None
+    # WP10 MC-DELIVERY: the objective per-variant table of a multi-candidate
+    # delivery (the driver's prescreen: which student-written variant passed the
+    # correctness smoke, its latency readings, which one became the delivery and
+    # took the full gate). The driver generates it; like the WP1 fields above it
+    # is an objective measurement record of the student's own work, not a
+    # teacher-curated message. None = no multi-candidate delivery this row (or a
+    # row from before the field existed).
+    variant_timings: list | None = None
 
     def __post_init__(self):
         if self.verdict not in ("KEEP", "REVERT", "NEUTRAL"):

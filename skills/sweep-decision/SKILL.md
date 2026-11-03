@@ -32,3 +32,35 @@ precedents: one bench ≤ `SWEEP_BENCH_TIMEOUT` (900 s), the whole pass ≤
 
 Each `SWEEP_REQUEST` consumes one probe round of the iteration's
 `max_probe_rounds` budget (the verdict-probe budget class; no extra dimension).
+
+## Flags are sweepable parameters (WP10)
+
+A compile flag on the `// fk-cuda-cflags:` line is kernel source text, so a flag
+axis is a legitimate sweep recipe — the lever discipline is unchanged (exact-text
+edits, the whitelist holds; the card refuses anything outside it before a build).
+The canonical recipe — a kernel pinned at a register tier with spill stack
+(resusage `regs_per_thread` at ≥ 0.9× of an architecture tier, `STACK > 0`) —
+sweeps the tier, not the tile:
+
+```json
+{"kernel_file": "kernel.cu", "rounds": 3,
+ "criterion": "min same-job ratio above floor",
+ "variants": [
+   {"name": "regs128", "edits": [{"old": "// fk-cuda-cflags: -lineinfo",
+                                  "new": "// fk-cuda-cflags: -lineinfo --maxrregcount=128"}]},
+   {"name": "regs168", "edits": [{"old": "// fk-cuda-cflags: -lineinfo",
+                                  "new": "// fk-cuda-cflags: -lineinfo --maxrregcount=168"}]},
+   {"name": "regs224", "edits": [{"old": "// fk-cuda-cflags: -lineinfo",
+                                  "new": "// fk-cuda-cflags: -lineinfo --maxrregcount=224"}]},
+   {"name": "regs255", "edits": [{"old": "// fk-cuda-cflags: -lineinfo",
+                                  "new": "// fk-cuda-cflags: -lineinfo --maxrregcount=255"}]}]}
+```
+
+Reading: the tier that clears the spill (`STACK` back to 0 in the RES-USAGE
+reading) and beats base above the floor is the winner — occupancy paid for the
+pressure relief. A tier that clears the spill but reads flat means the spill was
+not the binding constraint (occupancy-bound: check `waves_per_sm` for the tier
+jump before re-sweeping). Whitelist members worth the same treatment: `--ftz`,
+`--fmad`, `--prec-div` / `--prec-sqrt`, `--extra-device-vectorization`;
+`--use_fast_math` may be swept too, but its numerics are arbitrated by the
+precision gate.

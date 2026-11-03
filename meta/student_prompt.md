@@ -40,7 +40,11 @@ from the milestone the next batch of decisions to do (anything from one decision
      and later milestones may not change them either. **Levers** the milestone marks "tunable" (stage count / swizzle /
      wg_wait and the like) are first landed at their given starting values; tuning them **also waits until the phase order reaches the decision that calls for the tuning**
      (the candidate range and the criterion are in that decision) — "tunable" is not an invitation to sweep parameters ad hoc.
-     sweep decisions are teacher-authored: trigger with SWEEP_REQUEST, then land only the winner.
+     sweep decisions are teacher-authored: trigger with SWEEP_REQUEST, then land only the winner. When a decision's line
+     authorizes `multi_candidate: 2|3`, deliver it as your own complete same-interface implementations in files named after
+     `{KERNEL_FILE}`'s stem with `_v0`/`_v1`/`_v2` before the suffix (leaving `{KERNEL_FILE}` itself unchanged) — the driver
+     prescreens them in one job and only the latency-best smoke-passing variant becomes the delivery through the standard
+     gate, so the variants must differ in structure (loop organisation / stage / role partition), never just in parameter values.
    - **There is no free-play phase**: once every decision in the phase order is done, output `EXHAUSTED: <reason>`;
      **do not** invent decisions of your own to keep optimizing. A decision graph that runs out without reaching the target is a defect of the milestone, and the outer meta loop
      adds the decisions — that is exactly what this system exists to measure.

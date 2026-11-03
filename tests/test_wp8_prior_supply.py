@@ -379,11 +379,13 @@ def test_next_generation_writes_the_carry_four(tmp_path, monkeypatch):
     se.next_generation(task, BEST, dest, 1.05, run=run)
     carry = dest / "carry"
     names = {p.name for p in carry.iterdir()}
-    # the four records (plus the one-page README that labels them)
+    # the four records (plus the one-page README that labels them). WP19 (task 7)
+    # grows the carry to seven artifacts: probes/ and tools.md always (best
+    # effort), ref_census.md only when the caller threads the confirmed best.
     assert {"milestone.md", "levers.json", "arch_probe.md", "falsified.md",
             "README.md"} <= names
     assert names <= {"milestone.md", "levers.json", "arch_probe.md", "falsified.md",
-                     "README.md"}
+                     "README.md", "probes", "tools.md", "ref_census.md"}
     ms = (carry / "milestone.md").read_text(encoding="utf-8")
     assert "D0.1 tile 128x256" in ms                     # the parent's decisions travel
     ap = (carry / "arch_probe.md").read_text(encoding="utf-8")

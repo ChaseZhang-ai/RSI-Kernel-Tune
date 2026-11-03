@@ -790,6 +790,16 @@ class LoopContext:
     # iteration record, stamped onto that record as teacher_s.
     wp11_teacher_pending_s: float = 0.0
     wp11_teacher_measured: bool = False
+    # WP19 (task 8, 乙B9): the run-level buckets the per-iteration fields never
+    # covered — the recon/distill teacher turns (outside the iteration
+    # structure) and the pricing/timeline/confirm job spans. Stdout-only: the
+    # run-end composition table prints them; no record field, no gate input.
+    wp11_teacher_recon_s: float = 0.0
+    wp11_teacher_distill_s: float = 0.0
+    wp11_teacher_lever_s: float = 0.0
+    wp11_job_pricing_s: float = 0.0
+    wp11_job_timeline_s: float = 0.0
+    wp11_job_confirm_s: float = 0.0
     # --- WP10 ----------------------------------------------------------------
     # ARCHITECTURE ESCAPE TRIGGER. How many consecutive parameter-level attempts
     # (inner deliveries / sweep winners / additive meta patches, each read against
@@ -2548,16 +2558,36 @@ def _wp11_wallclock_fields(ctx: LoopContext, *, agent_s: float, eval_s: float | 
     }
 
 
-def _wp11_teacher_timed(ctx: LoopContext, fn, *args, **kwargs):
+def _wp11_teacher_timed(ctx: LoopContext, fn, *args, bucket: str | None = None, **kwargs):
     """Run one teacher agent turn, charging its wall clock to the next appended
     iteration record (WP11 task 4). Only the inner loop's teacher turns (diagnose,
-    patch) are charged: distill / recon run outside the iteration structure."""
+    patch) are charged: distill / recon run outside the iteration structure.
+
+    WP19 (task 8, 乙B9): ``bucket`` names a run-level accumulator instead
+    (wp11_teacher_recon_s / wp11_teacher_distill_s) — those turns sit outside
+    any iteration record, so their wall clock prints in the run-end
+    composition table and touches no record field."""
     t0 = ctx.now()
+    if bucket is not None:
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            setattr(ctx, bucket, getattr(ctx, bucket, 0.0) + (ctx.now() - t0))
     try:
         return fn(*args, **kwargs)
     finally:
         ctx.wp11_teacher_pending_s += ctx.now() - t0
         ctx.wp11_teacher_measured = True
+
+
+def _wp11_job_timed(ctx: LoopContext, bucket: str, fn, *args, **kwargs):
+    """WP19 (task 8, 乙B9): one GPU job's submit+poll span into a run-level
+    bucket (pricing / timeline / confirm) — stdout-only telemetry."""
+    t0 = ctx.now()
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        setattr(ctx, bucket, getattr(ctx, bucket, 0.0) + (ctx.now() - t0))
 
 
 def _wp11_apply_cfg(ctx: LoopContext) -> None:
@@ -2646,6 +2676,32 @@ def _wp11_wallclock_summary(ctx: LoopContext) -> None:
          f"reads this; shares over the {overall:.1f}s of measured buckets):")
     for line in rows:
         _log(line)
+    # WP19 (task 8, 乙B9): the run-level buckets the per-iteration fields never
+    # covered (recon / distill / lever-design teacher turns; pricing / timeline /
+    # confirm job spans) + the constant-calibration suggestion they imply
+    extra = [("teacher_recon", ctx.wp11_teacher_recon_s),
+             ("teacher_distill", ctx.wp11_teacher_distill_s),
+             ("teacher_lever", ctx.wp11_teacher_lever_s),
+             ("job_pricing", ctx.wp11_job_pricing_s),
+             ("job_timeline", ctx.wp11_job_timeline_s),
+             ("job_confirm", ctx.wp11_job_confirm_s)]
+    measured = [(n, s) for n, s in extra if s > 0]
+    if measured:
+        _log("[wp19] run-level wall-clock buckets (stdout only — no record reads "
+             "these):")
+        for name, secs in measured:
+            _log(f"  {name:<16} {secs:>10.1f}s")
+        # the constants the telemetry can now calibrate (suggestions, never applied)
+        if ctx.wp11_job_confirm_s > 0:
+            per_confirm = ctx.wp11_job_confirm_s
+            _log(f"  calibration: one confirmation job ≈ {per_confirm:.1f}s — "
+                 f"confirm_budget_per_iter and meta_hours_per_round may want "
+                 f"re-deriving from this table (suggestion only; the flip belongs "
+                 f"to the integration step)" )
+    overall2 = overall + sum(s for _n, s in measured)
+    if measured and overall2 > 0:
+        _log(f"[wp19] measured wall clock including the run-level buckets: "
+             f"{overall2:.1f}s")
 
 
 def _note_env_failure(ctx: LoopContext, channel: str, why: str) -> None:
@@ -5286,14 +5342,14 @@ def _node_dirty_reason(fail: str | None, log: str) -> str | None:
     return None
 
 
-def _lever_price_job(be, branch: str, cmd: str, what: str,
+def _lever_price_job(ctx: LoopContext, be, branch: str, cmd: str, what: str,
                      rerun: bool = True) -> "tuple[str, str]":
     """One pricing job, settled: (log, job id). Re-bought once (``rerun``) when its GPU
     was dirty or its log still carries no verdict (a crashed tool is not re-bought). BackendError
     propagates."""
     attempts = 2 if rerun else 1
     for attempt in range(attempts):
-        log = be.submit_gpu(branch, cmd)
+        log = _wp11_job_timed(ctx, "wp11_job_pricing_s", be.submit_gpu, branch, cmd)
         log = _price_log_settled(be, log, what)
         _, _, fail = parse_lever_prices(log)
         last = attempt == attempts - 1
@@ -5327,7 +5383,7 @@ def _lever_price_submit(ctx: LoopContext, be, branch: str, cmd: str, what: str,
     first."""
     shapes = meta_shapes.card_meta_workloads(ctx.workspace)
     if not shapes:
-        return _lever_price_job(be, branch, cmd, what, rerun)
+        return _lever_price_job(ctx, be, branch, cmd, what, rerun)
 
     def price(wl):
         if wl != shapes[0] and ctx.now() > ctx.deadline_epoch - 1800:
@@ -5336,7 +5392,8 @@ def _lever_price_submit(ctx: LoopContext, be, branch: str, cmd: str, what: str,
             # the role pass on the representative alone: on the others its columns were
             # never read and took a third of each job
             roles = "" if wl == shapes[0] else " --no-roles"
-            log, job = _lever_price_job(be, branch, f"{cmd}{roles} --workload {wl}",
+            log, job = _lever_price_job(ctx, be, branch,
+                                        f"{cmd}{roles} --workload {wl}",
                                         f"{what} [{wl}]", rerun)
         except BackendError as e:
             return ("error", e)
@@ -5936,9 +5993,13 @@ def _run_lever_pricing(ctx: LoopContext, priced: "PricedTrees", bindings: dict,
                 spec_path.unlink()
             except OSError:
                 pass
-            out = _agent_turn(
+            # WP19 (task 8, 乙B9): the lever-design turn's wall clock lands in
+            # its run-end bucket (stdout only — no record field)
+            out = _wp11_teacher_timed(
+                ctx, _agent_turn,
                 be, render_prompt(_meta_prompt(ctx, prompt_file), bindings,
                                   extra=design_extra),
+                bucket="wp11_teacher_lever_s",
                 label="meta/lever-design", storm_budget=storm_budget,
                 # a legal design turn either wrote the lever file or declined
                 left_a_trace=lambda o: (spec_path.is_file()
@@ -8213,8 +8274,9 @@ def _run_timeline(ctx: LoopContext, ref: str | None, label: str, *,
     log = None
     for rerun in range(2):
         try:
-            log = be.submit_gpu(branch, _timeline_cmd(ctx)
-                                + (f" --workload {workload}" if workload else ""))
+            log = _wp11_job_timed(
+                ctx, "wp11_job_timeline_s", be.submit_gpu, branch,
+                _timeline_cmd(ctx) + (f" --workload {workload}" if workload else ""))
         except BackendError as e:
             _log(f"timeline[{label}]: job failed ({e})")
             return None
@@ -11664,8 +11726,11 @@ def run_recon_step(ctx: LoopContext) -> ReconResult:
     storm_budget = [TRUNCATION_STORM_BUDGET]
     prompt = _recon_prompt(ctx)
     for r in range(ctx.max_recon_rounds):
-        out = _agent_turn(
-            be, prompt, label="meta/recon", storm_budget=storm_budget,
+        out = _wp11_teacher_timed(
+            ctx, _agent_turn,
+            be, prompt,
+            bucket="wp11_teacher_recon_s",
+            label="meta/recon", storm_budget=storm_budget,
             left_a_trace=lambda o: (
                 isinstance(parse_student_turn_safe(o, allow_recon=True), ReconRequest)
                 or _recon_artifacts_written(ctx, since=session_start)))
@@ -14178,7 +14243,7 @@ def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
                 # price the workspace HEAD — worse than best is still measured truth.
                 be.push_branch(branch)
                 ref = be.head()
-            log = be.submit_gpu(branch, cmd)
+            log = _wp11_job_timed(ctx, "wp11_job_pricing_s", be.submit_gpu, branch, cmd)
         except BackendError as e:
             _log(f"meta/stall-price[{label}]: pricing job failed ({e}) — "
                  "diagnosing without a ledger")
@@ -14327,7 +14392,7 @@ def _require_recon_artifacts(ctx: LoopContext, be, sass_ok: bool = True,
             # waive) is unfindable without this.
             gaps.extend(_near_miss_notes(lacking, near_miss))
         _log(f"meta/recon: write-up incomplete ({'; '.join(gaps)[:120]}) — write-up turn")
-        _agent_turn(be, _recon_prompt(ctx, extra=(
+        _wp11_teacher_timed(ctx, _agent_turn, be, _recon_prompt(ctx, extra=(
             f"\n\n## Recon rounds are over — now only write the deliverables\n\n"
             f"The GPU budget is used up; **you can no longer send RECON_REQUEST** (one sent "
             f"will not be executed).\n"
@@ -14337,6 +14402,7 @@ def _require_recon_artifacts(ctx: LoopContext, be, sass_ok: bool = True,
             f"was measured, and mark what was not honestly as \"not measured\"; an honest "
             f"hole is more useful than a fabricated whole.")),
             label="meta/recon-writeup", storm_budget=writeup_storm,
+            bucket="wp11_teacher_recon_s",
             left_a_trace=lambda o: _recon_artifacts_written(ctx, since=since))
     if not (_recon_artifacts_written(ctx, since=since)
             and _sass_evidence(ctx, sass_ok, near_miss)):
@@ -14960,9 +15026,11 @@ def run_distill_step(ctx: LoopContext) -> "MetaResult":
                       "the §9 skeleton; you must fix it and write it again)\n"
                       + "\n".join(f"- {v}" for v in violations) + "\n")
         pre = _read_or_none(ctx.milestone)
-        out = _agent_turn(
+        out = _wp11_teacher_timed(
+            ctx, _agent_turn,
             be, _apply_prior_input(
                 render_prompt(_distill_prompt_path(ctx), bindings, extra), ctx),
+            bucket="wp11_teacher_distill_s",
             label="meta/distill", storm_budget=storm_budget,
             # the only legal trace of a distill turn is the milestone changing on
             # disk — a tiny output that left the draft byte-identical is a
@@ -15511,6 +15579,10 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
         # --- WP9 ---: [loop] floor_stop (opt-in, default off) — the weak-ref/absent-ref
         # companion of the target stop (see _floor_stop_check).
         if (floor_stop := _floor_stop_check(ctx, best_before, meta_steps)) is not None:
+            # WP19 (task 8, 乙N-B15): the floor_stop exit prints the same
+            # composition table every other exit prints — the run's wall-clock
+            #构成 must be readable at whichever door it left through
+            _wp11_wallclock_summary(ctx)
             return floor_stop
         # Before spending the meta budget on a gap-driven diagnosis, make sure the
         # gap exists: stall pricing, the verdict probes and the prescription all
@@ -15815,7 +15887,7 @@ def run_best_confirmation(ctx: LoopContext, jobs: int = 3, max_extra: int = 2,
     while len(samples) < jobs and attempts < jobs + max_extra:
         attempts += 1
         try:
-            log = be.submit_gpu(branch, "all")
+            log = _wp11_job_timed(ctx, "wp11_job_confirm_s", be.submit_gpu, branch, "all")
         except BackendError as e:
             consecutive_errors += 1
             _log(f"confirm: job failed ({e})")

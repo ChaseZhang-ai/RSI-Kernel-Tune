@@ -1640,3 +1640,92 @@ def test_t7_self_evolve_writes_seven_artifacts(tmp_path, monkeypatch):
     # (its heading included — what the ref-side saver banks verbatim)
     assert "PM TIMELINE BODY" in parsed["sections"]["pm_timeline"]
     assert "=== PM-PHASE TIMELINE ===" in parsed["sections"]["pm_timeline"]
+
+
+# --- task 8: the small items bundle ---------------------------------------------
+
+def test_t8_floor_stop_exit_prints_the_composition(tmp_path, capsys, monkeypatch):
+    # 乙N-B15: the floor_stop door prints the same wall-clock table as the others
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    from forgekernel.inner.trajectory import IterationRecord as IR, append_record as _ar
+    _ar(ctx.status_path, IR(iter=1, decision_id="D1", change="c", correctness=True,
+                            verdict="KEEP", metric_before=2.0, bwd_median_ms=1.9,
+                            device_median_ms=1.9, eval_job_s=100.0))
+    monkeypatch.setattr(driver, "run_inner_loop", lambda *a, **kw: "plateau")
+    monkeypatch.setattr(driver, "_floor_stop_check", lambda c, b, m: {"stop": "floor"})
+    res = driver.run_two_layer(ctx)
+    out = capsys.readouterr().out
+    assert res["stop"] == "floor"
+    assert "wall-clock composition" in out          # the table at the floor door
+
+
+def test_t8_run_level_buckets_print_and_calibrate(tmp_path, capsys):
+    # 乙B9: the recon/distill/lever + pricing/timeline/confirm buckets print;
+    # the calibration suggestion is output, never applied
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    from forgekernel.inner.trajectory import IterationRecord as IR, append_record as _ar
+    _ar(ctx.status_path, IR(iter=1, decision_id="D1", change="c", correctness=True,
+                            verdict="KEEP", metric_before=2.0, bwd_median_ms=1.9,
+                            device_median_ms=1.9, eval_job_s=10.0))
+    ctx.wp11_job_confirm_s = 42.5
+    ctx.wp11_teacher_recon_s = 120.0
+    driver._wp11_wallclock_summary(ctx)
+    out = capsys.readouterr().out
+    assert "[wp19] run-level wall-clock buckets" in out
+    assert "teacher_recon" in out and "120.0s" in out
+    assert "job_confirm" in out and "42.5s" in out
+    assert "calibration:" in out and "suggestion only" in out
+    # the suggestion is stdout only: no config value was touched by the summary
+    assert "meta_hours_per_round = " not in out
+
+
+def test_t8_teacher_bucket_lands_outside_records(tmp_path):
+    # the recon turn's wall clock goes to the run-level bucket, NOT into any
+    # iteration record (distill/recon run outside the iteration structure)
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    seen = []
+    driver._wp11_teacher_timed(ctx, lambda: seen.append(1), bucket="wp11_teacher_recon_s")
+    assert seen == [1] and ctx.wp11_teacher_recon_s >= 0.0
+    fields = driver._wp11_wallclock_fields(ctx, agent_s=0.0, eval_s=0.0, ncu_s=None,
+                                           queue_s=None)
+    assert fields["teacher_s"] is None              # the iteration bucket untouched
+
+
+def test_t8_prewarm_runs_without_the_build_cache(tmp_path):
+    # 丙T6: the prewarm is decoupled — it runs with FK_BUILD_CACHE unset
+    import subprocess
+    tree = tmp_path / "tree"
+    (tree / "eval" / "problem").mkdir(parents=True)
+    (tree / "eval" / "problem" / "problem.json").write_text(
+        '{"kernel_file": "kernel.py"}', encoding="utf-8")
+    (tree / "kernel.py").write_text("WARMED = True\n", encoding="utf-8")
+    script = _cache_functions_script(tree)
+    # the prewarm imports the kernel module: give it an importable marker
+    harness = r"""
+set -uo pipefail
+harness_script="$1"; workdir="$2"
+source "$harness_script"
+cd "$workdir"
+unset FK_BUILD_CACHE 2>/dev/null || true
+out="$(fk_build_cache_prewarm)"; rc=$?
+echo "RC=$rc OUT=[$out]"
+"""
+    h = tmp_path / "prewarm.sh"
+    h.write_text(harness, encoding="utf-8")
+    r = subprocess.run(["bash", str(h), str(script), str(tree)],
+                       capture_output=True, text=True, env=_bash_env(), cwd=tree,
+                       timeout=60)
+    assert r.returncode == 0, r.stderr
+    assert "RC=0" in r.stdout                       # the prewarm ran clean
+    assert "prewarm failed" not in r.stdout         # and did not fall through
+
+
+def test_t8_ssh_lzma_preset_is_3():
+    # 乙B10: the ssh delivery compresses at preset 3 (transparent to the host)
+    import inspect
+    src = inspect.getsource(direct)
+    assert "lzma.compress(payload, preset=3)" in src
+    assert "preset=6" not in src

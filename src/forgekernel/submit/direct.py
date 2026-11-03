@@ -481,7 +481,11 @@ class DirectRunner:
                  tree_sha: str | None = None) -> str:
         # WP11 (task 3): the ssh delivery keeps the FULL archive — the input
         # store is a same-machine cache; cross-machine sync is not this package.
-        packed = lzma.compress(payload, preset=6)
+        # WP19 (task 8, 乙B10): preset 6 -> 3 — the slowest lzma tier bought
+        # nothing on tar archives (already-compressed tensors dominate), and the
+        # compression CPU was per-job minutes on GB-scale inputs. Transparent
+        # to the host: it still extracts `tar xJ`.
+        packed = lzma.compress(payload, preset=3)
         env = _job_env(self.cfg, tree_sha)
         secrets = "".join(f"{env[k]}\n" for k in sorted(env) if is_secret_env(k)) or None
         failures: list[str] = []

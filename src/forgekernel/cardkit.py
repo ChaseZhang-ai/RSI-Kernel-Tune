@@ -629,12 +629,17 @@ fk_build_cache_prewarm() {
     # file cache (a user-level managed location outside this workspace) is warm
     # before the timed process. Best effort; a failure falls through — the task
     # imports the module itself either way.
-    [ "${FK_BUILD_CACHE:-0}" = "1" ] || return 0
-    [ -f problem.json ] || return 0
+    # WP19 (task 8, 丙T6): the prewarm is a correctness-neutral warm-up, not a
+    # build-cache feature — it runs whether or not FK_BUILD_CACHE is on (its
+    # old gate made the JIT warm-up a build-cache-only side effect).
+    [ -f eval/problem/problem.json ] || [ -f problem.json ] || return 0
     FK_EXIT_RC_PREWARM=0
     timeout 300 python3 - <<'FKPRE' || FK_EXIT_RC_PREWARM=1
 import importlib, json, pathlib
-kf = json.load(open("problem.json")).get("kernel_file", "kernel.py")
+import os
+prob_path = ("eval/problem/problem.json" if os.path.isfile("eval/problem/problem.json")
+             else "problem.json")
+kf = json.load(open(prob_path)).get("kernel_file", "kernel.py")
 if not kf.endswith(".cu") and pathlib.Path(kf).is_file():
     importlib.import_module(pathlib.Path(kf).stem)
 FKPRE

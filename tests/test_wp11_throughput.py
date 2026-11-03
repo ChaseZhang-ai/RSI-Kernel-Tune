@@ -179,6 +179,13 @@ def test_wallclock_summary_prints_the_composition_table(tmp_path, capsys):
     class Ctx:
         workspace = tmp_path
         status_path = status
+        # the WP19 run-level buckets (their absence must not break the table)
+        wp11_teacher_recon_s = 0.0
+        wp11_teacher_distill_s = 0.0
+        wp11_teacher_lever_s = 0.0
+        wp11_job_pricing_s = 0.0
+        wp11_job_timeline_s = 0.0
+        wp11_job_confirm_s = 0.0
     driver._wp11_wallclock_summary(Ctx())
     out = capsys.readouterr().out
     assert "wall-clock composition" in out

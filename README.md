@@ -1,19 +1,28 @@
 # kernel-ZXtune
 
-kernel-ZXtune 是基于 [ForgeKernel](https://github.com/OpenBMB/ForgeKernel) 的 GPU 算子优化增强版：在上游自进化 kernel 代理框架之上，集成了十一条并行工作线（WP1–WP6 一代、WP8–WP12 二代）的改进——测量统计升级、每轮遥测扩容、知识复利、搜索机制升级、预算与停止治理、M0 冻结前实测与 R2 结构通道，以及二代的先验供给、测量锚定、结构搜索深化、过程提速与知识注入。
+**纯粹的 AI 优化算子框架**：给定一个算子（描述 + 参考实现 + 判据容差 + 输入），系统以五层机制迭代产出更快的 kernel——
+
+1. **教师-学生决策图蒸馏**：教师从参考实现的黑盒行为（运行、计时、剖析）蒸馏出架构决策图（milestone），学生逐行实现；
+2. **诚实测量**：配对窗口计时（`measure_paired` 镜像顺序）、精度门（默认 STRICT）、新鲜输入复检（fresh_recheck）、可声明并验证的测量时钟（task.toml `[protocol]`）、锁频拒绝安全（锁不住即拒绝计时，机器故障不计入判罚）；
+3. **认证知识复利**：跨 run 的知识库（KB）供给与生命周期管理、证伪杠杆台账、确定性 KB-MENU 注入；
+4. **定价搜索治理**：杠杆定价、预算与停止治理、结构天花板通道（解析地板、结构逃逸）；
+5. **结构天花板通道**：NCU 证据驱动的瓶颈定位与硬件极限对齐。
+
+任务供给 = 用户自供（`tasks/<op>/` 普通任务：教师判题 + 自供 inputs）；`forge init --from-kernels <op>` 可从 `kernels/` 已发布算子的冻结合同脚手架任务，并以既有 sealref 机制把已发布 kernel 密封为黑盒参考——框架自带的任务语料，自进化有题可做，超越已发布 kernel 即真超车。
+
+**与一切外部榜单/评测组织零关联**：评测路径零网络外发（agent CLI 的 LLM 后端与教师调研通道保留，均与榜单无关）。2026-11-03 用户裁决（WP24）：原上游继承的榜单面向机器（双榜单 suite 供给线、board API 拉取、board 评测模板、榜单钉死时钟、榜单 docs）已一次性切除，详见 `CHANGES-WP24.md`。
 
 ## 上游致谢与合规
 
 - 本仓库基于上游 [ForgeKernel](https://github.com/OpenBMB/ForgeKernel)（fork 自 `https://github.com/OpenBMB/ForgeKernel.git`，基线 commit `5030503`）修改而成。
-- 上游代码以 **Apache License 2.0** 授权；本仓库遵循同一许可，[LICENSE](LICENSE) 与 [NOTICE](NOTICE) 原样保留。
-- 上游的 README 见 [docs/upstream-readme.md](docs/upstream-readme.md)（英文）与 [docs/upstream-readme_zh.md](docs/upstream-readme_zh.md)（中文）。
+- 上游代码以 **Apache License 2.0** 授权；本仓库遵循同一许可，[LICENSE](LICENSE) 保留，[NOTICE](NOTICE) 为 WP24 缩减版（逐文件自查记录见 `CHANGES-WP24.md`）。
 
 ## 本仓库的改进（WP1–WP6 一代 / WP8–WP12 二代）
 
 | 包 | 改进摘要 |
 |---|---|
-| WP1 测量统计升级 | 判定分辨率从 1.5% 常数改为本次运行自测的 `resolvable_diff`（可配 `resolvable_floor/cap`）；迭代记录保留原始读数与 spread；疑似赢家确认带与 clock 漂移旗标；eval JSON 顶层 `gpu_state` 遥测；board 协议计时窗口 |
-| WP2 遥测扩容 | NCU 指标 17→25 项（SOL/L2 命中/尾波/合并度）；build 资源遥测 `resusage`（寄存器/共享内存）；digest 顶部 SOL roofline 头行与诊断读数顺序 |
+| WP1 测量统计升级 | 判定分辨率从 1.5% 常数改为本次运行自测的 `resolvable_diff`（可配 `resolvable_floor/cap`）；迭代记录保留原始读数与 spread；疑似赢家确认带与 clock 漂移旗标；eval JSON 顶层 `gpu_state` 遥测（其 board 协议副读数窗已随 WP24 切除） |
+| WP2 遥测扩容 | NCU 指标 17→25 项（SOL/L2 命中/尾波/合并度）；build 资源遥测 `resusage`（寄存器/共享内存）；digest 顶部 roofline 头行与诊断读数顺序 |
 | WP3 知识复利 | 跨 run 的证伪杠杆台账（`hw_kb/falsified_ledger.jsonl`）作为设计/定价先验；probe 归档；KB 待认证队列（`hw_kb/CANDIDATES.md`） |
 | WP4 搜索机制升级 | `LANDABLE` 组合一次落地；`SWEEP_REQUEST` 教师参数扫描（学生 sweep 禁令不变）；慢决策记账与 `REMOVE_CANDIDATES` 诊断小节 |
 | WP5 预算与停止治理 | 格式失误不计 meta 预算（`meta_format_retry`）；meta 预算与剩余墙钟联动（`meta_hours_per_round`）；headroom 扩展与 BLOCKED 解封（`meta_ext_*` / `reopen_blocked_uncap`）；`ncu_on_revert` 开关 |
@@ -28,16 +37,21 @@ kernel-ZXtune 是基于 [ForgeKernel](https://github.com/OpenBMB/ForgeKernel) �
 
 ## 快速开始
 
-上游的完整文档（安装、任务卡片、运行循环、leaderboard）在移动后的上游 README 中：
-
-- 英文：[docs/upstream-readme.md](docs/upstream-readme.md)
-- 中文：[docs/upstream-readme_zh.md](docs/upstream-readme_zh.md)
-
-环境要求：
-
 - **Python ≥ 3.11**；
 - 测试无需安装即可运行：`python3 -m pytest tests/ -q`（`pyproject.toml` 已配 `pythonpath=["src"]`）；
-- GPU job（评测、NCU、ref 采集）需按上游 docs 的说明配置提交后端与算子任务卡（见 `docs/design/` 与上游 README 的 Quick Start 一节）。
+- 一个任务的最小闭环：
+
+```
+forge init myop                     # tasks/myop/ 脚手架：填 description.md / shapes.json / reference/
+forge new tasks/myop --dry-run      # 计划预览（判题、校准、loop 配置）
+forge new tasks/myop                # 建运行目录
+forge run .artifacts/myop_<id>      # 判题 -> 生成卡片 -> 校准 -> 蒸馏 -> 学生迭代 -> 报告
+forge export .artifacts/myop_<id>   # 导出确认的最优 kernel
+```
+
+- `forge init myop --from-kernels --axes '{"seqs": 64}'`：从 `kernels/` 已发布算子的冻结合同脚手架任务（已发布 kernel 经 sealref 密封为黑盒参考）；
+- GPU job（评测、NCU、参考采集）按 `docs/design/` 与 `submit.toml`（`local.env`）配置提交后端；
+- 测量时钟可声明（`task.toml [protocol]`）：声明的锁由 gpu_entry 验证，锁不住即拒绝计时。
 
 ## 仓库名与包名
 
@@ -47,7 +61,7 @@ kernel-ZXtune 是基于 [ForgeKernel](https://github.com/OpenBMB/ForgeKernel) �
 
 | 路径 | 内容 |
 |---|---|
-| [docs/upstream-readme.md](docs/upstream-readme.md) / [docs/upstream-readme_zh.md](docs/upstream-readme_zh.md) | 上游 ForgeKernel README（原根 README 移动而来） |
 | [docs/wp-changes/](docs/wp-changes/) | WP1–WP6 六份交付文档（二代的 CHANGES-WP8…WP12.md 在仓库根） |
-| [docs/design/](docs/design/) | 上游设计文档（launch、milestone 蒸馏等） |
+| [docs/design/](docs/design/) | 设计文档（v1-launch 为历史存档：榜单章节已过时，见文首注记） |
 | [meta/](meta/) / [skills/](skills/) | 循环提示词与技能包 |
+| [kernels/](kernels/) | 26 条已发布 kernel（先验/教材资产；其 README 出处记录如实保留——诚实出处 ≠ 榜单关联） |

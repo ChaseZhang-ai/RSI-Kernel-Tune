@@ -1,5 +1,11 @@
 # ForgeKernel V1 launch design
 
+> **历史设计存档（WP24 注记，2026-11-03）**：本文是 V1 上游设计的历史记录。其中的榜单
+> （leaderboard）相关章节与链接已随 WP24 去榜单化过时——框架定位收敛为"纯粹的 AI 优化算子
+> 框架"，榜单面向机器（`forge init --leaderboard`、board 卡、SOL 分数、`leaderboard.py` →
+> `cardkit.py`/`benchkit.py` 更名）已删除或更名；正文按存档原样保留，不随代码更新。
+
+
 > This is the design record of V1's launch surface: what the user writes, what the harness generates,
 > where it runs, and how a run is resumed. §0–§12 are the design decisions, §13 the changes to the
 > code, and §14 records the trade-offs made in implementation and where the result departs from the

@@ -3,28 +3,29 @@ Copyright 2026 The ForgeKernel Authors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
-The leaderboard evaluator (src/forgekernel/card_template/eval/leaderboard.py) contains
-code adapted from the following projects, both licensed under the Apache License,
-Version 2.0. The adapted parts are the input generators and the reproduction of each
-suite's correctness and timing protocol; they were modified to run inside a ForgeKernel
-task.
-
---------------------------------------------------------------------------------
-FlashInfer-Bench
-https://github.com/flashinfer-ai/flashinfer-bench (commit 15618a6)
-Adapted from: flashinfer_bench/bench/utils.py, flashinfer_bench/bench/evaluators/default.py
-
-NOTICE file of FlashInfer-Bench:
-
-  FlashInfer-Bench
-
-  Copyright (c) 2025 by FlashInfer-Bench Contributors
+WP24 (2026-11-03) removed the leaderboard evaluator this NOTICE used to cover: the
+FlashInfer-Bench and SOL-ExecBench input generators, correctness protocols and timing
+protocols in the old eval/leaderboard.py template. What remains of adapted third-party
+code, file by file:
 
 --------------------------------------------------------------------------------
 SOL-ExecBench
 https://github.com/NVIDIA/SOL-ExecBench (commit a9fa080)
-Adapted from: src/sol_execbench/core/bench/io.py, src/sol_execbench/core/bench/correctness.py,
-src/sol_execbench/core/bench/timing.py, src/sol_execbench/driver/templates/eval_driver.py
+
+  src/forgekernel/card_template/eval/benchkit.py
+      the random-input draw and the input name heuristics (_rand_tensor,
+      _cast_to_fp4x2, _heuristic_tensor and the _is_* name predicates), adapted from
+      src/sol_execbench/core/bench/io.py; they serve the precision record's stress
+      draws and the recon tools' probe inputs on a normal task.
+  src/forgekernel/binref.py, src/forgekernel/binref_tool.py
+      the compiled-solution build conventions (compile_options semantics, top-level
+      C/C++/CUDA sources, the CUTLASS include path), following the solution format of
+      src/sol_execbench/core/data/solution.py and driver/templates/eval_driver.py.
+  src/forgekernel/loop/analytic_floor.py
+      the expression grammar of the shapes resolver, following
+      src/sol_execbench/core/data/shapes.py.
+
+  NOTICE file of SOL-ExecBench:
 
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0

@@ -30,6 +30,8 @@ SURFACE = ["src", "skills", "scripts", "tests"]
 # campaign measured. Attribution, not association (WP24 keeps kernels/ as-is).
 ALLOWED_HITS = {
     "scripts/floor_backtest.json",
+    # this file: it names the patterns it forbids
+    "tests/test_deboard_regression.py",
 }
 
 
@@ -43,7 +45,9 @@ def _git_grep(*patterns: str, paths: tuple = tuple(SURFACE)) -> list[str]:
 
 
 def test_zero_leaderboard_wording_on_the_code_surface():
-    assert _git_grep("leaderboard") == [], "leaderboard wording survived on the code surface"
+    hits = [h for h in _git_grep("leaderboard")
+            if Path(h).as_posix() not in ALLOWED_HITS]
+    assert hits == [], "leaderboard wording survived on the code surface"
 
 
 def test_zero_suite_board_symbols_on_the_code_surface():
@@ -53,10 +57,10 @@ def test_zero_suite_board_symbols_on_the_code_surface():
     assert hits == [], f"board symbols survived: {hits}"
 
 
-def test_the_only_allowed_hit_is_the_provenance_fixture():
+def test_the_only_outside_hits_are_the_documented_ones():
     hits = _git_grep("flashinfer-bench")
-    assert [h for h in hits if Path(h).as_posix() in ALLOWED_HITS] == \
-        ["scripts/floor_backtest.json"]
+    assert {h for h in hits} <= ALLOWED_HITS
+    assert "scripts/floor_backtest.json" in hits
 
 
 # --- cardkit import smoke ---------------------------------------------------------------

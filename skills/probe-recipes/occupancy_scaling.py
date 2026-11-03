@@ -22,9 +22,10 @@ bottleneck classes that the SOL header alone cannot:
     linear  t(s) ~ s (quarter grid = ~4x    -> throughput-bound (SMs are the
             slower)                            saturated resource; reducing
                                                grid costs proportionally)
-    stepped t(s) drops in waves (a jump     -> wave quantization (the tail
-            between adjacent scales)           wave dominates; tile height /
-                                               grid rounding is the lever)
+    stepped t(s) misses its linear share    -> wave quantization (the tail
+            between adjacent scales — the      wave dominates; tile height /
+            grid shrinks, the time does        grid rounding is the lever)
+            not follow)
 
 Adaptation (the only operator-specific spot): fill `launch(scale)` to launch
 the tree's kernel with its grid dimension(s) multiplied by `scale`. The
@@ -59,37 +60,51 @@ WORK_MIB = 64                 # streaming-kernel payload for the default launch
 # --- curve reading (pure; no torch, unit-tested) -------------------------------
 FLAT_BAND = 0.15              # |ratio - 1| within this at every sub-scale = flat
 LINEAR_BAND = 0.25            # |ratio - s| within this at every sub-scale = linear
-STEP_JUMP = 1.30              # adjacent-scale ratio jump beyond this = a wave step
+STEP_JUMP = 1.30              # smaller-scale time >= this x its linear share = a wave step
+MONOTONE_BAND = 0.15          # wave time never drops as the grid grows; a backward
+                              # step beyond this = not a wave curve (noise floor)
 
 
 def read_curve(points):
     """[(scale, median_ms), ...] ascending in scale -> (shape, verdict, detail).
 
-    Deterministic classification: all sub-scale ratios within FLAT_BAND of 1
-    -> flat; all within LINEAR_BAND of their scale -> linear; any adjacent
-    pair jumping more than STEP_JUMP (time drops when the grid crosses a wave
-    boundary) -> stepped; else mixed."""
+    Deterministic classification, in order: all sub-scale ratios within
+    FLAT_BAND of 1 -> flat; any adjacent pair (s0 < s1) whose smaller-scale
+    time is STEP_JUMP x (or more) its linear share — r0 >= STEP_JUMP * r1 *
+    (s0 / s1), i.e. shrinking the grid frees less than the proportional
+    share: a wave step — while time stays non-decreasing in s within
+    MONOTONE_BAND -> stepped; all ratios within LINEAR_BAND of their scale
+    -> linear; else mixed."""
     pts = sorted(points, key=lambda p: p[0])
     base = next((ms for s, ms in pts if abs(s - 1.0) < 1e-9), None)
     if base is None or base <= 0 or len(pts) < 2:
         return "mixed", "no base reading (s=1.0 missing or zero) — no shape", "n/a"
-    sub = [(s, ms / base) for s, ms in pts if abs(s - 1.0) >= 1e-9]
+    ratios = [(s, ms / base) for s, ms in pts]    # base kept in the step scan:
+                                                  # a wave step may sit between the
+                                                  # top sub-scale and s=1.0
+    sub = [(s, r) for s, r in ratios if abs(s - 1.0) >= 1e-9]
     if not sub:
         return "mixed", "no sub-scale points", "n/a"
     if all(abs(r - 1.0) <= FLAT_BAND for _, r in sub):
         return ("flat", "latency-bound: shrinking the grid does not slow the kernel "
-                "(SMs idle; the critical path is inside the block)", 
+                "(SMs idle; the critical path is inside the block)",
                 " ".join(f"s={s:g}:r={r:.3f}" for s, r in sub))
+    ordered = sorted(ratios)
+    adjacent = list(zip(ordered, ordered[1:]))
+    step = next(((s0, r0, s1, r1) for (s0, r0), (s1, r1) in adjacent
+                 if r0 >= STEP_JUMP * r1 * (s0 / s1)), None)
+    if (step is not None
+            and all(r0 - r1 <= MONOTONE_BAND for (_, r0), (_, r1) in adjacent)):
+        s0, r0, s1, r1 = step
+        return ("stepped", "wave quantization: a wave step sits between these "
+                "scales (shrinking the grid frees less than the linear share — "
+                "tail wave dominates; tile height / grid rounding is the lever)",
+                f"step between s={s0:g} and s={s1:g}: r={r0:.3f} vs linear "
+                f"{r1 * (s0 / s1):.3f}")
     if all(abs(r - s) <= LINEAR_BAND for s, r in sub):
         return ("linear", "throughput-bound: time scales with the grid (SMs are the "
                 "saturated resource; grid is not the lever to shrink)",
                 " ".join(f"s={s:g}:r={r:.3f}" for s, r in sub))
-    ordered = sorted(sub)
-    for (s0, r0), (s1, r1) in zip(ordered, ordered[1:]):
-        if r0 / max(r1, 1e-9) >= STEP_JUMP:
-            return ("stepped", "wave quantization: a wave boundary sits between these "
-                    "scales (tail wave dominates; tile height / grid rounding is the lever)",
-                    f"s={s0:g}:r={r0:.3f} -> s={s1:g}:r={r1:.3f}")
     return ("mixed", "no clean shape: re-read with the SOL header and the stall ledger "
             "before attributing", " ".join(f"s={s:g}:r={r:.3f}" for s, r in sub))
 

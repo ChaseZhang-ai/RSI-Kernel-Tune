@@ -104,3 +104,21 @@ KB-MENU 是知识注入类改动，上线前后必须对照同基座 goal-only �
 - 契约 C7：`kbmenu.py` 唯一合成器实现，纯函数、无模型调用；driver 无第二份渲染。
 - 契约 C3：注入区仅一个 WP12 块（≤30 行）；消费段与配方引用行合计 7 行（≤10）；未触碰 WP10 STAGNATION/WP9 领地/`kb_lint.py`/`hw_kb` 三树正文/`CANDIDATES.md`。
 - 围栏外的最小强制同步（全绿所需，存照）：`meta/cuda/kb_harvest_prompt.md`（binding 同步测试）、`tests/test_skills.py` + `skills/README.md`（无 SKILL.md 库目录的布局不变量）、未动 `student_prompt.md`。
+
+## 复查修复记录 — occupancy_scaling 台阶判读物理方向颠倒（复查后追加）
+
+**旧判据为何反向（一句）**：`r0 / max(r1, 1e-9) >= 1.30` 只在"grid 越大、时间越短"（t 随 s 递减 ≥1.3×）时触发，而波模型下 t(s) 单调不减、真实波界签名是"缩小 grid 跨档时时间**下降不足线性比例**"（尾波释放不掉），方向恰好相反；且旧 stepped 排在 linear 之后，W=1.2 尾波曲线（|0.5−0.25| = 0.25 恰压 LINEAR_BAND 线）先被判 linear，配方对专抓的尾波形态失明。
+
+**新判据公式**（`read_curve`，检查顺序改为 **flat → stepped → linear → mixed**，台阶扫描含"最大 sub 档 → s=1.0"一跳）：对相邻对 (s0 < s1) 取线性期望 `expected = r1 × (s0/s1)`，`r0 ≥ STEP_JUMP(1.30) × expected` 判跨波界——完美线性时该比值恰为 1.0，不受 scale 间距影响；同时要求曲线时间随 s 单调不减（容差 `MONOTONE_BAND = 0.15`，波模型不可能出现反向台阶，超出容差即非波形落 mixed，容差内视为中位数噪声回摆）。抗噪取舍：读数本身是 15 轮交错中位数，单点噪声难成反向台阶，故不另加"超额须多对稳定成立"的条件（W=1.2 形态只有一对触发，多对要求反而漏判）。
+
+**fixture 预期判读**（`tests/test_probe_recipes.py`，20 → 23 例，回归 **2290 passed**）：
+
+| 曲线 | 判读 |
+|---|---|
+| W=1.2 台阶 `[(0.25,0.50),(0.5,0.50),(1.0,1.00)]` | `stepped`，detail `step between s=0.25 and s=0.5: r=0.500 vs linear 0.250` |
+| 线性 `[(0.25,0.26),(0.5,0.52),(1.0,1.00)]` | 仍 `linear`（相邻对比值 1.00/1.04；新增反例 `test_linear_curve_is_not_misread_as_stepped` 钉死不被误触） |
+| flat `[(0.25,1.02),(0.5,1.01),(1.0,1.00)]` 与无基线用例 | 行为不变（flat 仍最前；无基线仍 mixed） |
+
+新增/换值说明：`test_wave_jump_flavor_reads_stepped`（W=2.2 波形 1/2/3，台阶点全在 LINEAR_BAND 内，钉死 stepped 先于 linear 的顺序）；`test_small_backward_wiggle_on_plateau_stays_stepped`（0.02 噪声回摆不丢判，钉住 MONOTONE_BAND 语义）；**mixed fixture 换值**：旧 `[(0.25,0.65),(0.5,0.80),(1.0,1.00)]` 在新判据下两对均为"缩小不按比例省时"（比值 1.63/1.60），恰是"每一档都付尾波"的真台阶形态 → `stepped`，不再是"无干净形态"样例；换成非单调摆动 `[(0.25,0.90),(0.5,0.70),(1.0,1.00)]`（缩小 grid 反而变慢，回摆 0.20 > MONOTONE_BAND，波模型不可能）。
+
+**文档同步**：脚本模块 docstring 判读表、`read_curve` docstring、`occupancy_scaling.md` 判读表行统一为方向正确表述（"相邻档小档时间 ≥1.30× 线性期望——缩小 grid 跨过波界，时间下降不足线性比例"）；`skills/probe-recipes/README.md` 无方向性措辞，未动；`phase_ablation.py` / `effective_bw.py` 判读方向复查无误，未动；READ/RECIPE/PROBE 行文法未变（`test_shared_line_vocabulary` 继续过）。改动仅触及围栏内四文件 + 本文件追加节。

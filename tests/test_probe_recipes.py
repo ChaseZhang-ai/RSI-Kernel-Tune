@@ -55,16 +55,52 @@ def test_linear_curve_reads_throughput_bound():
 
 
 def test_stepped_curve_reads_wave_quantization():
+    """W=1.2 tail-wave curve: s=0.25 and s=0.5 both pay the same partial wave
+    (t stuck at 0.50), s=1.0 pays a second wave. The step signature is the
+    shrink s=0.5 -> s=0.25 freeing nothing (r=0.50 >= 1.30 x its linear share
+    0.25); the detail must name the two scales the step sits between."""
     shape, verdict, detail = _load("occupancy_scaling.py").read_curve(
-        [(0.25, 1.02), (0.5, 0.71), (1.0, 0.55)])
+        [(0.25, 0.50), (0.5, 0.50), (1.0, 1.00)])
     assert shape == "stepped" and "wave quantization" in verdict
     assert "0.25" in detail and "0.5" in detail
 
 
-def test_mixed_curve_names_no_attribution():
+def test_linear_curve_is_not_misread_as_stepped():
+    """Anti-false-fire: on an exactly proportional curve every adjacent pair
+    sits at ratio 1.0 to its linear expectation, so stepped (checked first)
+    must not steal the linear reading."""
     shape, verdict, _ = _load("occupancy_scaling.py").read_curve(
-        [(0.25, 0.65), (0.5, 0.80), (1.0, 1.00)])
+        [(0.25, 0.26), (0.5, 0.52), (1.0, 1.00)])
+    assert shape == "linear" and "throughput-bound" in verdict
+
+
+def test_wave_jump_flavor_reads_stepped():
+    """W=2.2: waves 1/2/3 across the scales — the step shows as the shrink
+    s=1.0 -> s=0.5 freeing less than half the time. This curve is inside
+    LINEAR_BAND pointwise, so it also pins stepped outranking linear."""
+    shape, verdict, detail = _load("occupancy_scaling.py").read_curve(
+        [(0.25, 0.33), (0.5, 0.67), (1.0, 1.00)])
+    assert shape == "stepped" and "wave quantization" in verdict
+    assert "s=0.5" in detail and "s=1" in detail
+
+
+def test_mixed_curve_names_no_attribution():
+    """Genuinely shapeless: shrinking the grid makes the kernel SLOWER
+    (0.70 -> 0.90, a backward step beyond MONOTONE_BAND) — impossible under
+    the wave model, so it must not read stepped. (The old fixture
+    [(0.25, 0.65), (0.5, 0.80), (1.0, 1.00)] is, under the corrected
+    criterion, a true every-scale-pays-the-tail step shape -> stepped.)"""
+    shape, verdict, _ = _load("occupancy_scaling.py").read_curve(
+        [(0.25, 0.90), (0.5, 0.70), (1.0, 1.00)])
     assert shape == "mixed" and "re-read" in verdict
+
+
+def test_small_backward_wiggle_on_plateau_stays_stepped():
+    """MONOTONE_BAND is a noise floor, not strict monotonicity: a 0.02 median
+    wiggle on a wave plateau must not lose the stepped reading."""
+    shape, _, _ = _load("occupancy_scaling.py").read_curve(
+        [(0.25, 0.50), (0.5, 0.48), (1.0, 1.00)])
+    assert shape == "stepped"
 
 
 def test_curve_without_base_reading_is_mixed():

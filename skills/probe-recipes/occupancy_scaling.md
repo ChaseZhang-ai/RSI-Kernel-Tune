@@ -24,7 +24,7 @@ to s=1.0.
 |---|---|---|
 | `flat` — t(s) ~ constant | **latency-bound**: SMs idle, the critical path lives inside one block/warp | dependency chains, sync points, occupancy floors — not the grid |
 | `linear` — t(s) ~ s | **throughput-bound**: SMs are the saturated resource | more parallel work per pass / better SM utilization; shrinking the grid costs proportionally |
-| `stepped` — a jump between adjacent scales | **wave quantization**: a wave boundary sits there; the tail wave dominates | tile height vs SM count divisibility, persistent scheduling, partial-wave absorption |
+| `stepped` — between adjacent scales the smaller-scale time is ≥1.30× its linear share (shrinking the grid frees less than proportional) | **wave quantization**: a wave step sits there; the tail wave dominates | tile height vs SM count divisibility, persistent scheduling, partial-wave absorption |
 | `mixed` | no clean shape | re-read with the SOL header + stall ledger before attributing anything |
 
 ## Adaptation (required before trusting a reading)

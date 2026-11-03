@@ -33,11 +33,19 @@ def _rows():
 
 def test_queue_table_shape_and_initial_statuses():
     rows = _rows()
-    assert len(rows) == 13                     # the seven initial gaps + WP8's six
+    # the seven initial gaps + WP8's six + WP18's nine (the beyond-reference
+    # supply batch: TMEM double buffer, CLC-persistent composition, staged
+    # warp spec, FA4 MMA/SFU overlap, the conditioned L2 window's DSL face,
+    # launch-bounds controlled spill, the CUDA-graph negative-knowledge row,
+    # shape-keyed JIT specialization, Blackwell software exp)
+    assert len(rows) == 22
     for cells in rows:                         # supply-gap rows (raster/swizzle, TMA
-        assert cells[4] == "TODO"              # store reduce, im2col TMA, DSMEM
+        assert cells[4] in ("TODO", "DRAFT")   # store reduce, im2col TMA, DSMEM
         assert cells[2] in ("High", "Medium", "Low")  # exchange, bulk prefetch, load
-                                              # modifiers) — none certified by queueing
+                                              # modifiers, WP18's batch) — none certified
+                                              # by queueing; DRAFT rows are the survey's
+                                              # CANDIDATE-DRAFT landings (WP18), which the
+                                              # harvest re-grades before any probe
 
 
 def test_queue_rows_name_valid_trees():

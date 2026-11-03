@@ -51,6 +51,7 @@ claim moves a gate number, the M0 freeze or any stopping judgment** — unmeasur
 
 - `MILESTONES_TEMPLATE` = `{MILESTONES_TEMPLATE_PATH}`
 - `POLICY` = `{META_MILESTONE_PATH}`
+- `KB_DIR` = `{KB_READ_DIR}` — this architecture's own knowledge-base tree (the same access the distill step has: operator-agnostic hardware-interface entries; entry point `index.md`). Read it before you design probes: a skeleton hypothesis that re-derives a mechanism this tree has already certified pays twice, and an entry covering what you are about to measure becomes a cross-check for your reading — cite it, do not start from a guess. Trees of other architectures are not in your read set.
 - Recon tree = `{RECON_DIR}` — where you write scripts (**teacher-only; it never enters the student's job**)
 - Hardware calculator = `{SIMULATOR_DIR}` — pure Python, no GPU needed, see channel 4
 

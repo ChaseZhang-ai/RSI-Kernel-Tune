@@ -600,6 +600,23 @@ class LoopContext:
     # from the card layer's loop.toml (see _wp12_kb_menu_on); None = resolve
     # from config, an explicit value (tests, callers) wins.
     kb_menu: bool | None = None
+    # --- WP18: knowledge closure & beyond-reference supply ----------------------
+    # [loop] kb_cert_batch_size (default 4): how many candidate-queue rows one
+    # certification job may carry (each candidate its own block + control, one
+    # verdict line per candidate, a failing candidate never blocks the others).
+    # 1 = the per-candidate path (one candidate per job, the pre-WP18 shape);
+    # 0 disables the scheduled certification duty entirely. Resolved from the
+    # card layer's loop.toml by _wp18_apply_cfg (contract C17: WP18 keys do not
+    # grow cli's vocabulary).
+    kb_cert_batch_size: int = 4
+    # [loop] kb_cert_every_meta (default 2): one verdict-probe round of every N
+    # meta steps is reserved for the candidate queue's head (the schedule; the
+    # budget stays [loop] max_verdict_probe_rounds). 0 = never scheduled.
+    kb_cert_every_meta: int = 2
+    # runtime state: the kb_used entries quoted by the iteration currently being
+    # judged (iter -> [entry, ...]) — written when the student's record block is
+    # accepted, consumed into evidence/kb_usage.jsonl when the verdict lands.
+    kb_used_pending: dict = field(default_factory=dict)
     # --- WP8: prior supply (teacher-side) ---------------------------------------
     # Prior inputs for the distill/recon briefs — the student read set is
     # untouched (student_prompt.md byte-identical; no student-visible digest
@@ -3368,6 +3385,7 @@ def _harness_edit_revert(ctx: LoopContext, iter_no: int, record, sha: str, base_
         correctness=None, verdict="REVERT", metric_before=metric_before,
         error=err, profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
     )
+    _wp18_kb_usage_flow(ctx, rec)
     append_record(ctx.status_path, rec)
     return rec
 
@@ -3464,6 +3482,9 @@ def run_inner_iteration(
                 prompt = _student_prompt(ctx, iter_no, probe_feedback=feedback)
                 continue
             record = turn
+            # WP18: the record block was accepted — bank its kb_used quotes as
+            # PENDING rows; the verdict flow appends the final rows.
+            _wp18_kb_usage_note(ctx, iter_no, out)
             break
         if _is_timeline_request(turn.path):
             # a timeline of the student's own tree: one probe round, no verdict
@@ -3546,6 +3567,9 @@ def run_inner_iteration(
                     gate_refused = bounce[1]
             else:
                 record = turn
+                # WP18: bank the delivery-only turn's kb_used quotes (same flow
+                # as the main loop's acceptance).
+                _wp18_kb_usage_note(ctx, iter_no, out)
     if record is not None:
         # A landed decision ends every kept fight: the probe files are in the
         # student's tree now (or the student dropped them), and a keep that
@@ -3595,6 +3619,7 @@ def run_inner_iteration(
             correctness=False, verdict="REVERT", metric_before=metric_before,
             error=err, profiler={}, cluster=_active_cluster(ctx),
         )
+        _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
         _log(f"iter {iter_no}: {did} -> REVERT ({err})")
         return rec
@@ -3635,6 +3660,7 @@ def run_inner_iteration(
             correctness=None, verdict="NEUTRAL", metric_before=metric_before, sha=sha,
             cluster=_active_cluster(ctx), base_sha=base_sha,
         )
+        _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
         why = (f"declared construction: {declared}; lineage state unknown"
                if declared else "pre-green")
@@ -3795,6 +3821,7 @@ def run_inner_iteration(
                                      ncu_s=ncu_job_s, queue_s=queue_wait_s),
             variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
         )
+        _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
         return rec
 
@@ -3832,6 +3859,7 @@ def run_inner_iteration(
             suspicious=True,      # WP9: the reward-hack marker
             variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
         )
+        _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
         return rec
 
@@ -3889,6 +3917,7 @@ def run_inner_iteration(
         variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
     )
     _wp4_note_regression(ctx, rec, iter_no, cluster)   # WP4: slow-decision bookkeeping (prior only)
+    _wp18_kb_usage_flow(ctx, rec)
     append_record(ctx.status_path, rec)
     if _lane is not None and rec.verdict == "KEEP":
         push_ref = getattr(be, "push_ref", None)
@@ -4035,6 +4064,7 @@ def _archive_reused_reading(ctx: LoopContext, iter_no: int, record: Record, sha:
     rec = replace(base, iter=iter_no, decision_id=record.decision_id, change=record.change,
                   metric_before=metric_before, sha=sha, base_sha=base_sha, error="",
                   reading_of=origin)
+    _wp18_kb_usage_flow(ctx, rec)
     append_record(ctx.status_path, rec)
     if base.sha in ctx.paired_memo:
         # the same tree's same-job parity was already re-measured and refused
@@ -5497,6 +5527,25 @@ def run_kb_harvest(ctx: LoopContext) -> list[str]:
 
     Returns the recipe paths the teacher reported via ``RECIPE_RECORDED:`` lines.
     """
+    # --- WP18 (zero-GPU closure work, before the write-up turn): land the
+    # survey's CANDIDATE-DRAFT lines as deduped queue rows, and aggregate the
+    # run's KB-MENU hit telemetry (both best-effort, never the harvest's fate).
+    try:
+        drafts = _wp18_land_candidate_drafts(ctx)
+    except Exception as e:  # noqa: BLE001 — a draft is not worth a harvest
+        _log(f"meta/kb-harvest: candidate drafts unavailable ({e.__class__.__name__}: {e})")
+        drafts = []
+    try:
+        hits = _wp18_kbmenu_hits_summary(ctx)
+        if hits:
+            ev = _evidence_dir(ctx, create=True)
+            if ev is not None:
+                (ev / "kbmenu_hits_summary.json").write_text(
+                    json.dumps(hits, indent=1) + "\n", encoding="utf-8")
+            _log(f"meta/kbmenu-hits: {hits.get('renders', 0)} menu render(s), "
+                 f"top rules {list(hits.get('rule_fires', {}).items())[:3]}")
+    except Exception as e:  # noqa: BLE001 — telemetry never blocks the harvest
+        _log(f"meta/kbmenu-hits: summary unavailable ({e.__class__.__name__}: {e})")
     debt = kb_harvest_debt(ctx)
     try:
         axis_debt = kb_axis_debt(load_records(ctx.status_path), ctx.gate_window)
@@ -8902,6 +8951,7 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
             profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
             variant_timings=timings or None,
         )
+        _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
         return {"rows": timings, "winner": None, "revert": rec, "git_moved": True}
     # the winner becomes THIS iteration's delivery: written into the kernel file,
@@ -9000,10 +9050,17 @@ def _persist_lever_table(ctx: LoopContext, table: list, best_ref: str, job: str,
     else:
         _bank_evidence(ctx, "lever prices")
         _append_falsified_ledger(ctx, table, best_ref=best_ref, job=job, reprice=reprice)
+        # --- WP18: the teacher's own table (not a price-check) banks the
+        # lever x shape matrix; a reprice table rides the reprice channel
+        # (SUSPENDED markers) and contributes matrix history only.
+        _wp18_write_lever_shape_matrix(ctx, table, best_ref, job)
         if not reprice:
             # --- WP16: the compounding pool's bypass write — null alone is not
             # a dead end. Bookkeeping only; pricing never notices this exists.
             _pool_admit_table(ctx, table, spec_levers, best_ref, job)
+            # --- WP18: the table's null/noop levers stamp PRICED_NULL onto the
+            # milestone's decision lines.
+            _wp18_stamp_priced_null(ctx, table)
 
 
 # --- falsified-lever ledger (cross-run prior for the teacher) ------------------
@@ -9266,6 +9323,7 @@ def _wp12_kb_menu_block(ctx: LoopContext, live_records, prior_records) -> str:
     """The rendered KB-MENU, or '' — injection-ready (leading newline)."""
     from forgekernel.loop import kbmenu
     readings = _wp12_readings(live_records)
+    recent = _wp18_recent_readings(live_records, 2)
     menu = kbmenu.build_kb_menu(
         readings=readings,
         resusage=_wp12_resusage(readings),
@@ -9278,8 +9336,636 @@ def _wp12_kb_menu_block(ctx: LoopContext, live_records, prior_records) -> str:
         # recipe pointers must resolve from there (same convention as the
         # other repo-file bindings)
         recipe_dir=str(ctx.meta_dir.parent / "skills" / "probe-recipes"),
+        # --- WP18: the menu triages on the newest reading; the second-newest
+        # keeps a mid-run phase switch visible (a prev-only fire renders one
+        # marker line instead of silently dropping the phase)
+        prev_readings=recent[1] if len(recent) > 1 else None,
     )
+    _wp18_kbmenu_hits_note(ctx, readings, menu, live_records)
     return f"\n{menu}\n" if menu else ""
+
+
+# --- WP18: knowledge closure & beyond-reference supply ---------------------------
+#
+# Four closures over the KB's "use it -> measure it -> keep or kill it" loop:
+# (1) kb_used — the student names the KB entries an iteration leaned on; the
+#     driver banks the per-entry KEEP/REVERT ledger (evidence/kb_usage.jsonl,
+#     the student's own objective record — red-line exempt: it carries no
+#     teacher-curated content, only names the student chose to cite);
+# (2) the bandwidth-recipe bounce — a BLOCKED stop request with no measured
+#     bandwidth reading behind it is the most expensive wrong verdict a run can
+#     make (it stops the whole loop), so one bounce offers the recipe;
+# (3) priced_null — levers the price table measured dead are stamped onto the
+#     milestone decision lines that cite them, so the student stops re-walking
+#     measured dead knobs;
+# (4) the lever x shape price matrix — per-workload readings exist in the
+#     records and banked tables; banked into one artifact a shape-dispatch
+#     decision can read (the WP14 per_shape seam: workload dimension until that
+#     channel merges).
+# Plus the supply side: the scheduled candidate-queue batch certification
+# (kb_cert_*), the survey's CANDIDATE-DRAFT landing (deduped against the three
+# trees), and the KB-MENU hit telemetry. Every write here is best-effort
+# bookkeeping: a failure logs and degrades, nothing gates on it.
+
+_KB_USED_RE = re.compile(r"^\s*kb_used\s*:\s*(\S.*)$", re.M)
+_KB_USAGE_LEDGER_NAME = "kb_usage.jsonl"
+_KBMENU_HITS_NAME = "kbmenu_hits.jsonl"
+
+
+def _wp18_kb_usage_path(ctx: LoopContext) -> Path | None:
+    """evidence/kb_usage.jsonl (the run's banked evidence dir); None = no
+    channel (a ctx without an evidence dir records nothing)."""
+    ev = _evidence_dir(ctx, create=True)
+    return ev / _KB_USAGE_LEDGER_NAME if ev is not None else None
+
+
+def _wp18_kb_used_entries(text: str) -> list[str]:
+    """The KB entry names a record block's ``kb_used:`` line cites — names
+    only (path/extension stripped, the same normalisation the price gate
+    applies), deduped, order preserved. Unparseable / absent -> []."""
+    from forgekernel.loop import kbmenu   # same lazy import the WP12 glue uses
+    out: list[str] = []
+    for m in _KB_USED_RE.finditer(text or ""):
+        for tok in re.split(r"[,;，；\s]+", m.group(1).strip()):
+            name = kbmenu.kb_cite_name(f"via KB:{tok}") if tok else ""
+            if name and name not in out:
+                out.append(name)
+    return out
+
+
+def _wp18_kb_usage_note(ctx: LoopContext, iter_no: int, turn_text: str) -> None:
+    """The student's record block was accepted: bank the kb_used quotes as
+    PENDING rows (durable across a restart — the verdict flow appends the
+    final row later). Best-effort: a ledger failure costs a note, never an
+    iteration."""
+    entries = _wp18_kb_used_entries(turn_text)
+    if not entries:
+        return
+    ctx.kb_used_pending[iter_no] = entries
+    path = _wp18_kb_usage_path(ctx)
+    if path is None:
+        return
+    try:
+        with path.open("a", encoding="utf-8") as fh:
+            for name in entries:
+                fh.write(json.dumps({
+                    "iter": iter_no, "entry": name, "verdict": "pending",
+                    "ts": ctx.now()}) + "\n")
+    except OSError as e:
+        _log(f"iter {iter_no}: kb_used ledger write failed ({e})")
+
+
+def _wp18_kb_usage_flow(ctx: LoopContext, rec) -> None:
+    """The iteration's verdict landed: append the final kb_used row(s). Called
+    beside every append_record of an IterationRecord; a pending entry with no
+    verdict yet stays pending (its flow call comes with the verdict's row)."""
+    entries = ctx.kb_used_pending.pop(rec.iter, None)
+    if not entries:
+        return
+    path = _wp18_kb_usage_path(ctx)
+    if path is None:
+        return
+    try:
+        with path.open("a", encoding="utf-8") as fh:
+            for name in entries:
+                fh.write(json.dumps({
+                    "iter": rec.iter, "decision_id": rec.decision_id,
+                    "entry": name, "verdict": rec.verdict, "sha": rec.sha,
+                    "ts": ctx.now()}) + "\n")
+    except OSError as e:
+        _log(f"iter {rec.iter}: kb_used ledger write failed ({e})")
+
+
+def _wp18_kb_usage_summary(ctx: LoopContext) -> dict:
+    """Per-entry KEEP/REVERT counts from the final rows (the PENDING rows are
+    the durability trail; the aggregation reads verdicts only). {} when the
+    ledger does not exist yet."""
+    path = _wp18_kb_usage_path(ctx)
+    if path is None or not path.is_file():
+        return {}
+    out: dict[str, dict] = {}
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if row.get("verdict") not in ("KEEP", "REVERT"):
+                continue
+            slot = out.setdefault(str(row.get("entry")), {"KEEP": 0, "REVERT": 0})
+            if row["verdict"] in slot:
+                slot[row["verdict"]] += 1
+    except OSError as e:
+        _log(f"meta/kb-usage: could not read {path.name} ({e})")
+    return out
+
+
+def _wp18_recent_readings(records, n: int = 2) -> list:
+    """The newest ``n`` live iterations that carry a profiler dict, newest
+    first (WP18: the menu triages the newest and keeps the second visible —
+    a bottleneck that changed phase mid-run renders its prev-only fires)."""
+    out: list = []
+    for r in reversed(list(records)):
+        prof = getattr(r, "profiler", None) or {}
+        if prof:
+            out.append(dict(prof))
+            if len(out) >= n:
+                break
+    return out
+
+
+# --- WP18: the bandwidth-recipe bounce -------------------------------------------
+#
+# BLOCKED is the only verdict that ends a run, and "the wall is bandwidth" is
+# the reading it most often leans on. The effective_bw recipe exists precisely
+# for that moment (skills/probe-recipes/effective_bw.py: the bandwidth this
+# node actually reaches, vs NCU's theoretical SOL denominator) — a BLOCKED
+# verdict citing no measured bandwidth number is attribution from memory. One
+# bounce offers the recipe (run it, cite a same-family measured reading, or
+# argue why it does not apply); the second BLOCKED lands as before.
+
+_BW_RECIPE_RE = re.compile(r"effective[\s_-]?bw", re.I)
+_BW_MEASURED_RE = re.compile(r"\b\d+(?:\.\d+)?\s*(?:TB/s|GB/s)\b|\bbw[_\s]?[=%:]|"
+                             r"bandwidth[_\s]*[=:%]", re.I)
+_WP18_BW_BOUNCE_BLOCK = (
+    "\n## Bandwidth wall without a measured reading (driver check)\n"
+    "Your `reachability` line reads BLOCKED — a stop request whose floor arithmetic leans on a "
+    "bandwidth wall. The run accepts that reading only with a measured bandwidth number behind it:\n"
+    "- run the recipe first: `PROBE_REQUEST: notes/effective_bw.py` (copy "
+    "`skills/probe-recipes/effective_bw.py` into `notes/` unchanged) — it measures the bandwidth "
+    "this node actually reaches, and the SOL denominator NCUs prints is theoretical, not achieved;\n"
+    "- or cite a same-family measured reading already in this step's probe readings;\n"
+    "- or argue in `evidence` why the recipe cannot apply to this kernel (then the BLOCKED line "
+    "must stand on non-bandwidth arithmetic alone).\n"
+    "Resend the **complete** diagnosis with one of the three. The next BLOCKED lands without "
+    "this check — it is one bounce, not a gate.\n")
+
+
+def _wp18_bw_recipe_missing(diagnosis: str, probe_readings: list) -> bool:
+    """True when a BLOCKED verdict names a bandwidth wall with no measured
+    bandwidth reading behind it: no effective_bw probe ran in this step (the
+    pre-registered readings), and the diagnosis cites neither the recipe nor a
+    measured bandwidth number of its own. Naming the wall in prose ("the wall
+    is bandwidth") is exactly what the bounce exists to catch — prose is not a
+    reading."""
+    if _BW_RECIPE_RE.search(diagnosis or "") or _BW_MEASURED_RE.search(diagnosis or ""):
+        return False
+    for row in probe_readings or []:
+        blob = " ".join(str(row.get(k) or "") for k in ("path", "contract", "note"))
+        if _BW_RECIPE_RE.search(blob) or _BW_MEASURED_RE.search(blob):
+            return False
+    return True
+
+
+# --- WP18: priced_null — dead levers stamped onto the milestone -------------------
+#
+# A lever the price table measured null / noop is a dead knob. The table lives
+# in the run's evidence and the teacher's prompt; the milestone decision lines
+# that cite it read as live invitations, and the student re-walks them at full
+# price. After a table banks (non-reprice: the teacher's own table), every
+# null/noop lever's decision lines gain one machine-written annotation.
+
+_PRICED_NULL_TAG = "PRICED_NULL"
+
+
+def _wp18_null_levers(table: list) -> dict:
+    """{lever: {"decision_ids": [...], "cls": ..., "worth": ...}} for the rows
+    the tool itself classed null / noop — the measured-dead set (harmful /
+    faded ride the REMOVE_CANDIDATES / reprice channels, not this stamp)."""
+    out: dict = {}
+    for row in table or []:
+        if not isinstance(row, dict) or str(row.get("cls") or "") not in ("null", "noop"):
+            continue
+        name = str(row.get("name") or "")
+        if not name:
+            continue
+        worth = row.get("add_pct")
+        if worth is None:
+            rem = row.get("remove_pct")
+            worth = None if rem is None else round(-rem, 2)
+        out[name] = {"decision_ids": [str(d) for d in (row.get("decisions") or [])],
+                     "cls": str(row.get("cls")), "worth": worth}
+    return out
+
+
+def _wp18_null_marker(info: dict) -> str:
+    worth = "≈0" if info.get("worth") is None else f"{info['worth']:+.2f}%"
+    tag = (f"[{_PRICED_NULL_TAG}: measured {info['cls']} ({worth}) on this tree — "
+           f"re-measure before re-proposing, do not re-walk the knob]")
+    return tag
+
+
+def _wp18_stamp_priced_null(ctx: LoopContext, table: list) -> None:
+    """Stamp the milestone's decision lines for null/noop levers with their
+    measured-dead reading. Idempotent (an existing PRICED_NULL marker on the
+    citation is replaced, one standing verdict per line); best-effort — a
+    milestone write failure logs and moves on."""
+    nulls = _wp18_null_levers(table)
+    if not nulls:
+        return
+    try:
+        text = _read_milestone(ctx)
+    except (OSError, ValueError) as e:
+        _log(f"meta/price-stamp: could not read the milestone ({e})")
+        return
+    marked = text
+    for name, info in nulls.items():
+        if not _cited_levers(marked).count(name) and not info["decision_ids"]:
+            continue
+        # one standing verdict per citation: an earlier PRICED_NULL marker is
+        # replaced, not stacked (the RE-PRICED pattern the citation marker
+        # strips natively only knows its own tag)
+        clean = re.sub(r"\s*\[" + _PRICED_NULL_TAG + r"[^\]\n]*\]", "", marked)
+        marked = _mark_lever_citations(clean, name, _wp18_null_marker(info))
+    if marked != text:
+        try:
+            _write_milestone(ctx, marked)
+            _log(f"meta/price-stamp: PRICED_NULL stamped on {len(nulls)} measured-dead "
+                 f"lever citation(s): {', '.join(sorted(nulls))}")
+        except (OSError, ValueError) as e:
+            _log(f"meta/price-stamp: could not write the milestone ({e})")
+
+
+# --- WP18: lever x shape price matrix ---------------------------------------------
+#
+# The per-shape decision axis has no artifact to read: per-workload lever
+# readings exist (group cards price one job per workload; every record carries
+# its workloads block) but stay scattered across evidence files. The matrix
+# banks them into one machine-readable artifact — rows = levers, columns =
+# workloads, cells = the lever's add-one reading on that workload — so a
+# size-dispatch decision is a lookup, not an excavation. Workload dimension
+# until WP14's per_shape channel merges (the documented seam).
+
+_LEVER_SHAPE_MATRIX_NAME = "lever_shape_matrix.json"
+
+
+def _wp18_write_lever_shape_matrix(ctx: LoopContext, table: list,
+                                   best_ref: str, job: str) -> None:
+    """Append one matrix record per banked pricing job (per-workload readings
+    when the table carries them). Append-only: the aggregation reads the last
+    record per lever."""
+    ev = _evidence_dir(ctx, create=True)
+    if ev is None or not table:
+        return
+    rows = []
+    for row in table or []:
+        if not isinstance(row, dict) or not row.get("name"):
+            continue
+        per_wl = row.get("workloads") or row.get("per_shape") or []
+        rows.append({
+            "lever": str(row["name"]),
+            "kind": str(row.get("kind") or "lever"),
+            "add_pct": row.get("add_pct"), "remove_pct": row.get("remove_pct"),
+            "delta_pct": row.get("delta_pct"), "cls": row.get("cls"),
+            "decisions": [str(d) for d in (row.get("decisions") or [])],
+            # per-workload readings when the pricing job produced them
+            # ([{"workload": ..., "add_pct": ...}, ...]); [] = aggregate-only
+            "workloads": [
+                {"workload": str(w.get("workload") or w.get("name") or ""),
+                 "add_pct": w.get("add_pct"), "delta_pct": w.get("delta_pct")}
+                for w in per_wl if isinstance(w, dict)],
+        })
+    if not rows:
+        return
+    rec = {"ts": ctx.now(), "best_ref": best_ref, "job": job, "levers": rows}
+    try:
+        with (ev / _LEVER_SHAPE_MATRIX_NAME).open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError as e:
+        _log(f"meta/price-matrix: could not persist {_LEVER_SHAPE_MATRIX_NAME}: {e}")
+        return
+    _log(f"meta/price-matrix: banked {len(rows)} lever row(s) x "
+         f"{max([len(r['workloads']) for r in rows] or [0])} workload column(s) "
+         f"-> {_LEVER_SHAPE_MATRIX_NAME}")
+
+
+# --- WP18: scheduled candidate-queue batch certification ---------------------------
+#
+# The queue certifies nothing by itself and had no budget of its own: rows
+# waited for a run to trip over them (F17). The schedule reserves one verdict
+# probe round of every ``kb_cert_every_meta`` meta steps for the queue head;
+# the batch size lets one job carry N candidates — each candidate one
+# independent timing block plus its control, one verdict line per candidate,
+# a failing candidate never blocks the others (batch protocol, WP17-T3's
+# ``BATCH:<job>`` notation). The verdicts ride the step's meta record as
+# ``kb_cert:<candidate>`` contract rows (probe_readings — the field already
+# flows into meta_status.jsonl), and the queue's Status cells flip to
+# ``BATCH:<job>`` for the harvest to write up. batch_size 1 = the per-candidate
+# path (one candidate per job, no batch protocol); 0 = the duty never fires.
+
+_WP18_BATCH_SCRIPT_NAME = "kb_cert_batch.py"
+
+
+def _wp18_kb_cert_cfg(ctx: LoopContext) -> tuple[int, int]:
+    """(batch_size, every_meta) — LoopContext fields already resolved by
+    _wp18_apply_cfg; the tuple keeps the call sites short."""
+    return max(0, int(ctx.kb_cert_batch_size)), max(0, int(ctx.kb_cert_every_meta))
+
+
+def _wp18_candidates_rows(ctx: LoopContext) -> list[tuple[int, str]]:
+    """The queue's open rows as (line_index, mechanism name), in file order —
+    the head of the queue is what a certification batch consumes. Statuses
+    DONE / BATCH / DRAFT / STALE-REVIEW are not open."""
+    path = Path(ctx.kb_dir).parent / "CANDIDATES.md"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out: list[tuple[int, str]] = []
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if not (s.startswith("|") and s.endswith("|")):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if len(cells) != 5 or cells[0] == "Candidate entry":
+            continue
+        if cells[4] not in ("TODO",):
+            continue
+        name = cells[0].split("`")[1] if "`" in cells[0] else cells[0][:40]
+        out.append((i, name))
+    return out
+
+
+def _wp18_kb_cert_duty_block(ctx: LoopContext, meta_step: int) -> str:
+    """The scheduled certification duty for this meta step: the queue head —
+    one candidate (the per-candidate path) or up to ``kb_cert_batch_size``
+    candidates under the batch protocol. '' when nothing is due or open."""
+    batch, every = _wp18_kb_cert_cfg(ctx)
+    if batch <= 0 or every <= 0:
+        return ""
+    if every > 1 and meta_step % every:
+        return ""
+    rows = _wp18_candidates_rows(ctx)
+    if not rows:
+        return ""
+    take = rows[:batch]
+    queue = Path(ctx.kb_dir).parent / "CANDIDATES.md"
+    lines = [
+        "\n## Scheduled candidate-queue certification (driver schedule)\n"
+        f"This meta step reserves one verdict-probe round for the candidate queue "
+        f"(`{queue}`; {len(rows)} open row(s) — certification is a GPU probe returning "
+        "PROBE PASS, the only entrance into a tree).",
+    ]
+    if len(take) == 1 or batch <= 1:
+        lines.append(
+            "Certify the first open row: write ONE probe script "
+            f"(`notes/<name>.py`) whose verdict line names the candidate — "
+            f"`PROBE PASS/FAIL max_diff=<x>` with the candidate's mechanism verified on the "
+            f"GPU — then send `PROBE_REQUEST: notes/<name>.py` as usual. One candidate per "
+            "job (the per-candidate path).\n")
+    else:
+        lines.append(
+            f"Certify up to {len(take)} rows in ONE job: write `{_WP18_BATCH_SCRIPT_NAME}` "
+            "with, per candidate, an independent timing block plus its own control "
+            "(base spelling) — sequential blocks, no shared state between candidates, a "
+            "failing candidate must not abort the script. Print ONE verdict line per "
+            "candidate, contract name = the candidate's mechanism name:\n"
+            "    PROBE PASS max_diff=<x>  # <mechanism-name>   (or PROBE FAIL / NO VERDICT)\n"
+            f"then send `PROBE_REQUEST: notes/{_WP18_BATCH_SCRIPT_NAME}` — one job, one "
+            "verdict per candidate, failures do not contaminate each other.\n")
+    lines.append("Queue head this window:\n" + "".join(
+        f"- `{name}` (row {i + 1})\n" for i, name in take))
+    return "\n".join(lines)
+
+
+def _is_wp18_batch_request(path: str) -> bool:
+    """The probe request carrying the candidate batch (the duty block's exact
+    script name — an ordinary probe never collides with it)."""
+    return Path(path or "").name == _WP18_BATCH_SCRIPT_NAME
+
+
+def _wp18_parse_kb_cert_log(log: str) -> dict:
+    """{candidate_mechanism_name: {"verdict": PASS|FAIL, "reading": ...}} from a
+    batch job's per-candidate PROBE lines (the verdict-probe protocol: one line
+    per contract, the candidate's mechanism name in the trailing note). A line
+    with no name contributes nothing; duplicate names keep the last."""
+    try:
+        pv = parse_probe_verdict(log, audit=False)
+    except Exception:  # noqa: BLE001 — a lost log certifies nothing
+        return {}
+    out: dict = {}
+    for c in pv.contracts:
+        name = str(c.note or "").strip()
+        if name:
+            out[name] = {"verdict": c.verdict, "reading": c.reading}
+    return out
+
+
+def _wp18_stamp_kb_cert(ctx: LoopContext, results: dict, job: str) -> int:
+    """Flip each PASSED candidate's queue row Status to ``BATCH:<job>`` (the
+    harvest then writes the entry and flips DONE, per the queue's own
+    contract). Cell-only rewrite: the row's other columns are untouched.
+    Returns the number of rows stamped."""
+    if not results or not job:
+        return 0
+    path = Path(ctx.kb_dir).parent / "CANDIDATES.md"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as e:
+        _log(f"meta/kb-cert: could not read CANDIDATES.md ({e})")
+        return 0
+    stamped = 0
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if not (s.startswith("|") and s.endswith("|")):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if len(cells) != 5 or cells[4] != "TODO":
+            continue
+        m = re.search(r"`([^`]+)`", cells[0])
+        name = m.group(1) if m else cells[0][:40]
+        hit = results.get(name)
+        if hit is None or hit.get("verdict") != "PASS":
+            continue
+        cells[4] = f"BATCH:{job}"
+        lines[i] = "| " + " | ".join(cells) + " |"
+        stamped += 1
+    if stamped:
+        try:
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            verdicts = ", ".join(f"{k}={v.get('verdict', '')}" for k, v in results.items())
+            _log(f"meta/kb-cert: {stamped} queue row(s) stamped BATCH:{job} "
+                 f"(verdicts: {verdicts})")
+        except OSError as e:
+            _log(f"meta/kb-cert: could not write CANDIDATES.md ({e})")
+            return 0
+    return stamped
+
+
+# --- WP18: survey CANDIDATE-DRAFT landing ------------------------------------------
+#
+# The survey (skills/sota-survey) produced hypotheses with no mechanical
+# destination: a mechanism the survey surfaced but no run measured had no
+# channel into the queue (F18). The survey writes one ``CANDIDATE-DRAFT:``
+# line per uncovered mechanism at the end of notes/prior_art.md; the harvest
+# lands each as a DRAFT queue row — after a pure string dedup against the
+# three trees' indexes (a mechanism the KB already covers is a ``dup`` and
+# does not land).
+
+_WP18_DRAFT_RE = re.compile(r"^\s*CANDIDATE-DRAFT:\s*(.+)$", re.M)
+
+
+def _wp18_kb_covers(ctx: LoopContext, name: str) -> bool:
+    """True when a tree's index or an entry file name already carries the
+    mechanism (pure string containment, ci — the dedup is deliberately coarse:
+    a false 'covered' costs one dropped draft row, a false 'new' costs one
+    teacher glance at harvest). The three trees sit two levels under the KB
+    root (``hw_kb/<language>/<arch>/``); the queue and the ledger are files,
+    skipped."""
+    key = name.strip().lower().replace("-", "_").replace(" ", "_")
+    if not key:
+        return True
+    root = Path(ctx.kb_dir).parent
+    try:
+        for idx in sorted(root.glob("*/*/index.md")):
+            if key in idx.read_text(encoding="utf-8", errors="replace").lower():
+                return True
+        for entry in root.glob("*/*/*.md"):
+            if key in entry.name.lower():
+                return True
+    except OSError as e:
+        _log(f"meta/drafts: dedup read failed ({e}) — landing nothing this round")
+        return True   # fail closed: never land rows the check could not run on
+    return False
+
+
+def _wp18_land_candidate_drafts(ctx: LoopContext) -> list[str]:
+    """Land the survey's CANDIDATE-DRAFT lines as DRAFT queue rows (deduped).
+    Returns the landed mechanism names. Called from the harvest round."""
+    survey = Path(ctx.workspace) / "notes" / "prior_art.md"
+    try:
+        text = survey.read_text(encoding="utf-8") if survey.is_file() else ""
+    except OSError:
+        text = ""
+    if not text:
+        return []
+    path = Path(ctx.kb_dir).parent / "CANDIDATES.md"
+    landed: list[str] = []
+    try:
+        rows: list[str] = []
+        for m in _WP18_DRAFT_RE.finditer(text):
+            # line shape: <mechanism-name> | <tree(s)> | <axis> | <why worth a probe>
+            parts = [p.strip() for p in m.group(1).split("|")]
+            name = parts[0] if parts else ""
+            if not name:
+                continue
+            if _wp18_kb_covers(ctx, name):
+                _log(f"meta/drafts: `{name}` dup — a tree already covers it; not landed")
+                continue
+            trees = parts[1] if len(parts) > 1 else "any tree a task demands"
+            basis = parts[3] if len(parts) > 3 else (parts[2] if len(parts) > 2 else
+                                                     "survey hypothesis — worth a probe")
+            rows.append(f"| `{name}` — survey candidate (mechanism in the survey's own words) | "
+                        f"{trees} | Low | {basis[:220]} | DRAFT |")
+            landed.append(name)
+        if rows and path.is_file():
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write("\n".join(rows) + "\n")
+            _log(f"meta/drafts: landed {len(rows)} CANDIDATE-DRAFT row(s): {landed}")
+    except OSError as e:
+        _log(f"meta/drafts: landing failed ({e})")
+        return []
+    return landed
+
+
+# --- WP18: KB-MENU hit telemetry ----------------------------------------------------
+#
+# The menu has pulled weight unmeasured since WP12 (F16: zero counters). Each
+# render appends one objective row — which rules fired, how many lines each
+# section carried — to evidence/kbmenu_hits.jsonl; the harvest aggregates the
+# run. Nothing reads it back into a decision; it is the first-hand data the
+# A/B note in CHANGES-WP18 needs.
+
+def _wp18_kbmenu_hits_path(ctx: LoopContext) -> Path | None:
+    ev = _evidence_dir(ctx, create=True)
+    return ev / _KBMENU_HITS_NAME if ev is not None else None
+
+
+def _wp18_kbmenu_hits_note(ctx: LoopContext, readings: dict, menu: str,
+                           live_records) -> None:
+    """One telemetry row per rendered menu (the pure half lives in kbmenu:
+    fired_rule_names / hit_record — the synthesizer stays side-effect free,
+    contract C7). Best-effort; never touches the render."""
+    if not menu:
+        return
+    path = _wp18_kbmenu_hits_path(ctx)
+    if path is None:
+        return
+    from forgekernel.loop import kbmenu   # same lazy import the WP12 glue uses
+    recent = _wp18_recent_readings(live_records, 2)
+    prev = recent[1] if len(recent) > 1 else {}
+    rules = kbmenu.fired_rule_names(readings, _wp12_resusage(readings),
+                                    prev_readings=prev)
+    row = kbmenu.hit_record(
+        kb_label=f"{ctx.language}/{ctx.kb_arch}", op=ctx.op, rules=rules,
+        n_hints=sum(1 for ln in menu.splitlines()
+                    if ln.startswith("- ") and "hw_kb/" in ln),
+        n_lever_lines=sum(1 for ln in menu.splitlines()
+                          if ln.startswith("- ") and " -> " in ln and not ln.startswith("- LEDGER")),
+        n_calibration=sum(1 for ln in menu.splitlines()[1:]
+                          if ln.startswith("- ") and "CALIBRATION" not in ln
+                          and "KB-HINTS" not in ln and "LEVER-MENU" not in ln))
+    try:
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": ctx.now(), **row}) + "\n")
+    except OSError as e:
+        _log(f"meta/kbmenu-hits: write failed ({e})")
+
+
+def _wp18_kbmenu_hits_summary(ctx: LoopContext) -> dict:
+    """The run-end aggregation: renders, rule fire counts, and the hint/lever
+    line totals across the run. {} when no menu ever rendered."""
+    path = _wp18_kbmenu_hits_path(ctx)
+    if path is None or not path.is_file():
+        return {}
+    renders = 0
+    rules: dict = {}
+    hints = lever_lines = 0
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            renders += 1
+            hints += int(row.get("hints") or 0)
+            lever_lines += int(row.get("lever_lines") or 0)
+            for name in row.get("rules") or []:
+                rules[str(name)] = rules.get(str(name), 0) + 1
+    except OSError as e:
+        _log(f"meta/kbmenu-hits: read failed ({e})")
+        return {}
+    return {"renders": renders, "rule_fires": dict(sorted(rules.items(),
+                                                          key=lambda kv: -kv[1])),
+            "hint_lines": hints, "lever_lines": lever_lines}
+
+
+# --- WP18 config resolution (contract C17: no cli vocabulary growth) ----------------
+
+def _wp18_apply_cfg(ctx: LoopContext) -> None:
+    """Resolve the WP18 [loop] keys from the card layer (over the global
+    layer), same read as every [loop] key. Explicitly set fields (tests,
+    callers) win; a bad value leaves the documented default."""
+    loop_cfg = _wp5_cfg_sections(ctx).get("loop")
+    if not isinstance(loop_cfg, dict):
+        return
+
+    def _int(key, cur, lo):
+        if key in loop_cfg:
+            try:
+                v = int(loop_cfg[key])
+                if not isinstance(loop_cfg[key], bool) and v >= lo:
+                    return v
+            except (TypeError, ValueError):
+                pass
+        return cur
+
+    ctx.kb_cert_batch_size = _int("kb_cert_batch_size", ctx.kb_cert_batch_size, 0)
+    ctx.kb_cert_every_meta = _int("kb_cert_every_meta", ctx.kb_cert_every_meta, 0)
 
 
 # --- price staleness ----------------------------------------------------------
@@ -10949,6 +11635,15 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     # calibration only — never a price; empty inputs inject nothing.
     if _wp12_kb_menu_on(ctx):
         diagnose_extra += _wp12_kb_menu_block(ctx, live_records, prior_records)
+    # --- WP18: the scheduled candidate-queue certification duty (after the
+    # menu, still outside the C3-fixed sections — a duty block, not a menu
+    # section; one reserved probe round of every kb_cert_every_meta steps).
+    if not audit:
+        kb_cert_duty = _wp18_kb_cert_duty_block(ctx, meta_step)
+        if kb_cert_duty:
+            diagnose_extra += kb_cert_duty
+            _log(f"meta: candidate-queue certification scheduled this step "
+                 f"(batch={ctx.kb_cert_batch_size}, every={ctx.kb_cert_every_meta})")
     # --- WP14 (contract C10): per-regime evidence lines LAST in the injection
     # area — one scoped NCU pricing reading per regime, cap regime_ncu_max,
     # memo per (tree, workload). '' with no regime lines (byte-identical).
@@ -10969,6 +11664,8 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     seg_demanded = False
     infeasible_asked = False
     infeasible_bounces: list[str] = []   # refusal reasons put back to the teacher this step
+    bw_demanded = False    # --- WP18: the bandwidth-recipe bounce fires once ---
+    kb_cert_results: list = []   # WP18: per-candidate verdict rows (kb_cert:<name> contracts)
     diagnoses = _plateau_diagnoses(prior_records) + 1
     stop_line = None if audit else _resolve_target(ctx)
     # VERDICT PROBES: before committing to a cause_class the diagnose agent may run
@@ -11127,6 +11824,25 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
             diagnose_extra += _verdict_probe_feedback(
                 turn.path, pv, probe_log, probe_rounds, ctx.max_verdict_probe_rounds)
             probe_readings.extend(readings)
+            # --- WP18: the scheduled batch certification job — its per-candidate
+            # verdicts ride the step's meta record as `kb_cert:<candidate>`
+            # contract rows, and each PASS stamps its queue row BATCH:<job>.
+            if _is_wp18_batch_request(turn.path):
+                results = _wp18_parse_kb_cert_log(probe_log)
+                job = str(getattr(be, "last_job_id", "") or "")
+                kb_cert_results.extend(
+                    {"path": turn.path, "round": probe_rounds,
+                     "contract": f"kb_cert:{name}", "verdict": v.get("verdict", ""),
+                     "reading": v.get("reading", ""), "note": "candidate-queue certification"}
+                    for name, v in results.items())
+                if job and results:
+                    _wp18_stamp_kb_cert(ctx, results, job)
+                diagnose_extra += (
+                    "\n## Batch certification received\nPer-candidate verdicts are recorded "
+                    "(one contract row per candidate in this step's record); PASSED candidates "
+                    "are stamped `BATCH:<job>` in the queue for the end-of-run harvest to write "
+                    "up. A FAILED / NO VERDICT candidate stays TODO — re-propose it in a later "
+                    "window with a corrected probe.\n")
             continue
         diagnosis = out
         if cause:
@@ -11170,6 +11886,20 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                     infeasible_asked = True  # the refusal block already names the channel
                     _log(f"meta: INFEASIBLE stop request not accepted ({why}) -> merged re-prompt")
                     violations.append(_infeasible_refused_block(why))
+                elif not bw_demanded and _wp18_bw_recipe_missing(out, probe_readings):
+                    # WP18 BANDWIDTH-RECIPE BOUNCE (one, before acceptance): a BLOCKED
+                    # verdict with no measured bandwidth reading behind it is the most
+                    # expensive wrong verdict a run can make — the effective_bw recipe
+                    # exists for exactly this moment. One bounce offers it (run it /
+                    # cite a same-family measured reading / argue why it cannot apply);
+                    # the next BLOCKED lands without the check. Sits on the
+                    # would-be-accepted path only: a failing refusal keeps its own
+                    # bounce. WP23 integration: folded into WP19's C12 merged
+                    # re-prompt (a violations entry, not its own continue).
+                    bw_demanded = True
+                    _log("meta: BLOCKED without a measured bandwidth reading -> "
+                         "one bounce offering the effective_bw recipe")
+                    violations.append(_WP18_BW_BOUNCE_BLOCK)
             # INFEASIBLE CHANNEL: a diagnosis that talks INFEASIBLE under another
             # class is how a run spins — the verdict lives in the milestone, the
             # driver never hears it, and every later meta step re-diagnoses a
@@ -11268,6 +11998,12 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
         diagnose_extra += (f"\n## Format requirement (binding)\nThe `cause_class` field must be "
                            f"exactly one of the enum values: "
                            f"{enum_help}, with no prose / commentary after it.\n")
+    if kb_cert_results:
+        # WP18: the candidate batch's verdicts are meta-record material — they
+        # ride the same probe_readings field the next step's memory reads, so a
+        # later step sees `kb_cert:<candidate> PASS` as a measured row (and a
+        # harvest writes up exactly what passed).
+        probe_readings.extend(kb_cert_results)
     if probe_rounds:
         # Probe commits are add -A snapshots of whatever the diagnose agent touched —
         # not just notes/<name>.py — and every downstream branch (patch resume via
@@ -17676,6 +18412,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
         # (107 ruling F3), never a gate input (C15)
         ctx.background_lane_obj = BackgroundLane(
             temperature_ok=lambda: _lane_temperature_check(ctx), log=_log)
+    _wp18_apply_cfg(ctx)   # --- WP18: kb_cert_batch_size / kb_cert_every_meta
     meta_steps = 0
     # --- WP5 (task 2): the meta cap breathes with the wall clock left. max_meta
     # stays the configured floor; a long remaining budget lifts the cap so a run

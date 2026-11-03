@@ -116,3 +116,20 @@ reference_hours = 8         # writing a reference when the task has none
 #                                          # meta steps only, never the eval path)
 # Runs whose milestone carries no `regime:` lines buy nothing and render nothing
 # (byte-identical to the pre-WP14 loop).
+# --- WP18: knowledge closure & beyond-reference supply -----------------------
+# Like every [loop] key, these live on the card layer (operators/<op>/loop.toml,
+# read free-form; contract C17: WP18 keys resolve through the driver's
+# _wp18_apply_cfg and never grow this file's closed vocabulary). Defaults in
+# the driver:
+#   [loop] kb_cert_batch_size  = 4    # candidates one scheduled certification
+#                                     # job may carry (1 = one candidate per
+#                                     # job, the per-candidate path; 0 = off)
+#   [loop] kb_cert_every_meta  = 2    # the schedule: one verdict-probe round of
+#                                     # every N meta steps goes to the candidate
+#                                     # queue's head (budget stays
+#                                     # [loop] max_verdict_probe_rounds; 0 = never)
+# Always-on bookkeeping these keys ride with: the student's kb_used citations
+# land in evidence/kb_usage.jsonl (per-entry KEEP/REVERT), KB-MENU renders
+# telemetry to evidence/kbmenu_hits.jsonl (aggregated at harvest), null/noop
+# levers stamp PRICED_NULL onto the milestone lines citing them, and each
+# pricing job banks a lever x workload row in evidence/lever_shape_matrix.json.

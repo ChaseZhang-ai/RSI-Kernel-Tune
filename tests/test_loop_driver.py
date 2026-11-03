@@ -8721,12 +8721,15 @@ _INFEASIBLE_OPEN = _INFEASIBLE.replace("floor_opt=2.40 ms vs target=1.9 ms -> BL
 
 def test_infeasible_diagnosis_stops_without_a_patch_and_writes_the_notice(tmp_path):
     from forgekernel.meta_trajectory import load_meta_records
-    be = FakeBackend([_INFEASIBLE], [])
+    # the stop request cites no measured bandwidth reading: the WP18 recipe
+    # bounce fires once, the resent diagnosis lands as the stop
+    be = FakeBackend([_INFEASIBLE, _INFEASIBLE], [])
     ctx = _ctx(tmp_path, be)
     before = ctx.milestone.read_text(encoding="utf-8")
     res = run_meta_step(ctx, best_before=0.978)
     assert res.patch_class == "infeasible-stop" and res.changed_entries == []
-    assert len(be.prompts) == 1                                   # no patch turn
+    assert len(be.prompts) == 2                                   # one bounce, no patch turn
+    assert "effective_bw" in be.prompts[1]
     assert ctx.milestone.read_text(encoding="utf-8") == before
     rec = load_meta_records(ctx.meta_status_path)[-1]
     assert (rec.outcome, rec.cause_class, rec.patch_class) == \
@@ -8840,16 +8843,20 @@ def test_infeasible_on_open_twice_is_refused_without_a_stop(tmp_path):
 
 def test_two_layer_run_goes_on_after_a_refused_stop_request(tmp_path):
     """End to end: an OPEN stop request (twice) is refused and the meta step is
-    retried on the same state; a BLOCKED one then stops the run."""
+    retried on the same state; a BLOCKED one then stops the run. The BLOCKED
+    carries no measured bandwidth reading, so the WP18 recipe bounce fires once
+    first (the resent diagnosis is taken as-is — one bounce, not a gate)."""
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
     be = _E2EFake(agent_outputs=["EXHAUSTED: nothing left", _INFEASIBLE_OPEN, _INFEASIBLE_OPEN,
-                                 _INFEASIBLE, "EXHAUSTED: must not run"],
+                                 _INFEASIBLE, _INFEASIBLE, "EXHAUSTED: must not run"],
                   gpu_logs=[], milestone_path=ms, patch_writes=[])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.milestone = ms
     summary = run_two_layer(ctx, max_meta=3)
     assert summary["stop"] == "infeasible" and summary["meta_steps"] == 2
+    # the WP18 bandwidth-recipe bounce fired exactly once, in the stopping step
+    assert sum("effective_bw" in p for p in be.prompts) == 1
     assert be.agent_outputs == ["EXHAUSTED: must not run"]
 
 
@@ -8878,10 +8885,13 @@ def test_infeasible_mentioned_under_another_class_is_bounced_once(tmp_path):
     spin = ("cause_class: G4\ndeficient_locus: none\n"
             "evidence: 1.05x line INFEASIBLE (closure record 1), stop stands\n"
             "patch_direction: none\n")
-    be = FakeBackend([spin, _INFEASIBLE], [])
+    # the answering stop request carries no measured bandwidth reading: the WP18
+    # recipe bounce consumes one turn, the resend lands as the stop
+    be = FakeBackend([spin, _INFEASIBLE, _INFEASIBLE], [])
     ctx = _ctx(tmp_path, be)
     res = run_meta_step(ctx, best_before=0.978)
     assert "## INFEASIBLE has only one channel" in be.prompts[1]
+    assert "effective_bw" in be.prompts[2]
     assert res.patch_class == "infeasible-stop"
 
 
@@ -8907,13 +8917,14 @@ def test_two_layer_run_ends_on_infeasible_with_the_budget_unspent(tmp_path):
     (a verdict, not a crash to restart) and the notice path."""
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
-    be = _E2EFake(agent_outputs=["EXHAUSTED: nothing left", _INFEASIBLE,
+    be = _E2EFake(agent_outputs=["EXHAUSTED: nothing left", _INFEASIBLE, _INFEASIBLE,
                                  "EXHAUSTED: must not run"],
                   gpu_logs=[], milestone_path=ms, patch_writes=[])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.milestone = ms
     summary = run_two_layer(ctx, max_meta=3)
     assert summary["stop"] == "infeasible" and summary["meta_steps"] == 1
+    assert "effective_bw" in be.prompts[2]   # WP18 recipe bounce fired once before the stop
     assert summary["notice"].endswith("infeasible_stop.md")
     assert Path(summary["notice"]).exists()
     assert be.agent_outputs == ["EXHAUSTED: must not run"]

@@ -76,3 +76,15 @@ first and reconcile: keep its entries, mark what your survey adds or contradicts
 The driver consumes the milestone's `ARCH_PROBE_REQUEST` lines and the decisions' `sweep:` fields
 through the standard channels; the winner of a probe bracket is what M0 freezes. Nothing in
 `notes/prior_art.md` is read by the student, and nothing in it is true until the loop says so.
+
+## Map every uncovered mechanism to a candidate row (WP18)
+
+Every mechanism the survey surfaces that this repo's knowledge base does not already cover must end
+the survey as one more line at the bottom of `notes/prior_art.md` (one line per mechanism):
+
+    CANDIDATE-DRAFT: <mechanism-name> | <tree(s) or "any tree a task demands"> | <the axis it moves> | <why it is worth a probe>
+
+The end-of-run harvest lands each such line as a `DRAFT` row in the candidate queue
+(`hw_kb/CANDIDATES.md`) after a mechanical dedup against the three trees' indexes — a mechanism a
+tree already covers is a dup and is not landed. A draft row certifies nothing: it states only where
+knowledge is missing, and it becomes knowledge only when a run's GPU probe passes.

@@ -9,6 +9,7 @@ unit-testable without an agent or a GPU.
 from __future__ import annotations
 
 import json
+import math
 import re
 import statistics
 from typing import NamedTuple
@@ -206,6 +207,16 @@ class EvalResult:
     # correctness measured on the same instance — is a reward-hack reading the
     # driver turns into a suspicious REVERT; None layers are 'no reading'.
     fresh_recheck: dict | None = None
+    # WP15 (N-B14, contract C14): the job's SPRT early-stop decision, when the
+    # bench armed the sequential controller and it DECIDED: {"decided": <windows>,
+    # "direction": "loss"|"win", "windows": <the sides' full budget>}. A
+    # loss-direction stop is the WP11 rule (the reading cannot be a win);
+    # a WIN-direction stop is the tail task — its reading is one truncated draw
+    # that beat the margin, so the driver must run it through the standing
+    # watermark-confirmation protocol before it can take the watermark, enter
+    # the plateau window or price a lever. None = no decision (full sampling,
+    # or SPRT not armed).
+    sprt: dict | None = None
 
 
 _WORKLOAD_KEYS = ("device_median_ms", "bwd_median_ms", "ref_device_ms", "vs_ref_device", "vs_ref")
@@ -245,6 +256,11 @@ def _workloads(perf: dict) -> list:
         host = w.get("host_enqueue_ms")
         if isinstance(host, (int, float)) and not isinstance(host, bool):
             item["host_enqueue_ms"] = float(host)
+        # WP15: the workload's SPRT early-stop decision (timing.py's controller),
+        # so the driver's card rule (a loss-stopped workload cannot acquit the
+        # card) and the digest can read it off the row.
+        if isinstance(w.get("sprt"), dict):
+            item["sprt"] = dict(w["sprt"])
         spread = readings_spread_pct(item.get("device_readings_ms"))
         if spread is not None:
             item["device_spread_pct"] = spread
@@ -337,15 +353,70 @@ def _last_json_object(text: str) -> dict | None:
     return found
 
 
+CORRECTNESS_FAIL_TOP_K = 3
+"""How many of a numeric FAIL's worst check rows ride the feedback (WP15, 甲G6:
+the aggregate max_abs alone sent agents re-rounding the whole kernel when one
+output on one input group carried the failure; the worst-k rows name the
+locus)."""
+
+_WORST_ELEMENTS_KEY = "worst_elements"
+"""Reserved seam (WP15): when the bench reports per-element worst offenders
+(``[{output, group, index, value, expected, abs_diff}, ...]`` — an emission
+only the eval template can compute; outside this package's fence), the rows
+ride the feedback verbatim ahead of the per-check summary. Absent today, so
+the feedback ranks the per-(group, output) check rows the JSON already
+carries."""
+
+
+def _correctness_fail_detail(corr_obj: dict) -> str:
+    """Top-k worst rows of a numeric FAIL (WP15 甲G6): element-level rows when
+    the bench emitted them (the reserved seam above), else the per-(group,
+    output) check rows ranked by normalized error with the tolerance each
+    needed — the failing locus and the gap, not one aggregate number."""
+    rows = corr_obj.get(_WORST_ELEMENTS_KEY)
+    if isinstance(rows, list) and rows:
+        parts = []
+        for r in rows[:CORRECTNESS_FAIL_TOP_K]:
+            if not isinstance(r, dict):
+                continue
+            where = f"{r.get('group', '?')}/{r.get('output', '?')}"
+            idx = f"[{r.get('index')}]" if r.get("index") is not None else ""
+            parts.append(f"{where}{idx}: got {r.get('value')} expected {r.get('expected')} "
+                         f"(abs_diff {r.get('abs_diff')})")
+        if parts:
+            return "worst elements — " + "; ".join(parts)
+    checks = [c for c in corr_obj.get("checks") or () if isinstance(c, dict)]
+    if not checks:
+        return ""
+    ranked = sorted(checks, key=lambda c: (float("inf") if c.get("error") is None
+                                           else float(c["error"])), reverse=True)
+    parts = []
+    for c in ranked[:CORRECTNESS_FAIL_TOP_K]:
+        where = "/".join(str(c.get(k)) for k in ("workload", "group") if c.get(k))
+        loc = f"{where}/{c.get('output', '?')}" if where else str(c.get("output", "?"))
+        err = c.get("error")
+        tol = c.get("tolerance")
+        why = f" ({c['why']})" if c.get("why") else ""
+        parts.append(f"{loc}: error {err} vs tol {tol}{why}"
+                     + (" — worst" if len(parts) == 0 else ""))
+    return "; ".join(parts)
+
+
 def _correctness_error(corr_obj: dict) -> str:
     """The bench's failure verdict, verbatim when it wrote one.
 
     Harness-level rejections (forbidden-op scan, import failure, bad return shape)
     arrive as a single ``error`` string; numeric fails arrive as per-tensor detail
-    dicts instead, so summarise those into one line.
+    dicts instead, so summarise those into one line — and since WP15 the summary
+    carries the top-k worst rows (``_correctness_fail_detail``), not just the
+    aggregate: a FAIL whose feedback names the locus and the gap ends the
+    diagnosis in one round instead of three.
     """
     if err := str(corr_obj.get("error") or "").strip():
-        return err
+        detail = _correctness_fail_detail(corr_obj)
+        # the bench's own verdict already names the first failing (group, output);
+        # the ranked rows add the RUNNERS-UP the first-fail stop never reached.
+        return f"{err}; worst checks: {detail}" if detail and detail not in err else err
     parts = []
     for name in ("dq", "dk", "dv"):
         det = corr_obj.get(name)
@@ -355,7 +426,10 @@ def _correctness_error(corr_obj: dict) -> str:
             parts.append(f"{name}: {det_err}")
         elif "max_diff" in det:
             parts.append(f"{name}: max_diff={det['max_diff']} tol={det.get('tolerance')}")
-    return "; ".join(parts) if parts else "no failure detail in the eval JSON"
+    if parts:
+        return "; ".join(parts)
+    detail = _correctness_fail_detail(corr_obj)
+    return detail or "no failure detail in the eval JSON"
 
 
 def parse_eval(text: str) -> EvalResult:
@@ -448,6 +522,8 @@ def parse_eval(text: str) -> EvalResult:
         ref_host_enqueue_ms=_opt_any("ref_host_enqueue_ms", "cublas_host_enqueue_ms"),
         fresh_recheck=(obj.get("fresh_recheck")
                        if isinstance(obj.get("fresh_recheck"), dict) else None),
+        sprt=(perf.get("sprt") if isinstance(perf.get("sprt"), dict)
+              else (obj.get("sprt") if isinstance(obj.get("sprt"), dict) else None)),
     )
 
 
@@ -770,13 +846,37 @@ def parse_probe_verdict(text: str, *, audit: bool = True) -> ProbeVerdict:
                         numeric=bool(diffs), contracts=contracts)
 
 
-# --- the resolvable difference (WP1; cross-package contract C1) ---------------
+# --- the resolvable difference (WP1; cross-package contract C1; WP15 v2) ------
 #
 # The 1.5% noise floor was a constant standing in for a measurement nobody kept:
 # the spread of the run's OWN same-job paired ratios. Those ratios ride every
 # evaluated record (vs_ref_device / vs_ref — same job, so node speed cancels),
 # and a quiet run resolves far finer than 1.5%. WP4 / WP6 consume this function
 # in parallel — the name, module and positional signature are a contract.
+#
+# WP15 (v2, contract C8): the estimator is LAYERED. The v1 shape had two known
+# biases (42-report §2): the residual baseline was the rolling MAX (one lucky or
+# genuinely-faster draw pinned every residual positive and the band wide — the
+# run's own progress read as noise), and the job-internal window readings the
+# records already carry (device_readings_ms / ref_device_readings_ms — up to a
+# dozen pure window-noise samples per few records) were never consulted. v2:
+#
+#   sigma_within   per-window paired ratios (ref_i / kernel_i) of the recent
+#                  records, deviated around each record's OWN robust center —
+#                  kernel quality cancels within a record, what pools is pure
+#                  window noise (the _SprtController._candidate_pairs family);
+#   sigma_between  the record-level ratios' residuals against the robust center
+#                  of the OTHERS (leave-one-out — no rolling max to pin them),
+#                  plus the confirmation jobs' ratios the driver injects
+#                  (``raw={"ratios": [...]}`` — same-sha re-measurements are the
+#                  only between-job samples that carry no kernel difference);
+#   band           clamp(3 * max(sigma_within, sigma_between), floor, cap).
+#
+# The name, positional signature, clamp bounds and the data-poor fallback are
+# untouched (C8): fewer than RESOLVABLE_MIN_SAMPLES ratio samples returns cap —
+# the historical constant, so the old behavior is the fallback, never a mode.
+# _resolvable_diff_v1 keeps the v1 arithmetic verbatim for the consistency
+# matrix (tests + CHANGES) and for any caller that must reproduce old numbers.
 
 RESOLVABLE_SAMPLES = 6
 """How many recent evaluated records the resolution estimate reads."""
@@ -793,6 +893,9 @@ RESOLVABLE_DIFF_CAP = 0.015
 """Never claim to resolve worse than the historical noise floor: the cap the
 estimate clamps to, and the fallback when the data is insufficient."""
 
+RESOLVABLE_MAX_WINDOW_PAIRS = 24
+"""Cap on the pooled within-job window pairs (a noise estimate, not a census)."""
+
 
 def _gate_ratio(rec, gate_window: str) -> float | None:
     """The record's in-job paired ratio in the gate window, or None. vs_ref_device
@@ -806,25 +909,58 @@ def _gate_ratio(rec, gate_window: str) -> float | None:
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
-def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
-                    floor: float = RESOLVABLE_DIFF_FLOOR,
-                    cap: float = RESOLVABLE_DIFF_CAP) -> float:
-    """The relative difference this run's own recent measurements can resolve.
+def _mad_sigma(values) -> float | None:
+    """1.4826 x MAD(values) — the robust sigma of one family; None when fewer
+    than two usable values (a spread no single sample can speak about)."""
+    vals = [float(v) for v in (values or ())
+            if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    if len(vals) < 2:
+        return None
+    med = statistics.median(vals)
+    return 1.4826 * statistics.median(abs(v - med) for v in vals)
 
-    Data: the in-job paired ratio of the last ``RESOLVABLE_SAMPLES`` evaluated
-    records ("evaluated" exactly as detect_plateau defines it: a gate-window
-    reading present). sigma_roll is the robust standard deviation of those
-    ratios' residuals against their rolling best (median absolute deviation x
-    1.4826 — one lucky draw must not widen the band it is judged against).
 
-    Returns ``clamp(3 x sigma_roll, floor, cap)``. Fewer than
-    ``RESOLVABLE_MIN_SAMPLES`` ratio samples (a young run, or a bench without an
-    in-job reference) returns ``cap`` — the historical constant, so the old
-    behavior is the data-poor fallback, never a separate mode.
+def _window_pairs(rec, gate_window: str) -> list[float]:
+    """One record's per-window paired ratios (ref_i / kernel_i, index-aligned raw
+    device readings), deviated around the record's OWN robust center — what
+    remains is that record's pure window noise, its kernel level cancelled.
+    [] when the record carries no raw readings (a plain measure_windows bench, a
+    pre-WP1 row, or the e2e gate window — the raw arrays are device-window)."""
+    if gate_window != GATE_WINDOW_DEVICE:
+        return []
+    groups = []
+    kr = getattr(rec, "device_readings_ms", None)
+    rr = getattr(rec, "ref_device_readings_ms", None)
+    if kr and rr:
+        groups.append((rr, kr))
+    for w in getattr(rec, "workloads", None) or ():
+        if isinstance(w, dict) and w.get("device_readings_ms") and w.get("ref_device_readings_ms"):
+            groups.append((w["ref_device_readings_ms"], w["device_readings_ms"]))
+    out = []
+    for refs, kers in groups:
+        n = min(len(refs), len(kers))
+        ratios = [float(r) / float(k) for r, k in zip(refs[:n], kers[:n])
+                  if float(k) > 0.0 and float(r) > 0.0]
+        if len(ratios) < 2:
+            continue
+        center = statistics.median(ratios)
+        out.extend(r - center for r in ratios)
+    return out
 
-    ``floor`` / ``cap`` are loop.toml [loop] resolvable_floor / resolvable_cap
-    (defaults here); detect_plateau forwards its caller's.
-    """
+
+def _drift_clean(samples: list, min_keep: int) -> list:
+    """Drop rows whose SM clock sat >2% off the best's (they are not one
+    measurement condition and inflate every noise estimate), but only while the
+    remainder can still speak (>= ``min_keep``) — two-level fallback: an
+    all-drift history measures with what it has, exactly as before WP15."""
+    clean = [s for s in samples if not getattr(s, "clock_drift", False)]
+    return clean if len(clean) >= min_keep else samples
+
+
+def _resolvable_diff_v1(records, gate_window: str, *, floor: float, cap: float) -> float:
+    """The v1 estimator, verbatim (rolling-max residuals): kept for the v1<->v2
+    consistency matrix and as documentation of the fallback arithmetic. Not
+    consumed by the loop — resolvable_diff owns the production path."""
     evaluated = [r for r in records if gate_ms(r, gate_window) is not None]
     ratios = [v for r in evaluated[-RESOLVABLE_SAMPLES:]
               if (v := _gate_ratio(r, gate_window)) is not None]
@@ -838,10 +974,200 @@ def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
     return min(cap, max(floor, 3.0 * sigma))
 
 
+def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
+                    floor: float = RESOLVABLE_DIFF_FLOOR,
+                    cap: float = RESOLVABLE_DIFF_CAP,
+                    raw: dict | None = None) -> float:
+    """The relative difference this run's own recent measurements can resolve.
+
+    Data (WP15 v2, layered — see the block comment above):
+    * **within-job**: per-window paired ratios of the recent records, deviated
+      around each record's own center (pure window noise, kernel cancelled);
+    * **between-job**: the record-level ratios' leave-one-out residuals (the v1
+      rolling-max baseline — which let one draw pin every residual and widen the
+      band exactly where the run was making progress — is gone), plus any
+      confirmation-job ratios injected via ``raw``.
+
+    Returns ``clamp(3 x max(sigma_within, sigma_between), floor, cap)``. Fewer
+    than ``RESOLVABLE_MIN_SAMPLES`` between-job ratio samples (a young run, or a
+    bench without an in-job reference) returns ``cap`` — the historical constant,
+    so the old behavior is the data-poor fallback, never a separate mode. A
+    record with clock_drift=True is dropped from the sample while enough clean
+    rows remain (drifted readings inflate sigma; the fallback keeps a history
+    that is ALL drift measurable, as before).
+
+    ``raw`` (contract C8's injection point): {"pairs": [...], "ratios": [...]} —
+    within-job window deviations and between-job job-level ratios the CALLER
+    holds outside the trajectory (the confirmation jobs' same-sha re-measurements).
+    None (the default) reads everything off the records; an injected dict is
+    POOLED with the records' own samples, never a replacement.
+
+    ``floor`` / ``cap`` are loop.toml [loop] resolvable_floor / resolvable_cap
+    (defaults here); detect_plateau forwards its caller's.
+    """
+    evaluated = [r for r in records if gate_ms(r, gate_window) is not None]
+    recent = _drift_clean(evaluated[-RESOLVABLE_SAMPLES:], RESOLVABLE_MIN_SAMPLES)
+    ratios = [v for r in recent if (v := _gate_ratio(r, gate_window)) is not None]
+    extra = [float(v) for v in ((raw or {}).get("ratios") or ())
+             if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0.0]
+    if len(ratios) + len(extra) < RESOLVABLE_MIN_SAMPLES:
+        return cap
+    # within-job: window deviations off the records' raw readings (+ injected pairs)
+    pairs = []
+    for r in recent:
+        pairs.extend(_window_pairs(r, gate_window))
+    pairs.extend(float(v) for v in ((raw or {}).get("pairs") or ())
+                 if isinstance(v, (int, float)) and not isinstance(v, bool))
+    pairs = pairs[:RESOLVABLE_MAX_WINDOW_PAIRS]
+    sigma_within = _mad_sigma(pairs) or 0.0
+    # between-job: leave-one-out residuals of the pooled job-level ratios. The
+    # center for each datum is the median of the OTHERS — no datum can pin its
+    # own baseline (the v1 bias), and a robust center survives one outlier.
+    datums = ratios + extra
+    residuals = [statistics.median(datums[:i] + datums[i + 1:]) - v
+                 for i, v in enumerate(datums) if len(datums) > 1]
+    sigma_between = _mad_sigma(residuals) or 0.0
+    sigma = max(sigma_within, sigma_between)
+    return min(cap, max(floor, 3.0 * sigma))
+
+
+def combined_workload_test(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
+                           floor: float = RESOLVABLE_DIFF_FLOOR,
+                           cap: float = RESOLVABLE_DIFF_CAP,
+                           z_trigger: float = 2.0) -> dict | None:
+    """Per-workload Stouffer combined test over the recent records (WP15; NEW
+    function name per contract C8 — the verdict main path never calls this).
+
+    Why: the gate ratio is the geomean over the card's workloads, and the
+    confirmation band rides the same pooled currency — a gain that is small but
+    CONSISTENT across every workload (each +0.7%, the geomean +0.7%) hides under
+    a band fitted to the noisiest workload, while a gain carried by one workload
+    and a loss on another reads the same geomean. Stouffer's method combines each
+    workload's own z (its recent median ratio minus parity, over its own robust
+    sigma — the resolvable_diff MAD family) into one z with weights √n each;
+    heterogeneous per-workload noise stops diluting the signal the geomean
+    averages away.
+
+    Judgment is NOT here: the return value is advisory. The driver uses
+    ``significant`` only as one more CONFIRMATION-BAND trigger (a suspicious
+    reading gets re-measured — never a verdict by itself) and renders the row as
+    a teacher advisory in the plateau/audit block's existing slot.
+
+    Returns None when the records cannot speak (no per-workload ratios, or fewer
+    than RESOLVABLE_MIN_SAMPLES records with readings — same data floor as
+    resolvable_diff)."""
+    evaluated = _drift_clean([r for r in records if gate_ms(r, gate_window) is not None],
+                             RESOLVABLE_MIN_SAMPLES)
+    recent = evaluated[-RESOLVABLE_SAMPLES:]
+    per: dict[str, list[float]] = {}
+    for r in recent:
+        for w in getattr(r, "workloads", None) or ():
+            if not isinstance(w, dict):
+                continue
+            key = str(w.get("name"))
+            v = w.get("vs_ref_device", w.get("vs_ref")) if gate_window == GATE_WINDOW_DEVICE \
+                else w.get("vs_ref")
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0.0:
+                per.setdefault(key, []).append(float(v))
+    if sum(len(v) for v in per.values()) < RESOLVABLE_MIN_SAMPLES or len(per) < 2:
+        return None
+    rows, z_sum, w_sum = [], 0.0, 0.0
+    for name, vals in per.items():
+        med = statistics.median(vals)
+        sigma = _mad_sigma(vals)
+        if not sigma:
+            continue
+        z = (med - 1.0) / sigma
+        weight = len(vals) ** 0.5
+        z_sum += weight * z
+        w_sum += weight
+        rows.append({"name": name, "n": len(vals), "median_ratio": round(med, 4),
+                     "sigma_pct": round(sigma * 100, 2), "z": round(z, 2)})
+    if not w_sum:
+        return None
+    z = z_sum / w_sum
+    # one-sided p of the GAIN direction (z > 0): normal CDF via Abramowitz &
+    # Stegun 26.2.17 — report-only, so the rational approximation is the honest
+    # precision. A loss-direction z reads p=1: this test exists to surface small
+    # consistent WINS, never to call a loss.
+    t = 1.0 / (1.0 + 0.2316419 * z) if z >= 0 else 0.0
+    poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937
+             + t * (-1.821255978 + t * 1.330274429))))
+    phi = 1.0 - 0.3989422804014327 * pow(2.718281828459045, -0.5 * z * z) * poly \
+        if z >= 0 else 0.0
+    p = max(0.0, min(1.0, 1.0 - phi))
+    return {"z": round(z, 3), "p_one_sided": round(p, 5),
+            "significant": z >= z_trigger, "z_trigger": z_trigger,
+            "workloads": rows}
+
+
+def best_standard_error(records, gate_window: str = GATE_WINDOW_DEFAULT,
+                        *, min_within: int = 2) -> dict | None:
+    """The running best's log-domain standard error and CI95 (WP15; NEW function
+    name per contract C8 — an objective statistic row, never a judgment).
+
+    The best is min-of-draws: statistically it sits ABOVE the true best-branch
+    mean by an extreme-value offset, and every later gain is priced against that
+    bar. The row cannot remove the offset (only repetition can), but it can SAY
+    how wide the luck is: se of the best estimate in log domain, from
+
+    * the best row's CONFIRMATION readings when it carries >= 2 (the between-job
+      se of its median — the honest one), else
+    * the best row's own raw device readings (the within-job se of a median,
+      1.2533 x MAD(log)/sqrt(n) for the median-of-n estimator), else None.
+
+    ci95 = best_ms * exp(+/- 1.96 * se_log). The best row is picked exactly as
+    the driver's _best_ms does (min gate reading over rows with one, drifted
+    rows dropped while enough clean rows remain), so the digest line and the
+    watermark bar always describe the same number."""
+    evaluated = _drift_clean([r for r in records if gate_ms(r, gate_window) is not None],
+                             1)
+    if not evaluated:
+        return None
+    best = min(evaluated, key=lambda r: gate_ms(r, gate_window))
+    best_ms = gate_ms(best, gate_window)
+    readings = [float(v) for v in (getattr(best, "confirm_readings", None) or ())
+                if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0.0]
+    if len(readings) >= 2:
+        logs = [math.log(v) for v in readings]
+        se = (statistics.stdev(logs) / (len(logs) ** 0.5)) if len(logs) > 1 else None
+        basis, n = "confirm_jobs", len(readings)
+    else:
+        raw = [float(v) for v in (getattr(best, "device_readings_ms", None) or ())
+               if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0.0]
+        if len(raw) < min_within:
+            # single-input rows keep no raw arrays in the trajectory (the WP1
+            # digest-budget decision); the per-workload blocks do — read those
+            for w in getattr(best, "workloads", None) or ():
+                if isinstance(w, dict):
+                    raw.extend(float(v) for v in (w.get("device_readings_ms") or ())
+                               if isinstance(v, (int, float)) and not isinstance(v, bool)
+                               and v > 0.0)
+        if len(raw) < min_within:
+            return {"best_ms": best_ms, "se_log": None, "n": 1, "basis": None,
+                    "ci95": None, "iter": best.iter,
+                    "best_low_confidence": bool(getattr(best, "best_low_confidence", False))}
+        logs = [math.log(v) for v in raw]
+        mad = statistics.median(abs(x - statistics.median(logs)) for x in logs)
+        se = 1.2533 * mad / (len(logs) ** 0.5)
+        basis, n = "within_job", len(raw)
+    if se is None:
+        return {"best_ms": best_ms, "se_log": None, "n": n, "basis": basis,
+                "ci95": None, "iter": best.iter,
+                "best_low_confidence": bool(getattr(best, "best_low_confidence", False))}
+    half = 1.96 * se
+    return {"best_ms": best_ms, "se_log": round(se, 5), "n": n, "basis": basis,
+            "ci95": [round(best_ms * pow(2.718281828459045, -half), 4),
+                     round(best_ms * pow(2.718281828459045, half), 4)],
+            "iter": best.iter,
+            "best_low_confidence": bool(getattr(best, "best_low_confidence", False))}
+
+
 def detect_plateau(records, window: int = 3, noise_floor: float = 0.015,
                    gate_window: str = GATE_WINDOW_DEFAULT, *,
                    floor: float | None = None,
-                   cap: float | None = None) -> bool:
+                   cap: float | None = None,
+                   raw: dict | None = None) -> bool:
     """True when the last ``window`` evaluated iters set no new best beyond noise.
 
     Evaluated = has a reading in the gate window (REVERTs with None are skipped).
@@ -862,16 +1188,25 @@ def detect_plateau(records, window: int = 3, noise_floor: float = 0.015,
     still paid), and a lucky sub-noise draw read as progress (a dead phase kept
     grinding).
 
+    WP15 (contract C8's G8.2 sync obligation): the margin IS the watermark
+    confirmation band — both call this one resolvable_diff, so the v2 layered
+    estimator moves both judgments together by construction; the test suite
+    pins that identity (two estimators that could drift apart were the bug
+    class this is named for). Drifted rows (clock_drift=True) drop from the
+    window while enough clean rows remain, like every other consumer.
+
     ``noise_floor`` stays the ceiling of the margin (its historical meaning);
     ``floor`` / ``cap`` forward to resolvable_diff when the caller carries
-    config (loop.toml [loop] resolvable_floor / resolvable_cap).
+    config (loop.toml [loop] resolvable_floor / resolvable_cap); ``raw``
+    forwards the caller's confirmation-ratio injection (see resolvable_diff).
     """
     evaluated = [r for r in records if gate_ms(r, gate_window) is not None]
     if len(evaluated) <= window:
         return False
     margin = min(noise_floor, resolvable_diff(records, gate_window, floor=(
         RESOLVABLE_DIFF_FLOOR if floor is None else floor),
-        cap=noise_floor if cap is None else cap))
+        cap=noise_floor if cap is None else cap, raw=raw))
+    evaluated = _drift_clean(evaluated, window + 1)
     prior_best = min(gate_ms(r, gate_window) for r in evaluated[:-window])
     recent_best = min(gate_ms(r, gate_window) for r in evaluated[-window:])
     return recent_best >= prior_best * (1.0 - margin)

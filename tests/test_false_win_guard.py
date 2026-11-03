@@ -52,8 +52,10 @@ def test_apparent_target_from_a_lucky_node_draw_does_not_stop_the_run(tmp_path):
     be = PushingBackend(
         [REC("D1", 1.85), REC("D2", 1.85)],
         [EVAL(1.85), NCU,            # iter 0
-         EVAL(2.20), EVAL(2.20),     # same-period student confirmation (2 jobs)
-         EVAL(1.85), NCU],           # iter 1 keeps going
+         EVAL(2.20), EVAL(2.20), EVAL(2.20),   # same-period confirm; the median
+                                               # sits outside the node band of the
+                                               # lucky keep -> 1 disputed extra draw
+         EVAL(1.85), NCU],           # iter 1 keeps going (best unchanged: 1.85)
     )
     ctx = _ctx_with_anchor(tmp_path, be, target_ms=1.90, anchor_ms=2.00,
                            reanchor=reanchor)
@@ -220,7 +222,7 @@ def test_the_false_win_note_is_replayed_after_a_meta_entry_consumed_it(tmp_path)
         return ([2.20, 2.21], "")
 
     be = PushingBackend([REC("D1", 1.85)],
-                        [EVAL(1.85), NCU, EVAL(2.20), EVAL(2.20)])
+                        [EVAL(1.85), NCU, EVAL(2.20), EVAL(2.20), EVAL(2.20)])
     ctx = _ctx_with_anchor(tmp_path, be, target_ms=1.90, anchor_ms=2.00, reanchor=reanchor)
     ctx.ref_rides_job = False
     ctx.max_iters = 1

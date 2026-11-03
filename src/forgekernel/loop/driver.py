@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import math
 import os
 import re
 import shlex
@@ -68,6 +69,8 @@ from forgekernel.loop.parse import (
     ProbeRequest,
     ProbeVerdict,
     Record,
+    best_standard_error,
+    combined_workload_test,
     detect_plateau,
     job_abend,
     parse_eval,
@@ -447,10 +450,31 @@ class LoopContext:
     resolvable_cap: float = 0.015
     # Confirmations the suspicious-watermark band may buy per iteration (the
     # sub-margin "suspected real gain" band; the >margin jump and the NCU
-    # regression keep their own two-job protocol). 1 caps the cost of the new
-    # trigger; confirmation jobs ride the existing budget exemption (they never
-    # compete with iterations for wall-clock).
+    # regression keep their own two-job protocol). Since WP15 this budget is
+    # SHARED with the near-best routine (every new best confirms once — A1) and
+    # the drift / spread / win-stop triggers: one account, never a second one
+    # (contract C8: the confirmation jobs' accounting rides
+    # confirm_budget_per_iter). Confirmation jobs ride the existing budget
+    # exemption (they never compete with iterations for wall-clock).
     confirm_budget_per_iter: int = 1
+    # WP15 (甲G3): the gpu_entry MODE confirmation jobs submit. The default is
+    # the historical "all" (correctness + timing — what every confirmation has
+    # always bought). A card whose eval entry carries a cheaper gate-only mode
+    # (correctness short-circuit + gate-window timing; the 3-5x confirmation
+    # discount) sets [loop] confirm_job_mode in its card layer and the
+    # confirmations ride it — the driver-side mechanics (mode string, budget
+    # sharing, accounting) are here; the eval-side mode is the card's own.
+    # NOTE: the stock card_template entry maps perf|all to the same --mode all,
+    # so "gate" is a seam the eval template must provide (see CHANGES-WP15);
+    # setting it to a mode the entry does not know fails the job and the
+    # confirmation falls back to the single reading — safe, but pointless.
+    confirm_job_mode: str = "all"
+    # WP15: the confirmation draws' between-job memo (per gate window) — same-sha
+    # re-measurement ratios and their window-pair deviations, refuelling
+    # resolvable_diff's between-job / within-job sigma through contract C8's
+    # raw injection point. Runtime memory, not config.
+    confirm_ratio_memo: dict = field(default_factory=dict)
+    confirm_pair_memo: dict = field(default_factory=dict)
     # kb-tripwire: a student probe that needs >= this many GPU rounds before its
     # PASS is queued for the end-of-run KB harvest write-up (run_kb_harvest).
     # 0 disables. The threshold is on the *fight* (cumulative rounds per probe
@@ -748,7 +772,22 @@ class LoopContext:
     # sprt_early_stop = true arms it; the driver exports the flag into its own
     # process environment so locally-delivered jobs inherit it (ssh delivery
     # needs the same variable in submit.toml [env] — the env does not cross ssh).
+    # WP15 (B3): the local-delivery default is ON once the backtest cells pass
+    # (scripts/backtest_early_stop.py — the gate printout is the flip record);
+    # loop.toml [loop] sprt_early_stop = false restores the old default. The
+    # default here stays False — the LOOP-CONTEXT default is the ssh-conservative
+    # value; the local delivery flips it in _wp11_apply_cfg when the config does
+    # not say otherwise. The startup check WARNs on an ssh delivery that arms the
+    # flag without declaring it in submit.toml [env].
     sprt_early_stop: bool = False
+    # WP15 (N-B14, contract C14): WIN-direction early stop. Default OFF — the
+    # loss-only rule is safe by arithmetic, the win direction is only safe
+    # UNDER THE COUPLING: a win-direction-stopped reading confirms through the
+    # standing watermark protocol before it enters watermark/plateau/pricing.
+    # loop.toml [loop] sprt_win_stop = true arms it; the driver exports
+    # FK_SPRT_WIN_STOP + FK_SPRT_WIN_MARGIN (the watermark margin the job-side
+    # stop must clear) into the environment for local jobs.
+    sprt_win_stop: bool = False
     # --- WP11 (task 4) runtime accumulators (not config; memory like
     # wp5_blocked_uncaps_used): teacher turn seconds since the last appended
     # iteration record, stamped onto that record as teacher_s.
@@ -1385,8 +1424,15 @@ def _placeholder_bounce(ctx: LoopContext, turn: Record,
 
 
 def _best_ms(records, gate_window: str = GATE_WINDOW_DEFAULT) -> float | None:
-    vals = [gate_ms(r, gate_window) for r in records
-            if gate_ms(r, gate_window) is not None]
+    """The running best, over rows measured in ONE condition: rows flagged
+    clock_drift (their SM clock sat >2% off the best's) drop from the sample
+    while any clean row can speak (WP15's two-level fallback — an all-drift
+    history measures with what it has, exactly as before). A drifted lucky draw
+    as the bar taxed every later patch twice: the bar was never a real kernel
+    fact, and nothing downstream knew."""
+    with_reading = [r for r in records if gate_ms(r, gate_window) is not None]
+    clean = [r for r in with_reading if not getattr(r, "clock_drift", False)]
+    vals = [gate_ms(r, gate_window) for r in (clean or with_reading)]
     return min(vals) if vals else None
 
 
@@ -1685,105 +1731,177 @@ def _best_keep_gpu_state(records, gate_window: str) -> dict:
 
 def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_before,
                                   profiler: dict | None = None):
-    """Re-measure a KEEP whose reading is about to take the watermark on suspect
-    evidence, BEFORE it does.
+    """Re-measure a KEEP whose reading is about to take the watermark, BEFORE it
+    does — and since WP15, EVERY reading that would take it (the confirmation is
+    the best's routine, not its exception).
 
     One eval job is one node draw. An outlier that takes the watermark is not one
     bad number — it poisons every later meta transaction: rebuilds get attributed
     "no gain" against a best that was never real, and equal-or-better segments
-    cannot accumulate. Within-noise improvements — the common case — trigger
-    nothing and cost nothing.
+    cannot accumulate.
 
-    Three triggers:
-    * the reading beats the best by more than the noise floor (a jump this size
-      is exactly what one lucky node draw can fake), or
+    Triggers (WP15 rework; the first four re-measure SUSPECT evidence, the last
+    three re-measure because the best is a ratchet):
+    * the reading beats the best by more than the effective margin —
+      ``max(watermark_margin, resolvable_diff)`` (WP15 constant migration: a
+      noisy run's margin rides its own band; the config value stays the floor) —
+      or
+    * the improvement sits between what this run resolves (resolvable_diff, now
+      the WP15 layered estimator over CLUSTER-local records with the
+      confirmation-ratio memo injected) and the margin — the WP1 band; or
+    * the reading's SM clock sits >_CLOCK_DRIFT_BAND off the sitting best's —
+      WP15 promotes this from an ``elif`` (reachable only below the band, which
+      let a drifted SUB-resolution jump walk free through the NCU branch) to a
+      flat, independent trigger — the sub-rd+drift hole (42-report §3/§6) is
+      closed at unchanged budget; or
     * the reading takes the watermark while the record's own NCU kernel time
-      REGRESSED past the sitting best's by more than _NCU_REGRESSION_BAND — a
-      worse kernel on a fast node. This one costs nothing to detect and catches
-      fakes whose device-reading jump stays under the margin; or
-    * (WP1 band) the improvement sits between what the run's own paired ratios
-      resolve (resolvable_diff) and the margin — the +0.5..3% wins the official
-      ledger kept losing to the constant. These get their own confirmation,
-      budgeted: at most ctx.confirm_budget_per_iter jobs (default 1, loop.toml
-      [loop] confirm_budget_per_iter), not the full confirm-then-tie-break
-      protocol — the band is the common case and must stay cheap. The
-      confirmation jobs ride the standing budget exemption (they never compete
-      with iterations for wall-clock).
+      REGRESSED past the sitting best's — a worse kernel on a fast node (band
+      now ``max(_NCU_REGRESSION_BAND, 1 + resolvable_diff)``); or
+    * the row's own raw window spread exceeds twice the band (WP15 A11:
+      ``gate_spread_pct`` had no consumer — a DVFS-bimodal draw now confirms);
+      or
+    * the job EARLY-STOPPED in the win direction (WP15 N-B14, contract C14: a
+      truncated-draw win never enters watermark/plateau/pricing unconfirmed); or
+    * (A1, near-best routine) the reading improves the best INSIDE what this run
+      resolves — the official ledger's 8 wins were all <1.5% and every one of
+      them entered the ratchet unconfirmed. One budgeted job per new best; the
+      median-of-medians is what the trajectory banks.
 
-    Protocol: one confirmation job; agreement within the margin confirms the
-    jump, and the watermark takes the median of the two draws — not the first,
-    faster one: keeping it let a reading 1.5% fast stand as the bar every later
-    patch was priced against — except under the NCU trigger, where
-    ms agreement alone proves nothing (see below) and the branch is re-profiled
-    to clear the kernel clock too. Disagreement beyond it gets a third job and
-    the median of the three becomes the gate-window reading (the other window's
-    fields keep the first job's values — the watermark only reads the gate
-    window). A failed FIRST confirmation keeps the original reading: a flaky
-    queue must not veto a measured KEEP. But once a dissenting confirmation is
-    in hand, that excuse is spent — a failed tie-break settles on the median of
-    what was measured rather than re-instating the unconfirmed jump.
+    Protocol: band triggers buy at most ctx.confirm_budget_per_iter jobs (the
+    budget is the point; the jobs ride the standing budget exemption); the
+    margin / NCU triggers keep their two-job confirm-then-tie-break. The
+    watermark takes the MEDIAN OF THE JOB MEDIANS — not the first, faster one —
+    except that a failed FIRST confirmation keeps the original reading (a flaky
+    queue must not veto a measured KEEP); once a dissenting confirmation is in
+    hand, a failed tie-break settles on the median of what was measured. Draws
+    whose spread exceeds the band mark the row ``best_low_confidence``: the
+    reading is one this run cannot settle, and plateau/meta read it with that
+    caution. Confirmation draws' same-job ratios refuel the between-job sigma
+    (the ctx memo — same-sha re-measurements are the one between-job sample with
+    no kernel difference in it).
+
+    Returns ``(ev, info)``: the (possibly median-rewritten) eval result and
+    {"confirm_jobs", "confirm_readings", "low_confidence", "why"} — the
+    IterationRecord's confirmation accounting.
     """
-    margin = ctx.watermark_margin
+    margin_cfg = ctx.watermark_margin
     ms = gate_ms(ev, ctx.gate_window)
-    if not margin or metric_before is None or ms is None or ms >= metric_before:
-        return ev
+    info = {"confirm_jobs": 0, "confirm_readings": ([] if ms is None else [ms]),
+            "low_confidence": False, "why": None}
+    if not margin_cfg or metric_before is None or ms is None or ms >= metric_before:
+        return ev, info
+    records_now = _on_cluster(load_records(ctx.status_path), ctx)
+    # WP15: the confirmation band consumes the layered estimator over THIS
+    # cluster's rows, refuelled by the confirmation-ratio memo (C8's raw
+    # injection point). Cluster filtering matches detect_plateau's window (the
+    # 42-report's inconsistency: the band ran unfiltered where the plateau did
+    # not).
+    rd = resolvable_diff(records_now, ctx.gate_window,
+                         floor=ctx.resolvable_floor, cap=ctx.resolvable_cap,
+                         raw=_confirm_raw_memo(ctx))
+    margin = max(margin_cfg, rd)   # constant migration: the margin rides the band
     why = None
     ncu_suspect_ns = None  # set iff the NCU-regression trigger raised the alarm
     band = False           # set iff a budget-limited (single-job) trigger raised it
     # WP1: the reading's SM clock vs the sitting best's — a >2% move is not one
     # measurement condition, and such a reading must not take the watermark on
-    # its own (it gets the budget-limited confirmation below). Readings without
-    # gpu_state telemetry are simply never flagged.
-    records_now = load_records(ctx.status_path)
+    # its own. Readings without gpu_state telemetry are simply never flagged.
     clock_gap = _sm_clock_drift(ev.gpu_state,
-                                _best_keep_gpu_state(records_now, ctx.gate_window))
+                                _best_keep_gpu_state(load_records(ctx.status_path),
+                                                     ctx.gate_window))
     drifted = clock_gap is not None and clock_gap > _CLOCK_DRIFT_BAND
+    gain_pct = (metric_before - ms) / metric_before
     if ms < metric_before * (1 - margin):
         why = (f"beats best {metric_before} by more than {margin:.0%}")
-    else:
+    elif ms < metric_before * (1 - rd):
         # WP1 band: past what this run's own paired ratios resolve, inside the
         # margin. A run without enough ratio history keeps the old free pass
         # (resolvable_diff falls back to the cap, here >= any sub-margin gain).
-        rd = resolvable_diff(records_now, ctx.gate_window,
-                             floor=ctx.resolvable_floor, cap=ctx.resolvable_cap)
-        if ms < metric_before * (1 - rd):
-            why = (f"beats best {metric_before} by "
-                   f"{(metric_before - ms) / metric_before:.1%} — inside the "
-                   f"{margin:.0%} margin but past what this run's ratios resolve "
-                   f"({rd:.1%})")
-            band = True
-        elif drifted:
-            why = (f"beats best {metric_before} by "
-                   f"{(metric_before - ms) / metric_before:.1%} while its SM clock "
-                   f"sits {clock_gap:.1%} off the sitting best's — a clock move, "
-                   f"not a kernel fact, until confirmed")
-            band = True
-        else:
-            new_t = (profiler or {}).get("time_ns")
-            best_t = _best_keep_ncu_ns(records_now, ctx.gate_window)
-            if new_t and best_t and float(new_t) > best_t * _NCU_REGRESSION_BAND:
-                why = (f"takes the watermark while its NCU kernel time regressed "
-                       f"{float(new_t) / best_t:.3f}x vs the sitting best "
-                       f"({new_t} vs {best_t:.0f} ns) — worse kernel on a fast node?")
-                ncu_suspect_ns = best_t
+        why = (f"beats best {metric_before} by {gain_pct:.1%} — inside the "
+               f"{margin:.0%} margin but past what this run's ratios resolve "
+               f"({rd:.1%})")
+        band = True
+    elif drifted:
+        # WP15: flat trigger (was an elif reachable only below the band) — a
+        # drifted sub-resolution jump confirms at budget, not for free.
+        why = (f"beats best {metric_before} by {gain_pct:.1%} while its SM clock "
+               f"sits {clock_gap:.1%} off the sitting best's — a clock move, "
+               f"not a kernel fact, until confirmed")
+        band = True
+    else:
+        new_t = (profiler or {}).get("time_ns")
+        best_t = _best_keep_ncu_ns(records_now, ctx.gate_window)
+        ncu_band = _ncu_regression_band(records_now, ctx.gate_window,
+                                        floor=ctx.resolvable_floor,
+                                        cap=ctx.resolvable_cap)
+        if new_t and best_t and float(new_t) > best_t * ncu_band:
+            why = (f"takes the watermark while its NCU kernel time regressed "
+                   f"{float(new_t) / best_t:.3f}x vs the sitting best "
+                   f"({new_t} vs {best_t:.0f} ns) — worse kernel on a fast node?")
+            ncu_suspect_ns = best_t
     if why is None:
-        return ev
+        # WP15 A11: the row's own window spread — the raw mirrored readings'
+        # (max-min)/min — past twice the band means the draw itself was bimodal
+        # (DVFS), whatever its median says. gate_spread_pct was recorded with no
+        # consumer; this is its consumer.
+        spread = readings_spread_pct(ev.device_readings_ms)
+        if spread is not None and spread > 2.0 * rd:
+            why = (f"beats best {metric_before} by {gain_pct:.1%} with its own "
+                   f"windows spread {spread:.1%} (> 2x the {rd:.1%} band) — a "
+                   f"bimodal draw, not a kernel fact, until confirmed")
+            band = True
+    if why is None:
+        # WP15 N-B14 (contract C14): a job that early-stopped in the WIN
+        # direction produced a truncated draw that beat the margin — the stop
+        # saved windows, it did not confirm anything. The reading enters the
+        # same protocol here; until it confirms, it reaches no watermark, no
+        # plateau window, no lever pricing (the row is appended only after this
+        # returns).
+        sprt = getattr(ev, "sprt", None) or {}
+        if sprt.get("direction") == "win":
+            why = (f"beats best {metric_before} by {gain_pct:.1%} and its job "
+                   f"early-stopped in the win direction at "
+                   f"{sprt.get('decided', '?')} windows — a truncated draw is "
+                   f"not a confirmation; confirming (C14)")
+            band = True
+    if why is None:
+        # WP15 (the family battery's card rule): a card whose reading carries a
+        # LOSS-stopped workload cannot take the watermark on that reading — the
+        # loss direction is trusted (it convicted), but a truncated workload
+        # must not acquit the whole card's geomean (the backtest priced the
+        # unguarded rule at boundary false-wins; with the veto the family
+        # false-win is structurally zero). The confirmation buys the missing
+        # full-window evidence at the standing budget.
+        stopped = ([w.get("sprt", {}).get("direction") for w in (ev.workloads or ())
+                    if isinstance(w, dict) and isinstance(w.get("sprt"), dict)]
+                   if ev.workloads else [])
+        if sprt.get("direction") == "loss" or "loss" in stopped:
+            why = (f"beats best {metric_before} by {gain_pct:.1%} but its job "
+                   f"early-stopped (loss direction) on "
+                   f"{'a workload' if ev.workloads else 'the measurement'} — a "
+                   f"loss-stopped draw cannot acquit the card; confirming")
+            band = True
+    if why is None:
+        # WP15 A1: the near-best routine. Sub-resolution improvements used to
+        # take the watermark free — the 42-report's sub-rd hole. Every new best
+        # is now confirmed once, at unchanged per-iter budget.
+        why = (f"beats best {metric_before} by {gain_pct:.1%} inside what this "
+               f"run resolves ({rd:.1%}) — every new best confirms once (the "
+               f"best is a ratchet; one independent draw is what de-biases it)")
+        band = True
+    if why is None:
+        return ev, info
     _log(f"watermark: {ms} {why} — confirming before it takes the watermark")
     key = "device_median_ms" if ctx.gate_window == "device" else "bwd_median_ms"
     readings = [ms]
-
-    def _confirmed():
-        both = statistics.median(readings)
-        if both != ms:
-            _log(f"watermark: confirmed — recording median {both} of {readings}, "
-                 f"not the first draw")
-        return replace(ev, **{key: both})
+    confirmed = False
     # band: confirm_budget_per_iter job(s), no tie-break — the budget is the point;
     # a band trigger that disagreed settles on the median below. The margin / NCU
     # triggers keep their two-job protocol (confirm, then tie-break).
     for _ in range(ctx.confirm_budget_per_iter if band else 2):
         try:
-            ev_n = _enforce_single_ref(ctx, parse_eval(be.submit_gpu(branch, "all")))
+            ev_n = _enforce_single_ref(ctx, parse_eval(
+                be.submit_gpu(branch, ctx.confirm_job_mode)))
             ms_n = gate_ms(ev_n, ctx.gate_window) if ev_n.correctness else None
         except BackendError as e:
             ms_n, e_txt = None, str(e)
@@ -1798,13 +1916,20 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
                 _log(f"watermark: tie-break {what} — settling on what was measured")
                 break
             _log(f"watermark: confirmation {what} — keeping the single reading")
-            return ev
+            info["why"] = why
+            return ev, info
+        # WP15: the draw refuels the between-job sigma — its same-job ratio and
+        # its own window deviations (same-sha re-measurement: kernel constant,
+        # everything in the spread is measurement).
+        _memo_confirmation(ctx, ev_n)
         readings.append(ms_n)
+        info["confirm_jobs"] += 1
         _log(f"watermark: confirmation job {getattr(be, 'last_job_id', '') or '?'} "
              f"read {ms_n}")
         if len(readings) == 2 and abs(ms_n - ms) <= margin * ms:
             if ncu_suspect_ns is None:
-                return _confirmed()  # two independent draws agree — the jump is real
+                confirmed = True  # two independent draws agree — the jump is real
+                break
             # ms agreement cannot clear the NCU trigger: on a bimodal queue the
             # confirmation draws from the same fast-node pool the suspect did,
             # so band-consistent readings are near coin-flip likely even when
@@ -1814,15 +1939,87 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
                 t_n = _ncu_profiler(ctx, branch, correctness=True).get("time_ns")
             except BackendError:
                 t_n = None
-            if t_n and float(t_n) <= ncu_suspect_ns * _NCU_REGRESSION_BAND:
-                return _confirmed()  # kernel time recovered too — the jump is real
+            if t_n and float(t_n) <= ncu_suspect_ns * ncu_band:
+                confirmed = True  # kernel time recovered too — the jump is real
+                break
             _log(f"watermark: ms agrees but the re-profiled kernel time "
                  f"({t_n or 'unavailable'} ns) does not clear the regression vs "
                  f"{ncu_suspect_ns:.0f} ns — tie-breaking")
     final = statistics.median(readings)
-    _log(f"watermark: recording median {final} of {readings} — the single-job jump "
-         f"did not confirm")
-    return replace(ev, **{key: final})
+    if confirmed:
+        if final != ms:
+            _log(f"watermark: confirmed — recording median {final} of {readings}, "
+                 f"not the first draw")
+    else:
+        if len(readings) > 1:
+            spread = (max(readings) - min(readings)) / min(readings)
+            info["low_confidence"] = bool(spread > rd)
+            if info["low_confidence"]:
+                _log(f"watermark: confirmation draws spread {spread:.1%} > band "
+                     f"{rd:.1%} — the reading is marked low-confidence (plateau "
+                     f"and meta read it with that caution)")
+        _log(f"watermark: recording median {final} of {readings} — the "
+             + ("band draw did not confirm" if band else "single-job jump did not confirm"))
+    info["why"] = why
+    info["confirm_readings"] = list(readings)
+    return replace(ev, **{key: final}), info
+
+
+_CONFIRM_MEMO_MAX = 32
+"""Bound on the confirmation-ratio memo (the between-job sigma's refuel)."""
+
+
+def _memo_confirmation(ctx: LoopContext, ev) -> None:
+    """Bank one confirmation draw for the between-job sigma (WP15): its same-job
+    ratio and its index-aligned window-pair deviations around their own center
+    (kernel constant, so the deviations are pure measurement). Bounded; a memo
+    from another gate window is never mixed in (the ratios are window-local)."""
+    gate_window = ctx.gate_window
+    ratio = ev.vs_ref_device if gate_window == "device" else ev.vs_ref
+    if isinstance(ratio, (int, float)) and not isinstance(ratio, bool) and ratio > 0:
+        memo = ctx.confirm_ratio_memo.setdefault(gate_window, [])
+        memo.append(float(ratio))
+        del memo[:-_CONFIRM_MEMO_MAX]
+    kr = list(ev.device_readings_ms or ())
+    rr = list(ev.ref_device_readings_ms or ())
+    n = min(len(kr), len(rr))
+    if n >= 2:
+        pairs = [float(r) / float(k) for r, k in zip(rr[:n], kr[:n])
+                 if float(k) > 0 and float(r) > 0]
+        if len(pairs) >= 2:
+            center = statistics.median(pairs)
+            memo = ctx.confirm_pair_memo.setdefault(gate_window, [])
+            memo.extend(p - center for p in pairs)
+            del memo[:-_CONFIRM_MEMO_MAX]
+
+
+def _confirm_raw_memo(ctx: LoopContext) -> dict:
+    """The confirmation memo in resolvable_diff's ``raw`` shape (this gate
+    window's slices), or {} when the memo is empty."""
+    gate_window = ctx.gate_window
+    raw = {}
+    ratios = ctx.confirm_ratio_memo.get(gate_window) or []
+    pairs = ctx.confirm_pair_memo.get(gate_window) or []
+    if ratios:
+        raw["ratios"] = list(ratios)
+    if pairs:
+        raw["pairs"] = list(pairs)
+    return raw
+
+
+def _ncu_regression_band(records, gate_window: str, *, floor: float | None = None,
+                         cap: float | None = None) -> float:
+    """WP15 constant migration for _NCU_REGRESSION_BAND: the NCU regression that
+    raises the alarm must stay at least as wide as what the run's own gate
+    ratios resolve — a run whose band is 1.5% must not call a 1.05x kernel-clock
+    move a regression signature its own measurements cannot even see. The
+    constant (1.05) stays the floor."""
+    return 1.0 + max(_NCU_REGRESSION_BAND - 1.0,
+                     resolvable_diff(records, gate_window,
+                                     floor=(RESOLVABLE_DIFF_FLOOR if floor is None
+                                            else floor),
+                                     cap=(_GATE_REGRESSION_TOLERANCE if cap is None
+                                          else cap)))
 
 
 _PROBE_LOG_TAIL_LINES = 25
@@ -2208,6 +2405,20 @@ def _wp11_teacher_timed(ctx: LoopContext, fn, *args, **kwargs):
         ctx.wp11_teacher_measured = True
 
 
+def _wp15_delivery(ctx: LoopContext) -> tuple[str, dict]:
+    """(delivery kind, declared job env) of this run's submit config — ("", {})
+    when unreadable (test fakes, ops without a tree)."""
+    op = getattr(ctx.backend, "op", None)
+    if not op:
+        return "", {}
+    try:
+        from forgekernel.submit.config import load_config
+        cfg = load_config(op)
+        return cfg.delivery, dict(cfg.env or {})
+    except Exception:  # noqa: BLE001 — a config read must never break arming
+        return "", {}
+
+
 def _wp11_apply_cfg(ctx: LoopContext) -> None:
     """Resolve the WP11 switches from loop.toml (the WP5 pattern: card layer's
     [loop] over the global file, both reads best-effort; an explicitly set field
@@ -2215,19 +2426,52 @@ def _wp11_apply_cfg(ctx: LoopContext) -> None:
     default).
 
     ``merge_eval_ncu`` defaults True (the merged single job); ``false`` is the
-    kill switch that restores the two-job path. ``sprt_early_stop`` defaults
-    False; arming it exports FK_SPRT_EARLY_STOP=1 into THIS process's
-    environment so locally-delivered jobs inherit it (an ssh delivery's job env
-    does not cross the wire — put the same variable in submit.toml [env]
-    there)."""
+    kill switch that restores the two-job path.
+
+    WP15 (B3): ``sprt_early_stop`` defaults ON for the LOCAL delivery (the
+    backtest cells in scripts/backtest_early_stop.py are the flip record) and
+    stays OFF on an ssh delivery the config did not arm explicitly — with a
+    startup WARN when a config arms it there but submit.toml [env] does not
+    declare FK_SPRT_EARLY_STOP (the env does not cross the wire: the flag would
+    arm the DRIVER's accounting while every job runs full sampling, a silent
+    lie in the run log). ``sprt_win_stop`` (N-B14) defaults OFF everywhere and
+    exports FK_SPRT_WIN_STOP / FK_SPRT_WIN_MARGIN alongside. ``confirm_job_mode``
+    is read as a string (the confirmation jobs' gpu_entry mode)."""
     cfg = _wp5_cfg_sections(ctx)
     loop_cfg = cfg.get("loop") if isinstance(cfg.get("loop"), dict) else {}
     if isinstance(loop_cfg.get("merge_eval_ncu"), bool):
         ctx.merge_eval_ncu = loop_cfg["merge_eval_ncu"]
+    delivery, env = _wp15_delivery(ctx)
     if isinstance(loop_cfg.get("sprt_early_stop"), bool):
         ctx.sprt_early_stop = loop_cfg["sprt_early_stop"]
+        if ctx.sprt_early_stop and delivery == "ssh" \
+                and not any(k == "FK_SPRT_EARLY_STOP" for k in env):
+            _log("WARN [wp15] sprt_early_stop=true on an ssh delivery, but "
+                 "submit.toml [env] does not declare FK_SPRT_EARLY_STOP — the "
+                 "variable does not cross the wire, so jobs will run FULL "
+                 "sampling while this process believes it armed early stop. "
+                 "Add FK_SPRT_EARLY_STOP = \"1\" to [env] (or set "
+                 "sprt_early_stop = false).")
+    else:
+        # the flip: local deliveries arm it (backtest-gated, see CHANGES-WP15);
+        # ssh keeps the historical conservative default
+        ctx.sprt_early_stop = delivery != "ssh"
+    if isinstance(loop_cfg.get("sprt_win_stop"), bool):
+        ctx.sprt_win_stop = loop_cfg["sprt_win_stop"]
+    if isinstance(loop_cfg.get("confirm_job_mode"), str) \
+            and loop_cfg["confirm_job_mode"].strip():
+        ctx.confirm_job_mode = loop_cfg["confirm_job_mode"].strip()
     if ctx.sprt_early_stop:
         os.environ["FK_SPRT_EARLY_STOP"] = "1"
+    else:
+        os.environ.pop("FK_SPRT_EARLY_STOP", None)
+    if ctx.sprt_win_stop:
+        os.environ["FK_SPRT_WIN_STOP"] = "1"
+        os.environ["FK_SPRT_WIN_MARGIN"] = str(max(ctx.watermark_margin,
+                                                   ctx.resolvable_cap))
+    else:
+        os.environ.pop("FK_SPRT_WIN_STOP", None)
+        os.environ.pop("FK_SPRT_WIN_MARGIN", None)
 
 
 _WP11_TELEMETRY_FIELDS = ("agent_turn_s", "eval_job_s", "ncu_job_s",
@@ -2997,8 +3241,16 @@ def run_inner_iteration(
         append_record(ctx.status_path, rec)
         return rec
 
-    ev = _confirm_suspicious_watermark(ctx, be, branch, ev, metric_before,
-                                       profiler=profiler)
+    ev, confirm_info = _confirm_suspicious_watermark(ctx, be, branch, ev, metric_before,
+                                                     profiler=profiler)
+    # WP15: the confirmation accounting rides the row (objective; the budget
+    # account lives in the trajectory, not only in the log), and the row's log-
+    # domain standard error is derived from its own draws once, here.
+    _se_log = None
+    _draws = [float(v) for v in confirm_info["confirm_readings"] if v > 0]
+    if len(_draws) > 1:
+        _logs = [math.log(v) for v in _draws]
+        _se_log = statistics.stdev(_logs) / (len(_logs) ** 0.5)
     # WP1: was this reading's SM clock >2% off the sitting best's at reading time?
     # Computed on the same comparison the confirmation just ran (the new row is not
     # on file yet, so "best" is still the pre-iteration best).
@@ -3019,6 +3271,10 @@ def run_inner_iteration(
         orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
         prep=ev.prep or {}, n_workloads=ev.n_workloads, workloads=ev.workloads,
         precision=precision,
+        confirm_jobs=confirm_info["confirm_jobs"],
+        confirm_readings=confirm_info["confirm_readings"],
+        best_low_confidence=confirm_info["low_confidence"],
+        best_standard_error=_se_log,
         # WP1: how loud this row's own job was — the raw mirrored device readings'
         # spread, so a best set on a quiet draw is tellable from one set on a noisy
         # one. The arrays themselves ride the workload blocks / stay out of the digest.
@@ -3556,7 +3812,8 @@ def run_inner_loop(ctx: LoopContext, start_iter: int, *,
             msg = _gate_regression(records, rec, segment_records_before,
                                    gate_contract or {}, ctx.gate_window,
                                    voided=ctx.voided_ranges,
-                                   floor=ctx.resolvable_floor, cap=ctx.resolvable_cap)
+                                   floor=ctx.resolvable_floor, cap=ctx.resolvable_cap,
+                                   raw=_confirm_raw_memo(ctx))
             if msg:
                 _log(f"iter {iter_no}: gate regression — {msg}")
                 return "gate_regression"
@@ -4844,7 +5101,13 @@ def _lever_price_submit(ctx: LoopContext, be, branch: str, cmd: str, what: str,
             _log(f"{what}: workload {wl} has no table ({missing[wl]}) — merged without it")
             continue
         per.append((wl, log, job))
-    return meta_shapes.merge_lever_logs(per, missing=missing), per[0][2]
+    # WP15 constant migration: the merged table's floor never reads below this
+    # run's own resolution band (NOISE_FLOOR_PCT stays the quiet-run floor)
+    _mfloor = max(0.5, resolvable_diff(
+        _on_cluster(load_records(ctx.status_path), ctx), ctx.gate_window,
+        floor=ctx.resolvable_floor, cap=ctx.resolvable_cap) * 100.0)
+    return meta_shapes.merge_lever_logs(per, missing=missing,
+                                        floor=_mfloor), per[0][2]
 
 
 # ablations per pricing job / per JSON verdict probe (== lever_pricing_run.MAX_ABLATIONS)
@@ -5469,6 +5732,15 @@ def _run_lever_pricing(ctx: LoopContext, priced: "PricedTrees", bindings: dict,
             shapes = meta_shapes.card_meta_workloads(ctx.workspace)
             spec["rounds"] = meta_shapes.rounds_for(ctx.lever_pricing_rounds, len(shapes))
             spec["kernel_file"] = str(ctx.kernel_file)
+            # WP15 constant migration (lever_pricing_run.NOISE_FLOOR_PCT): the
+            # tool's floor never reads BELOW this run's own resolution — a run
+            # whose ratios only resolve 1.2% must not price a +0.8% lever
+            # LANDABLE. max() keeps the constant as the floor for quiet runs;
+            # an older tool script without the key behaves exactly as before.
+            _rd = resolvable_diff(_on_cluster(load_records(ctx.status_path), ctx),
+                                  ctx.gate_window, floor=ctx.resolvable_floor,
+                                  cap=ctx.resolvable_cap)
+            spec["noise_floor_pct"] = round(max(0.5, _rd * 100.0), 3)
             # The tool's own build check, run here on the same tree first: a
             # subset that shadows a lever, a member that is not a stack lever,
             # an `old` that does not apply — each used to cost a GPU job to
@@ -8478,6 +8750,26 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     if priced is not None:
         # a group card: the same readings on its other meta workloads (one job each)
         diagnose_extra += _meta_workload_readings(ctx, priced, "audit" if audit else "plateau")
+    if cwt := combined_workload_test(_on_cluster(load_records(ctx.status_path), ctx),
+                                     ctx.gate_window, floor=ctx.resolvable_floor,
+                                     cap=ctx.resolvable_cap):
+        # WP15 Stouffer advisory (contract C8: judgment is NOT here — the main
+        # verdict path never reads this; it is one more plateau/audit-block line,
+        # in this block's existing slot, telling the teacher what the geomean
+        # averages away: a small CONSISTENT per-workload gain the gate's pooled
+        # band hides, or a split the geomean cancels). Report-only.
+        rows = "; ".join(f"{r['name']}: median x{r['median_ratio']} "
+                         f"(n={r['n']}, σ={r['sigma_pct']}%, z={r['z']})"
+                         for r in cwt["workloads"])
+        diagnose_extra += (
+            "\n## Per-workload combined test (WP15, advisory — not a verdict)\n"
+            f"Stouffer z={cwt['z']} (one-sided p={cwt['p_one_sided']}, "
+            f"trigger z>={cwt['z_trigger']}) — "
+            + ("the recent workloads agree on a small GAIN the geomean's band hides; "
+               "a lever that repeats it is worth designing for"
+               if cwt["significant"]
+               else "no consistent per-workload signal beyond the run's resolution")
+            + f"\n{rows}\n")
     lever_table: list = []
     if priced is not None:
         # plateau OR audit: the audit is where structural reopens are decided,
@@ -10105,19 +10397,24 @@ _GATE_REGRESSION_TOLERANCE_MS = 0.06
 
 
 def _ratio_noise(records, gate_window: str, *, floor: float | None = None,
-                 cap: float | None = None) -> float:
+                 cap: float | None = None, raw: dict | None = None) -> float:
     """WP1: the same-job ratio noise band, from the run's own ratios
     (resolvable_diff). The historical constant is the ceiling and the
-    data-poor fallback — the old band, never a looser one."""
+    data-poor fallback — the old band, never a looser one. WP15: the band is
+    the v2 layered estimator (``raw`` forwards the confirmation-ratio memo —
+    the _GATE_REGRESSION_TOLERANCE constant's migration to resolvable
+    awareness is exactly this: the live band comes from the run's own
+    measurements, the constant only remains the clamp ceiling)."""
     return resolvable_diff(records, gate_window, floor=(
         RESOLVABLE_DIFF_FLOOR if floor is None else floor),
-        cap=_GATE_REGRESSION_TOLERANCE if cap is None else cap)
+        cap=_GATE_REGRESSION_TOLERANCE if cap is None else cap, raw=raw)
 
 
 def _gate_regression(records, rec, before: int, contract: dict, gate_window: str,
                      voided: "list[tuple[int, int]] | None" = None, *,
                      floor: float | None = None,
-                     cap: float | None = None) -> str | None:
+                     cap: float | None = None,
+                     raw: dict | None = None) -> str | None:
     """A message when ``rec`` (a gate KEEP) regressed past its band, else None.
 
     Read on the same-job ref/student ratio when both gate rows carry one
@@ -10132,7 +10429,7 @@ def _gate_regression(records, rec, before: int, contract: dict, gate_window: str
     allowed = float(contract.get(gate, 0.0))
     band = (f"declared band {allowed * 100:+.0f}%" if gate in contract
             else "same-stage parity")
-    tol = _ratio_noise(records, gate_window, floor=floor, cap=cap)
+    tol = _ratio_noise(records, gate_window, floor=floor, cap=cap, raw=raw)
     cur_r, prev_r = _paired_ratio(rec, gate_window), _paired_ratio(prev, gate_window)
     if cur_r is not None and prev_r is not None and prev_r > 0:
         # > 1 = student faster: a regression is the ratio dropping past the band
@@ -14967,6 +15264,17 @@ def _pct_off(ms: float | None, keep_ms: float | None) -> float | None:
     return 100.0 * (ms / keep_ms - 1.0)
 
 
+def _median_off_band(samples: list, keep_ms: float | None) -> bool:
+    """WP15: the settled median sits outside the node band of the KEEP reading —
+    the keep_disputed condition, live (the loop buys one more draw while it
+    holds and budget remains)."""
+    if not samples or not keep_ms:
+        return False
+    med = statistics.median(s["ms"] for s in samples)
+    off = _pct_off(med, keep_ms)
+    return off is not None and abs(off) > CONFIRM_NODE_BAND_PCT
+
+
 def _confirm_workload_medians(samples: list[dict], window: str) -> list[dict]:
     """Per-workload medians across confirmation samples (multi-workload cards).
 
@@ -15045,10 +15353,25 @@ def run_best_confirmation(ctx: LoopContext, jobs: int = 3, max_extra: int = 2,
              f"in hand — buying {max(0, jobs - len(samples))} more")
     consecutive_errors = 0
     attempts = 0
-    while len(samples) < jobs and attempts < jobs + max_extra:
+    disputed = False
+    while attempts < jobs + max_extra:
+        # WP15 (keep_disputed loop, 42-report §9): the dispute is about the
+        # MEDIAN — once ``jobs`` draws are in and their median sits outside the
+        # node band of the KEEP reading, buy up to ``max_extra`` more draws; the
+        # median over the enlarged set is what the claim settles on, and the
+        # outcome is written back below. A single deviating sample stays a
+        # logged machine note (exactly as before); the attempts cap is unchanged.
+        if len(samples) < jobs:
+            pass                       # the base budget first
+        elif len(samples) >= jobs + max_extra:
+            break                      # the dispute budget is spent
+        elif _median_off_band(samples, keep_ms):
+            disputed = True            # the claim itself is outside the band
+        else:
+            break                      # settled: the median sits in the band
         attempts += 1
         try:
-            log = be.submit_gpu(branch, "all")
+            log = be.submit_gpu(branch, ctx.confirm_job_mode)
         except BackendError as e:
             consecutive_errors += 1
             _log(f"confirm: job failed ({e})")
@@ -15057,6 +15380,7 @@ def run_best_confirmation(ctx: LoopContext, jobs: int = 3, max_extra: int = 2,
             continue
         consecutive_errors = 0
         ev = _enforce_single_ref(ctx, parse_eval(log))
+        _memo_confirmation(ctx, ev)   # WP15: every draw refuels the between-job sigma
         job = getattr(be, "last_job_id", "") or "?"
         if ctx.gate_window == "device":
             ms, ref_ms, ratio = ev.device_median_ms, ev.ref_device_ms, ev.vs_ref_device
@@ -15082,8 +15406,10 @@ def run_best_confirmation(ctx: LoopContext, jobs: int = 3, max_extra: int = 2,
             sample["off_keep_pct"] = round(off, 2)
             _log(f"confirm: job {job} {ctx.gate_window}={ms} is {off:+.1f}% off the KEEP "
                  f"reading {keep_ms} of {ref[:10]} — outside the ±{CONFIRM_NODE_BAND_PCT:.0f}% "
-                 f"node band: the reading stands, and the machine ({sample['node'] or '?'}) "
-                 f"is worth a look (another process on the GPU, clocks)")
+                 f"node band: if the settled median lands outside too, the dispute "
+                 f"loop buys up to {max_extra} more draw(s); the machine "
+                 f"({sample['node'] or '?'}) is worth a look (another process on "
+                 f"the GPU, clocks)")
         samples.append(sample)
         _log(f"confirm: job {job} {ctx.gate_window}={ms}"
              + (f" ref={ref_ms} ratio={ratio:.4f}" if ratio is not None else ""))
@@ -15098,10 +15424,24 @@ def run_best_confirmation(ctx: LoopContext, jobs: int = 3, max_extra: int = 2,
            "node_band_pct": CONFIRM_NODE_BAND_PCT}
     med_off = _pct_off(med_ms, keep_ms)
     out["keep_disputed"] = bool(med_off is not None and abs(med_off) > CONFIRM_NODE_BAND_PCT)
+    out["dispute_opened"] = disputed
+    if disputed:
+        # WP15 write-back: the dispute is no longer a terminal note. The claim
+        # settles on the median over the enlarged draw set (the KEEP row's own
+        # reading included), the outcome rides best_confirmation.json (this
+        # record) as before, AND the trajectory hears about it: the digest's
+        # achieved block reads best_low_confidence/best_standard_error off the
+        # rows, and the run log names the correction — a downstream reader of
+        # best_confirmation.json gets the settled number, not the disputed one.
+        _log(f"confirm: a node-band dispute was opened this run — the settled "
+             f"median {med_ms} ms over {len(samples)} draw(s) is the claim "
+             f"(write-back; the KEEP row's {keep_ms} ms stays as the trajectory's "
+             f"objective history)")
     if out["keep_disputed"]:
         _log(f"confirm: median {med_ms} ms is {med_off:+.1f}% off the KEEP reading {keep_ms} "
-             f"of {ref[:10]} — the confirmation DISPUTES the trajectory's reading; the "
-             f"number below is what fresh jobs measured, the KEEP row is the one to doubt")
+             f"of {ref[:10]} — the confirmation DISPUTES the trajectory's reading even "
+             f"after the extra draw(s); the number below is what fresh jobs measured, "
+             f"the KEEP row is the one to doubt")
     nodes = sorted({s["node"] for s in samples if s.get("node")})
     if len(samples) > 1 and len(nodes) == 1:
         _log(f"confirm: all {len(samples)} sample(s) ran on one machine ({nodes[0]}) — that "

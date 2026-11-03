@@ -336,13 +336,59 @@ def test_wp11_apply_cfg_reads_loop_toml(tmp_path, monkeypatch):
     driver._wp11_apply_cfg(ctx)
     assert ctx.merge_eval_ncu is False and ctx.sprt_early_stop is True
     assert os.environ["FK_SPRT_EARLY_STOP"] == "1"
-    monkeypatch.delenv("FK_SPRT_EARLY_STOP", raising=False)
-    # bad values leave the defaults
+    os.environ.pop("FK_SPRT_EARLY_STOP", None)   # NOT monkeypatch.delenv: its
+    # teardown-undo would RESTORE the production-set value and leak it onward
+    # bad values leave the defaults. WP15 (B3): the sprt_early_stop default is
+    # delivery-dependent — ON for a local delivery (the backtest-gated flip,
+    # scripts/backtest_early_stop.py OVERALL PASS is the record), OFF on ssh.
+    # _ctx's FakeBackend names no submit config -> the delivery reads as "" ->
+    # the local arm. An explicit config false is honored above.
     (tmp_path / "loop.toml").write_text('[loop]\nmerge_eval_ncu = "yes"\n',
                                         encoding="utf-8")
     ctx2 = _ctx(tmp_path, FakeBackend([], []))
     driver._wp11_apply_cfg(ctx2)
-    assert ctx2.merge_eval_ncu is True and ctx2.sprt_early_stop is False
+    assert ctx2.merge_eval_ncu is True and ctx2.sprt_early_stop is True
+    os.environ.pop("FK_SPRT_EARLY_STOP", None)
+
+
+def test_wp15_sprt_default_is_delivery_dependent(tmp_path, monkeypatch):
+    # ssh delivery, nothing configured -> the conservative default (no early
+    # stop; the env does not cross the wire). An ssh config that arms the flag
+    # without declaring FK_SPRT_EARLY_STOP in submit.toml [env] draws the WARN.
+    import types
+
+    def _with_delivery(monkeypatch, delivery, env=None):
+        from forgekernel.submit import config as submit_config
+
+        cfg = types.SimpleNamespace(delivery=delivery, env=env or {})
+        monkeypatch.setattr(submit_config, "load_config", lambda op: cfg)
+        be = FakeBackend([], [])
+        be.op = "demo"          # _wp15_delivery reads the backend's op
+        ctx = _ctx(tmp_path, be)
+        os.environ.pop("FK_SPRT_EARLY_STOP", None)
+        (tmp_path / "loop.toml").unlink(missing_ok=True)
+        driver._wp11_apply_cfg(ctx)
+        return ctx   # the caller asserts the env the flip left, then pops it
+
+    ctx_ssh = _with_delivery(monkeypatch, "ssh")
+    assert ctx_ssh.sprt_early_stop is False
+    assert "FK_SPRT_EARLY_STOP" not in os.environ
+
+    ctx_local = _with_delivery(monkeypatch, "local")
+    assert ctx_local.sprt_early_stop is True
+    assert os.environ["FK_SPRT_EARLY_STOP"] == "1"
+    os.environ.pop("FK_SPRT_EARLY_STOP", None)
+
+    ctx_warn = _with_delivery(monkeypatch, "ssh", env={"OTHER": "1"})
+    # the config explicitly arms it (sprt_early_stop is left at its False
+    # default here, so no flip); the WARN path needs the explicit true:
+    (tmp_path / "loop.toml").write_text("[loop]\nsprt_early_stop = true\n",
+                                        encoding="utf-8")
+    os.environ.pop("FK_SPRT_EARLY_STOP", None)
+    driver._wp11_apply_cfg(ctx_warn)
+    assert ctx_warn.sprt_early_stop is True   # explicit config wins on ssh too
+    os.environ.pop("FK_SPRT_EARLY_STOP", None)   # no env leak (pop, not delenv:
+    # the delenv teardown-undo would restore the production-set value)
 
 
 def test_merged_deadline_is_the_sum_of_the_segment_budgets(tmp_path):
@@ -736,7 +782,7 @@ def test_backtest_gate_passes():
     r = subprocess.run([sys.executable, str(REPO / "scripts" / "backtest_early_stop.py"),
                         "300"], capture_output=True, text=True, timeout=600)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "GATE: PASS" in r.stdout
+    assert "OVERALL: PASS" in r.stdout   # WP15: per-battery gates + the overall
 
 
 # --- the zero-behavior-change gate (all switches off) --------------------------

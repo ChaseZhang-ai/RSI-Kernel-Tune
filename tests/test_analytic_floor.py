@@ -71,7 +71,7 @@ def test_attention_causal_charges_the_masked_half() -> None:
                   outputs=[{"name": "o", "shape": ["batch", "seq", "heads", "dim"],
                             "dtype": "bfloat16"}])
     half = 2 * (8 * 16) * 4096 * 4096 * 128       # the masked half
-    causal = af.floor_for(_problem(family="attention", name="attn_bwd_causal", **common))
+    causal = af.floor_for(_problem(family="attention", name="attn_fwd_causal", **common))
     assert causal["flops"] == half
     # KV re-read conservative bound: each byte once
     assert causal["bytes_min"] == 4 * 8 * 4096 * 16 * 128 * 2
@@ -81,6 +81,27 @@ def test_attention_causal_charges_the_masked_half() -> None:
     undeclared = af.floor_for(_problem(family="attention", name="attn_full", **common))
     assert undeclared["flops"] == causal["flops"] == half
     assert undeclared["floor_ms"] == causal["floor_ms"]
+
+
+def test_backward_attention_charges_the_conservative_chain_factor() -> None:
+    # WP15 (丙WP15-T5): the fwd-only floor sat below half an attention bwd's real
+    # work (recompute + dgrad + wgrad ≈ 2.5x fwd) — the teacher's headroom was a
+    # fiction and floor_stop could never fire on a bwd card. A backward-named
+    # problem now charges the fwd chain x2 (conservative: the real chain is
+    # larger, so the floor still under-counts — never a ratio < 1).
+    axes = {"batch": 8, "heads": 16, "seq": 4096, "dim": 128, "causal": True}
+    tensors = dict(axes=axes,
+                   inputs=[{"name": n, "shape": ["batch", "seq", "heads", "dim"],
+                            "dtype": "bfloat16"} for n in ("q", "k", "v")],
+                   outputs=[{"name": "o", "shape": ["batch", "seq", "heads", "dim"],
+                             "dtype": "bfloat16"}])
+    half = 2 * (8 * 16) * 4096 * 4096 * 128
+    bwd = af.floor_for(_problem(family="attention", name="attn_bwd_causal", **tensors))
+    assert bwd["flops"] == 2 * half
+    assert any("backward kernel" in a for a in bwd["assumptions"])
+    fwd = af.floor_for(_problem(family="attention", name="attn_fwd_causal", **tensors))
+    assert fwd["flops"] == half        # fwd naming is untouched
+    assert bwd["floor_ms"] == fwd["floor_ms"] * 2   # flops-side floor doubles
 
 
 def test_attention_explicit_non_causal_charges_the_full_table() -> None:

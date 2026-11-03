@@ -4803,12 +4803,14 @@ def test_watermark_jump_not_confirmed_records_the_median(tmp_path):
     assert len([c for c in be.calls if c == ("gpu", "all")]) == 3
 
 
-def test_watermark_within_noise_improvement_costs_nothing(tmp_path):
-    # 2.97 vs best 3.0 is inside the 3% margin -> no confirmation job
-    be = FakeBackend([REC("D1", 2.97)], [EVAL_DW(3.1, 2.97), NCU])  # no extra log needed
+def test_watermark_within_noise_improvement_confirms_once_a1(tmp_path):
+    # WP15 A1: 2.97 vs best 3.0 (1%, inside the 3% margin and inside the 1.5%
+    # data-poor fallback band) used to take the watermark free — the near-best
+    # routine now confirms it once, and the row banks the median of the draws.
+    be = FakeBackend([REC("D1", 2.97)], [EVAL_DW(3.1, 2.97), NCU, EVAL_DW(3.1, 2.98)])
     rec = run_inner_iteration(_wm_ctx(tmp_path, be), 0, metric_before=3.0)
-    assert rec.device_median_ms == 2.97
-    assert len([c for c in be.calls if c == ("gpu", "all")]) == 1
+    assert rec.device_median_ms == pytest.approx((2.97 + 2.98) / 2)
+    assert len([c for c in be.calls if c == ("gpu", "all")]) == 2
 
 
 def test_watermark_confirmation_infra_failure_keeps_the_reading(tmp_path):
@@ -4843,23 +4845,27 @@ def test_watermark_ncu_regression_triggers_confirmation_below_the_margin(tmp_pat
     ctx = _wm_ctx(tmp_path, be)
     _seed_best_keep(ctx, ms=2.0, t_ns=280000)
     ev = parse_eval(EVAL_DW(2.36, 1.97))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0,
-                                        profiler={"time_ns": 310000})
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0,
+                                              profiler={"time_ns": 310000})
     assert out.device_median_ms == 2.05  # median of 1.97 / 2.05 / 2.06 — fake best rejected
+    assert "NCU kernel time regressed" in info["why"]
     assert len([c for c in be.calls if c == ("gpu", "all")]) == 2
 
 
-def test_watermark_ncu_consistent_small_improvement_costs_nothing(tmp_path):
+def test_watermark_ncu_consistent_small_improvement_confirms_once_a1(tmp_path):
+    # WP15 A1: the NCU clock is consistent, the gain is inside the data-poor
+    # band — the old free pass is gone; the near-best routine confirms once.
     from forgekernel.loop.driver import _confirm_suspicious_watermark
     from forgekernel.loop.parse import parse_eval
-    be = FakeBackend([], [])
+    be = FakeBackend([], [EVAL_DW(2.4, 2.0)])
     ctx = _wm_ctx(tmp_path, be)
     _seed_best_keep(ctx, ms=2.0, t_ns=280000)
     ev = parse_eval(EVAL_DW(2.36, 1.97))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0,
-                                        profiler={"time_ns": 279000})
-    assert out.device_median_ms == 1.97
-    assert not be.calls  # in-band improvement, NCU consistent — free
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0,
+                                              profiler={"time_ns": 279000})
+    assert out.device_median_ms == pytest.approx((1.97 + 2.0) / 2)
+    assert info["confirm_jobs"] == 1
+    assert "every new best confirms once" in info["why"]
 
 
 def test_watermark_tiebreak_failure_does_not_reinstate_the_outlier(tmp_path):
@@ -4881,7 +4887,7 @@ def test_watermark_tiebreak_failure_does_not_reinstate_the_outlier(tmp_path):
     be = _DiesOnTieBreak([], [EVAL_DW(2.6, 2.4)])  # confirm disagrees, tie-break dies
     ctx = _wm_ctx(tmp_path, be)
     ev = parse_eval(EVAL_DW(2.4, 2.0))  # suspect jump vs best 3.0
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 3.0, profiler={})
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 3.0, profiler={})
     assert out.device_median_ms == pytest.approx(2.2)  # median of 2.0 / 2.4
 
 
@@ -4899,8 +4905,8 @@ def test_watermark_ncu_trigger_is_not_cleared_by_ms_agreement_alone(tmp_path, mo
     ctx = _wm_ctx(tmp_path, be)
     _seed_best_keep(ctx, ms=2.0, t_ns=280000)
     ev = parse_eval(EVAL_DW(2.36, 1.97))  # in-band ms, NCU time regressed 10.7%
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0,
-                                        profiler={"time_ns": 310000})
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0,
+                                              profiler={"time_ns": 310000})
     assert out.device_median_ms == pytest.approx(1.98)  # median of 1.97/1.98/2.05
     assert len([c for c in be.calls if c == ("gpu", "all")]) == 2
 
@@ -4917,8 +4923,8 @@ def test_watermark_ncu_trigger_cleared_by_the_reprofile_confirms(tmp_path, monke
     ctx = _wm_ctx(tmp_path, be)
     _seed_best_keep(ctx, ms=2.0, t_ns=280000)
     ev = parse_eval(EVAL_DW(2.36, 1.97))
-    out = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0,
-                                        profiler={"time_ns": 310000})
+    out, info = _confirm_suspicious_watermark(ctx, be, "b", ev, 2.0,
+                                              profiler={"time_ns": 310000})
     assert out.device_median_ms == pytest.approx(1.975)
     assert len([c for c in be.calls if c == ("gpu", "all")]) == 1
 
@@ -7645,11 +7651,15 @@ def test_json_probe_with_no_ablations_feeds_back_without_a_job(tmp_path):
 # --- confirmation vs the KEEP reading (node hygiene) --------------------------
 
 def test_best_confirmation_without_a_lease_keeps_a_deviating_sample(tmp_path):
-    # the deviation is reported, and the reading stands
+    # the deviation is reported, and the reading stands. WP15: a deviating sample
+    # OPENS a dispute and buys up to max_extra more draws (the disputed loop);
+    # the median over the enlarged set is the claim, still disputed here.
     be = _ConfirmBackend([], [_EVAL_CONFIRM(4.6, 2.0), _EVAL_CONFIRM(4.7, 2.0),
-                              _EVAL_CONFIRM(4.65, 2.0)])
+                              _EVAL_CONFIRM(4.65, 2.0), _EVAL_CONFIRM(4.62, 2.0),
+                              _EVAL_CONFIRM(4.68, 2.0)])
     out = run_best_confirmation(_confirm_ctx(tmp_path, be), jobs=3)
-    assert len(out["jobs"]) == 3 and out["keep_disputed"] is True
+    assert len(out["jobs"]) == 5 and out["keep_disputed"] is True
+    assert out["dispute_opened"] is True
     assert all(s["off_keep_pct"] > 100 for s in out["jobs"])
 
 

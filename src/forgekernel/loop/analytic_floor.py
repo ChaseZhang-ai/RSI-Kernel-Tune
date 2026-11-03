@@ -302,16 +302,29 @@ def _conv_flops(axes: dict, assumptions: list[str]) -> int | None:
     return 2 * macs
 
 
+_BWD_NAME_RE = re.compile(r"bwd|backward|wgrad|dgrad|grad", re.I)
+_BWD_FACTOR = 2.0
+"""WP15 (丙WP15-T5 / 乙F5): the backward-chain factor. An attention bwd kernel
+does the fwd score+AV chain AGAIN (recompute for the softmax backward) plus the
+two backward matmuls — ~2.5x the fwd work in practice; a conv wgrad pays the
+im2col MACs of the forward pass plus its own gradient GEMM. Charging the plain
+fwd flops to a bwd problem put the floor BELOW half the real work: the teacher's
+headroom line overstated what was left, and floor_stop could never fire on a
+bwd card. 2.0 is the CONSERVATIVE (provable) factor — the real chain is larger,
+so the floor still under-counts, never over-counts; a lower bound must only
+stay below the truth."""
+
+
 def _family_flops(family: str | None, problem: dict,
                   assumptions: list[str]) -> int | None:
     axes = problem.get("axes") or {}
     if family == "gemm":
         return _gemm_flops(axes, assumptions)
     if family == "attention":
-        return _attention_flops(problem, axes, assumptions)
-    if family == "conv":
-        return _conv_flops(axes, assumptions)
-    if family == "reduction":
+        flops = _attention_flops(problem, axes, assumptions)
+    elif family == "conv":
+        flops = _conv_flops(axes, assumptions)
+    elif family == "reduction":
         # Tree lower bound: one add per reduced element (n-1 ≈ n), on the largest
         # input tensor's element count. Only provable when a single input carries
         # the reduced axis; else no charge.
@@ -326,9 +339,18 @@ def _family_flops(family: str | None, problem: dict,
                 return n
         assumptions.append("reduction: input element count not resolvable — flops not charged")
         return None
-    # norm / elementwise: byte-stream dominated (a handful of FLOPs per element —
-    # charging nothing keeps the floor provable).
-    return None
+    else:
+        # norm / elementwise: byte-stream dominated (a handful of FLOPs per element —
+        # charging nothing keeps the floor provable).
+        return None
+    if flops and _BWD_NAME_RE.search(str(problem.get("name", ""))):
+        # WP15: a backward kernel's floor charges the fwd chain x the
+        # conservative backward factor (see _BWD_FACTOR) — the fwd-only floor
+        # sat below half the real work and made every bwd headroom a fiction.
+        assumptions.append(f"backward kernel: flops x{_BWD_FACTOR:g} (recompute + "
+                           f"backward chain, conservative lower bound)")
+        flops = int(flops * _BWD_FACTOR)
+    return flops
 
 
 def _dominant_class(problem: dict) -> str:

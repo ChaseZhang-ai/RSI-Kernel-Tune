@@ -31,3 +31,33 @@ reference_hours = 8         # writing a reference when the task has none
 #   [loop] carry_dir              = "path"  # default tasks/<op>/carry/ (self_evolve)
 #   [loop] m0_probe_candidates    = 2       # ARCH_PROBE bracket width (budget stays
 #                                           # [loop] m0_probe_rounds)
+
+# --- WP15: SPRT early stop (default ON for the local delivery) ---------------
+# [loop] sprt_early_stop (card layer, operators/<op>/loop.toml): the card's
+# timing module may stop taking device windows once the accumulated paired
+# readings' honest interval sits entirely below parity (a clear loss) — the
+# WP11 loss-only rule, hardened by WP15's backtest (scripts/backtest_early_stop.py,
+# OVERALL PASS at 4000 paired trials/cell): the stop decides on the UNCLAMPED
+# band (a capped band lied when the true window noise exceeded 1.5%), a loss
+# stop must persist across two candidate protocols, and a multi-workload job
+# pools its workloads' decided pairs behind a 3-window stop floor.
+#
+# Since WP15 the DEFAULT on the local delivery is ON (the backtest printout is
+# the flip record). Set sprt_early_stop = false on a card to restore the old
+# default. An SSH delivery keeps the conservative default (the env does not
+# cross the wire): arming it there requires FK_SPRT_EARLY_STOP = "1" in the
+# tree's submit.toml [env] — the driver WARNs at startup when the config arms
+# the flag but [env] does not declare it (jobs would run full sampling while
+# the run log claims early stop).
+#
+# [loop] sprt_win_stop (default false everywhere): the WIN-direction stop. Only
+# safe under the C14 coupling — a win-stopped reading is a truncated draw that
+# must pass the driver's watermark confirmation before it enters the
+# watermark, the plateau window or lever pricing. Arming it exports
+# FK_SPRT_WIN_STOP / FK_SPRT_WIN_MARGIN into local job environments.
+#
+# [loop] confirm_job_mode (default "all"): the gpu_entry mode confirmation
+# jobs submit. A card whose eval entry provides a cheaper gate-only mode
+# (correctness short-circuit + gate-window timing, the 3-5x confirmation
+# discount) sets it here; the stock card template maps perf|all to --mode all,
+# so a custom mode needs the eval side to know it (see CHANGES-WP15).

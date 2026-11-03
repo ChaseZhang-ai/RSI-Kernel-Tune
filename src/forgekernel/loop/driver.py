@@ -2611,6 +2611,13 @@ def _wp19_apply_cfg(ctx: LoopContext) -> None:
     if ctx.background_lane is None:
         raw = loop_cfg.get("background_lane", False)
         ctx.background_lane = raw if isinstance(raw, bool) else False
+    if ctx.backend is not None and hasattr(ctx.backend, "resume_session") \
+            and not getattr(ctx.backend, "resume_session", False):
+        raw = loop_cfg.get("resume_session", False)
+        try:
+            ctx.backend.resume_session = bool(raw)
+        except Exception:  # noqa: BLE001 — an unwritable backend keeps the default
+            pass
 
 
 _WP11_TELEMETRY_FIELDS = ("agent_turn_s", "eval_job_s", "ncu_job_s",
@@ -3021,6 +3028,8 @@ def run_inner_iteration(
     last_pv, last_log = None, ""
     gate_refused = ""   # the last gate-row refusal (open placeholders), for the record
     wp11_agent_s = 0.0   # WP11 (task 4): every student agent turn of this iteration
+    if getattr(be, "resume_session", False):
+        be.agent_session_scope = f"iter{iter_no}"
     _lane = ctx.background_lane_obj
     if _lane is not None:
         # WP19 (task 3): the probe loop is the measurement window — a due lane
@@ -8784,6 +8793,12 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
 
     prior_records = load_meta_records(ctx.meta_status_path) if ctx.meta_status_path else []
     meta_step = len(prior_records)
+    if getattr(be, "resume_session", False):
+        # WP19 (task 6): the diagnose AND patch turns of ONE meta entry share a
+        # session (`claude -p --resume`); a fresh entry starts a fresh one. The
+        # per-turn policy rewrite and skills mirror run as before — the resumed
+        # session re-reads the freshly rewritten settings.
+        be.agent_session_scope = f"meta{meta_step}" 
     reflection = reflect_summary(prior_records)
     # INJECT the NCU report inline: the meta agent runs in the student workspace and
     # cannot fetch it via ./forge, so the diagnose prompt must carry the hardware truth

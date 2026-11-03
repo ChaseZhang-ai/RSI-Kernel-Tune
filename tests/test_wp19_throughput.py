@@ -19,6 +19,7 @@ from __future__ import annotations
 
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -1299,3 +1300,143 @@ def test_t3_lane_window_in_real_iteration_collects_before_eval(tmp_path):
     assert "lane-start" in kinds and "lane-finish" in kinds
     assert kinds.index("lane-finish") < kinds.index("fg")   # collected before the eval
     assert len(lane.queue) == 1                     # this iteration's KEEP re-enqueued
+
+
+# --- task 6: session resume + structured output ---------------------------------
+
+def test_t6_agent_claude_script_flags_gated_by_env(tmp_path):
+    # default: no session flags (byte-identical); env: create/resume pass them
+    import subprocess
+    script = Path(REPO) / "scripts" / "agent-claude.sh"
+    # a stub claude that echoes its argv, so the flag plumbing is observable
+    stub = tmp_path / "claude-stub.sh"
+    stub.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$@"\n', encoding="utf-8")
+    stub.chmod(0o755)
+    r0 = subprocess.run(
+        ["bash", str(script), "m", "", "10"], capture_output=True, text=True,
+        env={**_bash_env(), "FK_CLAUDE_BIN": f"bash {stub}", "FK_AGENT_PY": "echo"},
+        timeout=30)
+    assert "--session-id" not in r0.stdout and "--resume" not in r0.stdout
+    r1 = subprocess.run(
+        ["bash", str(script), "m", "", "10"], capture_output=True, text=True,
+        env={**_bash_env(), "FK_CLAUDE_BIN": f"bash {stub}", "FK_AGENT_PY": "echo",
+             "FK_AGENT_SESSION_ID": "s1", "FK_AGENT_SESSION_MODE": "create"},
+        timeout=30)
+    assert "--session-id s1" in r1.stdout
+    r2 = subprocess.run(
+        ["bash", str(script), "m", "", "10"], capture_output=True, text=True,
+        env={**_bash_env(), "FK_CLAUDE_BIN": f"bash {stub}", "FK_AGENT_PY": "echo",
+             "FK_AGENT_SESSION_ID": "s1", "FK_AGENT_SESSION_MODE": "resume"},
+        timeout=30)
+    assert "--resume s1" in r2.stdout
+
+
+def _t6_backend(tmp_path, outputs):
+    from forgekernel.loop.cli import RealBackend
+    be = RealBackend.__new__(RealBackend)
+    be.op = "demo"
+    be.workspace = tmp_path
+    be.agent_cmd = "true"                       # a turn "succeeds" with no output
+    be.teacher_agent_cmd = None
+    be.agent_policy = None
+    be.agent_retries = 2
+    be.agent_retry_sleep = 0.0
+    be.api_outage_retries = 0
+    be.api_outage_sleep_cap = 0.0
+    be.agent_heartbeat_s = 0
+    be.resume_session = True
+    be.agent_session_scope = "meta0"
+    be._scripted = list(outputs)
+    be._prompts = []
+
+    def _turn(cmd, prompt, role):
+        be._prompts.append((cmd, prompt))
+        out = be._scripted.pop(0)
+        if isinstance(out, tuple):
+            return out                          # (rc, out, err)
+        return 0, out, ""
+
+    be._agent_turn = _turn
+    return be
+
+
+def test_t6_session_file_lifecycle_create_then_resume(tmp_path):
+    import uuid as _uuid
+    be = _t6_backend(tmp_path, ["first", "second"])
+    env1 = be._session_env("teacher")
+    assert env1["FK_AGENT_SESSION_MODE"] == "create"
+    sid = env1["FK_AGENT_SESSION_ID"]
+    env2 = be._session_env("teacher")
+    assert env2 == {"FK_AGENT_SESSION_ID": sid, "FK_AGENT_SESSION_MODE": "resume"}
+    # a distinct scope gets its own session
+    be.agent_session_scope = "meta1"
+    env3 = be._session_env("teacher")
+    assert env3["FK_AGENT_SESSION_MODE"] == "create"
+    assert env3["FK_AGENT_SESSION_ID"] != sid
+    # roles never share a session file
+    be.agent_session_scope = "meta0"
+    env4 = be._session_env("student")
+    assert env4["FK_AGENT_SESSION_MODE"] == "create"
+
+
+def test_t6_resume_off_is_env_free(tmp_path):
+    be = _t6_backend(tmp_path, ["x"])
+    be.resume_session = False
+    assert be._session_env("teacher") == {}
+    be.resume_session = True
+    be.agent_session_scope = None
+    assert be._session_env("teacher") == {}     # no scope named: baseline
+
+
+def test_t6_retry_reenters_session_with_error_tail(tmp_path):
+    be = _t6_backend(tmp_path, [(1, "", "boom"), "recovered"])
+    out = be.run_agent("do the thing", role="teacher")
+    assert out == "recovered"
+    assert len(be._prompts) == 2
+    cmd1, prompt1 = be._prompts[0]
+    cmd2, prompt2 = be._prompts[1]
+    assert "FK_AGENT_SESSION_MODE=create" in cmd1
+    assert "FK_AGENT_SESSION_MODE=resume" in cmd2      # the retry re-enters
+    assert "## Previous attempt failed" in prompt2 and "boom" in prompt2
+    assert "## Previous attempt failed" not in prompt1
+
+
+def test_t6_resume_off_retry_prompt_is_untouched(tmp_path):
+    be = _t6_backend(tmp_path, [(1, "", "boom"), "recovered"])
+    be.resume_session = False
+    out = be.run_agent("do the thing", role="teacher")
+    assert out == "recovered"
+    cmd2, prompt2 = be._prompts[1]
+    assert "FK_AGENT_SESSION" not in cmd2
+    assert "## Previous attempt failed" not in prompt2   # byte-identical baseline retry
+
+
+def test_t6_offline_layers_ride_every_resumed_turn(tmp_path):
+    # the four offline layers are rewritten per turn by agent_policy.install —
+    # resume does not bypass it: the install+notice still run before the prompt
+    from forgekernel.loop.agent_policy import AgentPolicy
+    calls = []
+    be = _t6_backend(tmp_path, ["ok"])
+    class _P:
+        def install(self, role, workspace):
+            calls.append(("install", role))
+        def notice(self, role):
+            calls.append(("notice", role))
+            return "[NOTICE]\n"
+    be.agent_policy = _P()
+    be.run_agent("hello", role="student")
+    assert ("install", "student") in calls and ("notice", "student") in calls
+    assert be._prompts[0][1].startswith("[NOTICE]")
+
+
+def test_t6_capability_verification_recorded():
+    # the CLI capability gate (the record pasted into CHANGES-WP19): the flags
+    # exist on this machine's CLI; the script is the source of truth
+    script = Path(REPO) / "scripts" / "verify_claude_resume.sh"
+    assert script.is_file()
+    import subprocess
+    r = subprocess.run(["bash", str(script)], capture_output=True, text=True,
+                       env={**os.environ}, timeout=120)
+    assert "flag--session-id: YES" in r.stdout
+    assert "flag--resume: YES" in r.stdout
+    assert "FLAGS-OK" in r.stdout or "PASS" in r.stdout

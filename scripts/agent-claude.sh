@@ -40,4 +40,21 @@ fi
 if [ "${FK_AGENT_DRIVER:-}" = "goal" ]; then
     exec bash "$HERE/claude-goal.sh" "$MODEL" "$MODEL" "${ARGS[@]}"
 fi
+# WP19 (task 6): session resume within one scope (a meta entry, an iteration).
+# FK_AGENT_SESSION_MODE=create passes --session-id (first turn of the scope);
+# resume passes --resume (the scope's later turns, and a failed turn's retry).
+# Default off: neither flag is passed and the turn is byte-identical to the
+# baseline. The per-turn policy rewrite and the skills mirror are the loop's
+# business (agent_policy.install runs before every prompt) — resuming a
+# session does not weaken any of the four offline layers, because the project
+# settings the session resumes INTO are rewritten every turn.
+SID="${FK_AGENT_SESSION_ID:-}"
+MODE="${FK_AGENT_SESSION_MODE:-}"
+if [ -n "$SID" ] && [ "$MODE" = "create" ]; then
+    exec "$PY" "$HERE/timeout-run.py" "$TIMEOUT" "${FK_CLAUDE_BIN:-claude}" -p \
+        --model "$MODEL" --session-id "$SID" "${ARGS[@]}"
+elif [ -n "$SID" ] && [ "$MODE" = "resume" ]; then
+    exec "$PY" "$HERE/timeout-run.py" "$TIMEOUT" "${FK_CLAUDE_BIN:-claude}" -p \
+        --model "$MODEL" --resume "$SID" "${ARGS[@]}"
+fi
 exec "$PY" "$HERE/timeout-run.py" "$TIMEOUT" "${FK_CLAUDE_BIN:-claude}" -p --model "$MODEL" "${ARGS[@]}"

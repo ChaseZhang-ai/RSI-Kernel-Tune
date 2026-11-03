@@ -28,11 +28,13 @@ import json
 import math
 import os
 import re
+import ast
 import shlex
 import statistics
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from collections import deque
 from typing import Callable, Protocol
 
 from forgekernel.inner.ncu import (kernels_from_ncu, match_resusage, parse_resusage_lines,
@@ -49,6 +51,7 @@ from forgekernel.inner.trajectory import (
     GATE_WINDOWS,
     IterationRecord,
     append_record,
+    build_digest,
     constant_output_flag,
     gate_ms,
     load_records,
@@ -328,6 +331,40 @@ class LoopContext:
     # a 33.6h bwd-MHA run. A verdict probe collapses the hypothesis space at the cost
     # of one GPU job instead.
     max_verdict_probe_rounds: int = 4
+    # WP19 (task 2): PROBE-MANIFEST handling in the meta-step / KB loops — one
+    # job runs a manifest's ≤4 self-contained probe scripts sequentially
+    # (per-script verdicts, a DNF never takes the batch down, a wholesale job
+    # failure falls back to the per-script path). The default leaves every
+    # existing input byte-identical: nothing emits PROBE-MANIFEST unless the
+    # consuming package (WP17/WP18) teaches the teacher to. loop.toml
+    # [loop] probe_manifest = false disables the branch entirely.
+    probe_manifest: bool | None = None
+    # WP19 (task 4, contract C13): the student-side trajectory digest. When
+    # ``student_digest_binding`` is on, the STUDENT prompt's trajectory token
+    # reads student/status_digest.jsonl — a deterministic build_digest
+    # projection of the existing records, bounded to the last
+    # ``student_tail_lines`` decision rows — instead of the raw, unbounded
+    # status.jsonl. Off (the default) the prompt is byte-identical to the
+    # baseline and no digest file is written; every raw status.jsonl reader
+    # (the teacher prompts included) is untouched either way.
+    student_digest_binding: bool | None = None
+    student_tail_lines: int | None = None
+    # WP19 (task 4, teacher side): the diagnose prompt's NCU view bounded by
+    # ROWS — the best iteration's report stays whole (best-only), the
+    # per-iteration history keeps its last ``teacher_ncu_tail_lines`` rows.
+    # Block-based, never a byte cut (the 4k-truncation incident). Off by
+    # default: the full-history view is the baseline.
+    teacher_context_bound: bool | None = None
+    teacher_ncu_tail_lines: int | None = None
+    # WP19 (task 3, contract C15): the background measurement lane. Off by
+    # default; when on, run_two_layer constructs the lane and the student
+    # probe loop becomes the measurement window. Lane confirm readings are
+    # parsed for contract hygiene and DROPPED — they have no consumer (107
+    # ruling F3: the claimed ``run_best_confirmation`` seed_samples wiring
+    # never existed and was ruled out rather than added) and are structurally
+    # NEVER a gate input (the gate consumes only eval jobs).
+    background_lane: bool | None = None
+    background_lane_obj: "BackgroundLane | None" = None
     # INFEASIBLE GATE: the fewest diagnoses (this one included; the distillation
     # and a clean M0 audit do not count) before a stop request can be accepted.
     # 1 = the reachability check alone gates the stop (see _infeasible_refusal).
@@ -793,6 +830,16 @@ class LoopContext:
     # iteration record, stamped onto that record as teacher_s.
     wp11_teacher_pending_s: float = 0.0
     wp11_teacher_measured: bool = False
+    # WP19 (task 8, 乙B9): the run-level buckets the per-iteration fields never
+    # covered — the recon/distill teacher turns (outside the iteration
+    # structure) and the pricing/timeline/confirm job spans. Stdout-only: the
+    # run-end composition table prints them; no record field, no gate input.
+    wp11_teacher_recon_s: float = 0.0
+    wp11_teacher_distill_s: float = 0.0
+    wp11_teacher_lever_s: float = 0.0
+    wp11_job_pricing_s: float = 0.0
+    wp11_job_timeline_s: float = 0.0
+    wp11_job_confirm_s: float = 0.0
     # --- WP10 ----------------------------------------------------------------
     # ARCHITECTURE ESCAPE TRIGGER. How many consecutive parameter-level attempts
     # (inner deliveries / sweep winners / additive meta patches, each read against
@@ -1221,7 +1268,222 @@ def _student_prompt(ctx: LoopContext, iter_no: int, probe_feedback: str = "") ->
         extra += note
     if probe_feedback:
         extra += probe_feedback
-    return render_prompt(_meta_prompt(ctx, "student_prompt.md"), _bindings(ctx), extra)
+    bindings = _bindings(ctx)
+    if ctx.student_digest_binding:
+        # WP19 (task 4, contract C13): the student's trajectory read goes to the
+        # digest — a deterministic projection of the existing records — while
+        # every other reader (the teacher prompts) keeps the raw file. The
+        # swap is per-render: the shared bindings dict is copied, never
+        # mutated.
+        _write_student_digest(ctx)
+        digest = str(_student_digest_path(ctx))
+        bindings = {**bindings, "{STATUS_JSONL}": digest, "{TRAJECTORY_PATH}": digest}
+    return render_prompt(_meta_prompt(ctx, "student_prompt.md"), bindings, extra)
+
+
+def _student_digest_path(ctx: LoopContext) -> Path:
+    return Path(ctx.workspace) / "student" / "status_digest.jsonl"
+
+
+# --- WP19 (task 3): the idle-GPU background measurement lane (contract C15) ----
+#
+# During an agent turn the GPU is idle; the lane queues NON-GATE readings there.
+# Hard constraints, each structural:
+#   * gate never consumes a background reading — a lane reading travels to
+#     exactly one consumer (its task's ``deliver``); no eval/verdict code path
+#     reads a lane result (the confirm consumer is the post-stop claim's
+#     seed-sample pool, never a gate input);
+#   * cooldown guard — a lane job starts only ``cooldown_s`` after the last
+#     foreground GPU release (the burn-in/settle discipline), and the
+#     temperature check (the same gpu_state telemetry the eval JSON carries)
+#     can defer a start;
+#   * default off — ``background_lane`` reads loop.toml [loop], default false,
+#     and a run with it off constructs no lane and changes no byte;
+#   * gpu_lock semantics unchanged — a lane job is an ordinary submitted job
+#     (submit/direct's lock), just submitted during the window.
+_LANE_TASK_KINDS = ("confirm", "candidates")
+
+
+@dataclass
+class LaneTask:
+    """One background reading: what to run, and the ONLY place its log goes."""
+    kind: str
+    branch: str
+    mode: str
+    deliver: "Callable[[str], None]"
+
+
+class BackgroundLane:
+    """The agent-turn measurement window.
+
+    ``open_window`` starts the next due task (a non-blocking submit when the
+    backend has the start/finish pair, else nothing — the synchronous
+    ``submit_gpu`` path never runs inside the window); ``close_window``
+    collects the reading and hands it to its consumer; ``abandon`` forgets an
+    interrupted window's job without consuming it. Every failure path drops
+    the reading — the lane never retries into the window it must vacate and
+    never blocks the iteration it hides inside."""
+
+    def __init__(self, *, cooldown_s: float = 60.0,
+                 temperature_ok: "Callable[[], tuple[bool, str]] | None" = None,
+                 log: "Callable[[str], None] | None" = None):
+        self.queue: "deque[LaneTask]" = deque()
+        self.inflight: "tuple[LaneTask, object] | None" = None
+        self.last_release_s: float | None = None
+        self.cooldown_s = cooldown_s
+        self.temperature_ok = temperature_ok
+        self._log = log or (lambda m: None)
+
+    def enqueue(self, task: LaneTask) -> None:
+        if task.kind not in _LANE_TASK_KINDS:
+            raise ValueError(f"background lane accepts only confirm/candidates "
+                             f"tasks, not {task.kind!r}")
+        self.queue.append(task)
+
+    def note_gpu_release(self, now_s: float) -> None:
+        self.last_release_s = now_s
+
+    def _cooled(self, now_s: float) -> bool:
+        return (self.last_release_s is None
+                or now_s - self.last_release_s >= self.cooldown_s)
+
+    def open_window(self, start_fn, now_s: float) -> None:
+        if start_fn is None:
+            return
+        if self.inflight is not None:
+            # a window that never closed (the turn that opened it was
+            # interrupted): the job's runner detached, the reading is never
+            # consumed — abandon it so the lane stays usable
+            self.abandon()
+        if not self.queue:
+            return
+        if not self._cooled(now_s):
+            return
+        if self.temperature_ok is not None:
+            ok, why = self.temperature_ok()
+            if not ok:
+                self._log(f"lane: task deferred ({why})")
+                return
+        task = self.queue.popleft()
+        try:
+            handle = start_fn(task.branch, task.mode)
+        except Exception as e:  # noqa: BLE001 — a lane start never kills the turn
+            self._log(f"lane: {task.kind} start failed ({e}) — task dropped")
+            return
+        self.inflight = (task, handle)
+
+    def close_window(self, finish_fn) -> None:
+        if self.inflight is None:
+            return
+        task, handle = self.inflight
+        self.inflight = None
+        try:
+            log = finish_fn(handle, task.mode)
+        except Exception as e:  # noqa: BLE001 — a lost reading is dropped, not retried
+            self._log(f"lane: {task.kind} job lost ({e}) — reading dropped")
+            return
+        try:
+            task.deliver(log)
+        except Exception as e:  # noqa: BLE001
+            self._log(f"lane: {task.kind} deliver failed ({e})")
+
+    def abandon(self) -> None:
+        if self.inflight is None:
+            return
+        task, _handle = self.inflight
+        self.inflight = None
+        self._log(f"lane: {task.kind} job abandoned on interrupt (never consumed)")
+
+
+# the lane's v1 temperature guard: at/above this the GPU sits in the
+# throttle-adjacent zone (the cardkit clockdiag telemetry reads the same
+# sensor) — a foreground job inheriting it would time a different machine
+_LANE_TEMP_MAX_C = 83.0
+
+
+def _lane_temperature_check(ctx: LoopContext) -> "tuple[bool, str]":
+    """The lane's temperature guard, over the gpu_state telemetry the eval
+    JSON already carries (no new probe, no new job)."""
+    try:
+        records = load_records(ctx.status_path)
+    except Exception:  # noqa: BLE001 — a guard must never break the window
+        return True, ""
+    for r in reversed(records):
+        temp = (r.gpu_state or {}).get("temperature_c")
+        if temp is not None:
+            if float(temp) >= _LANE_TEMP_MAX_C:
+                return False, f"last gpu_state temperature {temp}C >= {_LANE_TEMP_MAX_C}C"
+            return True, ""
+    return True, ""
+
+
+def _lane_deliver_confirm(ctx: LoopContext, log: str) -> None:
+    """The confirm task's consumer: a hygiene parse and a DROP. The readings
+    have no destination (107 ruling F3: the claimed
+    ``run_best_confirmation(seed_samples=...)`` wiring never existed — a
+    field that appends with no reader is exactly the "mechanism present,
+    data flow broken" debt the data-flow audit clears, so the dead end was
+    removed, not wired); no gate reads lane data (C15). The parse stays so an
+    off-contract log still says so, and every usable reading says it was
+    dropped."""
+    ev = _enforce_single_ref(ctx, parse_eval(log))
+    if ctx.gate_window == "device":
+        ms = ev.device_median_ms
+    else:
+        ms = ev.bwd_median_ms
+    job = getattr(ctx.backend, "last_job_id", "") or "?"
+    if not ev.correctness or ms is None:
+        _log(f"lane: confirm job {job} unusable ({ev.error or 'no reading'}) — dropped")
+        return
+    _log(f"lane: confirm job {job} reading dropped (no consumer — 107 ruling F3)")
+
+
+def _bounded_ncu_records(records: list, ctx: LoopContext) -> list:
+    """WP19 (task 4): the diagnose prompt's NCU view input — the best
+    iteration (whole, best-only compression) plus the last
+    ``teacher_ncu_tail_lines`` records, chronological rows intact. A row list,
+    never a byte slice."""
+    n = ctx.teacher_ncu_tail_lines or 8
+    shown = list(records[-n:]) if len(records) > n else list(records)
+    best = _best_keep_profiler(records, ctx.gate_window)
+    if best is not None:
+        best_rec = next((r for r in records if r.iter == best[1]), None)
+        if best_rec is not None and all(r is not best_rec for r in shown):
+            shown.insert(0, best_rec)
+    return shown
+
+
+def _write_student_digest(ctx: LoopContext) -> None:
+    """WP19 (task 4, contract C13): project the existing iteration records
+    through build_digest into student/status_digest.jsonl.
+
+    Zero new record types — every field is build_digest's projection of what
+    status.jsonl already carries. The file is JSONL: line 1 the summary
+    (sol/target/achieved/flags), then one line per decision row, the last
+    ``student_tail_lines`` rows (the tail window is the point — the raw file
+    grows unbounded). Best-effort: a projection failure leaves the previous
+    digest (or none) in place and the run untouched."""
+    try:
+        records = load_records(ctx.status_path)
+        digest = build_digest(records, {"value": ctx.target_ms},
+                              gate_window=ctx.gate_window)
+        n = ctx.student_tail_lines or 50
+        rows = digest.get("decisions", [])
+        digest["decisions"] = rows[-n:] if len(rows) > n else rows
+        curve = digest.get("curve", [])
+        digest["curve"] = curve[-n:] if len(curve) > n else curve
+        regressions = digest.get("regressions", [])
+        digest["regressions"] = regressions[-n:] if len(regressions) > n else regressions
+        path = _student_digest_path(ctx)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({k: digest[k] for k in
+                                 ("sol", "target", "achieved", "flags")},
+                                ensure_ascii=False) + "\n")
+            for row in digest["decisions"]:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except (OSError, ValueError, KeyError, TypeError):
+        return
 
 
 # --- inner loop -------------------------------------------------------------
@@ -2180,6 +2442,107 @@ def _ablation_probe_feedback(path: str, rows: list, why: str | None, log: str,
             f"PROBE_REQUEST again, or send a script probe instead. Job log tail:\n{tail}\n")
 
 
+# --- WP19 (task 2): the probe batch manifest -----------------------------------
+#
+# PROBE-MANIFEST (parse.py) names a ≤4-line list of self-contained probe
+# scripts; ONE job runs them sequentially with a per-script verdict. Between
+# scripts the job resets whatever clock state an earlier script left (the
+# gpu_entry's own lb_clocks_reset is a shell function — a `cmd:` task's child
+# bash does not inherit it, so the batch re-states the reset inline) and
+# settles for FK_PROBE_BATCH_SETTLE_S seconds (burn-in isolation). A script
+# that crashes or prints no verdict is that script's DNF alone; a wholesale
+# job failure (transport, refusal, markers missing) falls back to the
+# per-script path, which stays the default for every existing input.
+_PROBE_BATCH_MAX_SCRIPTS = 4
+_PROBE_BATCH_BEGIN = "=== fk-probe-batch begin: {path} ==="
+_PROBE_BATCH_END = "=== fk-probe-batch end: {path} rc={rc} ==="
+
+
+def _read_probe_manifest(ctx: LoopContext, mpath: str) -> tuple[list[str], str]:
+    """The manifest's script paths (workspace-relative), or ([], reason)."""
+    p = Path(ctx.workspace) / mpath
+    try:
+        lines = p.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as e:
+        return [], f"the manifest file is unreadable ({e})"
+    paths = [ln.strip() for ln in lines
+             if ln.strip() and not ln.strip().startswith("#")]
+    if not paths:
+        return [], "the manifest lists no scripts"
+    if len(paths) > _PROBE_BATCH_MAX_SCRIPTS:
+        return [], (f"the manifest lists {len(paths)} scripts — the batch takes "
+                    f"at most {_PROBE_BATCH_MAX_SCRIPTS}")
+    missing = [s for s in paths if not (Path(ctx.workspace) / s).is_file()]
+    if missing:
+        return [], f"the manifest names scripts that are not in the workspace: {missing}"
+    return paths, ""
+
+
+def _probe_batch_mode(paths: list[str]) -> str:
+    """The one `cmd:` job that runs every script with per-script markers."""
+    segs = []
+    for p in paths:
+        q = shlex.quote(p)
+        segs.append(
+            f'echo "{_PROBE_BATCH_BEGIN.format(path=p)}"'
+            f'; __smi="${{LB_NVIDIA_SMI:-nvidia-smi}}"'
+            f'; __dev="${{CUDA_VISIBLE_DEVICES:+-i $CUDA_VISIBLE_DEVICES}}"'
+            f'; "$__smi" $__dev -rgc >/dev/null 2>&1 || true'
+            f'; "$__smi" $__dev -rmc >/dev/null 2>&1 || true'
+            f'; python3 {q}'
+            f'; echo "{_PROBE_BATCH_END.format(path=p, rc="$?")}"'
+            f'; sleep "${{FK_PROBE_BATCH_SETTLE_S:-3}}"')
+    return "cmd:" + " ; ".join(segs)
+
+
+def _split_probe_batch_log(log: str, paths: list[str]) -> "list[tuple[str, str]] | None":
+    """Each script's log slice ([begin, next-begin)), or None when any begin
+    marker is missing (the batch never really ran — the caller falls back)."""
+    slices: list[tuple[str, str]] = []
+    for i, p in enumerate(paths):
+        begin = _PROBE_BATCH_BEGIN.format(path=p)
+        start = log.find(begin)
+        if start < 0:
+            return None
+        if i + 1 < len(paths):
+            nxt = log.find(_PROBE_BATCH_BEGIN.format(path=paths[i + 1]), start + 1)
+            if nxt < 0:
+                return None
+            slices.append((p, log[start:nxt]))
+        else:
+            slices.append((p, log[start:]))
+    return slices
+
+
+def _run_meta_verdict_probe(ctx: LoopContext, be, probe_branch: str, path: str,
+                            round_no: int) -> tuple[ProbeVerdict, str, list[dict]]:
+    """One single-script verdict probe on its own job (the pre-WP19 path).
+
+    WP19 (task 2): extracted verbatim so the manifest's wholesale-failure
+    fallback runs exactly this — the old path is the fallback, not a copy."""
+    be.commit(f"meta-probe: {path}")
+    be.push_branch(probe_branch)
+    probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    # audit=False: these lines answer pre-registered hypotheses, and the
+    # max_diff field carries the reading as printed. The certification
+    # audit (error-norm ceiling, float-only) was downgrading a PASS with a
+    # reading table to FAIL — i.e. telling the teacher its hypothesis had
+    # been falsified when the experiment had confirmed it.
+    pv = parse_probe_verdict(probe_log, audit=False)
+    readings = [{"path": path, "round": round_no, "contract": c.index,
+                 "verdict": c.verdict, "reading": c.reading, "note": c.note}
+                for c in pv.contracts]
+    return pv, probe_log, readings
+
+
+def _run_probe_manifest_batch(ctx: LoopContext, be, branch: str,
+                              paths: list[str]) -> "list[tuple[str, str]] | None":
+    """One batched job over the manifest's scripts; None when the log carries
+    no begin markers (the job never really ran — the caller falls back)."""
+    log = be.submit_gpu(branch, _probe_batch_mode(paths))
+    return _split_probe_batch_log(log, paths)
+
+
 def _verdict_probe_feedback(path: str, pv: ProbeVerdict, log: str,
                             round_no: int, budget: int) -> str:
     """One diagnose-step verdict-probe round's feedback.
@@ -2396,16 +2759,36 @@ def _wp11_wallclock_fields(ctx: LoopContext, *, agent_s: float, eval_s: float | 
     }
 
 
-def _wp11_teacher_timed(ctx: LoopContext, fn, *args, **kwargs):
+def _wp11_teacher_timed(ctx: LoopContext, fn, *args, bucket: str | None = None, **kwargs):
     """Run one teacher agent turn, charging its wall clock to the next appended
     iteration record (WP11 task 4). Only the inner loop's teacher turns (diagnose,
-    patch) are charged: distill / recon run outside the iteration structure."""
+    patch) are charged: distill / recon run outside the iteration structure.
+
+    WP19 (task 8, 乙B9): ``bucket`` names a run-level accumulator instead
+    (wp11_teacher_recon_s / wp11_teacher_distill_s) — those turns sit outside
+    any iteration record, so their wall clock prints in the run-end
+    composition table and touches no record field."""
     t0 = ctx.now()
+    if bucket is not None:
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            setattr(ctx, bucket, getattr(ctx, bucket, 0.0) + (ctx.now() - t0))
     try:
         return fn(*args, **kwargs)
     finally:
         ctx.wp11_teacher_pending_s += ctx.now() - t0
         ctx.wp11_teacher_measured = True
+
+
+def _wp11_job_timed(ctx: LoopContext, bucket: str, fn, *args, **kwargs):
+    """WP19 (task 8, 乙B9): one GPU job's submit+poll span into a run-level
+    bucket (pricing / timeline / confirm) — stdout-only telemetry."""
+    t0 = ctx.now()
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        setattr(ctx, bucket, getattr(ctx, bucket, 0.0) + (ctx.now() - t0))
 
 
 def _wp15_delivery(ctx: LoopContext) -> tuple[str, dict]:
@@ -2477,6 +2860,44 @@ def _wp11_apply_cfg(ctx: LoopContext) -> None:
         os.environ.pop("FK_SPRT_WIN_MARGIN", None)
 
 
+def _wp19_apply_cfg(ctx: LoopContext) -> None:
+    """Resolve the WP19 config fields still at their None sentinel from loop.toml
+    (the same two-layer read as _wp5_cfg_sections: card layer over global_config).
+
+    Called once at run_two_layer entry, after _wp5/_wp11. An explicitly set
+    field (tests, callers) wins; a failed read or a bad value leaves the
+    documented default. Every WP19 switch's default is the baseline behavior."""
+    cfg = _wp5_cfg_sections(ctx)
+    loop_cfg = cfg.get("loop") if isinstance(cfg.get("loop"), dict) else {}
+    if ctx.probe_manifest is None:
+        raw = loop_cfg.get("probe_manifest", True)
+        ctx.probe_manifest = raw if isinstance(raw, bool) else True
+    if ctx.student_digest_binding is None:
+        raw = loop_cfg.get("student_digest_binding", False)
+        ctx.student_digest_binding = raw if isinstance(raw, bool) else False
+    if ctx.student_tail_lines is None:
+        raw = loop_cfg.get("student_tail_lines", 50)
+        ctx.student_tail_lines = raw if isinstance(raw, int) and not isinstance(raw, bool) \
+            and raw > 0 else 50
+    if ctx.teacher_context_bound is None:
+        raw = loop_cfg.get("teacher_context_bound", False)
+        ctx.teacher_context_bound = raw if isinstance(raw, bool) else False
+    if ctx.teacher_ncu_tail_lines is None:
+        raw = loop_cfg.get("teacher_ncu_tail_lines", 8)
+        ctx.teacher_ncu_tail_lines = raw if isinstance(raw, int) \
+            and not isinstance(raw, bool) and raw > 0 else 8
+    if ctx.background_lane is None:
+        raw = loop_cfg.get("background_lane", False)
+        ctx.background_lane = raw if isinstance(raw, bool) else False
+    if ctx.backend is not None and hasattr(ctx.backend, "resume_session") \
+            and not getattr(ctx.backend, "resume_session", False):
+        raw = loop_cfg.get("resume_session", False)
+        try:
+            ctx.backend.resume_session = bool(raw)
+        except Exception:  # noqa: BLE001 — an unwritable backend keeps the default
+            pass
+
+
 _WP11_TELEMETRY_FIELDS = ("agent_turn_s", "eval_job_s", "ncu_job_s",
                           "teacher_s", "queue_wait_s")
 
@@ -2503,6 +2924,32 @@ def _wp11_wallclock_summary(ctx: LoopContext) -> None:
          f"reads this; shares over the {overall:.1f}s of measured buckets):")
     for line in rows:
         _log(line)
+    # WP19 (task 8, 乙B9): the run-level buckets the per-iteration fields never
+    # covered (recon / distill / lever-design teacher turns; pricing / timeline /
+    # confirm job spans) + the constant-calibration suggestion they imply
+    extra = [("teacher_recon", ctx.wp11_teacher_recon_s),
+             ("teacher_distill", ctx.wp11_teacher_distill_s),
+             ("teacher_lever", ctx.wp11_teacher_lever_s),
+             ("job_pricing", ctx.wp11_job_pricing_s),
+             ("job_timeline", ctx.wp11_job_timeline_s),
+             ("job_confirm", ctx.wp11_job_confirm_s)]
+    measured = [(n, s) for n, s in extra if s > 0]
+    if measured:
+        _log("[wp19] run-level wall-clock buckets (stdout only — no record reads "
+             "these):")
+        for name, secs in measured:
+            _log(f"  {name:<16} {secs:>10.1f}s")
+        # the constants the telemetry can now calibrate (suggestions, never applied)
+        if ctx.wp11_job_confirm_s > 0:
+            per_confirm = ctx.wp11_job_confirm_s
+            _log(f"  calibration: one confirmation job ≈ {per_confirm:.1f}s — "
+                 f"confirm_budget_per_iter and meta_hours_per_round may want "
+                 f"re-deriving from this table (suggestion only; the flip belongs "
+                 f"to the integration step)" )
+    overall2 = overall + sum(s for _n, s in measured)
+    if measured and overall2 > 0:
+        _log(f"[wp19] measured wall clock including the run-level buckets: "
+             f"{overall2:.1f}s")
 
 
 def _note_env_failure(ctx: LoopContext, channel: str, why: str) -> None:
@@ -2799,6 +3246,27 @@ def _harness_hygiene(ctx: LoopContext, iter_no: int) -> None:
          f"files that reached the workspace outside a delivery")
 
 
+def _ast_preflight_warn(ctx: LoopContext, iter_no: int) -> None:
+    """WP19 (task 1 附, 乙B6): a python kernel that does not parse fails in-job
+    anyway; this pre-submit parse only says so one round-trip earlier. WARN
+    only — never a verdict, never a gate (a false positive must not kill a
+    good REVERT, and the eval job stays the single failure judge). CUDA-mode
+    runs are skipped: their build failures belong to the job-side compile
+    preflight."""
+    if _is_cuda(ctx):
+        return
+    path = Path(ctx.workspace) / str(ctx.kernel_file)
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return
+    try:
+        ast.parse(source)
+    except SyntaxError as e:
+        _log(f"iter {iter_no}: WARNING ast preflight: {ctx.kernel_file} does not "
+             f"parse ({e.msg}, line {e.lineno}) — the eval job will confirm")
+
+
 def _harness_edit_revert(ctx: LoopContext, iter_no: int, record, sha: str, base_sha: str,
                          metric_before) -> "IterationRecord | None":
     """REVERT a delivery whose commits (probe commits included) edit the card-owned
@@ -2864,6 +3332,14 @@ def run_inner_iteration(
     last_pv, last_log = None, ""
     gate_refused = ""   # the last gate-row refusal (open placeholders), for the record
     wp11_agent_s = 0.0   # WP11 (task 4): every student agent turn of this iteration
+    if getattr(be, "resume_session", False):
+        be.agent_session_scope = f"iter{iter_no}"
+    _lane = ctx.background_lane_obj
+    if _lane is not None:
+        # WP19 (task 3): the probe loop is the measurement window — a due lane
+        # task starts here (non-blocking submit) and is collected right after
+        # the loop, before the iteration's own eval job
+        _lane.open_window(getattr(be, "submit_gpu_start", None), ctx.now())
     for _ in range(ctx.max_probe_rounds):
         _wp11_t0 = ctx.now()
         out = be.run_agent(prompt)
@@ -2892,6 +3368,15 @@ def run_inner_iteration(
         if isinstance(turn, Exhausted):
             _log(f"iter {iter_no}: student EXHAUSTED ({turn.reason})")
             return None
+        if isinstance(turn, ProbeRequest) and turn.manifest:
+            # WP19 (task 2): PROBE-MANIFEST is meta-side vocabulary (the
+            # teacher's diagnose / KB loops). The student's submit surface
+            # stays exactly what it was: one script per PROBE_REQUEST.
+            prompt = _student_prompt(
+                ctx, iter_no,
+                probe_feedback="- PROBE-MANIFEST is not available to the student: send one "
+                               "PROBE_REQUEST: <script> per probe, or the record block.\n")
+            continue
         if isinstance(turn, Record):
             if bounce := _placeholder_bounce(ctx, turn, base_sha):
                 # A gate row over an open placeholder, or a placeholder landed
@@ -2992,6 +3477,8 @@ def run_inner_iteration(
         # outlived the iteration it was made for re-wrote stale text into
         # every later workspace (and every tree a later reset restored).
         ctx.kept_probes.clear()
+    if _lane is not None:
+        _lane.close_window(getattr(be, "submit_gpu_finish", None))
     if record is None:
         # budget exhausted with no landed decision (probe never certified, or the
         # student never emitted a parseable decision). Objective REVERT, roll back.
@@ -3032,6 +3519,7 @@ def run_inner_iteration(
         return rec
 
     sha = be.commit(f"{record.decision_id}: {record.change[:60]}")
+    _ast_preflight_warn(ctx, iter_no)
     if (rec := _harness_edit_revert(ctx, iter_no, record, sha, base_sha,
                                     metric_before)) is not None:
         return rec
@@ -3121,6 +3609,8 @@ def run_inner_iteration(
         eval_log = be.submit_gpu(branch, "all")
     eval_job_s = ctx.now() - eval_t0
     queue_wait_s = _queue_wait_from_log(eval_log)
+    if _lane is not None:
+        _lane.note_gpu_release(ctx.now())
     ev = parse_eval(eval_log)
     ev = _enforce_single_ref(ctx, ev)
     ev = _enforce_prep_contract(ctx, ev)
@@ -3292,6 +3782,16 @@ def run_inner_iteration(
     )
     _wp4_note_regression(ctx, rec, iter_no, cluster)   # WP4: slow-decision bookkeeping (prior only)
     append_record(ctx.status_path, rec)
+    if _lane is not None and rec.verdict == "KEEP":
+        push_ref = getattr(be, "push_ref", None)
+        if push_ref is not None:
+            try:
+                lane_branch = f"{ctx.branch_prefix}-laneconfirm"
+                push_ref(rec.sha, lane_branch)
+                _lane.enqueue(LaneTask(kind="confirm", branch=lane_branch, mode="all",
+                                       deliver=lambda log: _lane_deliver_confirm(ctx, log)))
+            except Exception as e:  # noqa: BLE001 — the lane never breaks the iteration
+                _log(f"lane: confirm enqueue skipped ({e})")
     _log_axis_change(ctx, rec)
     _check_host_bound(ctx, iter_no, ev)
     # NCU reports device time, so the reconciliation compares against the device
@@ -4479,6 +4979,87 @@ def _kb_certify_rounds(ctx: LoopContext, diagnosis: str, probes: dict) -> KbCert
                 return KbCertifyResult(False, None, r)
             _log(f"meta/kb: teacher finalized recipe (no probe) after {r} rounds")
             return KbCertifyResult(True, None, r)
+        if turn.manifest:
+            # WP19 (task 2): one batched certification job for the manifest's
+            # probe set — every script must PASS for the recipe to certify, and
+            # a wholesale batch failure falls back to this loop's own per-script
+            # path below (same commit/keep/submit/parse semantics).
+            if ctx.probe_manifest is False:
+                prompt = _teacher_prompt(ctx, diagnosis, probe_feedback=(
+                    "\n## Probe manifest not enabled\nThis run's loop.toml has [loop] "
+                    "probe_manifest off; send one PROBE_REQUEST per script.\n"))
+                continue
+            mpaths, merr = _read_probe_manifest(ctx, turn.path)
+            if merr:
+                prompt = _teacher_prompt(ctx, diagnosis, probe_feedback=(
+                    f"\n## Probe manifest rejected\n`{turn.path}`: {merr} Fix the "
+                    f"manifest or send single PROBE_REQUESTs.\n"))
+                continue
+            kb_branch = f"{ctx.branch_prefix}-kbprobe"
+            be.commit(f"kb-probe manifest: {turn.path}")
+            for mp in mpaths:
+                probes[mp] = _keep_probe_across_reset(ctx, mp)
+            be.push_branch(kb_branch)
+            batch = _run_probe_manifest_batch(ctx, be, kb_branch, mpaths)
+            if batch is None:
+                _log(f"meta/kb: probe manifest {turn.path} did not run its batch — "
+                     f"falling back to the per-script path")
+                verdicts = []
+                for mp in mpaths:
+                    be.commit(f"kb-probe: {mp}")
+                    probes[mp] = _keep_probe_across_reset(ctx, mp)
+                    be.push_branch(kb_branch)
+                    kb_log = be.submit_gpu(kb_branch, f"cmd:python3 {mp}")
+                    pv = parse_probe_verdict(kb_log)
+                    verdicts.append((mp, pv, kb_log))
+                    job = str(getattr(be, "last_job_id", "") or "")
+                    _log(f"meta/kb: recipe probe {mp} -> PROBE {_probe_label(pv)} "
+                         f"(max_diff={pv.diff_text}){_probe_log_suffix(pv)} "
+                         f"(round {r + 1}, job {job or '?'})")
+                    if not pv.passed:
+                        prompt = _teacher_prompt(
+                            ctx, diagnosis,
+                            probe_feedback=_probe_feedback(mp, pv, kb_log,
+                                                           what="recipe probe"))
+                        break
+                else:
+                    # every script passed on its own job: the shared
+                    # verdict/finalize below, on the per-script logs
+                    batch = [(mp, log) for mp, _pv, log in verdicts]
+                if batch is None:
+                    continue
+            verdicts = [(mp, parse_probe_verdict(s)) for mp, s in batch]
+            job = str(getattr(be, "last_job_id", "") or "")
+            for mp, pv in verdicts:
+                _log(f"meta/kb: recipe probe {mp} (manifest {turn.path}) -> "
+                     f"PROBE {_probe_label(pv)} (max_diff={pv.diff_text})"
+                     f"{_probe_log_suffix(pv)} (round {r + 1}, job {job or '?'})")
+            if (bad := next(((mp, pv) for mp, pv in verdicts if not pv.passed), None)) is not None:
+                mp, pv = bad
+                prompt = _teacher_prompt(
+                    ctx, diagnosis,
+                    probe_feedback=_probe_feedback(
+                        mp, pv, next(s for s_mp, s in batch if s_mp == mp),
+                        what="recipe probe"))
+                continue
+            final_out = _teacher(be).run_agent(_teacher_prompt(
+                ctx, diagnosis,
+                probe_feedback=_probe_feedback(
+                    turn.path, verdicts[0][1],
+                    "\n".join(s for _, s in batch), what="recipe probe",
+                    on_pass="Finalize: mark the recipe verified in the KB index and "
+                            "emit RECIPE_CERTIFIED: <recipe-path>. Cite the certifying "
+                            f"job in the entry's status line and its index cell: "
+                            f"`PROBE PASS max_diff={verdicts[0][1].diff_text}, job {job or '?'}` "
+                            f"(round {r + 1} of this certification).")))
+            recipe = _parse_field(final_out, "RECIPE_CERTIFIED")
+            if leaks := _kb_certify_lint_gate(ctx, diagnosis):
+                _quarantine_leaky_kb(ctx, leaks)
+                _log("meta/kb: recipe REJECTED — leak lint findings survived the fix rounds")
+                return KbCertifyResult(False, None, r + 1, job=job)
+            _log(f"meta/kb: recipe CERTIFIED and available to the student ({recipe or '?'}; "
+                 f"job {job or '?'})")
+            return KbCertifyResult(True, turn.path, r + 1, recipe=recipe or None, job=job)
         be.commit(f"kb-probe: {turn.path}")
         probes[turn.path] = _keep_probe_across_reset(ctx, turn.path)
         kb_branch = f"{ctx.branch_prefix}-kbprobe"
@@ -5023,14 +5604,14 @@ def _node_dirty_reason(fail: str | None, log: str) -> str | None:
     return None
 
 
-def _lever_price_job(be, branch: str, cmd: str, what: str,
+def _lever_price_job(ctx: LoopContext, be, branch: str, cmd: str, what: str,
                      rerun: bool = True) -> "tuple[str, str]":
     """One pricing job, settled: (log, job id). Re-bought once (``rerun``) when its GPU
     was dirty or its log still carries no verdict (a crashed tool is not re-bought). BackendError
     propagates."""
     attempts = 2 if rerun else 1
     for attempt in range(attempts):
-        log = be.submit_gpu(branch, cmd)
+        log = _wp11_job_timed(ctx, "wp11_job_pricing_s", be.submit_gpu, branch, cmd)
         log = _price_log_settled(be, log, what)
         _, _, fail = parse_lever_prices(log)
         last = attempt == attempts - 1
@@ -5064,7 +5645,7 @@ def _lever_price_submit(ctx: LoopContext, be, branch: str, cmd: str, what: str,
     first."""
     shapes = meta_shapes.card_meta_workloads(ctx.workspace)
     if not shapes:
-        return _lever_price_job(be, branch, cmd, what, rerun)
+        return _lever_price_job(ctx, be, branch, cmd, what, rerun)
 
     def price(wl):
         if wl != shapes[0] and ctx.now() > ctx.deadline_epoch - 1800:
@@ -5073,7 +5654,8 @@ def _lever_price_submit(ctx: LoopContext, be, branch: str, cmd: str, what: str,
             # the role pass on the representative alone: on the others its columns were
             # never read and took a third of each job
             roles = "" if wl == shapes[0] else " --no-roles"
-            log, job = _lever_price_job(be, branch, f"{cmd}{roles} --workload {wl}",
+            log, job = _lever_price_job(ctx, be, branch,
+                                        f"{cmd}{roles} --workload {wl}",
                                         f"{what} [{wl}]", rerun)
         except BackendError as e:
             return ("error", e)
@@ -5679,9 +6261,13 @@ def _run_lever_pricing(ctx: LoopContext, priced: "PricedTrees", bindings: dict,
                 spec_path.unlink()
             except OSError:
                 pass
-            out = _agent_turn(
+            # WP19 (task 8, 乙B9): the lever-design turn's wall clock lands in
+            # its run-end bucket (stdout only — no record field)
+            out = _wp11_teacher_timed(
+                ctx, _agent_turn,
                 be, render_prompt(_meta_prompt(ctx, prompt_file), bindings,
                                   extra=design_extra),
+                bucket="wp11_teacher_lever_s",
                 label="meta/lever-design", storm_budget=storm_budget,
                 # a legal design turn either wrote the lever file or declined
                 left_a_trace=lambda o: (spec_path.is_file()
@@ -7965,8 +8551,9 @@ def _run_timeline(ctx: LoopContext, ref: str | None, label: str, *,
     log = None
     for rerun in range(2):
         try:
-            log = be.submit_gpu(branch, _timeline_cmd(ctx)
-                                + (f" --workload {workload}" if workload else ""))
+            log = _wp11_job_timed(
+                ctx, "wp11_job_timeline_s", be.submit_gpu, branch,
+                _timeline_cmd(ctx) + (f" --workload {workload}" if workload else ""))
         except BackendError as e:
             _log(f"timeline[{label}]: job failed ({e})")
             return None
@@ -8545,6 +9132,12 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
 
     prior_records = load_meta_records(ctx.meta_status_path) if ctx.meta_status_path else []
     meta_step = len(prior_records)
+    if getattr(be, "resume_session", False):
+        # WP19 (task 6): the diagnose AND patch turns of ONE meta entry share a
+        # session (`claude -p --resume`); a fresh entry starts a fresh one. The
+        # per-turn policy rewrite and skills mirror run as before — the resumed
+        # session re-reads the freshly rewritten settings.
+        be.agent_session_scope = f"meta{meta_step}" 
     reflection = reflect_summary(prior_records)
     # INJECT the NCU report inline: the meta agent runs in the student workspace and
     # cannot fetch it via ./forge, so the diagnose prompt must carry the hardware truth
@@ -8576,10 +9169,18 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
         recon = render_ncu_reconciliation(
             best_prof, recon_baseline.ncu, student_iter=best_iter,
             ref_role=recon_baseline.role, ref_name=recon_baseline.ref_name)
+    shown = records
+    if ctx.teacher_context_bound:
+        # WP19 (task 4): the NCU view bounded by ROWS (blocks), never by bytes
+        # (the 4k-truncation incident): the best iteration's report stays whole
+        # (best-only), the per-iteration history keeps its tail. This is the
+        # whole reduction — nothing else is added to the prompt (the
+        # addition/reduction ledger lives in CHANGES-WP19).
+        shown = _bounded_ncu_records(records, ctx)
     ncu_view = (f"\n\n## NCU hardware ground truth (inline, per-iteration bottleneck verdicts — "
                 f"primary evidence, read before judging)\n"
-                f"{render_ncu_report(records, baseline=arch_ncu)}"
-                f"\n\n### Metric evolution table\n{render_ncu_trace(records)}\n")
+                f"{render_ncu_report(shown, baseline=arch_ncu)}"
+                f"\n\n### Metric evolution table\n{render_ncu_trace(shown)}\n")
     if recon:
         # Two-sided reconciliation: the digest above never quoted the ref side,
         # so "tensor occupancy gap ≈ the whole residual" — the decisive plateau
@@ -8910,6 +9511,63 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 tl_table = None
             continue
         if isinstance(turn, ProbeRequest):
+            if turn.manifest:
+                # WP19 (task 2): a PROBE-MANIFEST — one job runs the manifest's
+                # ≤4 scripts sequentially, each with its own verdict. The
+                # single-script path below stays the default for every
+                # PROBE_REQUEST and is the fallback for a wholesale batch
+                # failure.
+                if ctx.probe_manifest is False:
+                    diagnose_extra += ("\n## Probe manifest not enabled\nThis run's loop.toml has "
+                                       "[loop] probe_manifest off; send one PROBE_REQUEST per script.\n")
+                    continue
+                mpaths, merr = _read_probe_manifest(ctx, turn.path)
+                if merr:
+                    diagnose_extra += (f"\n## Probe manifest rejected\n`{turn.path}`: {merr} "
+                                       "Fix the manifest (at most 4 workspace-relative script "
+                                       "paths, one per line) or send single PROBE_REQUESTs.\n")
+                    continue
+                if probe_rounds >= ctx.max_verdict_probe_rounds:
+                    _log("meta: verdict-probe budget spent -> demanding a diagnosis")
+                    diagnose_extra += ("\n## Verdict-experiment budget exhausted\nNo more PROBE_REQUEST "
+                                       "may be sent. Give the final diagnosis from the evidence you have; "
+                                       "mark every unverified hypothesis in it explicitly as unverified.\n")
+                    continue
+                probe_rounds += 1
+                probes_run.extend(mpaths)
+                probe_branch = f"{ctx.branch_prefix}-metaprobe"
+                be.commit(f"meta-probe manifest: {turn.path}")
+                be.push_branch(probe_branch)
+                batch = _run_probe_manifest_batch(ctx, be, probe_branch, mpaths)
+                if batch is None:
+                    # the batch never really ran (markers missing): the
+                    # per-script path is the fallback, verbatim
+                    _log(f"meta: probe manifest {turn.path} did not run its batch — "
+                         f"falling back to the per-script path")
+                    for mp in mpaths:
+                        pv, probe_log, readings = _run_meta_verdict_probe(
+                            ctx, be, probe_branch, mp, probe_rounds)
+                        _log(f"meta: verdict probe {mp} "
+                             f"({probe_rounds}/{ctx.max_verdict_probe_rounds}) -> "
+                             f"PROBE {_probe_label(pv)} (max_diff={pv.diff_text})"
+                             f"{_probe_log_suffix(pv)}")
+                        diagnose_extra += _verdict_probe_feedback(
+                            mp, pv, probe_log, probe_rounds, ctx.max_verdict_probe_rounds)
+                        probe_readings.extend(readings)
+                    continue
+                for mp, mslice in batch:
+                    pv = parse_probe_verdict(mslice, audit=False)
+                    _log(f"meta: verdict probe {mp} (manifest {turn.path}, "
+                         f"{probe_rounds}/{ctx.max_verdict_probe_rounds}) -> "
+                         f"PROBE {_probe_label(pv)} (max_diff={pv.diff_text})"
+                         f"{_probe_log_suffix(pv)}")
+                    diagnose_extra += _verdict_probe_feedback(
+                        mp, pv, mslice, probe_rounds, ctx.max_verdict_probe_rounds)
+                    probe_readings.extend(
+                        {"path": mp, "round": probe_rounds, "contract": c.index,
+                         "verdict": c.verdict, "reading": c.reading, "note": c.note}
+                        for c in pv.contracts)
+                continue
             if probe_rounds >= ctx.max_verdict_probe_rounds:
                 _log("meta: verdict-probe budget spent -> demanding a diagnosis")
                 diagnose_extra += ("\n## Verdict-experiment budget exhausted\nNo more PROBE_REQUEST "
@@ -8951,28 +9609,29 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 lever_table.extend(rows)
                 known_levers.extend(rows)
                 continue
-            be.commit(f"meta-probe: {turn.path}")
-            be.push_branch(probe_branch)
-            probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {turn.path}")
-            # audit=False: these lines answer pre-registered hypotheses, and the
-            # max_diff field carries the reading as printed. The certification
-            # audit (error-norm ceiling, float-only) was downgrading a PASS with a
-            # reading table to FAIL — i.e. telling the teacher its hypothesis had
-            # been falsified when the experiment had confirmed it.
-            pv = parse_probe_verdict(probe_log, audit=False)
+            pv, probe_log, readings = _run_meta_verdict_probe(
+                ctx, be, probe_branch, turn.path, probe_rounds)
             _log(f"meta: verdict probe {turn.path} "
                  f"({probe_rounds}/{ctx.max_verdict_probe_rounds}) -> "
                  f"PROBE {_probe_label(pv)} (max_diff={pv.diff_text})"
                  f"{_probe_log_suffix(pv)}")
             diagnose_extra += _verdict_probe_feedback(
                 turn.path, pv, probe_log, probe_rounds, ctx.max_verdict_probe_rounds)
-            probe_readings.extend(
-                {"path": turn.path, "round": probe_rounds, "contract": c.index,
-                 "verdict": c.verdict, "reading": c.reading, "note": c.note}
-                for c in pv.contracts)
+            probe_readings.extend(readings)
             continue
         diagnosis = out
         if cause:
+            # WP19 (task 5, contract C12): the diagnosis gates merged into ONE
+            # pass. A turn that violates several gates gets every still-armed
+            # gate's block in a single re-prompt instead of one billed teacher
+            # turn per gate (a large-batch run measured 695 such turns). Each
+            # gate's own "bounce once, then accept/refuse" flag is untouched —
+            # a fired flag disables only its own gate next round — and the
+            # blocks are the same text reorganized, never new injected content.
+            # The patch-shaping gates still do not apply to an INFEASIBLE stop
+            # request, and a stop request whose one bounce is spent still
+            # breaks for the post-loop refusal.
+            violations: list[str] = []
             # REACHABILITY GATE (plateau only, ledger channel present): the floor
             # arithmetic (diagnose_prompt §1c) is what turns "levers exhausted" into
             # "architecture cannot reach target" while the evidence is fresh — the
@@ -8982,14 +9641,13 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
             if (not audit and ctx.stall_pricing and not reach_demanded
                     and not _parse_reachability(out)):
                 reach_demanded = True
-                _log("meta: diagnosis omitted the reachability line -> re-prompt")
-                diagnose_extra += (
+                _log("meta: diagnosis omitted the reachability line -> merged re-prompt")
+                violations.append(
                     "\n## Format requirement (binding)\nThe output block lacks a `reachability:` "
                     "line. Do the reachability refutation of diagnosis step 1c first (the "
                     "construction of `floor_opt` and its term-by-term arithmetic go in "
                     "`evidence`), then resend the **complete** diagnosis "
                     "(every field, not just the one missing line).\n")
-                continue
             # INFEASIBLE is a stop request: none of the patch-shaping gates below
             # (segment / reopen price / phase verdict) apply to it.
             if cause.upper() == "INFEASIBLE":
@@ -9001,10 +9659,8 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 if why and not infeasible_bounces:
                     infeasible_bounces.append(why)
                     infeasible_asked = True  # the refusal block already names the channel
-                    _log(f"meta: INFEASIBLE stop request not accepted ({why}) -> re-prompt")
-                    diagnose_extra += _infeasible_refused_block(why)
-                    continue
-                break
+                    _log(f"meta: INFEASIBLE stop request not accepted ({why}) -> merged re-prompt")
+                    violations.append(_infeasible_refused_block(why))
             # INFEASIBLE CHANNEL: a diagnosis that talks INFEASIBLE under another
             # class is how a run spins — the verdict lives in the milestone, the
             # driver never hears it, and every later meta step re-diagnoses a
@@ -9018,88 +9674,86 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
             # is in nearly all of them as a negation — in one large batch of
             # runs, 1157 of 1163 such diagnoses read OPEN and 695 teacher
             # turns went to the bounce.
-            if (not audit and not infeasible_asked
+            elif (not audit and not infeasible_asked
                     and _INFEASIBLE_MENTION.search(out)
                     and _parse_reach_verdict(_parse_reachability(out)) != "OPEN"):
                 infeasible_asked = True
                 _log(f"meta: diagnosis mentions INFEASIBLE under cause_class {cause} "
-                     f"-> re-prompt (stop request or not)")
-                diagnose_extra += _INFEASIBLE_MENTION_BLOCK
-                continue
-            # LOCUS SEGMENT: a diagnosis read against a timeline names the segment
-            # the gap sits in — the reading that makes the table binding.
-            if tl_table is not None and not seg_demanded and not _parse_locus_segment(out):
-                seg_demanded = True
-                _log("meta: diagnosis omitted the locus_segment line -> re-prompt")
-                diagnose_extra += (
-                    "\n## Format requirement (binding)\nThis step has a timeline table, and the "
-                    "output block lacks a `locus_segment:` line. Use the table to place the lesion "
-                    "in a specific segment: `locus_segment: <role>.<segment>` (if it cannot be "
-                    "placed in a segment, write `none` and explain in evidence), "
-                    "then resend the **complete** diagnosis (every field, not just the one missing "
-                    "line).\n")
-                continue
-            # REOPEN BUDGET GATE: the reopen budget is spent — an R1 cannot land,
-            # so one bounce asks for a class that can (before the price gate
-            # would spend turns pricing a reopen the driver is going to refuse)
-            if cause.upper() == "R1" and reopens_capped and not capped_demanded:
-                capped_demanded = True
-                _log(f"meta: R1 diagnosed with the reopen budget spent ({reopen_streak} "
-                     f"fruitless reopen(s) in a row) -> re-prompt")
-                diagnose_extra += _reopen_capped_block(reopen_streak, ctx.reopen_max_fruitless,
-                                                       bounce=True)
-                continue
-            # REOPEN PRICE GATE (plateau and audit): an R1 is a structural reopen,
-            # and a reopen without a measured price is a known dsa_sparse failure —
-            # the stage split axis flipped on an inferred masking window, six
-            # decisions redone for 2%. One bounce naming the three ways to price
-            # it (verdict probe / price table / certified KB); a second unpriced
-            # R1 is refused below, after the loop.
-            if (cause.upper() == "R1" and _reopen_gate_on(ctx) and not price_demanded
-                    and (why := _verify_reopen_price(_parse_reopen_price(out), probe_readings,
-                                                     known_levers, ctx, probes_run,
-                                                     best_ref=_priced_best(priced)))):
-                price_demanded = True
-                _log(f"meta: R1 reopen carries no measured price ({why}) -> re-prompt")
-                diagnose_extra += _UNPRICED_REOPEN_BLOCK + f"(driver check result: {why})\n"
-                continue
-            # R2-STRUCTURAL PRICE GATE (WP6): a skeleton NOT present in ORACLE is
-            # the one proposal class with no reference reading to lean on, so its
-            # only acceptable price is a probe measured in this run (no lever
-            # table, no KB entry, no inference). One bounce naming the route; a
-            # second unpriced R2-structural is refused after the loop. The gate
-            # binds to the `r2_structural:` tag itself, not to the cause class: a
-            # teacher that mis-files the proposal under a non-R2 class must still
-            # be told HOW to price it before the patch point refuses it outright.
-            if (_is_r2_structural(out) and not r2_price_demanded
-                    and (why := _verify_r2_structural_price(_parse_reopen_price(out),
-                                                            probe_readings, ctx, probes_run,
-                                                            check_disk=True))):
-                r2_price_demanded = True
-                _log(f"meta: R2-structural proposal carries no in-run measured price "
-                     f"({why}) -> re-prompt")
-                diagnose_extra += _R2_STRUCTURAL_PRICE_BLOCK + f"(driver check result: {why})\n"
-                continue
-            # PHASE VERDICT GATE: the exhaustion reading was put to the teacher;
-            # an answer that is neither close nor a walkable decision costs one
-            # bounce, then the driver closes the phase itself (below).
-            if (exhaustion and not phase_demanded
-                    and (why := _verify_phase_verdict(_parse_phase_verdict(out), exhaustion))):
-                phase_demanded = True
-                _log(f"meta: phase_verdict for {exhaustion['phase']} missing or invalid "
-                     f"({why}) -> re-prompt")
-                diagnose_extra += (
-                    f"\n## Phase ruling (binding)\nThe driver has ruled that {exhaustion['phase']}'s "
-                    f"levers are all null on the pricing table, but the diagnosis's `phase_verdict` "
-                    f"is not valid ({why}). Add `phase_verdict: close` "
-                    f"(the student submits the `{exhaustion['gate']}` row directly next round) or "
-                    f"`phase_verdict: continue:<D id>` "
-                    f"(only a decision with no priced lever: "
-                    f"{', '.join(exhaustion['unpriced']) or 'none — this phase has no such decision, so only close is possible'}), "
-                    f"and resend the **complete** diagnosis. If it is missing or invalid again, the "
-                    f"driver treats it as close.\n")
-                continue
-            break
+                     f"-> merged re-prompt (stop request or not)")
+                violations.append(_INFEASIBLE_MENTION_BLOCK)
+            if cause.upper() != "INFEASIBLE":
+                # LOCUS SEGMENT: a diagnosis read against a timeline names the segment
+                # the gap sits in — the reading that makes the table binding.
+                if tl_table is not None and not seg_demanded and not _parse_locus_segment(out):
+                    seg_demanded = True
+                    _log("meta: diagnosis omitted the locus_segment line -> merged re-prompt")
+                    violations.append(
+                        "\n## Format requirement (binding)\nThis step has a timeline table, and the "
+                        "output block lacks a `locus_segment:` line. Use the table to place the lesion "
+                        "in a specific segment: `locus_segment: <role>.<segment>` (if it cannot be "
+                        "placed in a segment, write `none` and explain in evidence), "
+                        "then resend the **complete** diagnosis (every field, not just the one missing "
+                        "line).\n")
+                # REOPEN BUDGET GATE: the reopen budget is spent — an R1 cannot land,
+                # so one bounce asks for a class that can (before the price gate
+                # would spend turns pricing a reopen the driver is going to refuse)
+                if cause.upper() == "R1" and reopens_capped and not capped_demanded:
+                    capped_demanded = True
+                    _log(f"meta: R1 diagnosed with the reopen budget spent ({reopen_streak} "
+                         f"fruitless reopen(s) in a row) -> merged re-prompt")
+                    violations.append(_reopen_capped_block(reopen_streak, ctx.reopen_max_fruitless,
+                                                           bounce=True))
+                # REOPEN PRICE GATE (plateau and audit): an R1 is a structural reopen,
+                # and a reopen without a measured price is a known dsa_sparse failure —
+                # the stage split axis flipped on an inferred masking window, six
+                # decisions redone for 2%. One bounce naming the three ways to price
+                # it (verdict probe / price table / certified KB); a second unpriced
+                # R1 is refused below, after the loop.
+                if (cause.upper() == "R1" and _reopen_gate_on(ctx) and not price_demanded
+                        and (why := _verify_reopen_price(_parse_reopen_price(out), probe_readings,
+                                                         known_levers, ctx, probes_run,
+                                                         best_ref=_priced_best(priced)))):
+                    price_demanded = True
+                    _log(f"meta: R1 reopen carries no measured price ({why}) -> merged re-prompt")
+                    violations.append(_UNPRICED_REOPEN_BLOCK + f"(driver check result: {why})\n")
+                # R2-STRUCTURAL PRICE GATE (WP6): a skeleton NOT present in ORACLE is
+                # the one proposal class with no reference reading to lean on, so its
+                # only acceptable price is a probe measured in this run (no lever
+                # table, no KB entry, no inference). One bounce naming the route; a
+                # second unpriced R2-structural is refused after the loop. The gate
+                # binds to the `r2_structural:` tag itself, not to the cause class: a
+                # teacher that mis-files the proposal under a non-R2 class must still
+                # be told HOW to price it before the patch point refuses it outright.
+                if (_is_r2_structural(out) and not r2_price_demanded
+                        and (why := _verify_r2_structural_price(_parse_reopen_price(out),
+                                                                probe_readings, ctx, probes_run,
+                                                                check_disk=True))):
+                    r2_price_demanded = True
+                    _log(f"meta: R2-structural proposal carries no in-run measured price "
+                         f"({why}) -> merged re-prompt")
+                    violations.append(_R2_STRUCTURAL_PRICE_BLOCK + f"(driver check result: {why})\n")
+                # PHASE VERDICT GATE: the exhaustion reading was put to the teacher;
+                # an answer that is neither close nor a walkable decision costs one
+                # bounce, then the driver closes the phase itself (below).
+                if (exhaustion and not phase_demanded
+                        and (why := _verify_phase_verdict(_parse_phase_verdict(out), exhaustion))):
+                    phase_demanded = True
+                    _log(f"meta: phase_verdict for {exhaustion['phase']} missing or invalid "
+                         f"({why}) -> merged re-prompt")
+                    violations.append(
+                        f"\n## Phase ruling (binding)\nThe driver has ruled that {exhaustion['phase']}'s "
+                        f"levers are all null on the pricing table, but the diagnosis's `phase_verdict` "
+                        f"is not valid ({why}). Add `phase_verdict: close` "
+                        f"(the student submits the `{exhaustion['gate']}` row directly next round) or "
+                        f"`phase_verdict: continue:<D id>` "
+                        f"(only a decision with no priced lever: "
+                        f"{', '.join(exhaustion['unpriced']) or 'none — this phase has no such decision, so only close is possible'}), "
+                        f"and resend the **complete** diagnosis. If it is missing or invalid again, the "
+                        f"driver treats it as close.\n")
+            if not violations:
+                break
+            diagnose_extra += "".join(violations)
+            continue
         # ENUM GATE: cause_class must be exactly one enum token (no prose). Re-prompt.
         _log("meta: diagnosis had no valid cause_class enum -> re-prompt")
         diagnose_extra += (f"\n## Format requirement (binding)\nThe `cause_class` field must be "
@@ -11374,8 +12028,11 @@ def run_recon_step(ctx: LoopContext) -> ReconResult:
     storm_budget = [TRUNCATION_STORM_BUDGET]
     prompt = _recon_prompt(ctx)
     for r in range(ctx.max_recon_rounds):
-        out = _agent_turn(
-            be, prompt, label="meta/recon", storm_budget=storm_budget,
+        out = _wp11_teacher_timed(
+            ctx, _agent_turn,
+            be, prompt,
+            bucket="wp11_teacher_recon_s",
+            label="meta/recon", storm_budget=storm_budget,
             left_a_trace=lambda o: (
                 isinstance(parse_student_turn_safe(o, allow_recon=True), ReconRequest)
                 or _recon_artifacts_written(ctx, since=session_start)))
@@ -13362,6 +14019,28 @@ def _ensure_ref_pricing(ctx: LoopContext, label: str = "meta") -> None:
     missing = _ref_price_missing(ctx)
     if not missing:
         return
+    # WP19 (task 7): the cross-generation reconciliation — a sha-matched carry
+    # census confirmed by ONE cheap job within the band adopts the carried
+    # ref-side readings; a refutation (or anything that fails) falls through
+    # to the full suite below; no carry is the byte-identical baseline.
+    if (census := _carry_ref_census(ctx)) is not None:
+        if _ref_tree_kernel_sha(ctx) == census["header"].get("reference_kernel_sha256"):
+            try:
+                carried = float(census["header"].get("median_ms") or 0) or None
+            except (TypeError, ValueError):
+                carried = None
+            be0 = ctx.ref_price_backend
+            branch = getattr(be0, "current_branch", lambda: "main")()
+            confirmed = _ref_confirm_reading_ms(ctx, be0, branch)
+            verdict = reconcile_carried_ref_reading(carried, confirmed)
+            _log(f"{label}/ref-price: carry census reconciliation -> {verdict} "
+                 f"(carried {carried}, confirmed {confirmed}, "
+                 f"band {_REF_RECONCILE_BAND:.0%})")
+            if verdict == "adopt" and _adopt_carry_ref_census(ctx, census):
+                return
+        else:
+            _log(f"{label}/ref-price: carry census sha mismatch — not citable, "
+                 f"running the full census suite")
     if _report_waives(ctx, *[_ROLE_WAIVED if m == "ROLE" else _PMTL_WAIVED for m in missing]):
         return  # the teacher owned the absence; no job behind its back
     if ctx.now() > ctx.deadline_epoch - 1800:
@@ -13661,6 +14340,154 @@ _REF_PRICE_MAX_SUBMIT_FAILURES = 3
 _REF_PRICE_MARKER_NAMES = ("ref_price_job.log", "ref_price_job.2.log", "ref_price_job.3.log")
 
 
+# --- WP19 (task 7): the cross-generation reference-reading reconciliation -----
+#
+# The parent generation's best tree IS the child's reference (verbatim copy),
+# so its sha-stamped census (carry/ref_census.md) is a byte-identity prior for
+# the child's ref-side readings. The rule (红线追加②: 读数复用是加速不是省
+# 测量): the prior is adopted only after ONE cheap confirmation job re-times
+# the reference and lands within _REF_RECONCILE_BAND of the carried reading;
+# a mismatch REFUTES the carry and the full census suite runs as always; no
+# carry (or a sha mismatch — the byte-identity failed) is the baseline path,
+# byte-identical to a run without carry.
+_REF_RECONCILE_BAND = 0.03
+_REF_CENSUS_HEADER_RE = re.compile(
+    r"<!-- fk-ref-census\n(.*?)-->", re.S)
+_CARRY_REF_CENSUS_SECTIONS = ("stall_ledger", "segment_ledger", "dossier",
+                              "role", "pm_timeline")
+
+
+def _reference_kernel_sha(kernel_src: str) -> str:
+    import hashlib
+    return hashlib.sha256(kernel_src.encode("utf-8")).hexdigest()
+
+
+def carry_ref_census_parse(text: str) -> "dict | None":
+    """The carry census: its machine header (sha/window/median/ratios) plus the
+    five sections; None when the header is missing or unparseable."""
+    m = _REF_CENSUS_HEADER_RE.search(text)
+    if m is None:
+        return None
+    header: dict = {}
+    for line in m.group(1).splitlines():
+        if ":" not in line:
+            continue
+        k, v = line.split(":", 1)
+        header[k.strip()] = v.strip()
+    if not header.get("reference_kernel_sha256"):
+        return None
+    sections = {}
+    for key in _CARRY_REF_CENSUS_SECTIONS:
+        sm = re.search(rf"(?ms)^## {re.escape(key)}\n\n(.*?)(?=^## |\Z)", text)
+        val = sm.group(1).strip() if sm else ""
+        sections[key] = "" if val == "(absent)" else val
+    return {"header": header, "sections": sections}
+
+
+def _carry_ref_census(ctx: LoopContext) -> "dict | None":
+    """The child's carried census, when the run's carry dir has one."""
+    carry_dir = ctx.carry_dir
+    if not carry_dir:
+        return None
+    p = Path(carry_dir) / "ref_census.md"
+    try:
+        return carry_ref_census_parse(p.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return None
+
+
+def _ref_tree_kernel_sha(ctx: LoopContext) -> "str | None":
+    """sha256 of the reference tree's kernel source — the byte-identity the
+    citation requires (the ref tree's own problem.json names the kernel)."""
+    d = ctx.ref_price_dir
+    if d is None:
+        return None
+    try:
+        prob = json.loads((Path(d) / "eval/problem/problem.json")
+                          .read_text(encoding="utf-8"))
+        kf = prob.get("kernel_file", "kernel.py")
+        return _reference_kernel_sha((Path(d) / kf).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def reconcile_carried_ref_reading(carried_ms: "float | None", confirmed_ms: "float | None",
+                                  band: float = _REF_RECONCILE_BAND) -> str:
+    """The three states, pure: 'no-carry' (nothing to reconcile against),
+    'adopt' (the confirmation lands within the band of the carried reading),
+    'refute' (it does not — the full suite runs)."""
+    if carried_ms is None or confirmed_ms is None or carried_ms <= 0 or confirmed_ms <= 0:
+        return "no-carry"
+    if abs(confirmed_ms - carried_ms) / carried_ms <= band:
+        return "adopt"
+    return "refute"
+
+
+def _adopt_carry_ref_census(ctx: LoopContext, census: dict) -> bool:
+    """Bank the carried census as the child's ref-side reading. Adopting is
+    all-or-nothing: the carry must settle BOTH halves of the ref account (the
+    role table with its tensor term and the PM timeline) — anything less runs
+    the full suite, which banks everything itself."""
+    ev = _evidence_dir(ctx, create=True)
+    if ev is None:
+        return False
+    sections = census["sections"]
+    if not sections.get("role") or not sections.get("pm_timeline"):
+        _log("ref-price/carry: the carry census lacks the role or timeline section "
+             "— adopting nothing, running the full suite")
+        return False
+    pairs = (("role", _REF_ROLE_EXPOSURE_NAME),
+             ("dossier", _REF_ORCH_DOSSIER_NAME),
+             ("stall_ledger", _REF_STALL_LEDGER_NAME),
+             ("segment_ledger", _REF_SEGMENT_LEDGER_NAME),
+             ("pm_timeline", _REF_PM_TIMELINE_NAME))
+    try:
+        for key, name in pairs:
+            text = sections.get(key, "")
+            if text:
+                (ev / name).write_text(text, encoding="utf-8")
+        key = _ref_pricing_key(ctx)
+        for marker_name in _REF_PRICE_MARKER_NAMES:
+            (ev / marker_name).write_text(
+                f"[ref-price] key={key} app={ctx.ref_price_app!r} "
+                f"pm_interval={_pm_interval(ctx)}\n"
+                f"[ref-price] adopted from the carry census (reconciled within band)\n",
+                encoding="utf-8")
+    except OSError as e:
+        _log(f"ref-price/carry: adoption failed ({e}) — running the full suite")
+        return False
+    _bank_evidence(ctx, "carry-adopted ref census")
+    _log("ref-price/carry: the carried census is banked — one confirmation job "
+         "replaced the census suite (读数复用是加速不是省测量: the confirmation "
+         "re-measured the ref; the census rides the byte-identity)")
+    return True
+
+
+def _ref_confirm_reading_ms(ctx: LoopContext, be, branch: str) -> "float | None":
+    """One cheap confirmation job of the reference tree (mode ``ref``: the
+    in-job reference alone, the bench's own JSON). None when it fails — the
+    caller falls back to the full suite, never to the carry alone."""
+    try:
+        log = be.submit_gpu(branch, "ref")
+    except BackendError as e:
+        _log(f"ref-price/carry: the confirmation job failed ({e}) — "
+             f"running the full census suite")
+        return None
+    m = re.search(r"\{[^{}]*\}", log, re.S)
+    if m is None:
+        return None
+    try:
+        obj = json.loads(m.group(0))
+    except ValueError:
+        return None
+    ms = obj.get("device_median_ms") if ctx.gate_window == "device" \
+        else obj.get("median_ms")
+    try:
+        return float(ms) if ms is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
                        bank_as: "tuple[str, ...]" = (_STUDENT_ORCH_DOSSIER_NAME,),
                        label: str = "best", workload: str | None = None) \
@@ -13718,7 +14545,7 @@ def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
                 # price the workspace HEAD — worse than best is still measured truth.
                 be.push_branch(branch)
                 ref = be.head()
-            log = be.submit_gpu(branch, cmd)
+            log = _wp11_job_timed(ctx, "wp11_job_pricing_s", be.submit_gpu, branch, cmd)
         except BackendError as e:
             _log(f"meta/stall-price[{label}]: pricing job failed ({e}) — "
                  "diagnosing without a ledger")
@@ -13867,7 +14694,7 @@ def _require_recon_artifacts(ctx: LoopContext, be, sass_ok: bool = True,
             # waive) is unfindable without this.
             gaps.extend(_near_miss_notes(lacking, near_miss))
         _log(f"meta/recon: write-up incomplete ({'; '.join(gaps)[:120]}) — write-up turn")
-        _agent_turn(be, _recon_prompt(ctx, extra=(
+        _wp11_teacher_timed(ctx, _agent_turn, be, _recon_prompt(ctx, extra=(
             f"\n\n## Recon rounds are over — now only write the deliverables\n\n"
             f"The GPU budget is used up; **you can no longer send RECON_REQUEST** (one sent "
             f"will not be executed).\n"
@@ -13877,6 +14704,7 @@ def _require_recon_artifacts(ctx: LoopContext, be, sass_ok: bool = True,
             f"was measured, and mark what was not honestly as \"not measured\"; an honest "
             f"hole is more useful than a fabricated whole.")),
             label="meta/recon-writeup", storm_budget=writeup_storm,
+            bucket="wp11_teacher_recon_s",
             left_a_trace=lambda o: _recon_artifacts_written(ctx, since=since))
     if not (_recon_artifacts_written(ctx, since=since)
             and _sass_evidence(ctx, sass_ok, near_miss)):
@@ -14500,9 +15328,11 @@ def run_distill_step(ctx: LoopContext) -> "MetaResult":
                       "the §9 skeleton; you must fix it and write it again)\n"
                       + "\n".join(f"- {v}" for v in violations) + "\n")
         pre = _read_or_none(ctx.milestone)
-        out = _agent_turn(
+        out = _wp11_teacher_timed(
+            ctx, _agent_turn,
             be, _apply_prior_input(
                 render_prompt(_distill_prompt_path(ctx), bindings, extra), ctx),
+            bucket="wp11_teacher_distill_s",
             label="meta/distill", storm_budget=storm_budget,
             # the only legal trace of a distill turn is the milestone changing on
             # disk — a tiny output that left the draft byte-identical is a
@@ -14817,6 +15647,13 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
     """
     _wp5_apply_cfg(ctx)
     _wp11_apply_cfg(ctx)
+    _wp19_apply_cfg(ctx)
+    if ctx.background_lane and ctx.background_lane_obj is None:
+        # WP19 (task 3): the lane exists only when the switch is on; its
+        # confirm readings are parsed for hygiene and dropped — no consumer
+        # (107 ruling F3), never a gate input (C15)
+        ctx.background_lane_obj = BackgroundLane(
+            temperature_ok=lambda: _lane_temperature_check(ctx), log=_log)
     meta_steps = 0
     # --- WP5 (task 2): the meta cap breathes with the wall clock left. max_meta
     # stays the configured floor; a long remaining budget lifts the cap so a run
@@ -15045,6 +15882,10 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
         # --- WP9 ---: [loop] floor_stop (opt-in, default off) — the weak-ref/absent-ref
         # companion of the target stop (see _floor_stop_check).
         if (floor_stop := _floor_stop_check(ctx, best_before, meta_steps)) is not None:
+            # WP19 (task 8, 乙N-B15): the floor_stop exit prints the same
+            # composition table every other exit prints — the run's wall-clock
+            #构成 must be readable at whichever door it left through
+            _wp11_wallclock_summary(ctx)
             return floor_stop
         # Before spending the meta budget on a gap-driven diagnosis, make sure the
         # gap exists: stall pricing, the verdict probes and the prescription all
@@ -15375,7 +16216,7 @@ def run_best_confirmation(ctx: LoopContext, jobs: int = 3, max_extra: int = 2,
             break                      # settled: the median sits in the band
         attempts += 1
         try:
-            log = be.submit_gpu(branch, ctx.confirm_job_mode)
+            log = _wp11_job_timed(ctx, "wp11_job_confirm_s", be.submit_gpu, branch, ctx.confirm_job_mode)
         except BackendError as e:
             consecutive_errors += 1
             _log(f"confirm: job failed ({e})")

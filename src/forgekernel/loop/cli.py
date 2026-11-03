@@ -17,6 +17,8 @@ import argparse
 import json
 import os
 import re
+import shlex
+import uuid
 import signal
 import statistics
 import subprocess
@@ -335,6 +337,16 @@ class RealBackend:
         self.last_mode = ""  # the gpu_entry mode of last_job_id (its closing line names the task)
         self.poll_timeout_s = poll_timeout_s  # per-job poll bound
         self.last_job_id = ""  # set by submit_gpu; provenance for whoever records results
+        # WP19 (task 6): session resume within one scope. Off by default (the
+        # flags are never passed and every turn is a fresh `claude -p`). When
+        # on AND the driver names a scope, the scope's FIRST turn creates a
+        # session (`--session-id`) and its later turns resume it (`--resume`);
+        # a failed turn's retry re-enters the same session with the error tail
+        # injected. The per-turn policy rewrite and skills mirror are NOT
+        # affected (agent_policy.install runs before every prompt, the resumed
+        # session re-reads the freshly rewritten project settings).
+        self.resume_session = False
+        self.agent_session_scope: str | None = None
 
     @property
     def machine(self) -> str:
@@ -395,6 +407,35 @@ class RealBackend:
             raise box["exc"]
         return proc.returncode, box.get("out", ""), box.get("err", "")
 
+    def _session_env(self, role: str) -> dict:
+        """WP19 (task 6): the resume env for this turn, or {} when resume is
+        off / no scope is named. The scope's session id lives in a file under
+        the workspace: the first turn of a scope writes it (mode=create), the
+        later turns read it (mode=resume). A scope file is removed when the
+        driver clears the scope, so a NEW meta entry starts a fresh session."""
+        if not self.resume_session or not self.agent_session_scope:
+            return {}
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", self.agent_session_scope)
+        sid_file = Path(self.workspace) / ".fk-sessions" / f"{safe}.{role}"
+        try:
+            if sid_file.is_file():
+                sid = sid_file.read_text(encoding="utf-8").strip()
+                if sid:
+                    return {"FK_AGENT_SESSION_ID": sid, "FK_AGENT_SESSION_MODE": "resume"}
+            sid = f"{safe}-{role}-{uuid.uuid4().hex[:12]}"
+            sid_file.parent.mkdir(parents=True, exist_ok=True)
+            sid_file.write_text(sid, encoding="utf-8")
+            return {"FK_AGENT_SESSION_ID": sid, "FK_AGENT_SESSION_MODE": "create"}
+        except OSError:
+            return {}   # resume is an optimization: any trouble runs the baseline
+
+    @staticmethod
+    def _prepend_env(cmd: str, env: dict) -> str:
+        if not env:
+            return cmd
+        prefix = " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items())
+        return f"{prefix} {cmd}"
+
     def run_agent(self, prompt: str, *, role: str = "student") -> str:
         cmd = self.agent_cmd_for(role)
         if not cmd:
@@ -407,8 +448,20 @@ class RealBackend:
         last = ""
         attempt = 0
         outage_waits = 0
+        base_prompt = prompt
         while attempt < self.agent_retries:
-            rc, out, err = self._agent_turn(cmd, prompt, role)
+            # per attempt: the first turn of a scope CREATES its session, and
+            # the retry of a failed turn RESUMES it (the session file now exists)
+            session_env = self._session_env(role)
+            turn_prompt = base_prompt
+            if attempt > 0 and last and session_env:
+                # WP19 (task 6): a retried turn re-enters its session with the
+                # previous attempt's failure tail — the model sees why it is
+                # being asked again instead of replaying a dead turn blind
+                turn_prompt = (base_prompt + "\n\n## Previous attempt failed\n"
+                               f"{last[-600:]}\nRetry the turn.\n")
+            rc, out, err = self._agent_turn(self._prepend_env(cmd, session_env),
+                                            turn_prompt, role)
             if rc == 0 and out.strip():
                 return out
             last = (f"rc={rc} "
@@ -459,6 +512,53 @@ class RealBackend:
                 raise ClockLockRefusedError(f"{head} ({refusals} refusal(s) in a row)")
             print(f"{head}; resubmitting ({refusals}/{self.clock_lock_retries})", flush=True)
             time.sleep(self.clock_lock_retry_sleep_s)
+
+    def submit_gpu_start(self, branch: str, mode: str) -> int:
+        """WP19 (task 3): the background lane's half of an overlapped submit —
+        submit (or adopt) and return the job id WITHOUT polling. The job's runner
+        detaches and runs under the GPU lock exactly as a foreground job would
+        (``gpu_lock`` semantics untouched); the caller collects with
+        ``submit_gpu_finish``. The fused ``submit_gpu`` above stays the only
+        gate-facing path."""
+        sub = self._retry_call(
+            lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode),
+            what=f"submit {mode}")
+        m = re.search(r"job=(\d+)", sub.stdout) or re.search(r'"id":\s*(\d+)', sub.stdout)
+        if not m:
+            raise BackendError(
+                f"could not parse job id from submit output:\n{sub.stdout[-800:]}")
+        job = m.group(1)
+        self._record_inflight(job, branch, mode)
+        self.last_job_id = job
+        self.last_mode = mode
+        return job
+
+    def submit_gpu_finish(self, job: str, mode: str) -> str:
+        """WP19 (task 3): the lane's collection half — poll to terminal, fetch the
+        log. A runner-lost or transport-failed lane job raises; the lane drops the
+        reading rather than retrying into the agent-turn window it must vacate."""
+        status = poll_until_terminal(
+            lambda: self._job_status(job), job, poll_s=self.poll_s,
+            timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+        if status in _LOST:
+            self._clear_inflight()
+            raise RunnerLostError(f"lane job {job} lost its runner without a verdict")
+        try:
+            log = self._fetch_log(job, status, task=_entry_task(mode))
+        except BackendError:
+            self._clear_inflight()
+            raise
+        self._clear_inflight()
+        if TRANSPORT_ERROR_MARKER in log:
+            detail = next((ln.strip() for ln in log.splitlines()
+                           if TRANSPORT_ERROR_MARKER in ln), TRANSPORT_ERROR_MARKER)
+            raise JobTransportError(
+                f"the lane job could not be delivered: {detail[:400]}")
+        if clock_lock_refusal(log) is not None:
+            # a lane reading taken without the declared clock is not a reading at
+            # all: dropped, the same rule the gate path resubmits under
+            raise BackendError(f"lane job {job}: the card's clock lock did not hold")
+        return log
 
     def _submit_gpu_once(self, branch: str, mode: str) -> str:
         """Submit (or adopt), poll, and return the job's log; a job that lost its runner

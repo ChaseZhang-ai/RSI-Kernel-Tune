@@ -63,7 +63,7 @@ def noise_floor(best: dict) -> float:
     return max(NOISE_FLOOR_MIN, spread)
 
 
-def next_generation(task, best: dict, dest: Path, step: float, run=None) -> Path:
+def next_generation(task, best: dict, dest: Path, step: float, run=None, best_data=None) -> Path:
     """tasks/<op>-g<k>/: the task with ``best`` as its reference and target ``step``x."""
     if dest.exists():
         raise FileExistsError(f"{dest} exists; remove it or start the chain elsewhere")
@@ -83,7 +83,7 @@ def next_generation(task, best: dict, dest: Path, step: float, run=None) -> Path
     cfg["target"].pop("ms", None)
     (dest / "task.toml").write_text(dump_task_toml(cfg), encoding="utf-8")
     if run is not None:
-        _write_carry(task, run, dest / "carry")
+        _write_carry(task, run, dest / "carry", best=best_data)
     load_task(dest)                       # the new generation must be a valid task
     return dest
 
@@ -102,16 +102,66 @@ _CARRY_MILESTONE = "milestone.md"
 _CARRY_LEVERS = "levers.json"
 _CARRY_ARCH_PROBE = "arch_probe.md"
 _CARRY_FALSIFIED = "falsified.md"
+# WP19 (task 7, 乙B8): the carry grows from four artifacts to seven — probes/,
+# ref_census.md (the parent best tree's SASS/NCU census, sha-stamped) and
+# tools.md. The census is what the next generation's reference-pricing
+# reconciliation consumes: the child's reference IS the parent's best kernel
+# verbatim, so a census whose header sha matches the child's reference kernel
+# byte-for-byte is a valid prior for the child's ref-side readings — adopted
+# only after one confirmation job re-measures the ref within the band, never
+# on the carry alone (读数复用是加速不是省测量).
+_CARRY_REF_CENSUS = "ref_census.md"
+_CARRY_PROBES = "probes"
+_CARRY_TOOLS = "tools.md"
 _ARCH_PROBE_STAMP_RE = re.compile(r"<!-- ARCH_PROBE .*?-->", re.S)
 
 
-def _write_carry(task, run, dest: Path) -> None:
-    """Four artifacts from the parent run into ``tasks/<op>-g<k>/carry/``:
-    the final milestone (decisions + contracts + rationale, its head note
-    carrying the ARCH_PROBE stamp), the lever price table, the ARCH_PROBE
-    readings, and this operator's falsified-lever rows. Best-effort by design:
-    an artifact the run never produced (no plateau pricing, no probes) is
-    recorded as absent, never guessed."""
+def _reference_kernel_sha(kernel_src: str) -> str:
+    """The census stamp: sha256 of the best kernel's exact source bytes. The
+    child recomputes it over its own reference kernel — a match is the
+    byte-identity the citation requires."""
+    import hashlib
+    return hashlib.sha256(kernel_src.encode("utf-8")).hexdigest()
+
+
+def _best_tree_census_sections(run, best: dict) -> dict:
+    """The parent best tree's census sections, from the run's evidence dir and
+    its stall-price cache (the best tree's whole pricing log). Best-effort:
+    a section the run never produced is absent, never guessed."""
+    sections: dict[str, str] = {}
+    ev = run.ws / "evidence"
+    pairs = (("dossier", "student_orch_dossier_best.txt"),
+             ("role", "student_role_exposure.txt"))
+    for key, name in pairs:
+        p = ev / name
+        if p.is_file():
+            sections[key] = p.read_text(encoding="utf-8", errors="replace")
+    # the best tree's whole pricing log: the cached log whose dossier section
+    # is the banked best dossier (same text, one collection)
+    dossier = sections.get("dossier", "")
+    cache = run.ws / "notes" / "wp11-stall-price"
+    if dossier and cache.is_dir():
+        import hashlib as _h
+        want = _h.sha256(dossier.encode("utf-8")).hexdigest()
+        for log_file in sorted(cache.glob("*.log")):
+            try:
+                text = log_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if dossier.strip() and dossier.strip() in text:
+                sections["pricing_log"] = text
+                sections["pricing_log_sha256"] = _h.sha256(
+                    text.encode("utf-8")).hexdigest()
+                break
+    return sections
+
+
+def _write_carry(task, run, dest: Path, best: dict | None = None) -> None:
+    """The parent run's closing record into ``tasks/<op>-g<k>/carry/``:
+    the four WP8 artifacts (milestone, lever table, ARCH_PROBE readings,
+    falsified rows) plus the WP19 three (probes/, ref_census.md, tools.md).
+    Best-effort by design: an artifact the run never produced (no plateau
+    pricing, no probes) is recorded as absent, never guessed."""
     dest.mkdir(parents=True, exist_ok=True)
     notes = []
 
@@ -152,12 +202,80 @@ def _write_carry(task, run, dest: Path) -> None:
                 rows.append(line)
     _put(_CARRY_FALSIFIED, "\n".join(rows) + ("\n" if rows else ""),
          "the parent's dead-lever ledger rows (class, price, why)")
+    # --- WP19 (task 7): probes/ + ref_census.md + tools.md -----------------
+    probes_dest = dest / _CARRY_PROBES
+    copied = 0
+    notes_dir = run.ws / "notes"
+    if notes_dir.is_dir():
+        probes_dest.mkdir(parents=True, exist_ok=True)
+        for probe in sorted(notes_dir.glob("*.py")):
+            try:
+                shutil.copy2(probe, probes_dest / probe.name)
+                copied += 1
+            except OSError:
+                continue
+    notes.append(f"- `{_CARRY_PROBES}/`: the parent's probe scripts "
+                 f"({copied} file(s)) — hypothesis-reuse material for the child's "
+                 "recon, re-verified line by line")
+    census_sections = _best_tree_census_sections(run, best) if best else {}
+    census = ""
+    if best and best.get("kernel"):
+        header = (f"<!-- fk-ref-census\n"
+                  f"reference_kernel_sha256: {_reference_kernel_sha(best['kernel'])}\n"
+                  f"parent_best_sha: {best.get('sha', '')}\n"
+                  f"window: {best.get('window') or ''}\n"
+                  f"median_ms: {best.get('median_ms')}\n"
+                  f"ratios: {json.dumps(best.get('ratios') or [])}\n"
+                  f"pricing_log_sha256: {census_sections.get('pricing_log_sha256', '')}\n"
+                  f"-->\n")
+        body = []
+        for key in ("stall_ledger", "segment_ledger", "dossier", "role", "pm_timeline"):
+            if key == "dossier":
+                text = census_sections.get("dossier", "")
+            elif key == "role":
+                text = census_sections.get("role", "")
+            elif key == "pm_timeline":
+                text = _extract_section(census_sections.get("pricing_log", ""),
+                                        r"(?ms)^=== PM-PHASE TIMELINE ===.*?(?=^=== |\Z)")
+            else:
+                text = _extract_section(census_sections.get("pricing_log", ""),
+                                        _CENSUS_SECTION_RES[key])
+            body.append(f"## {key}\n\n{text.strip() or '(absent)'}\n")
+        census = header + "\n".join(body)
+    _put(_CARRY_REF_CENSUS, census,
+         "the parent best tree's SASS/NCU census, sha-stamped (the child's "
+         "reference is this kernel verbatim): adopted for the child's ref-side "
+         "readings only after one confirmation job reconciles within the band")
+    (dest / _CARRY_TOOLS).write_text(
+        "# carry tools: the harness measurement tools the parent ran\n\n"
+        "- stall/segment/dossier/role census: `skills/stall_price_run.py --pm` "
+        "(the frozen recipe; the run's `--pm-interval` is the loop's)\n"
+        "- phase timeline: the same census collection (`=== PM-PHASE TIMELINE ===`)\n"
+        "- timeline probe: `notes/timeline_probe.py` (the harness overlays its own "
+        "copy on every probed ref)\n\n"
+        "The child's harness re-seeds and overlays its own tool copies; these are "
+        "seeds for reading the parent's numbers, never a reason to skip a measurement "
+        "the child's own contract asks for.\n", encoding="utf-8")
+    notes.append(f"- `{_CARRY_TOOLS}`: the measurement-tool seeds")
     (dest / "README.md").write_text(
         "# carry: the parent generation's closing record\n\n"
         "Consumed by the next generation's teacher through the distill/recon briefs' "
         "PRIOR-INPUT section: for hypothesis reuse and reconciliation only — re-verify "
         "every line against the new run's own measurements; never a gate anchor, never "
         "a price source.\n\n" + "\n".join(notes) + "\n", encoding="utf-8")
+
+
+_CENSUS_SECTION_RES = {
+    "stall_ledger": r"(?ms)^=== STALL LEDGER.*?(?=^=== |\Z)",
+    "segment_ledger": r"(?ms)^=== SEGMENT.*?(?=^=== |\Z)",
+}
+
+
+def _extract_section(text: str, pattern: str) -> str:
+    if not text:
+        return ""
+    m = re.search(pattern, text)
+    return m.group(0) if m else ""
 
 
 def main(argv=None) -> int:
@@ -199,7 +317,7 @@ def main(argv=None) -> int:
             print(f"[self-evolve] reached --max-gen {args.max_gen}", flush=True)
             return 0
         task_dir = next_generation(task, best, task_dir.parent / f"{base}-g{gen + 1}",
-                                   args.step, run=run)
+                                   args.step, run=run, best_data=best)
         print(f"[self-evolve] next generation: {task_dir}", flush=True)
     return 0
 

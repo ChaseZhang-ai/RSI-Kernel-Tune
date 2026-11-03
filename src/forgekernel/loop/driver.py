@@ -355,12 +355,13 @@ class LoopContext:
     teacher_ncu_tail_lines: int | None = None
     # WP19 (task 3, contract C15): the background measurement lane. Off by
     # default; when on, run_two_layer constructs the lane and the student
-    # probe loop becomes the measurement window. ``lane_confirm_samples``
-    # collects near-best confirmation readings — a post-stop claim input, and
-    # structurally NEVER a gate input (the gate consumes only eval jobs).
+    # probe loop becomes the measurement window. Lane confirm readings are
+    # parsed for contract hygiene and DROPPED — they have no consumer (107
+    # ruling F3: the claimed ``run_best_confirmation`` seed_samples wiring
+    # never existed and was ruled out rather than added) and are structurally
+    # NEVER a gate input (the gate consumes only eval jobs).
     background_lane: bool | None = None
     background_lane_obj: "BackgroundLane | None" = None
-    lane_confirm_samples: list = field(default_factory=list)
     # INFEASIBLE GATE: the fewest diagnoses (this one included; the distillation
     # and a clean M0 audit do not count) before a stop request can be accepted.
     # 1 = the reachability check alone gates the stop (see _infeasible_refusal).
@@ -1378,24 +1379,24 @@ def _lane_temperature_check(ctx: LoopContext) -> "tuple[bool, str]":
 
 
 def _lane_deliver_confirm(ctx: LoopContext, log: str) -> None:
-    """The confirm task's ONLY consumer: the post-stop claim's seed-sample
-    pool. No gate reads this list (C15) — the gate consumes eval jobs alone,
-    and the samples ride run_best_confirmation's ``seed_samples`` (a WP15
-    parameter) when the claim is formed."""
+    """The confirm task's consumer: a hygiene parse and a DROP. The readings
+    have no destination (107 ruling F3: the claimed
+    ``run_best_confirmation(seed_samples=...)`` wiring never existed — a
+    field that appends with no reader is exactly the "mechanism present,
+    data flow broken" debt the data-flow audit clears, so the dead end was
+    removed, not wired); no gate reads lane data (C15). The parse stays so an
+    off-contract log still says so, and every usable reading says it was
+    dropped."""
     ev = _enforce_single_ref(ctx, parse_eval(log))
     if ctx.gate_window == "device":
-        ms, ref_ms, ratio = ev.device_median_ms, ev.ref_device_ms, ev.vs_ref_device
+        ms = ev.device_median_ms
     else:
-        ms, ref_ms, ratio = ev.bwd_median_ms, ev.ref_median_ms, ev.vs_ref
-    if ratio is None and ms and ref_ms:
-        ratio = ref_ms / ms
+        ms = ev.bwd_median_ms
     job = getattr(ctx.backend, "last_job_id", "") or "?"
     if not ev.correctness or ms is None:
         _log(f"lane: confirm job {job} unusable ({ev.error or 'no reading'}) — dropped")
         return
-    ctx.lane_confirm_samples.append(
-        {"job": job, "ms": ms, "ref_ms": ref_ms, "ratio": ratio,
-         "node": _job_node(ctx.backend, job)})
+    _log(f"lane: confirm job {job} reading dropped (no consumer — 107 ruling F3)")
 
 
 def _bounded_ncu_records(records: list, ctx: LoopContext) -> list:
@@ -15348,7 +15349,8 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
     _wp19_apply_cfg(ctx)
     if ctx.background_lane and ctx.background_lane_obj is None:
         # WP19 (task 3): the lane exists only when the switch is on; its
-        # readings go to the post-stop claim's seed pool, never to a gate (C15)
+        # confirm readings are parsed for hygiene and dropped — no consumer
+        # (107 ruling F3), never a gate input (C15)
         ctx.background_lane_obj = BackgroundLane(
             temperature_ok=lambda: _lane_temperature_check(ctx), log=_log)
     meta_steps = 0

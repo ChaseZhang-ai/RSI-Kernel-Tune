@@ -1212,22 +1212,21 @@ def test_t3_c15_default_off_no_lane_no_behavior_change(tmp_path):
     ctx = _ctx(tmp_path, be)
     driver.run_inner_iteration(ctx, 0, metric_before=2.6)
     assert ctx.background_lane_obj is None          # nothing constructed
-    assert ctx.lane_confirm_samples == []
     rows = [{k: v for k, v in r.__dict__.items() if k not in _WP11_TELEMETRY}
             for r in load_records(ctx.status_path)]
     assert rows[0]["verdict"] == "KEEP"             # the baseline record, untouched
 
 
-def test_t3_c15_lane_readings_never_reach_the_gate(tmp_path):
-    # a completed confirm reading lands in lane_confirm_samples and NOWHERE in
-    # the gate path: the next eval's verdict/records are byte-identical to a
-    # run whose lane sample did not exist
+def test_t3_c15_lane_readings_never_reach_the_gate(tmp_path, capsys):
+    # a completed confirm reading is parsed for hygiene and DROPPED (107
+    # ruling F3: the readings have no consumer) and NOWHERE in the gate path:
+    # the next eval's verdict/records are byte-identical to a run whose lane
+    # sample did not exist
     be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
     ctx = _ctx(tmp_path, be)
     ctx.background_lane_obj = BackgroundLane(cooldown_s=0.0, log=lambda m: None)
     driver._lane_deliver_confirm(ctx, EVAL(2.55))
-    assert len(ctx.lane_confirm_samples) == 1
-    assert ctx.lane_confirm_samples[0]["ms"] == 2.55
+    assert "reading dropped (no consumer" in capsys.readouterr().out
     driver.run_inner_iteration(ctx, 0, metric_before=2.6)
     rows = [{k: v for k, v in r.__dict__.items() if k not in _WP11_TELEMETRY}
             for r in load_records(ctx.status_path)]

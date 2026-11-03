@@ -80,9 +80,11 @@ KB 单 job 全 PASS finalize + 失败反馈 + 回退。
 fuse 的 `submit_gpu` **逐字节不动**，gate 路径不变）。学生探针循环即测量窗口：窗口开（到期任务非阻塞提交，
 `submit_gpu_start`；后端无该对→窗口不动，同步路径永不入窗）→ agent turn → 窗口收（`submit_gpu_finish`
 收集并交付）。C15 三硬约束**结构性**成立并有逐条测试：
-1. **gate 永不消费后台读数**——车道读数只达任务自己的 `deliver`（confirm → `ctx.lane_confirm_samples`，
-   即 run-stop 后 claim 的 seed 池，WP15 的 `run_best_confirmation(seed_samples=...)` 参数；测试断言车道读数
-   前后 gate 字段逐字节不变）；
+1. **gate 永不消费后台读数**——车道读数只达任务自己的 `deliver`（confirm → 卫生解析后**丢弃**并落一行
+   `reading dropped (no consumer)` 日志；**107 裁决 F3 更正**：本节初稿声称的"run-stop 后 claim 的 seed 池、
+   WP15 的 `run_best_confirmation(seed_samples=...)` 参数"接线**不存在**，审查 grep 实锤为零调用——按裁决
+   拆除死端（`lane_confirm_samples` 字段+append 已删）而非接线：确认采样是否可走 lane 语义与 C15 边界
+   未厘清前，接线 = 白买 GPU job 或开纪律口子。测试断言交付日志 + 车道读数前后 gate 字段逐字节不变）；
 2. **cooldown guard**（默认 60s，按最后 GPU 释放时间）+ **温度 guard**（复用 eval JSON 已有的 gpu_state
    temperature_c 遥测，≥83°C 推迟启动不丢弃——不新增探测不新增 job）；
 3. **默认关**——`[loop] background_lane` 默认 false；off 时无 lane 对象、无窗口、记录逐字段同基线。
@@ -166,6 +168,10 @@ dossier, role table WITH tensor and the phase timeline"），且带 (status_path
 （skills/ 围栏外）并把 timeline 的 banked 复用/stale overlay/dirty 重跑语义移植进合并段——按围栏与
 "所有失败路径回退旧行为"纪律，本包不做，**留给 WP23 评估**（timeline 的 banked 复用本身已把实测开销
 摊薄：大批次 1672/1887 命中 bank）。群卡侧读合并照任务书缓议（P2）。
+
+> **总工书面裁决（107 号裁决 F4，2026-11-04）**：采信审查核实——基线 WP11 census 本就一个 job 产
+> stall+role+PM-timeline，任务书"三读数分属多 job"的前提过时，**无代码欠账**；上段诚实缓议维持，
+> timeline 并入归 WP23 评估。**本条记档了结。**
 
 ## 任务 8（P2）：小项捆
 
@@ -258,3 +264,24 @@ submit+poll 全程 1.26s——即单条确认 job 的真实固定开销，供任
 **围栏外改动清单（如实）**：`tests/test_wp8_prior_supply.py` 的 carry 四件上界集合放宽为七件（任务 7 的
 合法扩展，测试自身未改断言语义）；`tests/conftest.py` 未动；`tests/test_wp11_throughput.py` 的
 `Ctx` 桩补 6 个新桶字段默认 0.0（其测试语义未变）。
+
+## 修复会话（107 号裁决，2026-11-04，快速复审窗口）
+
+依据：`107-总工裁决-WP15-19审查处置与补流令.md`。修复范围=F3 拆除 + CHANGES 更正；F1/F4 为零代码裁决项（任务书 66 §2 补围栏 + 本报告 95 号审查报告补记已落档）。其余交付不动。
+
+### F3：`lane_confirm_samples` 死端拆除（选裁决保守项，不接线）
+
+- **删 field**：`LoopContext.lane_confirm_samples` 及其注释段（driver.py）。
+- **删 append**：`_lane_deliver_confirm` 不再落任何存储——保留卫生解析（off-contract 日志仍报 "unusable … dropped"），可用读数显式落一行 `lane: confirm job … reading dropped (no consumer — 107 ruling F3)`（report-only，`_log`）；数据流断点由此从"暗死端"变为"显式丢弃"，96 号审计"机制在、数据流断"清零。
+- **改注释**：`run_two_layer` 车道构造注释与 LoopContext 注释同步改口（读数无消费者；C15 边界未厘清前不接线）。
+- **测试**：`test_t3_c15_default_off_no_lane_no_behavior_change` 撤 field 断言；`test_t3_c15_lane_readings_never_reach_the_gate` 改断言 drop 日志（capsys）+ gate 字段逐字节不变（C15 实质保留）。
+- **全仓 grep**：`lane_confirm_samples` **零残留**（src/tests/scripts）。
+
+### CHANGES 更正
+
+- 任务 3 第 1 条硬约束的失实声明（"seed 池/`run_best_confirmation(seed_samples=...)` 参数"）已改口为裁决口径（见上文修正块）。
+- F4 `merge_meta_jobs`：总工书面裁决记档（任务书前提过时、无代码欠账、缓议维持、条目了结）。
+
+### 修复会话围栏自查
+
+本会话生产改动仅 driver.py（围栏内，车道区域）：field/append/两处注释；`tests/test_wp19_throughput.py` 两测试改写（围栏内）。`parse.py` 零触碰（补围栏是任务书文档动作，非代码）。零行为变化验收不受影响：车道默认关，`test_wp19_switches_off_matches_baseline_records` 照跑（全量见下）。

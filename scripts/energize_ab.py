@@ -38,7 +38,10 @@ ITEMS: dict[str, dict] = {
             "rollback": "FK_BUILD_CACHE=0（一行）",
             "depends": ["同内核跨 job 重复构建日志", "key 覆盖用例（改头文件必 miss/改注释必命中）"]},
     "A5": {"title": "floor_stop / floor_margin", "switch": "[target] floor_margin / [loop] floor_stop",
-            "rollback": "键默认关即回退", "depends": ["floor_backtest.json 回填（--from-run）", "WP15 resolvable v2"]},
+            "rollback": "键默认关即回退",
+            "depends": ["floor_backtest.json 回填（--from-run 自动化缺位——WP21 冒烟 defect D-9："
+                        "backtest_floors.py 无该旗标，best_ms 需按脚本自述人工从 run 归档填，"
+                        "或集成步先落自动化）", "WP15 resolvable v2"]},
     "A6": {"title": "survey 通道（teacher_prior_survey）", "switch": "[loop] teacher_prior_survey",
             "rollback": "键默认 false 即回退", "depends": ["机械存在检查（F18）"]},
     "A7": {"title": "MC-DELIVERY 激活", "switch": "教师里程碑 multi_candidate 块",

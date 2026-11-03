@@ -29,6 +29,7 @@ def save_state(s: dict) -> None:
 
 
 KERNEL_CU = """// wp21mini stub kernel: y = a + b, one elementwise CUDA kernel launch (at::add).
+// fk-cuda-cflags: -gencode=arch=compute_86,code=sm_86
 #include <torch/extension.h>
 
 torch::Tensor run(torch::Tensor a, torch::Tensor b) {
@@ -108,9 +109,15 @@ def main() -> int:
         write_judge_files()
         out = "judge: wrote definition.json, judge.py, groups.json for wp21mini.\n"
     elif "Initial distillation authoring step" in prompt:
-        # 蒸馏回合：把合规 milestone 写进 cwd（工作区根），之后教师轮只补丁
-        ms = Path("milestone.md")
-        ms.write_text("""# wp21mini milestone
+        # 蒸馏回合：milestone 落点=驱动提示词里的 {MILESTONE_PATH} 绝对路径绑定
+        # （loop/cli.py 默认 operators/<op>/milestone.md，而 agent cwd=ws/）；
+        # 双写 ws/milestone.md 兜底。
+        import re as _re
+        mm = _re.search(r"(/[^\s`']+/milestone\.md)", prompt)
+        targets = ([Path(mm.group(1))] if mm
+                   else [Path("../operators/wp21mini/milestone.md")])
+        targets.append(Path("milestone.md"))
+        body = ("""# wp21mini milestone
 
 ## 0. Problem statement and target
 
@@ -193,6 +200,9 @@ the smoke adds none of its own.
 
 (none — the smoke shape is trivial and fully specified by section 1)
 """)
+        for tgt in targets:
+            tgt.parent.mkdir(parents=True, exist_ok=True)
+            tgt.write_text(body)
         out = ("milestone.md authored (v1): M0 baseline D0.1 -> M1 termination D1.1; "
                "target anchored to the ref baseline job; [SYNC: none]/[GATHER: none]/"
                "[PHASE: none] adjudications present; mechanism-verification lines in "
@@ -205,11 +215,16 @@ the smoke adds none of its own.
     elif "Diagnosis step" in prompt:
         # 平台诊断：合法枚举 G1-G5/R1/R2/INFEASIBLE；给 G1 + 无操作 prose
         out = ("cause_class: G1\n"
+               "reachability: floor_opt=0.0001 ms -> OPEN (the floor sits far inside the "
+               "target; keep walking)\n"
                "diagnosis: stub — single-iteration smoke; no lever citations, "
-               "no PROBE_REQUEST, no INFEASIBLE request.\n")
+               "no probe requests.\n")
     elif "Patch step" in prompt or "patch_class" in prompt:
-        # 补丁回合：真的在 milestone.md 上追加条目（patch gate 校验文件被改过）
-        ms = Path("milestone.md")
+        # 补丁回合：追加到驱动提示词绑定的 milestone 绝对路径（patch gate 校验
+        # 那个文件被改过；cwd 是 ws，ctx.milestone 在 operators/<op>/）
+        import re as _re
+        mm = _re.search(r"(/[^\s`']+/milestone\.md)", prompt)
+        ms = Path(mm.group(1)) if mm else Path("milestone.md")
         if ms.is_file():
             with ms.open("a", encoding="utf-8") as fh:
                 fh.write("\n### P1.1 (wp21 stub)\nsmoke patch: no-op additive entry.\n")

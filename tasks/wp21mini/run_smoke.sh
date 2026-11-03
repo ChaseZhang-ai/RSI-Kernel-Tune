@@ -19,6 +19,9 @@ export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
 # job 侧 python3 = CUDA torch venv（job 继承驱动进程环境）；驱动本体用 forgekernel venv。
 export PATH="$HOME/venvs/ml/bin:$PATH"
 export CUTLASS_DIR="$HOME/tools/cutlass"   # job-env 预检的头文件库（~/tools，header-only）
+# WSL 驱动库：torch cpp_extension 的 -lcuda 需要 libcuda.so 开发符号链接；
+# WSL 只提供 /usr/lib/wsl/lib/libcuda.so.1，经 LIBRARY_PATH 补一个软链目录。
+export LIBRARY_PATH="$HOME/tools/wsl-cuda-lib:${LIBRARY_PATH:-}"
 export FK_DELIVERY=local
 export FK_GPU=0
 export FK_AGENT_PY="$HOME/venvs/ml/bin/python3"

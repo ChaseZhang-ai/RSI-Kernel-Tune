@@ -33,15 +33,5 @@
   "kind": "field",
   "owner": "P2",
   "note": "全库零读点：driver 生成写入（driver.py:6642 等）后无回读；driver.py:6538 宣称 status.jsonl 为 MC 变体的 durable fact source，但 resume/他处无读点——三代 Wave-3 各包均未领收，进 P2 积压。"
- },
- "IterationRecord.iter": {
-  "kind": "field",
-  "owner": "TEST",
-  "note": "negative test"
- },
- "IterationRecord.verdict": {
-  "kind": "field",
-  "owner": "TEST",
-  "note": "negative test"
  }
 }

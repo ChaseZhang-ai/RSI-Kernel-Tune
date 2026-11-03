@@ -89,3 +89,21 @@ reference_hours = 8         # writing a reference when the task has none
 # Job-side kill switches (env, read by the seeded tools): FK_SCREENING_INPROC=0
 # puts every screening bench back on the per-call subprocess (the historical
 # path); FK_SCREENING_CLOCK_GUARD=1 turns on the opt-in gpu_state clock guard.
+# --- WP16 ----------------------------------------------------------------
+# Active search & population governance. This global file's table vocabulary
+# stays closed (forgekernel.task._KEYS) — the WP16 keys are read from the CARD
+# layer's [loop] table (free-form, driver._wp16_apply_cfg, the WP5 shape):
+#   [loop] pattern_search_budget  = 2   # driver-run shrink-grid searches per run
+#                                       # at a STAGNATION / phase-exhaustion
+#                                       # trigger (0 disables the channel)
+#   [loop] pattern_search_stages  = 3   # contraction stages per search (1..3)
+#   [loop] pool_age_trigger       = 2   # combo-pool meta steps before a forced
+#                                       # all-on bundle pricing (0 = off; the
+#                                       # plateau path does not depend on it)
+#   [loop] reprice_climb_streak   = 2   # consecutive 1-3% KEEP gains that stand
+#                                       # the re-price gain gate down for one
+#                                       # new-best step (0 = off)
+#   [loop] runner_up_pool_k       = 3   # KEEP trees kept in notes/runner_up.jsonl
+#                                       # (rank 1 = the best; a restart target
+#                                       # needs a rank 2)
+# All five default as shown; an explicit value on the card wins.

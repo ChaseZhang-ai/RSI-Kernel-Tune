@@ -232,14 +232,23 @@ confidence:        high | medium | low + a one-sentence reason
   run's resolution band while a real gap to the target remains (the parameter-level local optimum signature). Answer inside
   the block's constraint: a structural route (R1 priced / R2-structural priced / ARCH_PROBE_REQUEST or survey request), or
   `stagnation_override: <reason>` argued in `confidence` — the override is recorded in the meta trajectory, and a run of
-  overrides is itself evidence the parameter space is exhausted.
+  overrides is itself evidence the parameter space is exhausted. When the block carries a `# --- WP16 --- restart target`
+  trailer: re-basing the run on that pooled runner-up tree is a legal structural answer — point the milestone patch at it;
+  the driver re-verifies the revived node with the full suite (watermark / clock-drift / fresh-recheck) at its next gated
+  delivery before any of its readings count again (a revived reading is never taken on trust). When a `## Pattern search`
+  block is present, its shrink-grid table is driver-measured evidence like any other reading: a winning point is a LANDABLE
+  row — cite it in a milestone patch (the student delivers, the standard gate judges); a flat grid strengthens the structural
+  constraint above, and a paying point is the grounded `stagnation_override:` argument.
 - **Pricing-table alignment** (when the `Pricing table` is present): the driver has already moved each candidate lever you listed in the previous turn once on the best tree
   and measured it (add-one / remove-one / all-on, same-job paired). `deficient_locus` and `patch_direction` must agree with the
   table: `independent` items are ranked by add, and the largest is the preferred locus; a `coupled` item (≈ 0 alone, a loss when removed from all-on)
   means you split, in the design round, a group that must go in together — it is the **companion item** of another candidate in the table; propose them combined into one
   ⊗ bundle in the diagnosis, and **do not judge it useless because add-one ≈ 0**; the grouping itself is your mechanism judgement (the design round should already have put changes that "only hold together"
   into the `edits` of the same candidate), and the table only verifies whether you grouped correctly; `null` items
-  must not be proposed as a direction again; a `noop` item means the edit did not take effect — fix the edit first. A multi-workload tree's table is merged from pricing the tree's meta workloads (the representative
+  must not be proposed as a **standalone** direction again — but null alone is not a dead end: the lever's combination with
+  later levers stays open, and a null-priced lever re-enters play only inside a measured combination (when the driver renders a
+  `## Combo pool` block, its levers live there awaiting the automatic all-on bundle pricing; a bundle that also reads null —
+  `combo-null` in the falsified ledger — is what closes the combination). A `noop` item means the edit did not take effect — fix the edit first. A multi-workload tree's table is merged from pricing the tree's meta workloads (the representative
   + the smallest + the largest in the group, plus the middle one of the group when the representative sits at an end) with one job each (each number is the geometric mean of the
   workloads that got priced; how many there actually are and which are missing is written above the table; per-workload readings are below the table):
   a `shape_split` item makes one workload faster beyond noise on add-one and another slower beyond noise (add-one only; inconsistency on remove-one does not count) — it is **not** null; its price varies with size,

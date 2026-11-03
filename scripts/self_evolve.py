@@ -63,6 +63,24 @@ def noise_floor(best: dict) -> float:
     return max(NOISE_FLOOR_MIN, spread)
 
 
+def _floor_progress_text(task, best: dict) -> str | None:
+    """WP16 (丙): the ``floor_progress = floor_ms / best_ms`` advisory line for
+    one generation — the card's parsed analytic floor (WP9's floor_for, the
+    single source; a card without a problem.json yields None and no line is
+    printed). Report-only: nothing downstream reads it."""
+    try:
+        from forgekernel.loop.analytic_floor import floor_from_op_dir
+        info = floor_from_op_dir(Path(task.dir), arch="")
+    except Exception:  # noqa: BLE001 — an advisory must never break the chain
+        return None
+    floor_ms = (info or {}).get("floor_ms")
+    best_ms = best.get("median_ms")
+    if not floor_ms or not best_ms or best_ms <= 0:
+        return None
+    return (f"floor_progress={floor_ms / best_ms:.3f} (analytic floor {floor_ms:.6g} ms / "
+            f"best {best_ms:.6g} ms) — report-only; the generation gate is unchanged")
+
+
 def next_generation(task, best: dict, dest: Path, step: float, run=None, best_data=None) -> Path:
     """tasks/<op>-g<k>/: the task with ``best`` as its reference and target ``step``x."""
     if dest.exists():
@@ -113,6 +131,12 @@ _CARRY_FALSIFIED = "falsified.md"
 _CARRY_REF_CENSUS = "ref_census.md"
 _CARRY_PROBES = "probes"
 _CARRY_TOOLS = "tools.md"
+# --- WP16: the arch graveyard rides the carry too — the parent's ARCH_PROBE
+# losers (candidate, readings, dead reason, tunables). A schema of its own,
+# disjoint from any other carry file (the WP19 carry extension adds its own
+# artifacts; neither overwrites the other's).
+_CARRY_GRAVEYARD = "arch_graveyard.jsonl"
+_GRAVEYARD_SRC = "notes/arch_graveyard.jsonl"
 _ARCH_PROBE_STAMP_RE = re.compile(r"<!-- ARCH_PROBE .*?-->", re.S)
 
 
@@ -159,7 +183,11 @@ def _best_tree_census_sections(run, best: dict) -> dict:
 def _write_carry(task, run, dest: Path, best: dict | None = None) -> None:
     """The parent run's closing record into ``tasks/<op>-g<k>/carry/``:
     the four WP8 artifacts (milestone, lever table, ARCH_PROBE readings,
-    falsified rows) plus the WP19 three (probes/, ref_census.md, tools.md).
+    falsified rows), the WP19 three (probes/, ref_census.md, tools.md), and
+    (WP16) the ARCH_PROBE graveyard — the parent's losing skeletons with
+    their readings and dead reasons, so the next generation's teacher never
+    re-buys a dead skeleton. Each extension's files are a schema of its own;
+    neither overwrites the other's.
     Best-effort by design: an artifact the run never produced (no plateau
     pricing, no probes) is recorded as absent, never guessed."""
     dest.mkdir(parents=True, exist_ok=True)
@@ -257,6 +285,14 @@ def _write_carry(task, run, dest: Path, best: dict | None = None) -> None:
         "seeds for reading the parent's numbers, never a reason to skip a measurement "
         "the child's own contract asks for.\n", encoding="utf-8")
     notes.append(f"- `{_CARRY_TOOLS}`: the measurement-tool seeds")
+
+    graveyard = ""
+    gy_path = run.ws / _GRAVEYARD_SRC
+    if gy_path.is_file():
+        graveyard = gy_path.read_text(encoding="utf-8", errors="replace")
+    _put(_CARRY_GRAVEYARD, graveyard,
+         "the parent's ARCH_PROBE losers (candidate, readings, dead reason, "
+         "tunables) — hypothesis-reuse material like every carry line")
     (dest / "README.md").write_text(
         "# carry: the parent generation's closing record\n\n"
         "Consumed by the next generation's teacher through the distill/recon briefs' "
@@ -309,6 +345,13 @@ def main(argv=None) -> int:
         print(f"[self-evolve] generation {gen}: best {best['sha'][:12]}, "
               + (f"{gain:.4f}x its reference" if gain else "speedup unknown")
               + f" (noise floor {floor:.1%})", flush=True)
+        # --- WP16: floor_progress beside the generation gate — the operator
+        # card's parsed analytic floor over this generation's own best.
+        # Report-only advisory: the chain's stop rule (gain vs the noise floor)
+        # and the --step target are untouched, and no external-benchmark
+        # scoring concept is involved (both numbers are this run's own).
+        if (fp := _floor_progress_text(task, best)) is not None:
+            print(f"[self-evolve] generation {gen}: {fp}", flush=True)
         if gain is None or gain <= 1.0 + floor:
             print(f"[self-evolve] gain within the {floor:.1%} noise floor: the chain stops here",
                   flush=True)

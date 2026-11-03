@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 
 # --- frozen spec ----------------------------------------------------------------
@@ -48,6 +49,11 @@ import re
 
 SWEEP_CRITERION = "min same-job ratio above floor"   # == sweep_run.CRITERION
 SWEEP_MAX_VARIANTS = 8
+# WP23 integration (WP16's ceiling, moved here so the sweep's spec vocabulary
+# stays one implementation): a `halving: true` recipe may name up to this many
+# points — successive halving re-funds the eliminated half's budget into the
+# survivors, so the same job clock covers a wider grid.
+SWEEP_MAX_VARIANTS_HALVING = 32
 
 
 def canonical_spec_hash(obj) -> str:
@@ -60,14 +66,22 @@ def canonical_spec_hash(obj) -> str:
 
 def sweep_spec_refused(recipe: dict) -> str | None:
     """Why the driver would not run ``recipe`` as written, or None: at most
-    SWEEP_MAX_VARIANTS variants, one-token unique names (never `base`), every
-    variant carrying at least one edit pair, and the criterion — when spelled —
-    the one mechanical rule the sweep implements."""
+    SWEEP_MAX_VARIANTS variants (SWEEP_MAX_VARIANTS_HALVING under a `halving`
+    recipe — the eliminated half's budget is re-funded into the survivors),
+    one-token unique names (never `base`), every variant carrying at least one
+    edit pair, and the criterion — when spelled — the one mechanical rule the
+    sweep implements. A `halving` recipe may give value RANGES (`axes`)
+    instead of enumerated points; the driver expands them at submit time and
+    validates the axis form here (sweep_axes_refused)."""
+    if recipe.get("halving") and recipe.get("axes") and not recipe.get("variants"):
+        return sweep_axes_refused(recipe)
     variants = recipe.get("variants")
     if not isinstance(variants, list) or not variants:
         return "recipe names no variants"
-    if len(variants) > SWEEP_MAX_VARIANTS:
-        return f"{len(variants)} variants (max {SWEEP_MAX_VARIANTS})"
+    ceiling = (SWEEP_MAX_VARIANTS_HALVING if recipe.get("halving")
+               else SWEEP_MAX_VARIANTS)
+    if len(variants) > ceiling:
+        return f"{len(variants)} variants (max {ceiling})"
     seen = set()
     for var in variants:
         if not isinstance(var, dict):
@@ -81,6 +95,60 @@ def sweep_spec_refused(recipe: dict) -> str | None:
             return f"variant {name!r} has no edits"
     if (crit := recipe.get("criterion")) and str(crit).strip() != SWEEP_CRITERION:
         return f"unknown criterion {crit!r}"
+    return None
+
+
+def sweep_axes_refused(recipe: dict) -> "str | None":
+    """Why a `halving` recipe's ``axes`` (value ranges, not points) would not
+    run, or None: 1..2 axes — the halving walk is coordinate-wise — each with
+    a name, an exact `old`, a `{v}` template, and points from `values` (2..7)
+    or `range`+[`points`] (2..16, expanded deterministically). The TOTAL
+    expanded points stay within SWEEP_MAX_VARIANTS_HALVING. (WP16's check,
+    moved here at integration so the sweep's spec vocabulary stays one
+    implementation; the driver keeps a delegating face for its call sites.)"""
+    axes = recipe.get("axes")
+    if not isinstance(axes, list) or not axes:
+        return "a halving recipe names no axes"
+    if len(axes) > 2:
+        return f"{len(axes)} axes (max 2)"
+    total = 0
+    for ax in axes:
+        if not isinstance(ax, dict):
+            return "an axis must be an object"
+        name = re.sub(r"\s+", "_", str(ax.get("name", "")).strip())
+        if not name:
+            return "an axis has no name"
+        if not isinstance(ax.get("old"), str) or not ax["old"]:
+            return f"axis {name!r} has no `old` text"
+        new = ax.get("new")
+        if not isinstance(new, str) or new.count("{v}") != 1:
+            return f"axis {name!r}'s `new` template must hold exactly one `{{v}}`"
+        if ax.get("values") is not None:
+            vals = ax["values"]
+            if not isinstance(vals, list) or not 2 <= len(vals) <= 7:
+                return f"axis {name!r} needs 2..7 values"
+            for v in vals:
+                if isinstance(v, bool) or not isinstance(v, (int, float)) \
+                        or not math.isfinite(float(v)):
+                    return f"axis {name!r} carries a non-numeric value"
+            total += len(vals)
+        elif ax.get("range") is not None:
+            rng = ax["range"]
+            if (not isinstance(rng, list) or len(rng) != 2
+                    or any(isinstance(x, bool) or not isinstance(x, (int, float))
+                           or not math.isfinite(float(x)) for x in rng)):
+                return f"axis {name!r}'s `range` must be two numbers"
+            lo, hi = float(rng[0]), float(rng[1])
+            if hi <= lo:
+                return f"axis {name!r}'s `range` is empty"
+            pts = int(ax.get("points", 8) or 8)
+            if not 2 <= pts <= 16:
+                return f"axis {name!r} needs 2..16 range points"
+            total += pts
+        else:
+            return f"axis {name!r} gives neither `values` nor `range`"
+    if total > SWEEP_MAX_VARIANTS_HALVING:
+        return f"{total} expanded points (max {SWEEP_MAX_VARIANTS_HALVING})"
     return None
 
 

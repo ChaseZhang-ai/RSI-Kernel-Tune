@@ -326,6 +326,14 @@ class LoopContext:
     # a 33.6h bwd-MHA run. A verdict probe collapses the hypothesis space at the cost
     # of one GPU job instead.
     max_verdict_probe_rounds: int = 4
+    # WP19 (task 2): PROBE-MANIFEST handling in the meta-step / KB loops — one
+    # job runs a manifest's ≤4 self-contained probe scripts sequentially
+    # (per-script verdicts, a DNF never takes the batch down, a wholesale job
+    # failure falls back to the per-script path). The default leaves every
+    # existing input byte-identical: nothing emits PROBE-MANIFEST unless the
+    # consuming package (WP17/WP18) teaches the teacher to. loop.toml
+    # [loop] probe_manifest = false disables the branch entirely.
+    probe_manifest: bool | None = None
     # INFEASIBLE GATE: the fewest diagnoses (this one included; the distillation
     # and a clean M0 audit do not count) before a stop request can be accepted.
     # 1 = the reachability check alone gates the stop (see _infeasible_refusal).
@@ -1981,6 +1989,107 @@ def _ablation_probe_feedback(path: str, rows: list, why: str | None, log: str,
             f"PROBE_REQUEST again, or send a script probe instead. Job log tail:\n{tail}\n")
 
 
+# --- WP19 (task 2): the probe batch manifest -----------------------------------
+#
+# PROBE-MANIFEST (parse.py) names a ≤4-line list of self-contained probe
+# scripts; ONE job runs them sequentially with a per-script verdict. Between
+# scripts the job resets whatever clock state an earlier script left (the
+# gpu_entry's own lb_clocks_reset is a shell function — a `cmd:` task's child
+# bash does not inherit it, so the batch re-states the reset inline) and
+# settles for FK_PROBE_BATCH_SETTLE_S seconds (burn-in isolation). A script
+# that crashes or prints no verdict is that script's DNF alone; a wholesale
+# job failure (transport, refusal, markers missing) falls back to the
+# per-script path, which stays the default for every existing input.
+_PROBE_BATCH_MAX_SCRIPTS = 4
+_PROBE_BATCH_BEGIN = "=== fk-probe-batch begin: {path} ==="
+_PROBE_BATCH_END = "=== fk-probe-batch end: {path} rc={rc} ==="
+
+
+def _read_probe_manifest(ctx: LoopContext, mpath: str) -> tuple[list[str], str]:
+    """The manifest's script paths (workspace-relative), or ([], reason)."""
+    p = Path(ctx.workspace) / mpath
+    try:
+        lines = p.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as e:
+        return [], f"the manifest file is unreadable ({e})"
+    paths = [ln.strip() for ln in lines
+             if ln.strip() and not ln.strip().startswith("#")]
+    if not paths:
+        return [], "the manifest lists no scripts"
+    if len(paths) > _PROBE_BATCH_MAX_SCRIPTS:
+        return [], (f"the manifest lists {len(paths)} scripts — the batch takes "
+                    f"at most {_PROBE_BATCH_MAX_SCRIPTS}")
+    missing = [s for s in paths if not (Path(ctx.workspace) / s).is_file()]
+    if missing:
+        return [], f"the manifest names scripts that are not in the workspace: {missing}"
+    return paths, ""
+
+
+def _probe_batch_mode(paths: list[str]) -> str:
+    """The one `cmd:` job that runs every script with per-script markers."""
+    segs = []
+    for p in paths:
+        q = shlex.quote(p)
+        segs.append(
+            f'echo "{_PROBE_BATCH_BEGIN.format(path=p)}"'
+            f'; __smi="${{LB_NVIDIA_SMI:-nvidia-smi}}"'
+            f'; __dev="${{CUDA_VISIBLE_DEVICES:+-i $CUDA_VISIBLE_DEVICES}}"'
+            f'; "$__smi" $__dev -rgc >/dev/null 2>&1 || true'
+            f'; "$__smi" $__dev -rmc >/dev/null 2>&1 || true'
+            f'; python3 {q}'
+            f'; echo "{_PROBE_BATCH_END.format(path=p, rc="$?")}"'
+            f'; sleep "${{FK_PROBE_BATCH_SETTLE_S:-3}}"')
+    return "cmd:" + " ; ".join(segs)
+
+
+def _split_probe_batch_log(log: str, paths: list[str]) -> "list[tuple[str, str]] | None":
+    """Each script's log slice ([begin, next-begin)), or None when any begin
+    marker is missing (the batch never really ran — the caller falls back)."""
+    slices: list[tuple[str, str]] = []
+    for i, p in enumerate(paths):
+        begin = _PROBE_BATCH_BEGIN.format(path=p)
+        start = log.find(begin)
+        if start < 0:
+            return None
+        if i + 1 < len(paths):
+            nxt = log.find(_PROBE_BATCH_BEGIN.format(path=paths[i + 1]), start + 1)
+            if nxt < 0:
+                return None
+            slices.append((p, log[start:nxt]))
+        else:
+            slices.append((p, log[start:]))
+    return slices
+
+
+def _run_meta_verdict_probe(ctx: LoopContext, be, probe_branch: str, path: str,
+                            round_no: int) -> tuple[ProbeVerdict, str, list[dict]]:
+    """One single-script verdict probe on its own job (the pre-WP19 path).
+
+    WP19 (task 2): extracted verbatim so the manifest's wholesale-failure
+    fallback runs exactly this — the old path is the fallback, not a copy."""
+    be.commit(f"meta-probe: {path}")
+    be.push_branch(probe_branch)
+    probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    # audit=False: these lines answer pre-registered hypotheses, and the
+    # max_diff field carries the reading as printed. The certification
+    # audit (error-norm ceiling, float-only) was downgrading a PASS with a
+    # reading table to FAIL — i.e. telling the teacher its hypothesis had
+    # been falsified when the experiment had confirmed it.
+    pv = parse_probe_verdict(probe_log, audit=False)
+    readings = [{"path": path, "round": round_no, "contract": c.index,
+                 "verdict": c.verdict, "reading": c.reading, "note": c.note}
+                for c in pv.contracts]
+    return pv, probe_log, readings
+
+
+def _run_probe_manifest_batch(ctx: LoopContext, be, branch: str,
+                              paths: list[str]) -> "list[tuple[str, str]] | None":
+    """One batched job over the manifest's scripts; None when the log carries
+    no begin markers (the job never really ran — the caller falls back)."""
+    log = be.submit_gpu(branch, _probe_batch_mode(paths))
+    return _split_probe_batch_log(log, paths)
+
+
 def _verdict_probe_feedback(path: str, pv: ProbeVerdict, log: str,
                             round_no: int, budget: int) -> str:
     """One diagnose-step verdict-probe round's feedback.
@@ -2229,6 +2338,20 @@ def _wp11_apply_cfg(ctx: LoopContext) -> None:
         ctx.sprt_early_stop = loop_cfg["sprt_early_stop"]
     if ctx.sprt_early_stop:
         os.environ["FK_SPRT_EARLY_STOP"] = "1"
+
+
+def _wp19_apply_cfg(ctx: LoopContext) -> None:
+    """Resolve the WP19 config fields still at their None sentinel from loop.toml
+    (the same two-layer read as _wp5_cfg_sections: card layer over global_config).
+
+    Called once at run_two_layer entry, after _wp5/_wp11. An explicitly set
+    field (tests, callers) wins; a failed read or a bad value leaves the
+    documented default. Every WP19 switch's default is the baseline behavior."""
+    cfg = _wp5_cfg_sections(ctx)
+    loop_cfg = cfg.get("loop") if isinstance(cfg.get("loop"), dict) else {}
+    if ctx.probe_manifest is None:
+        raw = loop_cfg.get("probe_manifest", True)
+        ctx.probe_manifest = raw if isinstance(raw, bool) else True
 
 
 _WP11_TELEMETRY_FIELDS = ("agent_turn_s", "eval_job_s", "ncu_job_s",
@@ -2667,6 +2790,15 @@ def run_inner_iteration(
         if isinstance(turn, Exhausted):
             _log(f"iter {iter_no}: student EXHAUSTED ({turn.reason})")
             return None
+        if isinstance(turn, ProbeRequest) and turn.manifest:
+            # WP19 (task 2): PROBE-MANIFEST is meta-side vocabulary (the
+            # teacher's diagnose / KB loops). The student's submit surface
+            # stays exactly what it was: one script per PROBE_REQUEST.
+            prompt = _student_prompt(
+                ctx, iter_no,
+                probe_feedback="- PROBE-MANIFEST is not available to the student: send one "
+                               "PROBE_REQUEST: <script> per probe, or the record block.\n")
+            continue
         if isinstance(turn, Record):
             if bounce := _placeholder_bounce(ctx, turn, base_sha):
                 # A gate row over an open placeholder, or a placeholder landed
@@ -4241,6 +4373,87 @@ def _kb_certify_rounds(ctx: LoopContext, diagnosis: str, probes: dict) -> KbCert
                 return KbCertifyResult(False, None, r)
             _log(f"meta/kb: teacher finalized recipe (no probe) after {r} rounds")
             return KbCertifyResult(True, None, r)
+        if turn.manifest:
+            # WP19 (task 2): one batched certification job for the manifest's
+            # probe set — every script must PASS for the recipe to certify, and
+            # a wholesale batch failure falls back to this loop's own per-script
+            # path below (same commit/keep/submit/parse semantics).
+            if ctx.probe_manifest is False:
+                prompt = _teacher_prompt(ctx, diagnosis, probe_feedback=(
+                    "\n## Probe manifest not enabled\nThis run's loop.toml has [loop] "
+                    "probe_manifest off; send one PROBE_REQUEST per script.\n"))
+                continue
+            mpaths, merr = _read_probe_manifest(ctx, turn.path)
+            if merr:
+                prompt = _teacher_prompt(ctx, diagnosis, probe_feedback=(
+                    f"\n## Probe manifest rejected\n`{turn.path}`: {merr} Fix the "
+                    f"manifest or send single PROBE_REQUESTs.\n"))
+                continue
+            kb_branch = f"{ctx.branch_prefix}-kbprobe"
+            be.commit(f"kb-probe manifest: {turn.path}")
+            for mp in mpaths:
+                probes[mp] = _keep_probe_across_reset(ctx, mp)
+            be.push_branch(kb_branch)
+            batch = _run_probe_manifest_batch(ctx, be, kb_branch, mpaths)
+            if batch is None:
+                _log(f"meta/kb: probe manifest {turn.path} did not run its batch — "
+                     f"falling back to the per-script path")
+                verdicts = []
+                for mp in mpaths:
+                    be.commit(f"kb-probe: {mp}")
+                    probes[mp] = _keep_probe_across_reset(ctx, mp)
+                    be.push_branch(kb_branch)
+                    kb_log = be.submit_gpu(kb_branch, f"cmd:python3 {mp}")
+                    pv = parse_probe_verdict(kb_log)
+                    verdicts.append((mp, pv, kb_log))
+                    job = str(getattr(be, "last_job_id", "") or "")
+                    _log(f"meta/kb: recipe probe {mp} -> PROBE {_probe_label(pv)} "
+                         f"(max_diff={pv.diff_text}){_probe_log_suffix(pv)} "
+                         f"(round {r + 1}, job {job or '?'})")
+                    if not pv.passed:
+                        prompt = _teacher_prompt(
+                            ctx, diagnosis,
+                            probe_feedback=_probe_feedback(mp, pv, kb_log,
+                                                           what="recipe probe"))
+                        break
+                else:
+                    # every script passed on its own job: the shared
+                    # verdict/finalize below, on the per-script logs
+                    batch = [(mp, log) for mp, _pv, log in verdicts]
+                if batch is None:
+                    continue
+            verdicts = [(mp, parse_probe_verdict(s)) for mp, s in batch]
+            job = str(getattr(be, "last_job_id", "") or "")
+            for mp, pv in verdicts:
+                _log(f"meta/kb: recipe probe {mp} (manifest {turn.path}) -> "
+                     f"PROBE {_probe_label(pv)} (max_diff={pv.diff_text})"
+                     f"{_probe_log_suffix(pv)} (round {r + 1}, job {job or '?'})")
+            if (bad := next(((mp, pv) for mp, pv in verdicts if not pv.passed), None)) is not None:
+                mp, pv = bad
+                prompt = _teacher_prompt(
+                    ctx, diagnosis,
+                    probe_feedback=_probe_feedback(
+                        mp, pv, next(s for s_mp, s in batch if s_mp == mp),
+                        what="recipe probe"))
+                continue
+            final_out = _teacher(be).run_agent(_teacher_prompt(
+                ctx, diagnosis,
+                probe_feedback=_probe_feedback(
+                    turn.path, verdicts[0][1],
+                    "\n".join(s for _, s in batch), what="recipe probe",
+                    on_pass="Finalize: mark the recipe verified in the KB index and "
+                            "emit RECIPE_CERTIFIED: <recipe-path>. Cite the certifying "
+                            f"job in the entry's status line and its index cell: "
+                            f"`PROBE PASS max_diff={verdicts[0][1].diff_text}, job {job or '?'}` "
+                            f"(round {r + 1} of this certification).")))
+            recipe = _parse_field(final_out, "RECIPE_CERTIFIED")
+            if leaks := _kb_certify_lint_gate(ctx, diagnosis):
+                _quarantine_leaky_kb(ctx, leaks)
+                _log("meta/kb: recipe REJECTED — leak lint findings survived the fix rounds")
+                return KbCertifyResult(False, None, r + 1, job=job)
+            _log(f"meta/kb: recipe CERTIFIED and available to the student ({recipe or '?'}; "
+                 f"job {job or '?'})")
+            return KbCertifyResult(True, turn.path, r + 1, recipe=recipe or None, job=job)
         be.commit(f"kb-probe: {turn.path}")
         probes[turn.path] = _keep_probe_across_reset(ctx, turn.path)
         kb_branch = f"{ctx.branch_prefix}-kbprobe"
@@ -8637,6 +8850,63 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 tl_table = None
             continue
         if isinstance(turn, ProbeRequest):
+            if turn.manifest:
+                # WP19 (task 2): a PROBE-MANIFEST — one job runs the manifest's
+                # ≤4 scripts sequentially, each with its own verdict. The
+                # single-script path below stays the default for every
+                # PROBE_REQUEST and is the fallback for a wholesale batch
+                # failure.
+                if ctx.probe_manifest is False:
+                    diagnose_extra += ("\n## Probe manifest not enabled\nThis run's loop.toml has "
+                                       "[loop] probe_manifest off; send one PROBE_REQUEST per script.\n")
+                    continue
+                mpaths, merr = _read_probe_manifest(ctx, turn.path)
+                if merr:
+                    diagnose_extra += (f"\n## Probe manifest rejected\n`{turn.path}`: {merr} "
+                                       "Fix the manifest (at most 4 workspace-relative script "
+                                       "paths, one per line) or send single PROBE_REQUESTs.\n")
+                    continue
+                if probe_rounds >= ctx.max_verdict_probe_rounds:
+                    _log("meta: verdict-probe budget spent -> demanding a diagnosis")
+                    diagnose_extra += ("\n## Verdict-experiment budget exhausted\nNo more PROBE_REQUEST "
+                                       "may be sent. Give the final diagnosis from the evidence you have; "
+                                       "mark every unverified hypothesis in it explicitly as unverified.\n")
+                    continue
+                probe_rounds += 1
+                probes_run.extend(mpaths)
+                probe_branch = f"{ctx.branch_prefix}-metaprobe"
+                be.commit(f"meta-probe manifest: {turn.path}")
+                be.push_branch(probe_branch)
+                batch = _run_probe_manifest_batch(ctx, be, probe_branch, mpaths)
+                if batch is None:
+                    # the batch never really ran (markers missing): the
+                    # per-script path is the fallback, verbatim
+                    _log(f"meta: probe manifest {turn.path} did not run its batch — "
+                         f"falling back to the per-script path")
+                    for mp in mpaths:
+                        pv, probe_log, readings = _run_meta_verdict_probe(
+                            ctx, be, probe_branch, mp, probe_rounds)
+                        _log(f"meta: verdict probe {mp} "
+                             f"({probe_rounds}/{ctx.max_verdict_probe_rounds}) -> "
+                             f"PROBE {_probe_label(pv)} (max_diff={pv.diff_text})"
+                             f"{_probe_log_suffix(pv)}")
+                        diagnose_extra += _verdict_probe_feedback(
+                            mp, pv, probe_log, probe_rounds, ctx.max_verdict_probe_rounds)
+                        probe_readings.extend(readings)
+                    continue
+                for mp, mslice in batch:
+                    pv = parse_probe_verdict(mslice, audit=False)
+                    _log(f"meta: verdict probe {mp} (manifest {turn.path}, "
+                         f"{probe_rounds}/{ctx.max_verdict_probe_rounds}) -> "
+                         f"PROBE {_probe_label(pv)} (max_diff={pv.diff_text})"
+                         f"{_probe_log_suffix(pv)}")
+                    diagnose_extra += _verdict_probe_feedback(
+                        mp, pv, mslice, probe_rounds, ctx.max_verdict_probe_rounds)
+                    probe_readings.extend(
+                        {"path": mp, "round": probe_rounds, "contract": c.index,
+                         "verdict": c.verdict, "reading": c.reading, "note": c.note}
+                        for c in pv.contracts)
+                continue
             if probe_rounds >= ctx.max_verdict_probe_rounds:
                 _log("meta: verdict-probe budget spent -> demanding a diagnosis")
                 diagnose_extra += ("\n## Verdict-experiment budget exhausted\nNo more PROBE_REQUEST "
@@ -8678,28 +8948,29 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 lever_table.extend(rows)
                 known_levers.extend(rows)
                 continue
-            be.commit(f"meta-probe: {turn.path}")
-            be.push_branch(probe_branch)
-            probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {turn.path}")
-            # audit=False: these lines answer pre-registered hypotheses, and the
-            # max_diff field carries the reading as printed. The certification
-            # audit (error-norm ceiling, float-only) was downgrading a PASS with a
-            # reading table to FAIL — i.e. telling the teacher its hypothesis had
-            # been falsified when the experiment had confirmed it.
-            pv = parse_probe_verdict(probe_log, audit=False)
+            pv, probe_log, readings = _run_meta_verdict_probe(
+                ctx, be, probe_branch, turn.path, probe_rounds)
             _log(f"meta: verdict probe {turn.path} "
                  f"({probe_rounds}/{ctx.max_verdict_probe_rounds}) -> "
                  f"PROBE {_probe_label(pv)} (max_diff={pv.diff_text})"
                  f"{_probe_log_suffix(pv)}")
             diagnose_extra += _verdict_probe_feedback(
                 turn.path, pv, probe_log, probe_rounds, ctx.max_verdict_probe_rounds)
-            probe_readings.extend(
-                {"path": turn.path, "round": probe_rounds, "contract": c.index,
-                 "verdict": c.verdict, "reading": c.reading, "note": c.note}
-                for c in pv.contracts)
+            probe_readings.extend(readings)
             continue
         diagnosis = out
         if cause:
+            # WP19 (task 5, contract C12): the diagnosis gates merged into ONE
+            # pass. A turn that violates several gates gets every still-armed
+            # gate's block in a single re-prompt instead of one billed teacher
+            # turn per gate (a large-batch run measured 695 such turns). Each
+            # gate's own "bounce once, then accept/refuse" flag is untouched —
+            # a fired flag disables only its own gate next round — and the
+            # blocks are the same text reorganized, never new injected content.
+            # The patch-shaping gates still do not apply to an INFEASIBLE stop
+            # request, and a stop request whose one bounce is spent still
+            # breaks for the post-loop refusal.
+            violations: list[str] = []
             # REACHABILITY GATE (plateau only, ledger channel present): the floor
             # arithmetic (diagnose_prompt §1c) is what turns "levers exhausted" into
             # "architecture cannot reach target" while the evidence is fresh — the
@@ -8709,14 +8980,13 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
             if (not audit and ctx.stall_pricing and not reach_demanded
                     and not _parse_reachability(out)):
                 reach_demanded = True
-                _log("meta: diagnosis omitted the reachability line -> re-prompt")
-                diagnose_extra += (
+                _log("meta: diagnosis omitted the reachability line -> merged re-prompt")
+                violations.append(
                     "\n## Format requirement (binding)\nThe output block lacks a `reachability:` "
                     "line. Do the reachability refutation of diagnosis step 1c first (the "
                     "construction of `floor_opt` and its term-by-term arithmetic go in "
                     "`evidence`), then resend the **complete** diagnosis "
                     "(every field, not just the one missing line).\n")
-                continue
             # INFEASIBLE is a stop request: none of the patch-shaping gates below
             # (segment / reopen price / phase verdict) apply to it.
             if cause.upper() == "INFEASIBLE":
@@ -8728,10 +8998,8 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 if why and not infeasible_bounces:
                     infeasible_bounces.append(why)
                     infeasible_asked = True  # the refusal block already names the channel
-                    _log(f"meta: INFEASIBLE stop request not accepted ({why}) -> re-prompt")
-                    diagnose_extra += _infeasible_refused_block(why)
-                    continue
-                break
+                    _log(f"meta: INFEASIBLE stop request not accepted ({why}) -> merged re-prompt")
+                    violations.append(_infeasible_refused_block(why))
             # INFEASIBLE CHANNEL: a diagnosis that talks INFEASIBLE under another
             # class is how a run spins — the verdict lives in the milestone, the
             # driver never hears it, and every later meta step re-diagnoses a
@@ -8745,88 +9013,86 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
             # is in nearly all of them as a negation — in one large batch of
             # runs, 1157 of 1163 such diagnoses read OPEN and 695 teacher
             # turns went to the bounce.
-            if (not audit and not infeasible_asked
+            elif (not audit and not infeasible_asked
                     and _INFEASIBLE_MENTION.search(out)
                     and _parse_reach_verdict(_parse_reachability(out)) != "OPEN"):
                 infeasible_asked = True
                 _log(f"meta: diagnosis mentions INFEASIBLE under cause_class {cause} "
-                     f"-> re-prompt (stop request or not)")
-                diagnose_extra += _INFEASIBLE_MENTION_BLOCK
-                continue
-            # LOCUS SEGMENT: a diagnosis read against a timeline names the segment
-            # the gap sits in — the reading that makes the table binding.
-            if tl_table is not None and not seg_demanded and not _parse_locus_segment(out):
-                seg_demanded = True
-                _log("meta: diagnosis omitted the locus_segment line -> re-prompt")
-                diagnose_extra += (
-                    "\n## Format requirement (binding)\nThis step has a timeline table, and the "
-                    "output block lacks a `locus_segment:` line. Use the table to place the lesion "
-                    "in a specific segment: `locus_segment: <role>.<segment>` (if it cannot be "
-                    "placed in a segment, write `none` and explain in evidence), "
-                    "then resend the **complete** diagnosis (every field, not just the one missing "
-                    "line).\n")
-                continue
-            # REOPEN BUDGET GATE: the reopen budget is spent — an R1 cannot land,
-            # so one bounce asks for a class that can (before the price gate
-            # would spend turns pricing a reopen the driver is going to refuse)
-            if cause.upper() == "R1" and reopens_capped and not capped_demanded:
-                capped_demanded = True
-                _log(f"meta: R1 diagnosed with the reopen budget spent ({reopen_streak} "
-                     f"fruitless reopen(s) in a row) -> re-prompt")
-                diagnose_extra += _reopen_capped_block(reopen_streak, ctx.reopen_max_fruitless,
-                                                       bounce=True)
-                continue
-            # REOPEN PRICE GATE (plateau and audit): an R1 is a structural reopen,
-            # and a reopen without a measured price is a known dsa_sparse failure —
-            # the stage split axis flipped on an inferred masking window, six
-            # decisions redone for 2%. One bounce naming the three ways to price
-            # it (verdict probe / price table / certified KB); a second unpriced
-            # R1 is refused below, after the loop.
-            if (cause.upper() == "R1" and _reopen_gate_on(ctx) and not price_demanded
-                    and (why := _verify_reopen_price(_parse_reopen_price(out), probe_readings,
-                                                     known_levers, ctx, probes_run,
-                                                     best_ref=_priced_best(priced)))):
-                price_demanded = True
-                _log(f"meta: R1 reopen carries no measured price ({why}) -> re-prompt")
-                diagnose_extra += _UNPRICED_REOPEN_BLOCK + f"(driver check result: {why})\n"
-                continue
-            # R2-STRUCTURAL PRICE GATE (WP6): a skeleton NOT present in ORACLE is
-            # the one proposal class with no reference reading to lean on, so its
-            # only acceptable price is a probe measured in this run (no lever
-            # table, no KB entry, no inference). One bounce naming the route; a
-            # second unpriced R2-structural is refused after the loop. The gate
-            # binds to the `r2_structural:` tag itself, not to the cause class: a
-            # teacher that mis-files the proposal under a non-R2 class must still
-            # be told HOW to price it before the patch point refuses it outright.
-            if (_is_r2_structural(out) and not r2_price_demanded
-                    and (why := _verify_r2_structural_price(_parse_reopen_price(out),
-                                                            probe_readings, ctx, probes_run,
-                                                            check_disk=True))):
-                r2_price_demanded = True
-                _log(f"meta: R2-structural proposal carries no in-run measured price "
-                     f"({why}) -> re-prompt")
-                diagnose_extra += _R2_STRUCTURAL_PRICE_BLOCK + f"(driver check result: {why})\n"
-                continue
-            # PHASE VERDICT GATE: the exhaustion reading was put to the teacher;
-            # an answer that is neither close nor a walkable decision costs one
-            # bounce, then the driver closes the phase itself (below).
-            if (exhaustion and not phase_demanded
-                    and (why := _verify_phase_verdict(_parse_phase_verdict(out), exhaustion))):
-                phase_demanded = True
-                _log(f"meta: phase_verdict for {exhaustion['phase']} missing or invalid "
-                     f"({why}) -> re-prompt")
-                diagnose_extra += (
-                    f"\n## Phase ruling (binding)\nThe driver has ruled that {exhaustion['phase']}'s "
-                    f"levers are all null on the pricing table, but the diagnosis's `phase_verdict` "
-                    f"is not valid ({why}). Add `phase_verdict: close` "
-                    f"(the student submits the `{exhaustion['gate']}` row directly next round) or "
-                    f"`phase_verdict: continue:<D id>` "
-                    f"(only a decision with no priced lever: "
-                    f"{', '.join(exhaustion['unpriced']) or 'none — this phase has no such decision, so only close is possible'}), "
-                    f"and resend the **complete** diagnosis. If it is missing or invalid again, the "
-                    f"driver treats it as close.\n")
-                continue
-            break
+                     f"-> merged re-prompt (stop request or not)")
+                violations.append(_INFEASIBLE_MENTION_BLOCK)
+            if cause.upper() != "INFEASIBLE":
+                # LOCUS SEGMENT: a diagnosis read against a timeline names the segment
+                # the gap sits in — the reading that makes the table binding.
+                if tl_table is not None and not seg_demanded and not _parse_locus_segment(out):
+                    seg_demanded = True
+                    _log("meta: diagnosis omitted the locus_segment line -> merged re-prompt")
+                    violations.append(
+                        "\n## Format requirement (binding)\nThis step has a timeline table, and the "
+                        "output block lacks a `locus_segment:` line. Use the table to place the lesion "
+                        "in a specific segment: `locus_segment: <role>.<segment>` (if it cannot be "
+                        "placed in a segment, write `none` and explain in evidence), "
+                        "then resend the **complete** diagnosis (every field, not just the one missing "
+                        "line).\n")
+                # REOPEN BUDGET GATE: the reopen budget is spent — an R1 cannot land,
+                # so one bounce asks for a class that can (before the price gate
+                # would spend turns pricing a reopen the driver is going to refuse)
+                if cause.upper() == "R1" and reopens_capped and not capped_demanded:
+                    capped_demanded = True
+                    _log(f"meta: R1 diagnosed with the reopen budget spent ({reopen_streak} "
+                         f"fruitless reopen(s) in a row) -> merged re-prompt")
+                    violations.append(_reopen_capped_block(reopen_streak, ctx.reopen_max_fruitless,
+                                                           bounce=True))
+                # REOPEN PRICE GATE (plateau and audit): an R1 is a structural reopen,
+                # and a reopen without a measured price is a known dsa_sparse failure —
+                # the stage split axis flipped on an inferred masking window, six
+                # decisions redone for 2%. One bounce naming the three ways to price
+                # it (verdict probe / price table / certified KB); a second unpriced
+                # R1 is refused below, after the loop.
+                if (cause.upper() == "R1" and _reopen_gate_on(ctx) and not price_demanded
+                        and (why := _verify_reopen_price(_parse_reopen_price(out), probe_readings,
+                                                         known_levers, ctx, probes_run,
+                                                         best_ref=_priced_best(priced)))):
+                    price_demanded = True
+                    _log(f"meta: R1 reopen carries no measured price ({why}) -> merged re-prompt")
+                    violations.append(_UNPRICED_REOPEN_BLOCK + f"(driver check result: {why})\n")
+                # R2-STRUCTURAL PRICE GATE (WP6): a skeleton NOT present in ORACLE is
+                # the one proposal class with no reference reading to lean on, so its
+                # only acceptable price is a probe measured in this run (no lever
+                # table, no KB entry, no inference). One bounce naming the route; a
+                # second unpriced R2-structural is refused after the loop. The gate
+                # binds to the `r2_structural:` tag itself, not to the cause class: a
+                # teacher that mis-files the proposal under a non-R2 class must still
+                # be told HOW to price it before the patch point refuses it outright.
+                if (_is_r2_structural(out) and not r2_price_demanded
+                        and (why := _verify_r2_structural_price(_parse_reopen_price(out),
+                                                                probe_readings, ctx, probes_run,
+                                                                check_disk=True))):
+                    r2_price_demanded = True
+                    _log(f"meta: R2-structural proposal carries no in-run measured price "
+                         f"({why}) -> merged re-prompt")
+                    violations.append(_R2_STRUCTURAL_PRICE_BLOCK + f"(driver check result: {why})\n")
+                # PHASE VERDICT GATE: the exhaustion reading was put to the teacher;
+                # an answer that is neither close nor a walkable decision costs one
+                # bounce, then the driver closes the phase itself (below).
+                if (exhaustion and not phase_demanded
+                        and (why := _verify_phase_verdict(_parse_phase_verdict(out), exhaustion))):
+                    phase_demanded = True
+                    _log(f"meta: phase_verdict for {exhaustion['phase']} missing or invalid "
+                         f"({why}) -> merged re-prompt")
+                    violations.append(
+                        f"\n## Phase ruling (binding)\nThe driver has ruled that {exhaustion['phase']}'s "
+                        f"levers are all null on the pricing table, but the diagnosis's `phase_verdict` "
+                        f"is not valid ({why}). Add `phase_verdict: close` "
+                        f"(the student submits the `{exhaustion['gate']}` row directly next round) or "
+                        f"`phase_verdict: continue:<D id>` "
+                        f"(only a decision with no priced lever: "
+                        f"{', '.join(exhaustion['unpriced']) or 'none — this phase has no such decision, so only close is possible'}), "
+                        f"and resend the **complete** diagnosis. If it is missing or invalid again, the "
+                        f"driver treats it as close.\n")
+            if not violations:
+                break
+            diagnose_extra += "".join(violations)
+            continue
         # ENUM GATE: cause_class must be exactly one enum token (no prose). Re-prompt.
         _log("meta: diagnosis had no valid cause_class enum -> re-prompt")
         diagnose_extra += (f"\n## Format requirement (binding)\nThe `cause_class` field must be "
@@ -14539,6 +14805,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
     """
     _wp5_apply_cfg(ctx)
     _wp11_apply_cfg(ctx)
+    _wp19_apply_cfg(ctx)
     meta_steps = 0
     # --- WP5 (task 2): the meta cap breathes with the wall clock left. max_meta
     # stays the configured floor; a long remaining budget lifts the cap so a run

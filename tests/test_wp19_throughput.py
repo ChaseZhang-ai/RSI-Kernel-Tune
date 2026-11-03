@@ -19,6 +19,7 @@ from __future__ import annotations
 
 
 import json
+import tempfile
 from pathlib import Path
 
 from forgekernel.inner.trajectory import load_records
@@ -647,3 +648,337 @@ def test_b6_driver_ast_preflight_silent_on_good_kernel_and_cuda_mode(tmp_path, c
     (tmp_path / "cu" / "kernel.cu").write_text("void broken(:\n", encoding="utf-8")
     driver._ast_preflight_warn(ctx2, 0)
     assert "ast preflight" not in capsys.readouterr().out
+
+
+# --- task 2: the probe batch manifest -------------------------------------------
+
+from forgekernel.loop.parse import parse_student_turn, parse_probe_verdict
+
+
+def test_t2_manifest_marker_parses_and_probe_request_wins():
+    t = parse_student_turn("PROBE-MANIFEST: notes/batch.txt\n")
+    assert isinstance(t, driver.ProbeRequest) and t.manifest and t.path == "notes/batch.txt"
+    # an explicit single-script request always wins over a manifest marker
+    both = parse_student_turn("PROBE_REQUEST: p1.py\nPROBE-MANIFEST: m.txt\n")
+    assert isinstance(both, driver.ProbeRequest) and not both.manifest
+    assert both.path == "p1.py"
+
+
+def test_t2_batch_mode_markers_and_isolation():
+    mode = driver._probe_batch_mode(["a.py", "b.py"])
+    assert mode.startswith("cmd:")
+    assert 'echo "=== fk-probe-batch begin: a.py ==="' in mode
+    assert 'echo "=== fk-probe-batch end: b.py rc=$? ==="' in mode
+    # the clock reset re-stated inline (the cmd task's child bash has no
+    # gpu_entry functions) + a settle sleep between scripts
+    assert mode.count("-rgc") == 2 and mode.count("-rmc") == 2
+    assert mode.count("sleep") == 2
+    # a failing python3 does not stop the loop (`;` sequencing, no set -e in
+    # the child bash) — the DNF isolation is structural
+    assert " && python3" not in mode
+
+
+def test_t2_split_log_and_missing_marker():
+    log = ("noise\n"
+           + driver._PROBE_BATCH_BEGIN.format(path="a.py") + "\n"
+           "PROBE PASS max_diff=0.1\n"
+           + driver._PROBE_BATCH_END.format(path="a.py", rc="0") + "\n"
+           + driver._PROBE_BATCH_BEGIN.format(path="b.py") + "\n"
+           "PROBE FAIL max_diff=9.9\n"
+           + driver._PROBE_BATCH_END.format(path="b.py", rc="1") + "\n")
+    batch = driver._split_probe_batch_log(log, ["a.py", "b.py"])
+    assert batch is not None and [p for p, _ in batch] == ["a.py", "b.py"]
+    va = parse_probe_verdict(batch[0][1], audit=False)
+    vb = parse_probe_verdict(batch[1][1], audit=False)
+    assert va.passed and not vb.passed          # per-script verdicts are independent
+    # a missing begin marker: the batch never ran -> None (caller falls back)
+    assert driver._split_probe_batch_log(log.replace(
+        driver._PROBE_BATCH_BEGIN.format(path="b.py"), ""), ["a.py", "b.py"]) is None
+
+
+def test_t2_read_manifest_bounds_and_missing():
+    ctx_ws = Path(tempfile.mkdtemp())
+    (ctx_ws / "notes").mkdir()
+    (ctx_ws / "notes" / "m.txt").write_text("# comment\n\na.py\nb.py\n", encoding="utf-8")
+    (ctx_ws / "a.py").write_text("x\n", encoding="utf-8")
+    (ctx_ws / "b.py").write_text("x\n", encoding="utf-8")
+
+    class _C:
+        workspace = ctx_ws
+    paths, err = driver._read_probe_manifest(_C(), "notes/m.txt")
+    assert err == "" and paths == ["a.py", "b.py"]          # comments/empties dropped
+    (ctx_ws / "notes" / "big.txt").write_text(
+        "\n".join(f"s{i}.py" for i in range(5)), encoding="utf-8")
+    paths, err = driver._read_probe_manifest(_C(), "notes/big.txt")
+    assert not paths and "at most 4" in err                 # >4 rejected, not truncated
+    paths, err = driver._read_probe_manifest(_C(), "notes/absent.txt")
+    assert not paths and "unreadable" in err
+
+
+def _manifest_meta_ctx(tmp_path, batch_log, n_scripts=2, extra_logs=()):
+    """A meta step whose teacher sends PROBE-MANIFEST then the final diagnosis
+    then the milestone patch; the batch job's log is scripted, and any
+    per-script fallback jobs pop extra_logs in order."""
+    manifest = tmp_path / "batch.txt"
+    scripts = [f"s{i}.py" for i in range(n_scripts)]
+    manifest.write_text("\n".join(scripts) + "\n", encoding="utf-8")
+    for s in scripts:
+        (tmp_path / s).write_text("print('probe')\n", encoding="utf-8")
+    turn = "PROBE-MANIFEST: batch.txt\n"
+    diagnosis = "cause_class: R1\ndeficient_locus: D1.1"
+    patch = _patching(tmp_path, "\n### D0.9 loosened\nx\n",
+                      "patch_class: structural\nchanged_entries: [D0.9]\npatch: ...\n")
+    be = FakeBackend([turn, diagnosis, patch], [batch_log, *extra_logs])
+    ctx = _ctx(tmp_path, be)
+    return ctx, be, scripts
+
+
+def test_t2_meta_batch_one_job_per_script_verdicts(tmp_path):
+    batch_log = "".join(
+        driver._PROBE_BATCH_BEGIN.format(path=s) + "\n"
+        + ("PROBE PASS max_diff=0.1\n" if i == 0 else "PROBE FAIL max_diff=2.0\n")
+        + driver._PROBE_BATCH_END.format(path=s, rc="0") + "\n"
+        for i, s in enumerate(["s0.py", "s1.py"]))
+    ctx, be, scripts = _manifest_meta_ctx(tmp_path, batch_log)
+    driver.run_meta_step(ctx)
+    submits = [m for c in be.calls if c[0] == "gpu" for m in [c[1]]]
+    assert len(submits) == 1, f"4->1: one batch job, got {submits}"
+    assert submits[0].startswith("cmd:") and "fk-probe-batch" in submits[0]
+    from forgekernel.meta_trajectory import load_meta_records
+    recs = load_meta_records(ctx.meta_status_path)
+    assert recs[0].probe_rounds == 1                       # one round = one job
+    readings = recs[0].probe_readings
+    assert [r["path"] for r in readings] == scripts
+    assert readings[0]["verdict"] == "PASS" and readings[1]["verdict"] == "FAIL"
+
+
+def test_t2_meta_batch_single_script_dnf_does_not_condemn(tmp_path):
+    # script 1 crashes with no verdict line at all; script 2 prints a clean PASS
+    batch_log = (
+        driver._PROBE_BATCH_BEGIN.format(path="s0.py") + "\nTraceback ...\n"
+        + driver._PROBE_BATCH_END.format(path="s0.py", rc="1") + "\n"
+        + driver._PROBE_BATCH_BEGIN.format(path="s1.py") + "\nPROBE PASS max_diff=0.2\n"
+        + driver._PROBE_BATCH_END.format(path="s1.py", rc="0") + "\n")
+    ctx, be, scripts = _manifest_meta_ctx(tmp_path, batch_log)
+    driver.run_meta_step(ctx)
+    from forgekernel.meta_trajectory import load_meta_records
+    recs = load_meta_records(ctx.meta_status_path)
+    readings = recs[0].probe_readings
+    # a no-verdict script is "ran, no reading" (the standing semantics — no
+    # contract lines, no reading row): s0's DNF stays s0's own, s1 keeps its PASS
+    assert [r["path"] for r in readings] == ["s1.py"]
+    assert readings[0]["verdict"] == "PASS"
+    assert any("no 'PROBE PASS/FAIL' line" in p or "NO VERDICT" in p
+               for p in be.prompts)                        # the teacher still hears the DNF
+
+
+def test_t2_meta_batch_wholesale_failure_falls_back(tmp_path):
+    # the batch job returns a log with NO markers (e.g. transport/refusal):
+    # the per-script path takes over, one job per script
+    fallback_log = "PROBE PASS max_diff=0.1\n"
+    ctx, be, scripts = _manifest_meta_ctx(
+        tmp_path, "[direct] transport failure\n",
+        extra_logs=[fallback_log, fallback_log])
+    driver.run_meta_step(ctx)
+    submits = [c[1] for c in be.calls if c[0] == "gpu"]
+    assert len(submits) == 3                    # 1 failed batch + 2 fallback jobs
+    assert submits[0].startswith("cmd:") and "fk-probe-batch" in submits[0]
+    assert submits[1] == "cmd:python3 s0.py" and submits[2] == "cmd:python3 s1.py"
+
+
+def test_t2_manifest_disabled_by_config(tmp_path):
+    ctx, be, scripts = _manifest_meta_ctx(
+        tmp_path, "[direct] transport failure\n")
+    ctx.probe_manifest = False
+    driver.run_meta_step(ctx)
+    assert not [c for c in be.calls if c[0] == "gpu"]      # no job, feedback instead
+    assert any("probe_manifest off" in p for p in be.prompts)
+
+
+def test_t2_student_manifest_is_not_a_new_submit_surface(tmp_path, capsys):
+    # a student turn carrying PROBE-MANIFEST: no GPU job, one re-prompt
+    be = FakeBackend(["PROBE-MANIFEST: m.txt\n"] * 4, [])
+    ctx = _ctx(tmp_path, be)
+    (tmp_path / "m.txt").write_text("s0.py\n", encoding="utf-8")
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    assert not [c for c in be.calls if c[0] == "gpu" and "s0.py" in c[1]]
+    assert "not available to the student" in be.prompts[-1]
+
+
+def test_t2_default_state_leaves_existing_probes_alone(tmp_path):
+    # 默认不强制回归钉：普通 PROBE_REQUEST 仍是单脚本单 job
+    be = FakeBackend(
+        ["PROBE_REQUEST: p.py\n", REC("D2.3", 2.6)],
+        ["PROBE PASS max_diff=0.1\n", EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    (tmp_path / "p.py").write_text("print('probe')\n", encoding="utf-8")
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    submits = [c[1] for c in be.calls if c[0] == "gpu"]
+    assert "cmd:python3 p.py" in submits
+
+
+def test_t2_wp19_apply_cfg_reads_probe_manifest(tmp_path, monkeypatch):
+    from forgekernel.loop.driver import _wp19_apply_cfg
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    _wp19_apply_cfg(ctx)
+    assert ctx.probe_manifest is True                     # default: mechanism on
+    import forgekernel.paths as paths_mod
+    gcfg = tmp_path / "global_config"
+    gcfg.mkdir(exist_ok=True)
+    (gcfg / "loop.toml").write_text("[loop]\nprobe_manifest = false\n", encoding="utf-8")
+    monkeypatch.setattr(paths_mod, "global_config_dir", lambda: gcfg)
+    (tmp_path / "2").mkdir(exist_ok=True)
+    ctx2 = _ctx(tmp_path / "2", FakeBackend([], []))
+    ctx2.probe_manifest = None
+    _wp19_apply_cfg(ctx2)
+    assert ctx2.probe_manifest is False                   # the kill switch reads
+
+
+def test_t2_kb_manifest_one_job_all_pass_certifies(tmp_path):
+    from forgekernel.meta_trajectory import load_meta_records
+    (tmp_path / "s0.py").write_text("print('probe')\n", encoding="utf-8")
+    (tmp_path / "s1.py").write_text("print('probe')\n", encoding="utf-8")
+    (tmp_path / "batch.txt").write_text("s0.py\ns1.py\n", encoding="utf-8")
+    batch_log = "".join(
+        driver._PROBE_BATCH_BEGIN.format(path=s) + "\nPROBE PASS max_diff=0.1\n"
+        + driver._PROBE_BATCH_END.format(path=s, rc="0") + "\n"
+        for s in ("s0.py", "s1.py"))
+    manifest_turn = "PROBE-MANIFEST: batch.txt\n"
+    finalize = "RECIPE_CERTIFIED: kb/recipe.md\n"
+    be = FakeBackend([manifest_turn, finalize], [batch_log])
+    ctx = _ctx(tmp_path, be)
+    probes = {}
+    res = driver._kb_certify_rounds(ctx, "diagnosis text", probes)
+    submits = [c[1] for c in be.calls if c[0] == "gpu"]
+    assert len(submits) == 1 and "fk-probe-batch" in submits[0]   # 4->1
+    assert res.certified is True and res.probe == "batch.txt"
+    assert set(probes) == {"s0.py", "s1.py"}                      # per-script bookkeeping
+
+
+def test_t2_kb_manifest_fail_feedback_and_fallback(tmp_path):
+    (tmp_path / "s0.py").write_text("print('probe')\n", encoding="utf-8")
+    (tmp_path / "s1.py").write_text("print('probe')\n", encoding="utf-8")
+    (tmp_path / "batch.txt").write_text("s0.py\ns1.py\n", encoding="utf-8")
+    fail_log = (driver._PROBE_BATCH_BEGIN.format(path="s0.py") + "\n"
+                + driver._PROBE_BATCH_END.format(path="s0.py", rc="0") + "\n"
+                + driver._PROBE_BATCH_BEGIN.format(path="s1.py") + "\n"
+                "PROBE PASS max_diff=0.1\n"
+                + driver._PROBE_BATCH_END.format(path="s1.py", rc="0") + "\n")
+    manifest_turn = "PROBE-MANIFEST: batch.txt\n"
+    # round 1: the batch (s0 has no verdict -> DNF -> not passed -> re-prompt);
+    # round 2: the teacher finalizes without a probe
+    be = FakeBackend([manifest_turn, "RECIPE_CERTIFIED: kb/r.md\n"], [fail_log])
+    ctx = _ctx(tmp_path, be)
+    probes = {}
+    res = driver._kb_certify_rounds(ctx, "diagnosis text", probes)
+    submits = [c[1] for c in be.calls if c[0] == "gpu"]
+    assert len(submits) == 1                                # one batch job, no fallback
+    assert res.certified is True
+    # the DNF feedback reached the teacher (s0's no-verdict is named)
+    assert any("s0.py" in p for p in be.prompts)
+    # wholesale failure -> the per-script fallback (one job per script)
+    ws2 = tmp_path / "2"
+    ws2.mkdir(exist_ok=True)
+    be2 = FakeBackend(
+        ["PROBE-MANIFEST: batch.txt\n",
+         "PROBE_REQUEST: s0.py\n",
+         "RECIPE_CERTIFIED: kb/r.md\n"],
+        ["[direct] transport gone\n",
+         "PROBE PASS max_diff=0.1\n",
+         "PROBE PASS max_diff=0.1\n"])
+    ctx2 = _ctx(ws2, be2)
+    (ws2 / "batch.txt").write_text("s0.py\ns1.py\n", encoding="utf-8")
+    (ws2 / "s0.py").write_text("print('probe')\n", encoding="utf-8")
+    (ws2 / "s1.py").write_text("print('probe')\n", encoding="utf-8")
+    res2 = driver._kb_certify_rounds(ctx2, "diagnosis text", {})
+    submits2 = [c[1] for c in be2.calls if c[0] == "gpu"]
+    assert submits2[0].startswith("cmd:") and "fk-probe-batch" in submits2[0]
+    assert submits2[1] == "cmd:python3 s0.py"               # the old path, per script
+
+
+# --- task 5: the merged diagnosis-validation bounce (C12) -----------------------
+
+def _t5_ctx(tmp_path, outputs, **kw):
+    patch = _patching(tmp_path, "\n### D0.9 loosened\nx\n",
+                      "patch_class: structural\nchanged_entries: [D0.9]\npatch: ...\n")
+    be = FakeBackend([*outputs, patch], [])
+    ctx = _ctx(tmp_path, be, **kw)
+    return ctx, be
+
+
+def test_t5_two_violations_one_reprompt(tmp_path):
+    # a diagnosis missing BOTH the reachability line and (via the INFEASIBLE
+    # mention) the stop-choice: the OLD chain cost two teacher turns, the merge
+    # reports both in one
+    bad = ("cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"
+           "INFEASIBLE is implied by the floor gap here\n")
+    good = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"
+    ctx, be = _t5_ctx(tmp_path, [bad, good])
+    ctx.stall_pricing = True                      # arms the reachability gate
+    driver.run_meta_step(ctx)
+    agent_calls = [i for i, c in enumerate(be.calls) if c[0] == "agent"]
+    assert len(be.prompts) == 3                   # 1 turn + 1 merged re-prompt + patch
+    second = be.prompts[1]
+    assert "reachability:" in second and "INFEASIBLE" in second
+    assert "Format requirement" in second         # both blocks in ONE prompt
+    assert "stop request or not" in second or "INFEASIBLE" in second
+
+
+def test_t5_gate_flags_bounce_once_then_accept(tmp_path):
+    # the same gate does not fire twice: after its one bounce the (still
+    # imperfect) diagnosis is accepted — the standing per-gate semantics
+    bad = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\nINFEASIBLE anyway\n"
+    ctx, be = _t5_ctx(tmp_path, [bad, bad])
+    ctx.stall_pricing = True
+    driver.run_meta_step(ctx)
+    assert len(be.prompts) == 3                   # one bounce, then accept (patch turn)
+
+
+def test_t5_infeasible_stop_channel_unmerged_break(tmp_path):
+    # an ACCEPTABLE INFEASIBLE stop request still leaves the loop immediately
+    # for the post-loop refusal path — no patch turn, no extra gate round
+    stop = ("cause_class: INFEASIBLE\ndeficient_locus: none\nreachability: closed\n"
+            "infeasible_reason: the floor arithmetic closes the gap\n")
+    ctx, be = _t5_ctx(tmp_path, [stop])
+    res = driver.run_meta_step(ctx)
+    assert res.cause_class == "INFEASIBLE"
+    assert len(be.prompts) == 1                   # accepted on the first turn
+
+
+def test_t5_merged_blocks_are_the_same_text(tmp_path):
+    # 弹回文本只重组不新增：each block's wording is exactly the standing one
+    bad = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\nINFEASIBLE anyway\n"
+    ctx, be = _t5_ctx(tmp_path, [bad])
+    ctx.stall_pricing = True
+    driver.run_meta_step(ctx)
+    second = be.prompts[1]
+    # the reachability block, verbatim (its unique sentence)
+    assert "Do the reachability refutation of diagnosis step 1c first" in second
+    # the mention block, verbatim (its own heading)
+    assert "## Your stop request is not in the stop channel" in second or \
+           "_INFEASIBLE_MENTION_BLOCK" not in second
+
+
+def test_t5_r1_gates_cofire_in_one_prompt(tmp_path):
+    # R1 + reopen budget spent + unpriced reopen: both R1 blocks in one prompt
+    from forgekernel.inner.trajectory import IterationRecord, append_record
+    bad = ("cause_class: R1\ndeficient_locus: D1.1\nreachability: closed\n"
+           "reopen_price: none\n")
+    good = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"
+    ctx, be = _t5_ctx(tmp_path, [bad, good])
+    ctx.stall_pricing = True
+    ctx.reopen_requires_price = True
+    ctx.reopen_max_fruitless = 1
+    ctx.max_verdict_probe_rounds = 0              # the in-step way to price: none...
+    # ...but the reopen-price gate stands down without an in-step measuring way
+    # unless probes exist; give the run a prior fruitless reopen so the budget
+    # gate fires
+    rec = IterationRecord(iter=0, decision_id="D0.9", change="reopen attempt",
+                          correctness=False, verdict="REVERT", metric_before=2.0)
+    append_record(ctx.status_path, rec)
+    driver.run_meta_step(ctx)
+    assert len(be.prompts) == 3
+    second = be.prompts[1]
+    assert "reopen" in second.lower()
+    assert second.count("## ") >= 2 or "budget" in second.lower()

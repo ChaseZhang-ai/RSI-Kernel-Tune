@@ -31,8 +31,15 @@ class Record:
 
 @dataclass
 class ProbeRequest:
-    """The student wants a GPU layout-probe run before committing the decision."""
+    """The student wants a GPU layout-probe run before committing the decision.
+
+    ``manifest=True``: ``path`` names a PROBE-MANIFEST file (WP19 task 2) —
+    one ≤4-line list of self-contained probe scripts the driver runs in a
+    single job, each with its own verdict. The student-side submit surface
+    never grows this shape: only the meta-step / KB-certification loops read
+    it."""
     path: str
+    manifest: bool = False
 
 
 @dataclass
@@ -88,6 +95,15 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     probe = re.search(r"PROBE_REQUEST:\s*(\S+)", text)
     if probe:
         return ProbeRequest(path=_clean_path(probe.group(1)))
+    # WP19 (task 2): a PROBE-MANIFEST names a ≤4-line list of self-contained
+    # probe scripts for one batched job. Parsed AFTER PROBE_REQUEST (an
+    # explicit single-script request always wins) and before the record
+    # fields — the manifest is a meta-side vocabulary; a student turn is not
+    # expected to carry it, and a stray echo falls through to the ordinary
+    # shapes exactly like a stray RECON_REQUEST does.
+    manifest = re.search(r"PROBE-MANIFEST:\s*(\S+)", text)
+    if manifest:
+        return ProbeRequest(path=_clean_path(manifest.group(1)), manifest=True)
     if allow_recon:
         recon = re.search(r"RECON_REQUEST:\s*(\S+)", text)
         if recon:

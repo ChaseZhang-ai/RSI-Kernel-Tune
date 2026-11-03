@@ -1082,7 +1082,10 @@ _WP11_ALLNCU_CASE = """    allncu)
             if [ "$NCU_METRICS" != "$NCU_METRICS_DESIRED" ]; then
                 echo "[gpu_entry.sh] ncu: metrics filtered for this arch: $NCU_METRICS"
             fi
+            # WP9's flags travel with the invocation this case mirrors (the plain
+            # `ncu` task's): same metrics filter, same flags, same budget.
             ncu_bounded ncu --csv --target-processes all --profile-from-start off \\
+                --cache-control none --clock-control none \\
                 --launch-count 24 --kill yes --metrics "$NCU_METRICS" python3 eval/ncu_run.py
         fi
         echo "[gpu_entry.sh] allncu: profile segment done (wall $((SECONDS - profile_seg_start))s)"

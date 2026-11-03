@@ -55,7 +55,9 @@ def test_binref_recon_tree_ncu_carries_the_flags() -> None:
 def test_leaderboard_gpu_entry_template_ncu_carries_the_flags() -> None:
     text = leaderboard.GPU_ENTRY_TEMPLATE.format(
         name="op", suite=leaderboard.SUITE_SOL, arch="sm_100a", clock="1500",
-        mem_clock="3996", require_lock="1", clock_note="n")
+        mem_clock="3996", require_lock="1", clock_note="n",
+        wp11_cache_block=leaderboard._WP11_CACHE_BLOCK,
+        wp11_allncu_case=leaderboard._WP11_ALLNCU_CASE)
     cmds = _ncu_commands(text)
     assert cmds
     assert all(_CMD_RE.search(c) for c in cmds)
@@ -68,7 +70,9 @@ def test_generated_board_card_entry_carries_the_flags() -> None:
     """End to end through the same .replace() taskcard.write_card applies."""
     text = leaderboard.GPU_ENTRY_TEMPLATE.format(
         name="op", suite=leaderboard.SUITE_SOL, arch="sm_100a", clock="1500",
-        mem_clock="3996", require_lock="1", clock_note="n")
+        mem_clock="3996", require_lock="1", clock_note="n",
+        wp11_cache_block=leaderboard._WP11_CACHE_BLOCK,
+        wp11_allncu_case=leaderboard._WP11_ALLNCU_CASE)
     text = text.replace("--launch-count 24", "--launch-count 48")
     cmds = _ncu_commands(text)
     assert all(_CMD_RE.search(c) for c in cmds)

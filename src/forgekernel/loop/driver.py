@@ -15049,7 +15049,7 @@ def _arch_probe_base_problem(ctx: LoopContext) -> dict | None:
     not resolve: nothing is ranked, the file order stands."""
     try:
         from forgekernel.loop.analytic_floor import problem_from_card
-        p = Path(ctx.milestone).parent / "eval" / "leaderboard" / "problem.json"
+        p = Path(ctx.milestone).parent / "eval" / "problem" / "problem.json"
         if not p.is_file():
             return None
         card = json.loads(p.read_text(encoding="utf-8"))

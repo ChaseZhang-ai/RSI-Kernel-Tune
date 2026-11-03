@@ -2840,6 +2840,24 @@ def _main(argv: list[str] | None = None) -> int:
         # [loop] m0_probe_rounds: ARCH_PROBE's GPU-job budget (WP6; default 2 —
         # one job per of the two candidate skeletons, 0 disables, <2 skips).
         m0_probe_rounds=int(cfg.get("loop", {}).get("m0_probe_rounds", 2)),
+        # --- WP8: prior supply (teacher-side; all off/empty = pre-WP8 briefs) --
+        # [loop] teacher_prior_survey: the teacher researches public SOTA for the
+        #   operator family (skills/sota-survey/) and writes notes/prior_art.md
+        #   before recon/distill. The task.toml spelling is [agent.teacher]
+        #   prior_survey (carried on AgentSpec; the launcher joins it here at the
+        #   integration seam, the same place WP6's loop.toml keys were wired).
+        teacher_prior_survey=bool(cfg.get("loop", {}).get("teacher_prior_survey", False)),
+        # [loop] teacher_prior_art: a declared offline dossier; a relative value
+        #   resolves against the workspace and the run's task snapshot (the
+        #   [agent.teacher] prior_art spelling is joined with the task dir).
+        teacher_prior_art=str(cfg.get("loop", {}).get("teacher_prior_art", "") or ""),
+        # carry_dir: the parent generation's closing record (self_evolve writes
+        #   tasks/<op>/carry/ at repo level); the card layer may point elsewhere.
+        carry_dir=(str(cfg.get("loop", {}).get("carry_dir", "") or "")
+                   or str(_repo_root() / "tasks" / args.op / "carry")),
+        # [loop] m0_probe_candidates: the ARCH_PROBE bracket width (WP8; default
+        #   2 = the WP6 behavior), clamped to m0_probe_rounds at run time.
+        m0_probe_candidates=int(cfg.get("loop", {}).get("m0_probe_candidates", 2)),
     )
     # The re-anchor's measurement channel: the same fresh-ref path the finish
     # confirmation uses (measure_ref_fresh — parsed readings, never archived, so

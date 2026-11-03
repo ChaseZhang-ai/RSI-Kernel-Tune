@@ -6720,16 +6720,22 @@ def test_source_run_recon_brief_says_the_source_is_in_hand(tmp_path):
     reconnaissance is FOR when the source is readable: measuring what the
     source states only as a template. The blackbox rendering stays
     byte-identical."""
-    from forgekernel.loop.driver import _bindings, _recon_prompt, render_prompt
+    from forgekernel.loop.driver import (_apply_prior_input, _bindings, _recon_prompt,
+                                         render_prompt)
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.oracle_mode = "blackbox"
     ctx.oracle_path = "/ref/gemm.cu"
-    plain = render_prompt(ctx.meta_dir / "recon_prompt.md", _bindings(ctx))
+    # WP8: the template carries the PRIOR-INPUT section, which the driver strips
+    # when the run opted into no prior lane — the off-state rendering is the
+    # pre-WP8 bytes, so "plain" is the template render minus that section.
+    plain = _apply_prior_input(
+        render_prompt(ctx.meta_dir / "recon_prompt.md", _bindings(ctx)), ctx)
     assert _recon_prompt(ctx) == plain
     assert "/ref/gemm.cu" not in plain
     ctx.oracle_mode = "source"
     p = _recon_prompt(ctx, extra="\n\nTAIL")
-    assert p.startswith(render_prompt(ctx.meta_dir / "recon_prompt.md", _bindings(ctx)))
+    assert p.startswith(_apply_prior_input(
+        render_prompt(ctx.meta_dir / "recon_prompt.md", _bindings(ctx)), ctx))
     assert "Source-mode addendum" in p and "/ref/gemm.cu" in p
     assert "the binary's reading is the fact" in p
     assert p.endswith("TAIL")
@@ -6771,15 +6777,17 @@ def test_source_run_runs_recon_before_distilling(tmp_path):
 def test_source_run_without_a_recon_tree_is_the_unchanged_control(tmp_path):
     """recon_op = "" (or no tree on disk): no recon turn, no GPU job, and the
     distill brief is exactly the source brief with nothing appended."""
-    from forgekernel.loop.driver import _bindings, render_prompt
+    from forgekernel.loop.driver import (_apply_prior_input, _bindings, render_prompt)
     teacher = FakeBackend([_authoring(tmp_path), "EXHAUSTED: nothing to do"], [])
     ctx = _ctx(tmp_path, teacher)
     ctx.oracle_mode = "source"
     ctx.oracle_path = "/ref/gemm.cu"
     ctx.milestone.unlink()
     run_two_layer(ctx, max_meta=0)
-    assert teacher.prompts[0] == render_prompt(ctx.meta_dir / "distill_prompt.md",
-                                               _bindings(ctx))
+    # WP8: "exactly the source brief" = the template minus the PRIOR-INPUT
+    # section the driver strips when no prior lane is on (the pre-WP8 bytes).
+    assert teacher.prompts[0] == _apply_prior_input(
+        render_prompt(ctx.meta_dir / "distill_prompt.md", _bindings(ctx)), ctx)
     assert len(teacher.prompts) == 2                      # distill, then the student
 
 

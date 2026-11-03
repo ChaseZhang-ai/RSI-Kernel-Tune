@@ -21,3 +21,4 @@ imports the same files as `forgekernel.skills.<module>` to read their verdict li
 | [job-env-check](job-env-check/SKILL.md) | whether a GPU job's `python3` can run the tools at all |
 | [ncu-trace](ncu-trace/SKILL.md) | NCU metrics across iterations, for the teacher |
 | [arch-probe](arch-probe/SKILL.md) | pre-freeze M0 topology skeletons, teacher-written and driver-timed (teacher-side) |
+| [sota-survey](sota-survey/SKILL.md) | the teacher's public-SOTA prior survey: candidates + verification routes into notes/prior_art.md (teacher-side) |

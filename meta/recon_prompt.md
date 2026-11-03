@@ -10,6 +10,27 @@ Your task: **measure its architecture** and produce two files for the next step,
 > time a dozen-plus rounds have been burned. **Better to say "I did not measure this one"
 > than to write a self-consistent number that no observation supports.**
 
+<!-- PRIOR-INPUT:BEGIN (WP8) -->
+
+## Prior inputs (teacher-only; every claim is a hypothesis until THIS run measures it)
+
+This run's prior inputs are listed below; "(none)" names an input that does not exist. **If every input reads
+"(none)", skip this section entirely** and work exactly as the rest of this brief says. Read them **before you
+design the probes**: a skeleton hypothesis that diverges from what you are about to measure is exactly what the
+distill step wants on its M0 `ARCH_CANDIDATES` lines (with `ARCH_PROBE_REQUEST` recipes, so THIS run measures
+it); a prior config table becomes `sweep:` starting values on the matching decision later.
+
+- `PRIOR_ART` = {PRIOR_ART}
+- `CARRY` (the parent generation's closing record) = {CARRY}
+- `PRIORS` (the repo prior library; read the top-k entries matching this operator's family) = {PRIORS_INDEX}
+
+`CARRY` is **for hypothesis reuse and reconciliation only — re-verify every line against this run's own
+measurements; it is never a gate anchor and never a price source**. Mechanism descriptions in your own words
+only: **no implementation body** enters the report, the milestone or any notes file, and **no unmeasured prior
+claim moves a gate number, the M0 freeze or any stopping judgment** — unmeasured claims stay `[ESTIMATE]`.
+
+<!-- PRIOR-INPUT:END (WP8) -->
+
 ## Inputs
 
 - `ARCH_REF` = measured performance and per-kernel NCU signature of **the reference under reconnaissance** (the driver has

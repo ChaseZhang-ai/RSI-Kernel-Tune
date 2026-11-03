@@ -14,6 +14,28 @@ target performance from scratch. This is the first step of the distillation loop
 > When distilling, organize only mechanism decisions **that language can express** — e.g. cutedsl uses the tile/cluster/swizzle/
 > mma_inst_tile_k/raster/layout knobs of `cutlass.cute` (do not write inline-PTX asm-block details); only inline-ptx talks about asm blocks.
 
+<!-- PRIOR-INPUT:BEGIN (WP8) -->
+
+## Prior inputs (teacher-only; every claim is a hypothesis until THIS run measures it)
+
+This run's prior inputs are listed below; "(none)" names an input that does not exist. **If every input reads
+"(none)", skip this section entirely** and work exactly as the rest of this brief says. Read them **before the
+ORACLE**: skeleton hypotheses that diverge from the source's readings become M0 `ARCH_CANDIDATES` lines (each
+carrying an `ARCH_PROBE_REQUEST: notes/arch_<n>.json` recipe, so THIS run measures them before the freeze); a
+prior config table becomes `sweep:` starting values ("starting values marked tunable") on the matching decision.
+
+- `PRIOR_ART` = {PRIOR_ART}
+- `CARRY` (the parent generation's closing record) = {CARRY}
+- `PRIORS` (the repo prior library; read the top-k entries matching this operator's family) = {PRIORS_INDEX}
+
+`CARRY` is **for hypothesis reuse and reconciliation only — re-verify every line against this run's own
+measurements; it is never a gate anchor and never a price source** (a parent price was read on the parent's tree;
+on this run's reference tree it is a hypothesis until re-priced). Mechanism descriptions in your own words only:
+**no implementation body** enters the milestone, the KB or any notes file, and **no unmeasured prior claim moves
+a gate number, the M0 freeze or any stopping judgment** — unmeasured claims stay `[ESTIMATE]` candidates.
+
+<!-- PRIOR-INPUT:END (WP8) -->
+
 ## Inputs (paths injected at runtime; do not hard-code the operator name)
 - `TEMPLATE` = `{MILESTONES_TEMPLATE_PATH}` — **the milestones meta-template** (A.1–A.7 + section B): the normative source for how
   milestones are written. **Read it first.** The v1 you write must conform to it item by item: M0, the mandatory Gate + mechanism-verification line of every

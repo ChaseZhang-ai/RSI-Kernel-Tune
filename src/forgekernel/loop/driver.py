@@ -40,6 +40,7 @@ from forgekernel.loop.job_env import env_failure
 from forgekernel.loop import harness_guard, precision_gate
 from forgekernel.loop.kb_lint import lint_kb_dir
 from forgekernel.loop import lang_mode
+from forgekernel.paths import operators_dir
 from forgekernel.inner.trajectory import (
     GATE_WINDOW_DEFAULT,
     GATE_WINDOW_DEVICE,
@@ -523,6 +524,31 @@ class LoopContext:
     # LoopContext(...) — added at the integration step; the default 2 governs
     # launches that don't set the key.)
     m0_probe_rounds: int = 2
+    # --- WP8: prior supply (teacher-side) ---------------------------------------
+    # Prior inputs for the distill/recon briefs — the student read set is
+    # untouched (student_prompt.md byte-identical; no student-visible digest
+    # line). All three default off/empty: without them the rendered teacher
+    # briefs are byte-identical to before (the control-run principle).
+    # teacher_prior_survey: the run opted into a teacher-side SOTA survey
+    #   (task.toml [agent.teacher] prior_survey = true, or the card layer's
+    #   [loop] teacher_prior_survey): before authoring, the teacher researches
+    #   the public SOTA for the operator family (skills/sota-survey/) and
+    #   writes notes/prior_art.md.
+    # teacher_prior_art: a declared offline dossier — the [agent.teacher]
+    #   prior_art value relative to the task snapshot directory (the launcher
+    #   joins it), or a card-layer path used as given.
+    # carry_dir: a parent generation's closing record (tasks/<op>-g<k>/carry/,
+    #   written by scripts/self_evolve.py): final milestone, lever price table,
+    #   ARCH_PROBE readings, dead-lever rows — hypothesis-reuse material for
+    #   the teacher, never a gate anchor, never a price source.
+    teacher_prior_survey: bool = False
+    teacher_prior_art: str = ""
+    carry_dir: str = ""
+    # ARCH_PROBE bracket: how many of the listed candidates the pre-freeze
+    # probes at most (the WP6 budget key m0_probe_rounds still caps the jobs;
+    # the bracket clamps to it — the channel degrades to fewer candidates with
+    # the cut recorded, it never spends jobs it does not have).
+    m0_probe_candidates: int = 2
     probe_battles: dict[str, ProbeBattle] = field(default_factory=dict)
     # Force a meta audit the first time a segment goes green (= the M0 gate lands).
     # The gate verifies the student against the milestone's OWN declared values — it
@@ -806,6 +832,12 @@ def _bindings(ctx: LoopContext) -> dict[str, str]:
         # 1.0x reading (a self-evolution run asks for >1)
         "{EQUIVALENCE_RATIO}": f"{ctx.equivalence_ratio:g}",
         "{TARGET_MS}": (f"{ctx.target_ms:.4f}" if ctx.target_ms else "(pending measurement)"),
+        # --- WP8: prior-supply faces (the tokens live only in the briefs'
+        # PRIOR-INPUT section, which the driver strips when the run opted out —
+        # no other prompt mentions them, the student least of all).
+        "{PRIOR_ART}": _prior_art_binding(ctx),
+        "{CARRY}": _carry_binding(ctx),
+        "{PRIORS_INDEX}": _priors_index_binding(ctx),
     }
 
 
@@ -9698,8 +9730,9 @@ def _recon_prompt(ctx: LoopContext, extra: str = "") -> str:
             "- Every fact in the report must still trace to a job number; \"the source says "
             "so\" is not a measurement source.\n"
         )
-    return render_prompt(_meta_prompt(ctx, "recon_prompt.md"), _bindings(ctx),
-                         extra=addendum + extra)
+    return _apply_prior_input(
+        render_prompt(_meta_prompt(ctx, "recon_prompt.md"), _bindings(ctx),
+                      extra=addendum + extra), ctx)
 
 
 def run_recon_step(ctx: LoopContext) -> ReconResult:
@@ -12428,40 +12461,79 @@ def _seed_arch_probe_runner(ctx: LoopContext) -> str | None:
 
 
 def _arch_probe_stamp(requests: list[str], readings: dict, *, skipped: str = "",
-                      floor: float | None = None) -> list[str]:
+                      floor: float | None = None, note: str = "") -> list[str]:
     """The head-note lines recording the ARCH_PROBE outcome. ``skipped`` short-
     circuits to a skip record; otherwise two readings above the resolution floor
     name the winner (the freeze follows it), anything else freezes the teacher's
-    preferred candidate with the readings attached."""
+    preferred candidate with the readings attached. ``note`` records a degraded
+    bracket (candidates listed beyond the probed top-k) alongside the readings.
+    WP8: with more than two candidates probed, the note generalizes to one line
+    per reading ranked fastest-first; the two-candidate rendering is unchanged."""
     head = ["<!-- ARCH_PROBE (driver, pre-freeze; time-only, never a gate)"]
     if skipped:
         return head + [f"     {skipped} -->"]
-    r0, r1 = requests[0], requests[1]
-    t0, t1 = readings.get(r0), readings.get(r1)
-    if t0 is not None and t1 is not None:
-        # faster reading wins; the gap is relative to the winner (the same ratio
-        # currency every other driver judgment reads)
-        win_r, lose_r = (r0, r1) if t0 <= t1 else (r1, r0)
-        win_t, lose_t = min(t0, t1), max(t0, t1)
-        delta = (lose_t - win_t) / win_t
-        if delta > (floor if floor is not None else 0.015):
+    measured = [(r, readings[r]) for r in requests if readings.get(r) is not None]
+    if len(requests) == 2 and not note:
+        # the WP6 two-candidate rendering, byte for byte
+        r0, r1 = requests[0], requests[1]
+        t0, t1 = readings.get(r0), readings.get(r1)
+        if t0 is not None and t1 is not None:
+            # faster reading wins; the gap is relative to the winner (the same
+            # ratio currency every other driver judgment reads)
+            win_r, lose_r = (r0, r1) if t0 <= t1 else (r1, r0)
+            win_t, lose_t = min(t0, t1), max(t0, t1)
+            delta = (lose_t - win_t) / win_t
+            if delta > (floor if floor is not None else 0.015):
+                return head + [
+                    f"     candidates {r0} (preferred) vs {r1}: {t0:.6g} ms vs {t1:.6g} ms",
+                    f"     winner {win_r} ({delta:+.1%} faster than {lose_r}, above the "
+                    f"{(floor if floor is not None else 0.015):.1%} resolution floor)",
+                    "     the M0 freeze follows the WINNER candidate's topology reading -->",
+                ]
             return head + [
                 f"     candidates {r0} (preferred) vs {r1}: {t0:.6g} ms vs {t1:.6g} ms",
+                f"     readings within the resolution floor ({delta:+.1%} <= "
+                f"{(floor if floor is not None else 0.015):.1%})",
+                f"     frozen as authored: the teacher's preferred candidate ({r0}) -->",
+            ]
+        missing = [r for r, t in ((r0, t0), (r1, t1)) if t is None]
+        return head + [
+            f"     inconclusive: no time reading from {', '.join(missing)} "
+            "(compile fail, crash, or the recipe never printed a verdict line)",
+            f"     frozen as authored: the teacher's preferred candidate ({r0}) -->",
+        ]
+    # WP8: the widened bracket's rendering — one line per reading, ranked
+    # fastest-first; the decision rule is the two-candidate one applied to the
+    # two fastest readings.
+    lines = head + [f"     {r}: {t:.6g} ms" for r, t in sorted(measured, key=lambda rt: rt[1])]
+    if note:
+        lines.append(f"     {note}")
+    if len(measured) >= 2:
+        (win_r, win_t), (lose_r, lose_t) = sorted(measured, key=lambda rt: rt[1])[:2]
+        delta = (lose_t - win_t) / win_t
+        if delta > (floor if floor is not None else 0.015):
+            lines += [
                 f"     winner {win_r} ({delta:+.1%} faster than {lose_r}, above the "
                 f"{(floor if floor is not None else 0.015):.1%} resolution floor)",
                 "     the M0 freeze follows the WINNER candidate's topology reading -->",
             ]
-        return head + [
-            f"     candidates {r0} (preferred) vs {r1}: {t0:.6g} ms vs {t1:.6g} ms",
-            f"     readings within the resolution floor ({delta:+.1%} <= "
-            f"{(floor if floor is not None else 0.015):.1%})",
-            f"     frozen as authored: the teacher's preferred candidate ({r0}) -->",
+        else:
+            lines += [
+                f"     readings within the resolution floor ({delta:+.1%} <= "
+                f"{(floor if floor is not None else 0.015):.1%})",
+                f"     frozen as authored: the teacher's preferred candidate "
+                f"({requests[0]}) -->",
+            ]
+        return lines
+    if len(measured) == 1:
+        return lines + [
+            f"     inconclusive: only one usable reading — nothing to compare; "
+            f"frozen as authored: the teacher's preferred candidate ({requests[0]}) -->",
         ]
-    missing = [r for r, t in ((r0, t0), (r1, t1)) if t is None]
-    return head + [
-        f"     inconclusive: no time reading from {', '.join(missing)} "
+    return lines + [
+        "     inconclusive: no time reading from any probed candidate "
         "(compile fail, crash, or the recipe never printed a verdict line)",
-        f"     frozen as authored: the teacher's preferred candidate ({r0}) -->",
+        f"     frozen as authored: the teacher's preferred candidate ({requests[0]}) -->",
     ]
 
 
@@ -12471,11 +12543,15 @@ def _run_arch_probes(ctx: LoopContext) -> None:
 
     Budget = ctx.m0_probe_rounds jobs, one per candidate recipe; two candidates
     need both rounds, so a smaller budget skips the channel (recorded in the
-    milestone head, the freeze proceeds as authored). The recipes + runner are
-    committed for the jobs, then the probe workspace is reset away — the skeleton
-    kernels are teacher material and never reach the student line; the readings
-    ride the milestone head note (and this log). Correctness is never read: these
-    are time-only readings for the teacher's freeze decision, never a gate."""
+    milestone head, the freeze proceeds as authored). WP8: the bracket widens —
+    up to ctx.m0_probe_candidates of the listed candidates are probed, clamped
+    to the budget (a wider bracket than the budget allows degrades to the
+    budget's count with the cut recorded in the stamp, it never buys jobs it
+    does not have). The recipes + runner are committed for the jobs, then the
+    probe workspace is reset away — the skeleton kernels are teacher material
+    and never reach the student line; the readings ride the milestone head note
+    (and this log). Correctness is never read: these are time-only readings for
+    the teacher's freeze decision, never a gate."""
     if ctx.m0_probe_rounds <= 0:
         return
     text = _read_milestone(ctx)
@@ -12493,10 +12569,20 @@ def _run_arch_probes(ctx: LoopContext) -> None:
         _stamp_milestone_head(ctx, _arch_probe_stamp(
             requests, {}, skipped="M0 probes skipped (budget)"))
         return
-    if ctx.m0_probe_rounds > 2 and len(requests) > 2:
-        _log(f"meta/distill: ARCH_PROBE probing the top-2 of {len(requests)} "
-             f"listed candidates (budget {ctx.m0_probe_rounds})")
-    missing = [p for p in requests[:2] if not (Path(ctx.workspace) / p).is_file()]
+    # --- WP8: the candidate bracket (default 2 = the WP6 behavior) -----------
+    want = max(2, int(ctx.m0_probe_candidates))
+    n = min(want, len(requests), ctx.m0_probe_rounds)
+    cut_note = ""
+    if n < len(requests):
+        cut_note = (f"{len(requests) - n} further listed candidate(s) beyond the probed "
+                    f"top-{n} skipped (bracket {want}, budget {ctx.m0_probe_rounds})")
+        _log(f"meta/distill: ARCH_PROBE probing the top-{n} of {len(requests)} "
+             f"listed candidates (bracket {want}, budget {ctx.m0_probe_rounds})")
+    elif want > 2:
+        _log(f"meta/distill: ARCH_PROBE bracket widened to {want} candidates "
+             f"({len(requests)} listed, budget {ctx.m0_probe_rounds})")
+    probed = requests[:n]
+    missing = [p for p in probed if not (Path(ctx.workspace) / p).is_file()]
     if missing:
         _log(f"meta/distill: ARCH_PROBE skipped (recipe file(s) missing: "
              f"{', '.join(missing)}); freezing as authored")
@@ -12524,7 +12610,7 @@ def _run_arch_probes(ctx: LoopContext) -> None:
         # is re-written stamped from the text held here).
         be.commit("meta-probe: ARCH_PROBE skeleton candidates")
         be.push_branch(branch)
-        for path in requests[:2]:
+        for path in probed:
             log = be.submit_gpu(branch, f"cmd:python3 {runner} {path}")
             stem = Path(path).stem
             readings[path] = _arch_probe_ms(log, stem)
@@ -12541,13 +12627,143 @@ def _run_arch_probes(ctx: LoopContext) -> None:
                 _log("meta/distill: ARCH_PROBE workspace reset failed — the probe "
                      "commit stays in the lineage (provenance, not a leak)")
         floor = resolvable_diff(load_records(ctx.status_path), ctx.gate_window)
-        _stamp_milestone_head(ctx, _arch_probe_stamp(requests, readings, floor=floor),
+        _stamp_milestone_head(ctx, _arch_probe_stamp(requests, readings, floor=floor,
+                                                     note=cut_note),
                               text=text)
-        if readings.get(requests[0]) is not None and readings.get(requests[1]) is not None:
-            t0, t1 = readings[requests[0]], readings[requests[1]]
-            win = requests[0] if t0 <= t1 else requests[1]
-            _log(f"meta/distill: ARCH_PROBE decisive candidate {win} "
+        decisive = sorted(((r, readings[r]) for r in probed
+                           if readings.get(r) is not None), key=lambda rt: rt[1])
+        if len(decisive) >= 2:
+            win, lose = decisive[0][0], decisive[1][0]
+            _log(f"meta/distill: ARCH_PROBE decisive candidate {win} over {lose} "
                  f"(resolution floor {floor:.1%} from resolvable_diff)")
+
+
+# --- WP8: prior supply (teacher-side) ===========================================
+# Three prior-input faces, all injected into the distill/recon briefs' PRIOR
+# INPUT section (the .md files carry the section between PRIOR-INPUT markers;
+# this code fills its tokens and deletes the whole section when the run did not
+# opt into any prior lane — the briefs then render byte-identical to before).
+# Every prior face is teacher read-set only, and everything it says is a
+# hypothesis until THIS run measures it (ARCH_PROBE / SWEEP / probe / lever
+# pricing): a borrowed authority never moves a gate number, an M0 freeze or a
+# stop judgment — unmeasured claims may only surface as [ESTIMATE] candidates.
+
+_PRIOR_INPUT_BEGIN = "<!-- PRIOR-INPUT:BEGIN (WP8) -->"
+_PRIOR_INPUT_END = "<!-- PRIOR-INPUT:END (WP8) -->"
+# the block plus the newline before BEGIN and the one after END, so stripping
+# restores the pre-WP8 bytes exactly (the .md files place a blank line on each side)
+_PRIOR_INPUT_RE = re.compile(r"\n<!-- PRIOR-INPUT:BEGIN \(WP8\) -->.*?"
+                             r"<!-- PRIOR-INPUT:END \(WP8\) -->\n", re.S)
+
+# content caps per injected face (the brief is a prompt, not an archive)
+_PRIOR_ART_CHARS = 6000
+_CARRY_MILESTONE_CHARS = 4000
+_CARRY_TABLE_CHARS = 3000
+_CARRY_READINGS_CHARS = 1500
+_CARRY_LEDGER_CHARS = 2500
+
+_SURVEY_DUTY = (
+    "this run opted into a survey (`prior_survey = true`) and "
+    "`notes/prior_art.md` does not exist yet: before authoring, follow "
+    "`skills/sota-survey/SKILL.md` — research the public state of the art for "
+    "this operator family on the web and write `notes/prior_art.md` in that "
+    "skill's format, then read it back as the survey product")
+_CARRY_DISCIPLINE = ("for hypothesis reuse and reconciliation only — re-verify every "
+                     "line against this run's own measurements; never a gate anchor, "
+                     "never a price source")
+
+
+def _prior_input_enabled(ctx: LoopContext) -> bool:
+    """The prior-input section stays in the brief only when a prior lane is on:
+    a survey opt-in, a declared dossier, or a carry directory on disk. Off means
+    the teacher briefs are exactly what they always were."""
+    if ctx.teacher_prior_survey or (ctx.teacher_prior_art or "").strip():
+        return True
+    return bool((ctx.carry_dir or "").strip()) and Path(ctx.carry_dir).is_dir()
+
+
+def _strip_prior_input(rendered: str) -> str:
+    return _PRIOR_INPUT_RE.sub("", rendered)
+
+
+def _apply_prior_input(rendered: str, ctx: LoopContext) -> str:
+    return rendered if _prior_input_enabled(ctx) else _strip_prior_input(rendered)
+
+
+def _resolve_prior_art_path(ctx: LoopContext) -> Path | None:
+    """The declared dossier, if it exists. The [agent.teacher] spelling is
+    relative to the task snapshot directory — derivable in a run from the
+    operators dir's parent (the run dir holds task/), which is what the
+    launcher would have joined. The card-layer spelling is used as given
+    (absolute, or relative to the workspace)."""
+    raw = (ctx.teacher_prior_art or "").strip()
+    if not raw:
+        return None
+    p = Path(raw)
+    if p.is_absolute():
+        return p if p.is_file() else None
+    for base in (Path(ctx.workspace), operators_dir().parent / "task"):
+        cand = base / raw
+        if cand.is_file():
+            return cand
+    return None
+
+
+def _prior_art_binding(ctx: LoopContext) -> str:
+    """{PRIOR_ART}: the declared dossier and/or the run's own survey product,
+    content-capped; the survey duty sentence when opted in with nothing on
+    disk; ``(none)`` when the lane is dark."""
+    parts: list[str] = []
+    p = _resolve_prior_art_path(ctx)
+    if p is not None:
+        parts.append(f"### Dossier (declared prior_art): `{p}`\n\n"
+                     f"{p.read_text(encoding='utf-8', errors='replace')[:_PRIOR_ART_CHARS]}")
+    survey = Path(ctx.workspace) / "notes" / "prior_art.md"
+    if survey.is_file():
+        parts.append(f"### Survey dossier (this run): `{survey}`\n\n"
+                     f"{survey.read_text(encoding='utf-8', errors='replace')[:_PRIOR_ART_CHARS]}")
+    if ctx.teacher_prior_survey and not survey.is_file():
+        parts.append(f"### Survey duty\n\n{_SURVEY_DUTY}.")
+    if not parts:
+        return "(none)"
+    return "\n\n".join(parts)
+
+
+def _carry_binding(ctx: LoopContext) -> str:
+    """{CARRY}: the parent generation's closing record, rendered with its
+    discipline line. A missing directory renders ``(none)``."""
+    d = Path(ctx.carry_dir) if (ctx.carry_dir or "").strip() else None
+    if d is None or not d.is_dir():
+        return "(none)"
+
+    def _face(name: str, cap: int, what: str) -> str:
+        f = d / name
+        if not f.is_file():
+            return ""
+        body = f.read_text(encoding="utf-8", errors="replace")[:cap]
+        return f"#### {what} (`carry/{name}`)\n\n```\n{body}\n```\n"
+
+    faces = "".join([
+        _face("milestone.md", _CARRY_MILESTONE_CHARS,
+              "Parent final milestone (its decisions, contracts, rationale; its head "
+              "note carries the parent's own ARCH_PROBE stamp)"),
+        _face("levers.json", _CARRY_TABLE_CHARS,
+              "Parent lever price table (prices read on the PARENT's tree — "
+              "hypotheses here, not prices)"),
+        _face("arch_probe.md", _CARRY_READINGS_CHARS, "Parent ARCH_PROBE readings"),
+        _face("falsified.md", _CARRY_LEDGER_CHARS, "Parent dead-lever ledger rows"),
+    ])
+    return (f"{_CARRY_DISCIPLINE}.\n\n{faces}".strip() if faces.strip()
+            else f"{_CARRY_DISCIPLINE}; the directory holds no readable record."
+                 .strip())
+
+
+def _priors_index_binding(ctx: LoopContext) -> str:
+    """{PRIORS_INDEX}: the repo prior library's index — a pointer the teacher
+    reads top-k from itself (the library is repo-level, outside every student
+    read set)."""
+    p = ctx.meta_dir.parent / "priors" / "index.md"
+    return str(p) if p.is_file() else "(none)"
 
 
 def run_distill_step(ctx: LoopContext) -> "MetaResult":
@@ -12614,7 +12830,8 @@ def run_distill_step(ctx: LoopContext) -> "MetaResult":
                       + "\n".join(f"- {v}" for v in violations) + "\n")
         pre = _read_or_none(ctx.milestone)
         out = _agent_turn(
-            be, render_prompt(_distill_prompt_path(ctx), bindings, extra),
+            be, _apply_prior_input(
+                render_prompt(_distill_prompt_path(ctx), bindings, extra), ctx),
             label="meta/distill", storm_budget=storm_budget,
             # the only legal trace of a distill turn is the milestone changing on
             # disk — a tiny output that left the draft byte-identical is a

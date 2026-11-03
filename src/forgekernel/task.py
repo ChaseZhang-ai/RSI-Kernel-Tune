@@ -115,7 +115,12 @@ _KEYS = {
     # clocks + L2 flushed before every timed call + single-call median,
     # report-only — the gate never reads it).
     "timing": {"protocol"},
-    "agent.role": {"backend", "provider", "model", "effort", "timeout_s"},
+    # WP8: [agent.teacher] prior_survey (a teacher-side SOTA survey before
+    # recon/distill, writing notes/prior_art.md per skills/sota-survey/) and
+    # prior_art (an offline dossier, resolved relative to the task directory).
+    # Teacher read-set only — the student faces no new information channel.
+    "agent.role": {"backend", "provider", "model", "effort", "timeout_s",
+                   "prior_survey", "prior_art"},
     "budget": {"hours", "max_meta", "reference_hours"},
     "leaderboard": {"suite", "card", "ref"},
 }
@@ -196,6 +201,11 @@ class AgentSpec:
     effort: str | None
     provider: str = provider_mod.NATIVE
     timeout_s: int = 7200
+    # WP8 (teacher-side prior supply; both default off — the run's briefs are
+    # then byte-identical to before). ``prior_art`` is relative to the task
+    # directory; the launcher joins it before the driver sees it.
+    prior_survey: bool = False
+    prior_art: str = ""
 
 
 @dataclass(frozen=True)
@@ -297,6 +307,12 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
     teacher = _read_agent(cfg.get("agent", {}), "teacher", problems)
     student = _read_agent(cfg.get("agent", {}), "student", problems)
     budget = _read_budget(cfg, problems)
+    if teacher.prior_art:
+        # WP8: the dossier is part of the task like any other declared file —
+        # relative to the task directory and present (the driver joins the
+        # relative string with the task snapshot's dir when it renders the
+        # teacher brief).
+        _inside(d, teacher.prior_art, "[agent.teacher] prior_art", problems)
 
     if problems:
         raise TaskError(d, problems)
@@ -709,9 +725,31 @@ def _read_agent(agents: dict, role: str, problems: list[str]) -> AgentSpec:
         problems.append(f"{where} timeout_s must be a positive number of seconds, "
                         f"got {timeout_s!r}")
         timeout_s = 1
+    # WP8: the teacher-side prior-supply keys (a student setting them is a
+    # configuration mistake — the student read set has no prior lane).
+    prior_survey = a.get("prior_survey", False)
+    if not isinstance(prior_survey, bool):
+        problems.append(f"{where} prior_survey must be true or false, got {prior_survey!r}")
+        prior_survey = False
+    if prior_survey and role != "teacher":
+        problems.append(f"{where} prior_survey is a teacher-side key; the {role} has no "
+                        f"prior lane (the student never reads prior inputs)")
+        prior_survey = False
+    prior_art = a.get("prior_art", "")
+    if not isinstance(prior_art, str):
+        problems.append(f"{where} prior_art must be a path relative to the task directory, "
+                        f"got {prior_art!r}")
+        prior_art = ""
+    elif role != "teacher":
+        if prior_art:
+            problems.append(f"{where} prior_art is a teacher-side key; the {role} has no "
+                            f"prior lane")
+        prior_art = ""
     return AgentSpec(backend=backend, model=model.strip(), effort=effort,
                      provider=provider if provider in known else provider_mod.NATIVE,
-                     timeout_s=int(timeout_s))
+                     timeout_s=int(timeout_s),
+                     prior_survey=bool(prior_survey),
+                     prior_art=prior_art.strip())
 
 
 def _read_budget(cfg: dict, problems: list[str]) -> Budget:

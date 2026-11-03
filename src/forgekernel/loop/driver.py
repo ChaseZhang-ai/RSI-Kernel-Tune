@@ -1822,8 +1822,11 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
                f"({rd:.1%})")
         band = True
     elif drifted:
-        # WP15: flat trigger (was an elif reachable only below the band) — a
-        # drifted sub-resolution jump confirms at budget, not for free.
+        # WP15: drift rides the same flattened chain as the band branch. Both
+        # baseline generations already confirm a drifted sub-resolution jump —
+        # the elif is reachable there and sets band=True (42 §3's "free pass
+        # through the NCU branch" was a misparse; 107 ruling F3). Keeping the
+        # branch peer-level is hardening, not a fix.
         why = (f"beats best {metric_before} by {gain_pct:.1%} while its SM clock "
                f"sits {clock_gap:.1%} off the sitting best's — a clock move, "
                f"not a kernel fact, until confirmed")
@@ -3827,7 +3830,8 @@ def run_inner_loop(ctx: LoopContext, start_iter: int, *,
         # and meta intervenes every iteration. Segment-scoping gives each patch a real window.
         if detect_plateau(_on_cluster(records[start_iter:], ctx),
                           window=ctx.plateau_window, gate_window=ctx.gate_window,
-                          floor=ctx.resolvable_floor, cap=ctx.resolvable_cap):
+                          floor=ctx.resolvable_floor, cap=ctx.resolvable_cap,
+                          raw=_confirm_raw_memo(ctx)):
             # A standing plateau reading with a declared package in flight is not a
             # stop: the package's measured intermediates are exactly the rows that
             # read as "no new best" (its payoff lands at part n), so an n-step

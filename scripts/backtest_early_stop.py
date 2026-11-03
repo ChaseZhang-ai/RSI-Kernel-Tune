@@ -4,16 +4,14 @@ Four batteries, all PAIRED: the full-sampling verdict and the early-stopped
 verdict read the SAME window sequence, so any verdict difference is caused by
 truncation alone — never by a different noise draw.
 
-The WP15 protocol under test (three changes to the WP11 rule, each forced by a
-cell here — see the battery comments):
+The protocol under test is PRODUCTION's judgment, imported — not re-implemented
+(107 ruling B1: a backtest that validates its own copy of the stop rule
+validates nothing about production):
 
-* HONEST STOP BAND: the stop decides on the UNCLAMPED band (MAD x 1.4826 x 3,
-  floored at SPRT_BAND_FLOOR, the CAP REMOVED from the decision). The cap made
-  the stop's confidence interval lie whenever the true window noise exceeded
-  1.5%: the interval claimed ±1.5% around a ratio whose real spread was 2%+,
-  and marginal "clear loss" stops fired on ordinary noise. The cap keeps its
-  OTHER consumers (the verdict-side band constants stay put; this file's
-  SPRT_BAND_CAP below models the driver-side band, not the stop's).
+* PRODUCTION LOSS STOP: timing.py's ``sprt_stop_verdict`` — the clamped
+  resolvable_diff family band [floor, cap]. This is the mixed configuration
+  every deployed job runs (clamped band + persistence + family floor), so the
+  cells below are the flip record for exactly what production executes.
 * PERSISTENCE: a loss stop must hold at the current candidate AND the previous
   one (the previous protocol's ratio is recomputed from the same sides trimmed
   to n-1 — no extra windows). One transient dip in one candidate protocol used
@@ -22,6 +20,9 @@ cell here — see the battery comments):
   pairs — WP15 band pooling) the earliest stop candidate is the 3rd window, not
   the 2nd. A 2-window stop on one workload of three is half the evidence the
   single-measurement rule had, and the geomean verdict amplifies the drag.
+* WIN STOP (WP15 N-B14): timing.py's ``sprt_win_stop_verdict`` on the
+  unclamped honest band (``sprt_band``) — safe only under the driver's C14
+  confirmation coupling, which the win battery prices.
 
 Batteries and gates:
 
@@ -54,6 +55,7 @@ never a per-measurement fit (which would let a quiet draw keep what a run-level
 margin would revert).
 
 Usage: python scripts/backtest_early_stop.py [trials_per_cell]
+       (forgekernel venv — the imported timing.py pulls torch)
 """
 
 from __future__ import annotations
@@ -62,39 +64,24 @@ import math
 import random
 import statistics
 import sys
+from pathlib import Path
 
-# --- timing.py's constants (drift pair — keep in sync, see docstring) ----------
-DEVICE_REPS = 5           # windows per side in one paired measurement
-SPRT_MIN_PAIRED = 4
-SPRT_MIN_WINDOWS = 2      # single-workload floor (family cards stop no earlier
-SPRT_MIN_WINDOWS_FAMILY = 3   # than the 3rd window — the FAMILY FLOOR change)
-SPRT_BAND_FLOOR = 0.005
-SPRT_BAND_CAP = 0.015     # verdict-side cap; the STOP decides UNCLAMPED (WP15)
+# --- production judgment (the subject under test — never a local copy) --------
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from forgekernel.card_template.eval import timing as _timing  # noqa: E402
+
+DEVICE_REPS = _timing.DEVICE_REPS             # windows per side, one paired measurement
+SPRT_MIN_WINDOWS = _timing.SPRT_MIN_WINDOWS   # single-workload floor (family cards
+SPRT_MIN_WINDOWS_FAMILY = _timing.SPRT_MIN_WINDOWS_FAMILY  # stop no earlier than this)
+SPRT_BAND_FLOOR = _timing.SPRT_BAND_FLOOR
+SPRT_BAND_CAP = _timing.SPRT_BAND_CAP
+POOL_MAX = _timing._SPRT_POOL_MAX
+sprt_stop_verdict = _timing.sprt_stop_verdict
+sprt_win_stop_verdict = _timing.sprt_win_stop_verdict
+
 WORKLOADS = 3             # the geomean family battery's card width
-POOL_MAX = 12
-
-
-def sprt_band_raw(ratios, floor=SPRT_BAND_FLOOR):
-    """The honest stop band: MAD x 1.4826 x 3, floored, NOT capped (WP15)."""
-    vals = [r for r in ratios if r > 0.0]
-    if len(vals) < SPRT_MIN_PAIRED:
-        return None
-    mad = statistics.median(abs(r - statistics.median(vals)) for r in vals)
-    return max(3.0 * 1.4826 * mad, floor)
-
-
-def sprt_stop_verdict(ratio, ratios):
-    """The timing.py LOSS rule (WP15 form): True when even the honest interval's
-    TOP sits below parity."""
-    band = sprt_band_raw(ratios)
-    return band is not None and ratio + band < 1.0
-
-
-def sprt_win_stop_verdict(ratio, ratios, margin):
-    """The timing.py WIN rule (WP15 N-B14): True when even the honest interval's
-    BOTTOM sits above parity by more than the confirmation band."""
-    band = sprt_band_raw(ratios)
-    return band is not None and margin > 0 and ratio - band > 1.0 + margin
 
 
 class Controller:
@@ -319,9 +306,10 @@ def main(trials: int = 4000) -> int:
     ]
     noises = [0.003, 0.010, 0.020]
     print(f"backtest_early_stop: {trials} paired trials per cell — full and early read "
-          f"the SAME windows; DEVICE_REPS={DEVICE_REPS}, stop band = UNCLAMPED "
-          f"(floor {SPRT_BAND_FLOOR}, cap {SPRT_BAND_CAP} verdict-side only); "
-          f"persistence=2; family floor={SPRT_MIN_WINDOWS_FAMILY} windows")
+          f"the SAME windows; DEVICE_REPS={DEVICE_REPS}, stop verdict = timing.py "
+          f"sprt_stop_verdict (LOSS band clamped to [{SPRT_BAND_FLOOR}, {SPRT_BAND_CAP}] "
+          f"— the production mixed configuration: clamped + persistence + family floor); "
+          f"win band = unclamped sprt_band")
 
     # --- battery 1: iid loss (the WP11 gate) ------------------------------------
     rows, saved_t, full_t = [], 0, 0

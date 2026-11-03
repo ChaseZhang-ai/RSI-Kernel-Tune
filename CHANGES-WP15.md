@@ -19,7 +19,7 @@
 | `resolvable_diff` 返回值 | record 级比值对滚动 max 的残差 MAD×1.4826×3，clamp [0.005, 0.015] | **分层**：σ_within（job 内逐窗配对偏差 pool）与 σ_between（record 级比值 leave-one-out 残差 + 确认 job 比值注入）取 max 后 ×3，clamp 不变；drift 行剔除（两级回退） | 新旧数字**不可直接横比**：v2 去掉了 v1 的两类偏差（滚动 max 钉住残差 → 爬升段自我钝化；job 内窗噪声从未入估）。CHANGES §2 一致性矩阵给出同数据下的对照 |
 | running best | 同 cluster 全部 KEEP 行 gate_ms 取 min（最幸运一抽） | min 不变，但 (a) drift 行剔除；(b) **每个新 best 落带即确认一次**，行上 gate 值=独立 job 读数的 median（median-of-medians）；(c) 行携带 `confirm_readings`/`best_standard_error`/`best_low_confidence` | 跨代比较终值时：三代 best 是确认中位数，二代是单 draw——三代同条件下**系统性略高**（去幸运偏差），这是特性 |
 | plateau margin | `min(noise_floor, resolvable_diff)` | 同式（分母换 v2），窗口行同样剔除 drift | 与 watermark band 恒同源（G8.2 硬义务，测试钉死） |
-| SPRT 停判带宽 | MAD×1.4826×3 clamp [floor, cap] | 停判用**未钳 cap** 的诚实带宽（floor 保留）；2 点持续性；族卡 3 窗停判地板；多 workload band pool 化 | 旧常数 SPRT_BAND_CAP 仍是文档/对漂口径；停判不再读它（§5 回测为证） |
+| SPRT 停判带宽 | MAD×1.4826×3 clamp [floor, cap] | **loss 停判维持钳 [floor, cap]**（107 裁决 B1 更正：交付版的未钳形式是被覆盖的死定义，生产从未生效——见 §12）；2 点持续性；族卡 3 窗停判地板；多 workload band pool 化；win 方向带宽未钳（`sprt_band`，C14 耦合下） | 钳 cap 的族 cell 代价（最差 win-lost 1.35%）在生产语义重跑中如实显形，仍在 2% 门内（§12） |
 
 **预算影响估算**（30 号红线义务）：A1 常规化使每个新 best 多买 1 个确认 job（`confirm_budget_per_iter` 共用，默认 1/iter 不变）。REVERT 主导的迭代序列不触发；爬升段每 KEEP +1 job。SPRT 本地默认开后损失方向早停抵回部分（回测：明确亏损省 3-60% 窗，§5）。
 
@@ -46,7 +46,7 @@
 - **签名/clamp/回退不变**：`resolvable_diff(records, gate_window, *, floor, cap)` + 新可选 `raw=None`（C8 注入点：`{"ratios": [...], "pairs": [...]}`，与 record 样本 **pool** 而非替换）。`<RESOLVABLE_MIN_SAMPLES` 回退 cap 逐字节不变。
 - σ 分层：within = workload 块里 index 对齐的 `(ref_i/kernel_i)` 对本记录 own-center 的偏差（kernel 消掉，纯窗噪声；`_SprtController._candidate_pairs` 同族数据）；between = record 级比值 **leave-one-out** 残差（"除本条外其余读数的 robust 中心"——滚动 max 基线退役）+ 确认 memo 注入。合成=clamp(max(σ_w,σ_b)×3, floor, cap)。
 - **drift 剔除两级回退**：`_drift_clean` 在 resolvable_diff/detect_plateau/`_best_ms` 三处生效——`clock_drift=True` 行在剩余干净行 ≥ 需要样本数时剔除；全 drift 历史照测（回退=现行为）。测试：`test_drift_rows_drop_from_best_plateau_and_sigma`、`test_plateau_excludes_drift_rows_with_fallback`。
-- **detect_plateau 同步**（乙G8.2 硬义务）：margin 一处计算（同一 resolvable_diff），窗口行 drift 剔除，`raw` 透传；`test_plateau_and_watermark_band_move_together_g82` 钉死同源恒等式。
+- **detect_plateau 同步**（乙G8.2 硬义务）：margin 一处计算（同一 resolvable_diff），窗口行 drift 剔除，`raw` 透传（**107 裁决 B2 更正**：交付版 driver.py 唯一调用点漏传 raw——memo 非空时两带分叉，修复 commit 已补上）；恒等式由两个真测试钉死：`test_plateau_margin_consumes_the_confirmation_memo_g82`（memo 分叉 fork：band 0.005→0.015，plateau 判定随之翻转）+ `test_run_inner_loop_plateau_reads_the_confirmation_memo_g82`（经 run_inner_loop 端到端，变异验证：撤掉透传测试即红）。
 - **cluster 过滤补齐**（丙 §2 缺口 3）：确认带现在消费 `_on_cluster(...)` 行（driver.py `_confirm_suspicious_watermark`），与 detect_plateau 的窗口一致。
 - **新函数名**（C8）：`combined_workload_test`（per-workload Stouffer 合成检验，z≥2 判 significant，单侧 p Abramowitz-Stegun；**判定主路零消费**——只进 plateau/audit 诊断块 advisory 行与 driver 触发文案）、`best_standard_error`（log 域 se：≥2 个确认 draw 用其 stdev/√n，否则 best 行 workload 块原始读数的 1.2533×MAD/√n；ci95 = best×exp(±1.96 se)）。
 - **corr_margin_ratio 不在本包**（围栏：归 WP20）——`parse.py` REVERT 行未动。
@@ -59,7 +59,7 @@
 |---|---|---|---|
 | 1 | 跳变 > max(watermark_margin, rd) | 两 job 协议（确认+仲裁）不变 | 不变 |
 | 2 | [rd, margin) 带 | confirm_budget_per_iter | 不变 |
-| 3 | **drift（平级 if）** | budget | `elif drifted`→平级：sub-rd+drift 漏洞（丙 §3/§6）关闭，预算不变 |
+| 3 | **drift（平级链位）** | budget | **口径更正（107 裁决 F3）**：42 报告所称 "sub-rd+drift 免确认洞"经与 359696b/19e885b 两代基线逐行核实**不存在**（`elif drifted` 在 sub-rd 区间可达且 band=True，丙线误读）；本包把触发链拍平（margin/band/drift/NCU 同层 elif），行为与基线逐分支等价——**加固而非修复**，预算不变 |
 | 4 | NCU 回归 > max(1.05, 1+rd) | 两 job | 常数迁移（见 §6 对照表 #5） |
 | 5 | **窗间 spread > 2×rd**（A11：`gate_spread_pct` 首个消费者） | budget | 新增：DVFS 双峰 draw 必确认 |
 | 6 | **SPRT win 方向早停**（N-B14/C14） | budget | 新增：截断 draw 未过确认前不入 watermark/plateau/定价 |
@@ -77,7 +77,7 @@
 
 ### timing.py（围栏内：SPRT band pool 化 + 逐窗遥测；`measure_paired` 一字不动）
 
-- 停判带宽诚实化：`sprt_band` = MAD×1.4826×3，**floor 保留、cap 从停判中移除**（cap 钳制让置信区间在真噪声 >1.5% 时撒谎——回测族 cell 的 4% win-lost 即其代价）。
+- **停判带宽口径更正（107 裁决 B1）**：交付版 `sprt_stop_verdict` 双定义——新增未钳版（timing.py:226）被基线钳 cap 版（:270）在模块加载时覆盖，"cap 从停判中移除"在生产路径**从未生效**（95-审查报告 B1 实锤）。修复：删除死定义，钳 cap 版（clamp [0.005, 0.015]）为唯一实现；未钳 `sprt_band` 仅服务 win 方向（`sprt_win_stop_verdict`，C14 耦合）。
 - 持续性：loss 停判须在候选 n 与 n-1 两个协议同时成立（同 sides 重算，零额外窗）。
 - 族地板：`measure_windows_workloads` 置 `_SPRT_FAMILY_JOB`，控制器最小停判点 2→3 窗。
 - band pool：同 job 各 workload 的 decided pairs pool（≤12）喂后续控制器。
@@ -92,21 +92,21 @@
 
 ### 回测（`scripts/backtest_early_stop.py`，4000 paired trials/cell，完整输出=交付证据）
 
+**证据链更正（107 裁决 B1②③）**：下版粘贴验证的是脚本自带的第二套未钳实现（95-审查报告 B1——"回测验证了回测自己"），**作废**。脚本现 import 生产 `timing.py` 的 `sprt_stop_verdict`/`sprt_win_stop_verdict`/常数/pool 上限（恒等由 `test_backtest_judgment_is_production` 钉住），以下为**生产混合组态**（钳 cap loss 停判 + 持续性 + 族地板 + band pool；win 未钳）的重跑输出（2026-11-04，seed 20261103 不变）：
+
 ```
-backtest_early_stop: 4000 paired trials per cell — full and early read the SAME windows;
-DEVICE_REPS=5, stop band = UNCLAMPED (floor 0.005, cap 0.015 verdict-side only);
-persistence=2; family floor=3 windows
-GATE (iid loss (WP11 gate)): PASS (false-win total 0, worst win-lost 0.00% < 2.0%)
-GATE (AR(1) autocorrelation rho=0.3 (WP15 cell 1)): PASS (false-win total 0, worst win-lost 0.00% < 2.0%)
-GATE (AR(1) autocorrelation rho=0.6 (WP15 cell 1)): PASS (false-win total 0, worst win-lost 0.00% < 2.0%)
-GATE (geomean family ...): PASS (false-win total 0, worst win-lost 0.03% < 2.0%)
-GATE (win): PASS (no-fire on loss/null; won-early-lost-full <= 2%)
+backtest_early_stop: 4000 paired trials per cell — full and early read the SAME windows; DEVICE_REPS=5, stop verdict = timing.py sprt_stop_verdict (LOSS band clamped to [0.005, 0.015] — the production mixed configuration: clamped + persistence + family floor); win band = unclamped sprt_band
+GATE (iid loss (WP11 gate)): PASS (false-win total 0, worst win-lost 0.03% < 2.0%)
+GATE (AR(1) autocorrelation rho=0.3 (WP15 cell 1)): PASS (false-win total 0, worst win-lost 0.07% < 2.0%)
+GATE (AR(1) autocorrelation rho=0.6 (WP15 cell 1)): PASS (false-win total 0, worst win-lost 0.05% < 2.0%)
+GATE (geomean family ...): PASS (false-win total 0, worst win-lost 1.35% < 2.0%) [raw arm disagreements … routed to confirmation]
+GATE (win): PASS (no-fire on loss/null; won-early-lost-full <= 2% — the driver's C14 confirmation re-measures every win-stopped reading before it counts)
 OVERALL: PASS
 ```
 
-- 节省：clear loss x0.90 省 40%（iid）/39.9%（AR1 ρ=0.3）；loss x0.97 @1% 省 14.9%；族卡 loss 组合省 2.6-26.6%；整体 1,539,804/1,680,000 窗（8.3%）。
-- **诚实记账**：族 battery 的 raw 口径（driver 无 veto 时）在 2% 噪声边界 cell 留有 1/60000 臂间分歧（`raw-false-win=1`，行内可见）——系统裁决（loss-stopped workload 否决卡级 KEEP，触发器 #7）下该方向**结构性为 0**（无停判→两臂全等；有停判→早臂不得判赢）。win 格：loss/null 不点火（算术单侧），x1.020 win-stopped 6.4% 且 won-early-lost-full 8/4000=0.2%——正是 C14 确认耦合的存在理由。
-- 回测发现并修复的协议缺陷（cell 的价值）：capped band 停判在 2% 噪声下产生 4% 族 win-lost → 未钳带宽+持续性+族地板后 0.03%。
+- 节省（生产组态）：整体 1,480,908/1,680,000 窗（11.9%）；clear loss x0.90 省 40%；loss x0.97 @1% 噪声省 38.9-39.3%、@2% 省 32.4-33.3%；族卡 loss 组合省 22.5-26.7%。
+- **诚实记账（生产组态）**：钳 cap 使族 cell 最差 win-lost 达 **1.35%**（2% 噪声 mixed 2win1flat 格；未钳版同格 0.03%）——钳 cap 的代价如实显形，仍在 2% 门内；两 cell（AR(1) 窗自相关 + 3-workload 族误差）全过 → **默认翻转保留**（107 裁决③：本地 delivery `sprt_early_stop=true` 的硬前置现为对生产对象成立）。raw 臂间分歧：2% 噪声格 1+3/60000（行内 `raw-false-win` 可见），系统裁决（loss-stopped 否决卡级 KEEP → 确认协议，触发器 #7）下假赢方向结构性为 0。win 格：loss/null 不点火，won-early-lost-full 1/4000=0.025%——C14 耦合的存在理由。
+- 钳 cap 与未钳的取舍记档：未钳 loss 停判（win-lost 0.03% 但假赢面向噪声更宽）**不随本包交付**；若 WP23 A/B 需要重开该口径，以生产函数 `cap` 参数为准再走回测门。
 
 ### win 方向早停（契约 C14）
 
@@ -117,7 +117,7 @@ OVERALL: PASS
 | # | 常数 | 位置 | 旧值 | 迁移语义 | 消费点 |
 |---|---|---|---|---|---|
 | 1 | `NOISE_FLOOR_PCT` | `loop/meta_shapes.py:40` | 0.5% | `merged_floor(floors, floor=)` 可选参数=本 run `resolvable_diff×100`；**max(现值, resolvable)**——常数仍是安静 run 下界 | 杠杆定价合并表（driver 传入）；旧调用 None=原行为 |
-| 2 | `NOISE_FLOOR_PCT` | `skills/lever-pricing/lever_pricing_run.py:156` | 0.5% | spec `noise_floor_pct` 键（driver 建 levers.json 时写入 resolvable band），`floor_pct()=max(常数, spec)`；旧驱动无键=原行为 | 三个消费点（noise_floor/ablation noise/stack noise） |
+| 2 | `NOISE_FLOOR_PCT` | `skills/lever-pricing/lever_pricing_run.py:156` | 0.5% | spec `noise_floor_pct` 键（driver 建 levers.json 时写入 resolvable band），`floor_pct()=max(常数, spec)`；旧驱动无键=原行为 | 三个消费点（noise_floor 两处 + time_ablations 一处；95-审查 F10 更正：无独立 stack noise 调用点） |
 | 3 | `noise_floor` | `detect_plateau`（parse.py） | 0.015 上限 | **天花板语义不变**；live margin=v2 分层估计（§3）——与 watermark band 同源 | plateau 判定 |
 | 4 | `watermark_margin` | driver.py LoopContext | 0.03 | 触发时 `margin=max(配置值, resolvable_diff)`——吵闹 run 的水位margin骑自己的带；配置值是下界 | `_confirm_suspicious_watermark` |
 | 5 | `_NCU_REGRESSION_BAND` | driver.py | 1.05 | `_ncu_regression_band = 1 + max(0.05, rd)`——run 自己的分辨率看不见的 kernel-clock 移动不算回归信号 | NCU 回归触发器 + 确认清算 |
@@ -155,9 +155,36 @@ OVERALL: PASS
 
 ## 11. 回归与验收核对
 
-- 基线 2332 → 交付全绿（§0）；WP15 新测试 25 件（一致性矩阵/覆盖率/幸运 fixture/记账/新统计/drift 剔除/G8.2 同步/top-k/seam 断言/win/loss-stopped 耦合/mode 断言/交付依赖回测 PASS 断言）。
+- 基线 2332 → 交付全绿（§0）；WP15 新测试 **26 件**（95-审查 F10 更正：初稿误记 25）；107 修复会话后为 **28 件**（同义反复 G82 撤 1、真恒等式补 2、回测恒等补 1，全量 2360 passed，见 §12）。
 - **顺带修复一处存量测试卫生缺陷**：`test_wp11_apply_cfg_reads_loop_toml`/`test_wp15_sprt_default_is_delivery_dependent` 原用 `monkeypatch.delenv` 清理 `_wp11_apply_cfg` 写入 `os.environ` 的 `FK_SPRT_EARLY_STOP`——`monkeypatch.delenv` 的 teardown-undo 会**恢复生产代码设置的值**，泄漏给后续测试；本包给 `paired_performance` 加 `sprt` 块后，该泄漏让 `test_multi_workload_perf` 的 workload 闭集断言在特定顺序下失败（环境变量开着 → FakeGpu fixture 的 loss 组合点火）。清理改为 `os.environ.pop`（不经 monkeypatch 账本），并加 conftest autouse fixture 兜底弹 `FK_SPRT_*`（本地翻转是生产行为：每个 FakeBackend loop 测试都会置位 env）。
 - **顺带修复 sprt 块的延迟上报缺陷**（真 bug，非测试问题）：`workloads_performance` 在**全部 workload 测完后**才逐块调 `paired_performance`——模块级 `_last_sprt_decision` 里只剩最后一个 workload 的决策，且纪元检查恒等通过，导致末位 workload 的 SPRT 决策错骑到**所有** workload 的 eval 块上。修法：`measure_windows_workloads` 在每个 measure_paired 返回时把**本 workload 的决策就地挂到它的 paired dict**（`_sprt_decision`，私有键，paired_performance pop 消费、永不进 JSON），单测量 bench 保留"全局+纪元相等"回退路径。
 - 回测输出粘贴 §5；真实 record 回放的新旧带宽对比表：**无真实 run 存档可用**（仓库不存绝对时间，42 §8 同款限制）——以一致性矩阵（§2）+ 合成覆盖率替代，此为诚实交底。
 - dry-run 断言：`best_ci95` 行（test_digest_carries_best_ci95）、低置信标注（test_band_confirmation_disagreement…）、gate-only submit 断言（mock backend 载荷差异，test_confirm_job_mode_reaches_the_submit_payload）✓。
 - CHANGES：band 口径变化记账 §1 + 6 常数对照表 §6 + SPRT 翻默认的回测依据引用 §5 ✓。
+
+## 12. 107 号裁决修复会话（2026-11-04，快速复审窗口）
+
+依据：`107-总工裁决-WP15-19审查处置与补流令.md`。修复范围=B1+B2+非阻塞 1/2/4 + CHANGES 更正；其余交付不动。
+
+### B1（SPRT 停判生产路径）
+
+1. **删除死定义**：`timing.py` 未钳 `sprt_stop_verdict`（原 :226）整段删除，钳 cap 版（floor/cap 可配，clamp [0.005, 0.015]）为唯一实现——与部署实况一致，**运行时行为零变化**；`sprt_band` 文档改为 win 方向专用口径。
+2. **回测禁止第二实现**：`scripts/backtest_early_stop.py` 删自带 `sprt_band_raw`/双 verdict 复制品，`sprt_stop_verdict`/`sprt_win_stop_verdict`/SPRT 常数/pool 上限一律 import 生产 `timing.py`；`test_backtest_judgment_is_production` 断言恒等（`is`）防回归。
+3. **生产语义重跑**（红线③前置，seed 20261103、4000 trials/cell）：OVERALL **PASS**——iid 0.03%、AR(1) ρ=0.3 0.07%、ρ=0.6 0.05%、族 1.35%、win 门过；整体省 11.9% 窗。→ **默认翻转保留**（本地 delivery `sprt_early_stop=true` 的证据现在对生产对象成立）；钳 cap 的族 cell 代价（0.03%→1.35%）如实入账（§5）。
+
+### B2（plateau↔watermark band 同步）
+
+1. `driver.py` stop lane 的 `detect_plateau` 调用补 `raw=_confirm_raw_memo(ctx)`（G8.2：memo 非空时两带同源）。
+2. 同义反复测试换成两个真测试：`test_plateau_margin_consumes_the_confirmation_memo_g82`（fork：memo 使 band 0.005→0.015，plateau 判定随之翻转）+ `test_run_inner_loop_plateau_reads_the_confirmation_memo_g82`（经 run_inner_loop 端到端；**变异验证**：临时撤掉透传 → 测试红，已还原）。
+
+### 非阻塞项落档
+
+- **F3 口径**：drift 触发注释与 §4 触发表 #3 改口——42 报告"sub-rd+drift 免确认洞"两代基线核实不存在（丙线误读）；触发链拍平为加固而非修复。代码结构不动（行为与基线等价）。
+- **F7 补围栏**：任务书 62 §2 补 `meta_shapes.py`/`lever_pricing_run.py`/`analytic_floor.py`（仅任务宿主用途，107 裁决非阻塞 2）。
+- **F8 乙A13**：per-workload 回退护栏行维持 P2 冻结，**挂入 backlog（WP25 建档收录）**。
+- **F9/C5 fresh-recheck**：diff 实核零触碰（parse.py 的 fresh_recheck 行为上下文非新增）——无还原动作，本条即记录。
+- **F10 小出入**：§11 测试数 25→26 更正；§6 #2 消费点口径更正（noise_floor×2+time_ablations×1）。
+
+### 修复会话回归
+
+`~/venvs/forgekernel/bin/python -m pytest tests/ -q` → **2360 passed in 298.18s**（基线 2332；净增 28）。回测门测试（300 trials）随改随绿。

@@ -172,15 +172,14 @@ SPRT_MIN_WINDOWS_FAMILY = 3  # WP15: a pooled (multi-workload) controller stops
 SPRT_BAND_FLOOR = 0.005    # == loop/parse.py RESOLVABLE_DIFF_FLOOR (drift pair)
 SPRT_BAND_CAP = 0.015      # == loop/parse.py RESOLVABLE_DIFF_CAP (drift pair)
 #
-# WP15 STOP-BAND HONESTY (the backtest's AR(1) + family cells forced this): the
-# STOP decides on the UNCLAMPED band — MAD x 1.4826 x 3, floored, the CAP
-# REMOVED from the decision. The cap made the stop's confidence interval lie
-# whenever the true window noise exceeded 1.5%: the interval claimed ±1.5%
-# around a ratio whose real spread was 2%+, and marginal "clear loss" stops
-# fired on ordinary noise (and on a 3-workload card those drags cost FAMILY
-# wins — the cell that measured 4% win-lost under the capped band). SPRT_BAND_CAP
-# keeps its verdict-side/documented meaning; the stop's band is honest or the
-# rule does not stop.
+# WP15 STOP-BAND CALIBRATION (107 ruling B1 correction — an earlier draft of
+# this block claimed the loss stop decides on an UNCLAMPED band; that form was
+# a shadowed dead definition and never ran): the LOSS stop decides on the
+# clamped band [SPRT_BAND_FLOOR, SPRT_BAND_CAP], the resolvable_diff family —
+# the mixed configuration every deployed job runs, and the one the backtest's
+# AR(1) + family cells are the flip record for (worst family win-lost 1.35% at
+# 2% noise, inside the 2% gate). The WIN stop reads the unclamped honest band
+# (sprt_band below) and is safe only under the driver's C14 confirmation.
 #
 # WP15 PERSISTENCE: a loss stop must hold at the current candidate AND the
 # previous one (the previous protocol's ratio is recomputed from the same sides
@@ -212,35 +211,19 @@ _SPRT_FAMILY_JOB = False   # set by measure_windows_workloads: this job is a car
 
 
 def sprt_band(ratios, *, floor: float = SPRT_BAND_FLOOR) -> float | None:
-    """The SPRT STOP band (WP15, honest form): MAD x 1.4826 x 3, floored, NOT
-    capped — the confidence interval the stop decides on must describe the
-    noise it actually saw. None below SPRT_MIN_PAIRED pairs (cannot speak)."""
+    """The WIN-stop band (WP15 N-B14): MAD x 1.4826 x 3, floored, NOT capped —
+    the win direction's interval must not under-state the noise it actually
+    saw. The LOSS stop decides on the clamped resolvable_diff family band
+    [floor, cap] instead (computed inline in sprt_stop_verdict below — 107
+    ruling B1: the unclamped loss-side form was a shadowed dead definition and
+    is gone; the clamped semantics are what every deployed job ran). None
+    below SPRT_MIN_PAIRED pairs (cannot speak)."""
     vals = [float(r) for r in (ratios or ()) if isinstance(r, (int, float))
             and not isinstance(r, bool) and float(r) > 0.0]
     if len(vals) < SPRT_MIN_PAIRED:
         return None
     mad = statistics.median(abs(r - statistics.median(vals)) for r in vals)
     return max(3.0 * 1.4826 * mad, floor)
-
-
-def sprt_stop_verdict(ratio, ratios) -> bool:
-    """Whether the candidate measurement reads a CLEAR LOSS under the verdict's
-    own estimator (the only direction this rule may stop on — see the block
-    comment above).
-
-    ``ratio``: the candidate measurement's gate ratio, computed EXACTLY as the
-    bench reports it (the mean of the mirrored halves' device medians, ref over
-    kernel). ``ratios``: the candidate's ref/kernel per-window pairs — the band
-    is their median absolute deviation x 1.4826 x 3, floored (WP15: uncapped —
-    the stop's interval must not under-state the noise). True = even the
-    interval's TOP sits below parity (ratio + band < 1). Deciding with the
-    verdict's own ratio on the verdict's own data is what makes the false-win
-    direction arithmetically impossible: a measurement that never stopped IS
-    the full measurement (identical ratio, identical verdict), and a stopped
-    one carries ratio < 1 - band <= 1 - floor, which no margin >= 0 can score
-    KEEP."""
-    band = sprt_band(ratios)
-    return band is not None and ratio + band < 1.0
 
 
 def sprt_win_stop_verdict(ratio, ratios, margin: float = SPRT_WIN_MARGIN) -> bool:

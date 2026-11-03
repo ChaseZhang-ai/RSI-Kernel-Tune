@@ -295,23 +295,54 @@ def test_plateau_excludes_drift_rows_with_fallback():
     assert detect_plateau(all_drift, window=3, gate_window="device") is True  # measures as before
 
 
-def test_plateau_and_watermark_band_move_together_g82():
-    # G8.2's hard obligation: the plateau margin IS the watermark band — both
-    # call the same resolvable_diff, so a v2 change moves both. Pinned by
-    # computing each and asserting identity on the same records.
-    rng = random.Random(31)
-    recs = [_rec(i, 1.0 * rng.lognormvariate(0.0, 0.004)) for i in range(6)]
-    from forgekernel.loop.driver import LoopContext
-    ctx = LoopContext(op="d", workspace=None, milestone=None, kb_dir=None,
-                      status_path=None, meta_dir=None, kernel_file="k.py",
-                      branch_prefix="b", target_ms=1.0, deadline_epoch=1e18,
-                      backend=None, now=lambda: 0.0)
-    band = resolvable_diff(recs, "device", floor=ctx.resolvable_floor,
-                           cap=ctx.resolvable_cap)
-    margin = min(0.015, band)
-    assert margin == min(0.015, resolvable_diff(recs, "device",
-                                                floor=ctx.resolvable_floor,
-                                                cap=ctx.resolvable_cap))
+def test_plateau_margin_consumes_the_confirmation_memo_g82():
+    # G8.2's hard obligation: the plateau margin IS the watermark band — one
+    # resolvable_diff, both judges. Pinned on a FORK: a non-empty confirmation
+    # memo pools injected ratios into the between-job component and MOVES the
+    # band (0.005 -> 0.015 here), so any side that stops reading the memo
+    # diverges visibly instead of agreeing by construction. The 3 prior rows
+    # sit 2.0 ms, the 3 recent rows 1.984 ms (-0.8%): inside the memo'd band,
+    # past the raw-less one — the plateau verdict must flip with the band
+    # exactly as the driver's confirmation band does.
+    memo = {"ratios": [0.992, 1.008] * 6}
+    recs = ([_rec(i, 1.0, ms=2.0) for i in range(3)]
+            + [_rec(3 + i, 1.0, ms=1.984) for i in range(3)])
+    band_without = resolvable_diff(recs, "device",
+                                   floor=RESOLVABLE_DIFF_FLOOR, cap=RESOLVABLE_DIFF_CAP)
+    band_with = resolvable_diff(recs, "device",
+                                floor=RESOLVABLE_DIFF_FLOOR, cap=RESOLVABLE_DIFF_CAP,
+                                raw=memo)
+    assert band_with > band_without                 # the fork is real: bands apart
+    assert detect_plateau(recs, window=3, gate_window="device") is False
+    assert detect_plateau(recs, window=3, gate_window="device", raw=memo) is True
+
+
+def test_run_inner_loop_plateau_reads_the_confirmation_memo_g82(tmp_path):
+    # The sync's second half is the DRIVER's stop lane: its detect_plateau call
+    # must forward the confirmation memo (107 ruling B2 — driver.py was the one
+    # call site that could silently split the two bands). Same fork through the
+    # production loop: with the memo, the segment's 0.8%-gain rows sit inside
+    # the 1.5% band and the run stops "plateau"; a driver that drops the raw
+    # passthrough reads the 0.5% raw-less band, calls the rows progress and
+    # climbs to "max_iters" instead.
+    from test_loop_driver import NCU, REC, FakeBackend, _ctx
+    from forgekernel.loop.driver import run_inner_loop
+
+    def eval_ref(ms):
+        return ('=== JSON ===\n{"correctness": {"pass": true}, "performance": '
+                '{"bwd_median_ms": %r, "device_median_ms": %r, "ref_device_ms": %r, '
+                '"vs_ref_device": 1.0}}' % (ms, ms, ms))
+
+    be = FakeBackend(
+        [REC(f"D{i}", 2.0) for i in range(1, 7)],
+        [eval_ref(2.0), NCU, eval_ref(2.0), NCU]
+        + [eval_ref(1.984), NCU, eval_ref(1.984)]     # slack: a confirm draw, if any
+        + [eval_ref(1.984), NCU] * 5)
+    ctx = _ctx(tmp_path, be, target_ms=0.1)
+    ctx.gate_window = "device"
+    ctx.max_iters = 6
+    ctx.confirm_ratio_memo = {"device": [0.992, 1.008] * 6}
+    assert run_inner_loop(ctx, start_iter=0) == "plateau"
 
 
 # --- numeric FAIL feedback: top-k worst checks --------------------------------

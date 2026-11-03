@@ -785,6 +785,24 @@ def test_backtest_gate_passes():
     assert "OVERALL: PASS" in r.stdout   # WP15: per-battery gates + the overall
 
 
+def test_backtest_judgment_is_production():
+    # 107 ruling B1: the backtest must judge through timing.py's own verdicts —
+    # a local second implementation once had the gate validate the script
+    # instead of production (the delivered flip's evidence was about the wrong
+    # object). The import IS the identity; this test forbids its regression.
+    import importlib.util
+
+    from forgekernel.card_template.eval import timing
+    spec = importlib.util.spec_from_file_location(
+        "backtest_early_stop", REPO / "scripts" / "backtest_early_stop.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.sprt_stop_verdict is timing.sprt_stop_verdict
+    assert mod.sprt_win_stop_verdict is timing.sprt_win_stop_verdict
+    assert mod.SPRT_BAND_FLOOR == timing.SPRT_BAND_FLOOR
+    assert mod.SPRT_BAND_CAP == timing.SPRT_BAND_CAP
+
+
 # --- the zero-behavior-change gate (all switches off) --------------------------
 
 _WP11_TELEMETRY = ("agent_turn_s", "eval_job_s", "ncu_job_s", "teacher_s", "queue_wait_s")

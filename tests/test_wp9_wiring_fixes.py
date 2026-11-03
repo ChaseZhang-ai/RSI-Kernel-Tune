@@ -34,6 +34,10 @@ def _fake_task(**over):
         shapes=[SimpleNamespace(name="prefill", axes={"m": 8192, "n": 4096})],
         loop_language="cutedsl", arch="sm100", target=SimpleNamespace(timing="device"),
         budget=SimpleNamespace(reference_hours=8.0), reference=None, mode="generate",
+        # WP8 seam: write_loop_toml reads the teacher prior-supply opt-ins and
+        # the snapshot dir; this fixture opts out of every prior channel.
+        teacher=SimpleNamespace(prior_survey=False, prior_art=""),
+        dir=Path("/nonexistent-wp8-fixture"),
     )
     for k, v in over.items():
         if k == "shapes":

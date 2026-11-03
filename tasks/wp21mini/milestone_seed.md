@@ -1,4 +1,4 @@
-# Milestone — _wp21mini (WP21 mini smoke seed)
+# Milestone — wp21mini (WP21 mini smoke seed)
 
 ## §0 target
 

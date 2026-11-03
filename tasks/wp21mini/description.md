@@ -1,4 +1,4 @@
-# _wp21mini
+# wp21mini
 
 Elementwise add over float32 vectors — the smallest possible CUDA eval surface, for the
 WP21 machine energization smoke only (link & dataflow evidence; never a performance claim).

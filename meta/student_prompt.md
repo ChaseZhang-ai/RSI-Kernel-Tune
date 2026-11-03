@@ -165,10 +165,11 @@ The driver hash-checks the file against the milestone's recipe (anything added, 
 decision_id:        <e.g. D2.3; for a bundle join several with +, e.g. D2.3+D2.4>
 change:             <one objective sentence: which optimization technique / what changed in {KERNEL_FILE}; for a bundle list each item and state the shared budget/knobs>
 files_touched:      <should be only {KERNEL_FILE}>
+kb_used:            <optional; comma-separated names of the KB_DIR entries this iteration actually leaned on, e.g. mbarrier_ring_rolled_loop, tcgen05_commit_slot_release — omit when none>
 ```
 
 > **Do not** write hypotheses, bottleneck judgements or any subjective analysis in the record block — that is your reasoning process and **does not go into the trajectory**.
-> The trajectory records only objective information: the optimization technique (change) + correctness/performance + NCU (filled in by the driver, for successful and failed iterations alike).
+> The trajectory records only objective information: the optimization technique (change) + correctness/performance + NCU (filled in by the driver, for successful and failed iterations alike) + which KB entries the change cited (the driver keeps that per-entry record; it is an objective citation, not analysis).
 > The meta agent diagnoses from measured hardware ground truth, not from your prose.
 
 ## L0 hard rules (a violation voids this iteration)

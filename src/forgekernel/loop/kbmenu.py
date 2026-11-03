@@ -33,7 +33,7 @@ from typing import Callable, Iterable
 
 __all__ = [
     "RULES", "Rule", "build_kb_menu", "parse_symptom_rows", "stale_kb_entries",
-    "kb_cite_name", "SymptomRow",
+    "kb_cite_name", "SymptomRow", "fired_rule_names", "hit_record",
 ]
 
 # --- the fixed rule table -----------------------------------------------------
@@ -161,6 +161,67 @@ RULES: list[Rule] = [
         lambda r, ru: f"dram_pct={_fmt(_num(r, 'dram_pct'))}% (SOL denominator is theoretical peak)",
         None,
         "bandwidth check recipe: skills/probe-recipes/effective_bw.py (re-base SOL on measured node BW)",
+    ),
+    # --- WP18: symptom keys for the beyond-reference supply (hw_kb/CANDIDATES.md
+    # second batch). Appended only (contract C10): the pointers name the nearest
+    # existing index row where the candidate is not yet certified, so a tree
+    # without the row simply renders the LEVER-MENU form — never a made-up
+    # pointer. Thresholds stay coarse: the menu triages, the teacher judges.
+    Rule(
+        "wave-tail",
+        lambda r, ru: (lambda w: w is not None and w >= 1.0 and (w % 1.0) >= 0.05)(
+            _num(r, "waves_per_sm")),
+        lambda r, ru: f"waves_per_sm={_fmt(_num(r, 'waves_per_sm'))} (a non-integer wave count: "
+                      f"the fractional part is a tail wave)",
+        ("persistent",),
+        "tail-wave governance levers (persistent residency to absorb the tail / tile height vs the "
+        "SM count)",
+    ),
+    Rule(
+        "tma-multicast",
+        lambda r, ru: (_num(r, "memory_sol_pct") or 0.0) >= 80.0,
+        lambda r, ru: f"memory_sol_pct={_fmt(_num(r, 'memory_sol_pct'))}% (at the bandwidth roof)",
+        ("multicast",),
+        "cluster multicast / pair-load levers (one gmem read fanned out to many SMEMs)",
+    ),
+    Rule(
+        "warp-spec-pipeline",
+        lambda r, ru: (_num(r, "compute_sol_pct") or 0.0) >= 70.0
+        and (_num(r, "memory_sol_pct") or 0.0) >= 70.0,
+        lambda r, ru: (f"both SOL high (compute={_fmt(_num(r, 'compute_sol_pct'))}%, "
+                       f"memory={_fmt(_num(r, 'memory_sol_pct'))}%)"),
+        ("producer",),
+        "producer/consumer warp-specialization pipeline levers (stage the roles so supply and "
+        "compute overlap)",
+    ),
+    Rule(
+        "prefetch-lead",
+        lambda r, ru: (_num(r, "l2_hit_rate_pct") or 100.0) < 20.0,
+        lambda r, ru: f"l2_hit_rate_pct={_fmt(_num(r, 'l2_hit_rate_pct'))} < 20 (almost no L2 reuse)",
+        ("prefetch",),
+        "bulk-prefetch lead levers (start the next tile's L2 fill early; read the L2 hit rate so "
+        "the prefetch does not evict data with real reuse)",
+    ),
+    Rule(
+        "launch-bounds",
+        lambda r, ru: (_num(r, "regs_per_thread") or 0) >= 96
+        and (_first(_num(r, "spill_st_sectors"), _num(r, "spill_ld_sectors")) or 0) == 0
+        and (_num(ru, "cstack") or 0) == 0,
+        lambda r, ru: f"high regs with no spill (regs_per_thread={_fmt(_num(r, 'regs_per_thread'))})",
+        ("setmaxnreg",),
+        "launch-bounds / controlled-spill variants (a measured spill-for-registers trade can win; "
+        "price it, do not assume)",
+    ),
+    Rule(
+        "l2-policy-window",
+        lambda r, ru: (_num(r, "dram_pct") or 0.0) >= 80.0
+        and (_num(r, "l2_hit_rate_pct") or 0.0) >= 45.0,
+        lambda r, ru: (f"dram_pct={_fmt(_num(r, 'dram_pct'))}% with l2_hit_rate_pct="
+                       f"{_fmt(_num(r, 'l2_hit_rate_pct'))}% (streaming and reused data competing "
+                       f"for L2)"),
+        ("L2",),
+        "L2 access-policy window levers (only where streaming and persistent data compete for L2; "
+        "near the roof without competition it reads as no-op)",
     ),
 ]
 
@@ -375,6 +436,14 @@ def _ledger_lines(rows: list, arch: str, op: str) -> list[str]:
     return out
 
 
+def _prev_resusage(readings: dict) -> dict:
+    """The build-time resource fields of a raw profiler dict, namespaced the
+    same way the driver delivers the newest reading's (``resusage_*`` keys
+    stripped of their prefix; ``resusage_*_kernel`` excluded)."""
+    return {k.removeprefix("resusage_"): v for k, v in readings.items()
+            if k.startswith("resusage_") and not k.endswith("_kernel")}
+
+
 # --- block assembly ------------------------------------------------------------
 
 _HEADER = ("## KB-MENU (deterministic retrieval aid — a pointer is not an answer, "
@@ -384,10 +453,18 @@ _HEADER = ("## KB-MENU (deterministic retrieval aid — a pointer is not an answ
 def build_kb_menu(*, readings: dict, resusage: dict | None = None,
                   ledger_rows: list | None = None, meta_records: list | None = None,
                   index_text: str = "", kb_label: str = "", op: str = "",
-                  recipe_dir: str = "") -> str:
+                  recipe_dir: str = "", prev_readings: dict | None = None) -> str:
     """The KB-MENU block, or ``""`` when no section yields a line (the driver
     injects nothing rather than an empty shell). Pure: the same inputs render
     the same text, byte for byte.
+
+    ``prev_readings`` (WP18) is the second-newest profiler reading. A rule that
+    fired THERE but not on the newest reading renders once with a
+    ``[prev reading]`` marker — the bottleneck changed phase mid-run, and a menu
+    that triages on the newest reading alone would quietly drop the phase the
+    teacher may still be mid-decision on. A rule firing on both renders as
+    before (persistent symptom), and ``None`` (one reading on file, or the
+    driver's default) renders byte-identical output to the pre-WP18 form.
 
     ``recipe_dir`` (absolute) rewrites the recipe-library pointers — the
     teacher runs with cwd = the student workspace, so a bare repo-relative
@@ -395,15 +472,23 @@ def build_kb_menu(*, readings: dict, resusage: dict | None = None,
     repo's absolute recipe directory and the menu names the scripts there."""
     readings = readings or {}
     resusage = resusage or {}
+    prev = prev_readings or {}
     rows = parse_symptom_rows(index_text) if index_text else []
 
     hints: list[str] = []
     lever_forms: list[str] = []
     shown: set[str] = set()
     for rule in RULES:
-        if not rule.when(readings, resusage):
+        fires = rule.when(readings, resusage)
+        fires_prev = bool(prev) and rule.when(prev, _prev_resusage(prev))
+        if not fires and not fires_prev:
             continue
-        trigger = rule.label(readings, resusage)
+        # the trigger line quotes the reading that fired it (newest first) and
+        # marks a prev-only fire: the symptom moved, it did not vanish
+        face, ru_face = (readings, resusage) if fires else (prev, _prev_resusage(prev))
+        trigger = rule.label(face, ru_face)
+        if fires_prev and not fires:
+            trigger += " [prev reading]"
         entry = snippet = ""
         if rule.keywords:
             hit = _match_row(rows, rule.keywords)
@@ -454,3 +539,36 @@ def build_kb_menu(*, readings: dict, resusage: dict | None = None,
 def arch_of(kb_label: str) -> str:
     """``cuda/sm100`` -> ``sm100`` (the ledger rows' ``arch`` field)."""
     return kb_label.split("/")[-1]
+
+
+# --- hit telemetry (WP18; task 5) ----------------------------------------------
+#
+# kbmenu stays pure (contract C7): the counters below only EVALUATE the rule
+# table against the readings the driver is about to render — the driver owns
+# the file, the timestamps and the run-end aggregation.
+
+def fired_rule_names(readings: dict, resusage: dict | None = None,
+                     prev_readings: dict | None = None) -> list[str]:
+    """The rule names that fire for these readings, table order — the pure
+    half of the hit telemetry: the driver renders a menu, evaluates this on the
+    same inputs, and appends one jsonl row. ``prev_readings`` counts a rule
+    that fires only there as a hit too (the prev-marker line the teacher
+    reads)."""
+    resusage = resusage or {}
+    prev = prev_readings or {}
+    prev_ru = _prev_resusage(prev) if prev else {}
+    return [r.name for r in RULES
+            if r.when(readings, resusage) or (prev and r.when(prev, prev_ru))]
+
+
+def hit_record(*, kb_label: str, op: str, rules: list[str], n_hints: int,
+               n_lever_lines: int, n_calibration: int) -> dict:
+    """One ``evidence/kbmenu_hits.jsonl`` row: which rules fired for this
+    render and how many lines each menu section carried. Objective telemetry
+    about the DRIVER's own rendering — nothing here is a claim about the
+    kernel, and nothing reads it back into a decision; the run-end aggregation
+    is the first-hand data on whether KB-MENU pulls its weight (A/B note in
+    CHANGES-WP18)."""
+    return {"kb_label": kb_label, "op": op, "rules": list(rules),
+            "hints": int(n_hints), "lever_lines": int(n_lever_lines),
+            "calibration_lines": int(n_calibration)}

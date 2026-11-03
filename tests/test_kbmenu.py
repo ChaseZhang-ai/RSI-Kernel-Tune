@@ -132,20 +132,32 @@ def test_corrupt_and_foreign_ledger_rows_ignored():
     ({}, {"cstack": 8}, {"spill"}),
     ({"regs_per_thread": 168, "spill_st_sectors": 3}, {}, {"spill", "regs-at-cap"}),
     ({"regs_per_thread": 60, "spill_st_sectors": 3}, {}, {"spill"}),   # low regs: no tier rule
-    ({"regs_per_thread": 200}, {}, set()),                             # regs without spill
+    ({"regs_per_thread": 200}, {}, {"launch-bounds"}),                 # regs without spill: WP18 tier rule
     ({"bankconf_ld": 2}, {}, {"bankconf"}),
     ({"l2_hit_rate_pct": 35.0}, {}, {"l2-low"}),
     ({"l2_hit_rate_pct": 55.0}, {}, set()),
     ({"waves_per_sm": 0.4}, {}, {"waves-low", "wave-quantization"}),
-    ({"waves_per_sm": 1.4}, {}, {"wave-quantization"}),
+    ({"waves_per_sm": 1.4}, {}, {"wave-quantization", "wave-tail"}),   # WP18: integer + tail
+    ({"waves_per_sm": 2.0}, {}, {"wave-quantization"}),               # WP18: whole waves, no tail
     ({}, {"smem": 210000}, {"smem-cliff"}),
     ({}, {"smem": 100000}, set()),
     ({"compute_sol_pct": 40.0, "memory_sol_pct": 50.0}, {}, {"latency-bound"}),
     ({"compute_sol_pct": 40.0, "memory_sol_pct": 50.0, "tensor_pct": 50.0},
      {}, {"latency-bound", "unbound-attribution"}),
     ({"compute_sol_pct": 90.0, "memory_sol_pct": 50.0}, {}, set()),
+    ({"compute_sol_pct": 75.0, "memory_sol_pct": 80.0},
+     {}, {"warp-spec-pipeline", "tma-multicast"}),                     # WP18: both roles staged
     ({"dram_pct": 88.0}, {}, {"dram-high"}),
     ({"dram_pct": 60.0}, {}, set()),
+    # --- WP18: the beyond-reference supply keys ---
+    ({"memory_sol_pct": 85.0}, {}, {"tma-multicast"}),
+    ({"l2_hit_rate_pct": 15.0}, {}, {"l2-low", "prefetch-lead"}),
+    ({"regs_per_thread": 200}, {}, {"launch-bounds"}),                 # WP18: high regs, dry
+    ({"regs_per_thread": 60}, {}, set()),                              # below the tier
+    ({"dram_pct": 85.0, "l2_hit_rate_pct": 50.0},
+     {}, {"dram-high", "l2-policy-window"}),
+    ({"dram_pct": 85.0, "l2_hit_rate_pct": 30.0},
+     {}, {"dram-high", "l2-low"}),          # streaming, no persisting competition
 ])
 def test_rules_fire_on_the_documented_thresholds(readings, resusage, fired_names):
     fired = {r.name for r in kbmenu.RULES if r.when(readings, resusage)}

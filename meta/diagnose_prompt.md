@@ -109,6 +109,11 @@ defect right now**. **Do not** write the full patch text (that is a later step) 
      if the decision pinned by the excluded reading has a registered fork, `patch_direction` should first choose **flipping the whole side along the registered ⊗ coupling graph**
      (switching, as one set, to the transcription of the surviving candidate), and write the on-paper recomputation of "whether the flip removes the largest unhideable item"; only when there is truly no fork to
      flip may you propose a from-scratch structural re-ruling, and you must explain why the candidate table cannot help.
+   - **Analytic floor reconciliation (WP9)**: the NCU ground-truth section may carry a machine-computed line `floor=<...> (bytes=<n> flops=<n|n/a>)` — bytes and FLOPs derived from the problem definition
+     alone. Treat it as the arithmetic DENOMINATOR of this §1c: build `floor_opt` ON TOP of it (your unhideable-residual items add to it, never replace it). When your `floor_opt` and the analytic floor
+     disagree by more than ×1.5 (yours higher) or ×0.8 (yours lower), the evidence MUST state which operand bytes, FLOPs or serial item explains the difference — an unexplained gap lowers `confidence` by
+     a notch, and a BLOCKED verdict whose floor_opt rests on an unexplained inconsistency with the analytic floor is read as unproven. When the line reads `floor=n/a`, nothing is anchored: fall back to the
+     hand construction exactly as before.
 2. Use the **taxonomy** below to classify the stuck point; **every call must cite trajectory evidence** (iteration number + metric). The key first split is into two big classes:
    the student **cannot move** (G, guidance failure) or **follows correctly but hits a ceiling** (R, reach failure).
 3. Read the **shape** of the performance curve (POLICY's smoothness principle): smooth and monotone = healthy; a big dip followed by recovery / an early plateau far from the target

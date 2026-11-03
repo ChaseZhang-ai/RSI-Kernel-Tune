@@ -137,6 +137,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import subprocess
+import sys
 import bisect
 import contextlib
 import importlib.machinery
@@ -184,6 +186,34 @@ FIB_LOWBIT_RATIO = 0.95
 # SOL-ExecBench eval_driver.py / BenchmarkConfig / ToleranceSpec.
 SOL_ROUNDS = 10
 SOL_SEED = 200
+# WP9 fresh-recheck: the child process re-running correctness under a layer-2
+# seed draws its inputs at a DIFFERENT seed than the timed rounds did, so a
+# content-keyed cache (the correct outputs stored against the input values)
+# misses as well. Absent -> SOL_SEED, byte-identical to the historical protocol.
+FRESH_SEED_ENV = "FK_FRESH_SEED"
+FRESH_RECHECK_ENV = "FK_FRESH_RECHECK"
+
+
+def _recheck_seed() -> int:
+    """The correctness draw's seed: SOL_SEED, or the layer-2 override the
+    fresh-recheck parent set on this child."""
+    try:
+        return int(os.environ.get(FRESH_SEED_ENV, SOL_SEED))
+    except ValueError:
+        return SOL_SEED
+
+
+def _recheck_seed_shift() -> int:
+    """The seed SHIFT a fresh-recheck child applies to the task suite's per-group
+    generator seeds: in the child, drawn inputs must differ in content from the
+    timed draw (the same shift cannot fire in the parent — the env is child-only,
+    and the default shift is 0 outside a recheck)."""
+    if not os.environ.get(FRESH_RECHECK_ENV):
+        return 0
+    try:
+        return int(os.environ.get(FRESH_SEED_ENV, 7919))
+    except ValueError:
+        return 7919
 SOL_WARMUP = 10
 SOL_ITERS = 50
 SOL_TOLERANCE_DEFAULTS = {"max_atol": 1e-2, "max_rtol": 1e-2, "required_matched_ratio": 0.99,
@@ -1192,12 +1222,13 @@ def sol_correctness(problem: dict, impl, dps: bool, device, prec=None) -> tuple[
     timing is SOL's thread-injection reward hack."""
     tol = sol_tolerance(problem)
     ref_run, custom = reference_callables(problem)
-    random.seed(SOL_SEED)
-    torch.manual_seed(SOL_SEED)
+    seed = _recheck_seed()   # WP9 fresh-recheck: the layer-2 child draws elsewhere
+    random.seed(seed)
+    torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(SOL_SEED)
+        torch.cuda.manual_seed_all(seed)
     verdict = {"pass": False, "status": "PASSED", "max_abs": 0.0, "max_rel": 0.0,
-               "matched_ratio": 1.0, "checks": [], "tolerance": tol, "seed": SOL_SEED,
+               "matched_ratio": 1.0, "checks": [], "tolerance": tol, "seed": seed,
                "threads_after_first_call": None}
     inp: list = []
 
@@ -1909,6 +1940,109 @@ def _suite_judge(problem: dict):
             SUITE_TASK: task_correctness}[problem["suite"]]
 
 
+# --- WP9: the timing-fresh-input recheck (the agent-side cheat insurance) ---------
+#
+# Correctness and timing share ONE workload instance (the ``sets`` the judge built
+# are the sets the windows time), so a module-level stateful kernel — compute the
+# verdict once on the judged tensors, then serve the timed calls from a side
+# buffer keyed on data pointers / shapes / module state — passes correctness,
+# times like a no-op, and is caught by nothing else (harness_guard scans files,
+# prep snapshots catch mutation, host_bound catches host-only paths). After ALL
+# timing windows close, the bench re-runs the suite's correctness protocol in a
+# FRESH PROCESS: fresh allocation, fresh module state — every pointer moved, so a
+# pointer-keyed cache misses (layer 1). A card whose inputs are DRAWN also
+# re-draws at a different seed (SOL: FRESH_SEED_ENV; the task suite's generators
+# and FIB's protocol draw unseeded, so its layer 1 already carries fresh content),
+# which catches content-keyed caches too (layer 2). Both layers use the card's
+# own input code — no task invariant can be broken by construction. A fail is a
+# REWARD-HACK reading: the driver records the iteration as REVERT and marks the
+# row suspicious. The recheck NEVER runs inside the timing windows (contract C5)
+# and does not touch measure_paired.
+FRESH_RECHECK_TIMEOUT_S = 1800
+_VERDICT_LINE = "FRESH-RECHECK-VERDICT "
+
+
+def _fresh_recheck_mode(problem: dict) -> str:
+    """Which layers this card's recheck runs: 'regen' when the draw's CONTENT
+    differs from the timed draw (an unseeded protocol or a seed override),
+    'process' when only the allocation is fresh (file-based inputs, the seeded
+    protocol at its own seed)."""
+    suite = problem["suite"]
+    if suite in (SUITE_FIB, SUITE_SOL):
+        return "regen" if suite == SUITE_FIB or _recheck_seed() != SOL_SEED else "process"
+    return "regen" if _task_custom(problem)[1] is not None else "process"
+
+
+def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
+    """One fresh-process correctness run over the SAME card: returns the parsed
+    verdict, or None when the child could not produce one (env failure — a 'no
+    reading', never counted as a fail)."""
+    env = dict(os.environ)
+    env[FRESH_RECHECK_ENV] = "1"
+    if seed is not None:
+        env[FRESH_SEED_ENV] = str(seed)
+    bench = (Path(__file__).parent / "bench.py").resolve()
+    root = (Path(__file__).parent.parent).resolve()   # the workspace (eval/ below it)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(root), str(root / "eval")]
+        + [p for p in [env.get("PYTHONPATH", "")] if p])
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(bench), "--mode", "correctness", "--fresh-recheck"],
+            cwd=str(root), env=env, capture_output=True, text=True,
+            timeout=int(os.environ.get("FK_FRESH_RECHECK_TIMEOUT_S",
+                                       FRESH_RECHECK_TIMEOUT_S)))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"pass": None, "detail": f"recheck child did not run: {type(exc).__name__}: {exc}"}
+    for line in proc.stdout.splitlines():
+        if line.startswith(_VERDICT_LINE):
+            try:
+                return json.loads(line[len(_VERDICT_LINE):])
+            except ValueError:
+                break
+    return {"pass": None,
+            "detail": f"recheck child printed no verdict (rc={proc.returncode})"}
+
+
+def _fresh_recheck_block(problem: dict) -> "dict | None":
+    """The parent's recheck: layer 1 always (fresh process, fresh allocation);
+    layer 2 (a different seed) whenever the card's inputs are drawn. The result
+    rides the eval JSON's top-level ``fresh_recheck``; pass=None layers are
+    reported, never scored."""
+    if os.environ.get(FRESH_RECHECK_ENV):
+        return None                      # a child never nests
+    mode = _fresh_recheck_mode(problem)
+    if mode == "regen" and problem["suite"] == SUITE_SOL:
+        l1 = _fresh_child(problem, seed=None)          # same-seed fresh allocation
+        l2 = _fresh_child(problem, seed=SOL_SEED + 7919)   # content moved
+        passes = [l.get("pass") for l in (l1, l2)]
+        return {"mode": "regen", "layers": [l1, l2],
+                "pass": (False if False in passes else
+                         (True if all(p is True for p in passes) else None))}
+    child = _fresh_child(problem, seed=None)
+    return {"mode": mode, "layers": [child], "pass": child.get("pass")}
+
+
+def _run_fresh_recheck_child(problem: dict, args) -> int:
+    """The child side (--fresh-recheck): the suite's correctness protocol over the
+    timed workloads, one machine-readable verdict line, no nested recheck, no
+    timing. Exit code stays 0: the parent reads the verdict, not the rc. The
+    device is the job's GPU; FK_FRESH_RECHECK_DEVICE exists so the protocol can
+    be rehearsed on a CPU box (tests) without touching the GPU path."""
+    device = os.environ.get("FK_FRESH_RECHECK_DEVICE", "cuda")
+    impl, dps = _impl(problem, "kernel")
+    try:
+        verdict, _ = _correctness(problem, impl, dps, device)
+    except Exception as exc:  # noqa: BLE001 — the impl is foreign code
+        print(_VERDICT_LINE + json.dumps({"pass": None,
+                                          "detail": f"{type(exc).__name__}: {exc}"}))
+        return 0
+    print(_VERDICT_LINE + json.dumps({"pass": bool(verdict.get("pass")),
+                                      "status": verdict.get("status"),
+                                      "seed": verdict.get("seed")}))
+    return 0
+
+
 def _correctness(problem: dict, impl, dps: bool, device):
     """The suite's correctness protocol. On a card whose problem.json turns the precision
     contract on (``precision_on``), a timed workload also gets the precision record
@@ -2284,7 +2418,8 @@ def task_inputs(problem: dict, group: dict, device, make_inputs=None) -> list:
     else:
         if make_inputs is None:
             make_inputs = _task_custom(problem)[1]
-        got = make_inputs(dict(axes), group=group["name"], seed=int(group.get("seed", 0)),
+        got = make_inputs(dict(axes), group=group["name"],
+                          seed=int(group.get("seed", 0)) + _recheck_seed_shift(),
                           device=dev)
         if not isinstance(got, dict):
             raise ValueError(f"make_inputs returned {type(got).__name__}, not a dict of inputs")
@@ -2510,6 +2645,7 @@ def _run_task(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, timed
           + (f"; reference device {perf['ref_device_ms']} ms, x{perf['vs_ref_device']}"
              if perf.get("vs_ref_device") else f" [reference: {perf.get('in_job_ref')}]")
           + f"; clock {clock_state()}")
+    _maybe_fresh_recheck(result, problem, args)   # --- WP9: after ALL windows
     _emit(result)
     return 0
 
@@ -2622,8 +2758,15 @@ def run_leaderboard_bench(argv=None, problem_path=None) -> int:
     p.add_argument("--impl", choices=("kernel", "ref"), default="kernel",
                    help="ref: the in-job reference judged and timed AS the implementation "
                         "(card self-test; vs_ref_device must read ~1.0)")
+    # WP9 fresh-recheck child mode: the parent's LAST step spawns a fresh process
+    # in this mode after all timing windows closed; the child runs the correctness
+    # protocol once and prints one FRESH-RECHECK-VERDICT line.
+    p.add_argument("--fresh-recheck", action="store_true",
+                   help=argparse.SUPPRESS)
     args = p.parse_args(argv)
     problem = load_problem(problem_path)
+    if args.fresh_recheck:
+        return _run_fresh_recheck_child(problem, args)
     _SCOPE.clear()
     if scope := apply_workload_scope(problem):
         _SCOPE.update(scope)
@@ -2728,6 +2871,7 @@ def run_leaderboard_bench(argv=None, problem_path=None) -> int:
             print(f"[leaderboard] WARNING {lb[note]}")
     if board and board.get("clock_warning"):
         print(f"[leaderboard] WARNING {board['clock_warning']}")
+    _maybe_fresh_recheck(result, problem, args)   # --- WP9: after ALL windows
     _emit(result)
     return 0
 
@@ -2799,8 +2943,26 @@ def _run_group(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, time
             print(f"[leaderboard] WARNING {lb[note]}")
     if board and board.get("clock_warning"):
         print(f"[leaderboard] WARNING {board['clock_warning']}")
+    _maybe_fresh_recheck(result, problem, args)   # --- WP9: after ALL windows
     _emit(result)
     return 0
+
+
+def _maybe_fresh_recheck(result: dict, problem: dict, args) -> None:
+    """The timing-fresh-input recheck (WP9), attached after ALL timing windows
+    closed on a PASSING kernel the student wrote. A self-test (--impl ref) has
+    nothing to recheck (the reference is the trusted side), and a correctness
+    FAIL never reaches timing."""
+    if args.impl != "kernel" or not (result.get("correctness") or {}).get("pass"):
+        return
+    if not (result.get("performance") or {}):
+        return
+    block = _fresh_recheck_block(problem)
+    if block is not None:
+        result["fresh_recheck"] = block
+        print(f"[leaderboard] fresh recheck ({block['mode']}): "
+              + ("PASS" if block.get("pass") is True else
+                 "FAIL" if block.get("pass") is False else "no reading"))
 
 
 def ncu_window(problem_path=None, calls: int = 8, which: str = "kernel") -> None:

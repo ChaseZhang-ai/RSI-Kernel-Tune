@@ -200,6 +200,12 @@ class EvalResult:
     # sitting best's, so the two are not one measurement condition — see
     # loop/driver.py _CLOCK_DRIFT_BAND.
     clock_drift: bool = False
+    # WP9: the timing-fresh-input recheck (eval/leaderboard.py, run after ALL
+    # timing windows close): {"mode": "process"|"regen", "pass": bool|None,
+    # "layers": [...]}. pass=False — the timed calls did not compute what
+    # correctness measured on the same instance — is a reward-hack reading the
+    # driver turns into a suspicious REVERT; None layers are 'no reading'.
+    fresh_recheck: dict | None = None
 
 
 _WORKLOAD_KEYS = ("device_median_ms", "bwd_median_ms", "ref_device_ms", "vs_ref_device", "vs_ref")
@@ -391,6 +397,8 @@ def parse_eval(text: str) -> EvalResult:
         device_window_basis=(str(perf["device_window_basis"])
                              if perf.get("device_window_basis") else None),
         ref_host_enqueue_ms=_opt_any("ref_host_enqueue_ms", "cublas_host_enqueue_ms"),
+        fresh_recheck=(obj.get("fresh_recheck")
+                       if isinstance(obj.get("fresh_recheck"), dict) else None),
     )
 
 

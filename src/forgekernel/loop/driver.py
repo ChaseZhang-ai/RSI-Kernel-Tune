@@ -524,6 +524,26 @@ class LoopContext:
     # launches that don't set the key.)
     m0_probe_rounds: int = 2
     probe_battles: dict[str, ProbeBattle] = field(default_factory=dict)
+    # --- WP9: measurement anchoring (analytic floor; both opt-ins default off) ---
+    # The machine denominator behind the teacher's hand-estimated floor_opt
+    # (forgekernel.loop.analytic_floor): bytes/FLOPs computed from the card's
+    # problem definition alone, timed against the arch's published peaks. TEACHER
+    # side only — it renders at the tail of the NCU ground-truth section, never
+    # in the student digest. Lazily read off eval/leaderboard/problem.json on
+    # first use and cached here.
+    floor_ms: float | None = None            # cached analytic floor (ms)
+    floor_info: dict = field(default_factory=dict)   # the full floor dict (line rendering)
+    floor_checked: bool = False              # the lazy read ran (result may be None)
+    # [target] floor_margin: a run without a measured reference target (weak/absent
+    # ref) derives its stop from the analytic floor instead: target = floor x
+    # (1 + margin). 0 = off (the historical behavior: no target, no stop).
+    target_floor_margin: float = 0.0
+    # [loop] floor_stop: allow stopping at floor x (1 + floor_stop_margin) once the
+    # structural channel has been explored (a verified-BLOCKED diagnosis — WP5's
+    # machine gate; STAGNATION is WP10 and not in this baseline). Advisory: the
+    # INFEASIBLE gate and the target stop are untouched.
+    floor_stop: bool = False
+    floor_stop_margin: float = 0.10
     # Force a meta audit the first time a segment goes green (= the M0 gate lands).
     # The gate verifies the student against the milestone's OWN declared values — it
     # cannot verify the milestone. Every iteration after M0 builds on the foundation,
@@ -667,6 +687,10 @@ class LoopContext:
     # unchanged best cannot change the answer except by further drift — reuse the
     # verdict instead of re-buying ref jobs at every subsequent plateau.
     reanchor_memo: "tuple[float, str] | None" = None
+    # --- WP9 (C5): the memo above was process memory only — a driver restart
+    # re-bought the same-card re-measure the reanchor.jsonl audit trail had
+    # already paid for. Read that file back once (see _reanchor_memo).
+    reanchor_memo_loaded: bool = False
 
 
 # --- prompt rendering -------------------------------------------------------
@@ -2594,6 +2618,33 @@ def run_inner_iteration(
         append_record(ctx.status_path, rec)
         return rec
 
+    # --- WP9 (task 4): the timing-fresh-input recheck. The bench re-ran the
+    # correctness protocol in a fresh process AFTER all timing windows closed
+    # and the verdict did not reproduce: the timed calls were not computing what
+    # correctness measured on the shared instance — the module-level-cache cheat
+    # shape. Hard REVERT, row marked suspicious (an objective reading of the
+    # student's own work, not a protocol change: correctness itself is untouched).
+    if (fr := getattr(ev, "fresh_recheck", None)) and fr.get("pass") is False:
+        mode = fr.get("mode", "?")
+        layers = "; ".join(str(l.get("detail") or l.get("status") or "verdict moved")
+                           for l in (fr.get("layers") or [{}]))
+        detail = (f"fresh_recheck FAIL (mode={mode}): the correctness verdict did not "
+                  f"reproduce on fresh inputs after timing — {layers}")
+        _log(f"iter {iter_no}: {record.decision_id} REVERT ({detail})")
+        if last_good_ref:
+            be.reset(last_good_ref)
+        rec = IterationRecord(
+            iter=iter_no, decision_id=record.decision_id, change=record.change,
+            correctness=False, verdict="REVERT", metric_before=metric_before,
+            error=detail, profiler=profiler, cluster=cluster,
+            orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
+            prep=ev.prep or {}, precision=precision,
+            gpu_state=ev.gpu_state or {},
+            suspicious=True,      # WP9: the reward-hack marker
+        )
+        append_record(ctx.status_path, rec)
+        return rec
+
     ev = _confirm_suspicious_watermark(ctx, be, branch, ev, metric_before,
                                        profiler=profiler)
     # WP1: was this reading's SM clock >2% off the sitting best's at reading time?
@@ -2610,6 +2661,7 @@ def run_inner_iteration(
         vs_ref_device=ev.vs_ref_device,
         host_enqueue_ms=ev.host_enqueue_ms, host_bound_ratio=ev.host_bound_ratio,
         ref_host_bound_ratio=ev.ref_host_bound_ratio,
+        ref_host_enqueue_ms=ev.ref_host_enqueue_ms,   # --- WP9 (C2)
         device_window_basis=ev.device_window_basis,
         metric_before=metric_before, profiler=profiler, sha=sha, cluster=cluster,
         orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
@@ -7154,6 +7206,15 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
         ncu_view += (f"\n### Two-sided NCU reconciliation (student best KEEP vs reference "
                      f"signature, read before judging)\n"
                      f"{recon}\n")
+    # --- WP9 ---: the analytic floor and the MFU -> headroom line at the tail of
+    # the NCU ground-truth section — the machine denominator beside the measured
+    # SOL header (what SOL% reads against), and what reaching 100% MFU would still
+    # buy. TEACHER side only: this rides diagnose_extra; the student digest never
+    # carries either line.
+    if (line := _floor_teacher_line(ctx)):
+        ncu_view += f"\n{line}\n"
+    if (line := _mfu_teacher_line(records, ctx)):
+        ncu_view += f"{line}\n"
     # The timed-window ledger: what each side's stopwatch covers, both
     # decompositions, and the priced contract tax. Without it a residual that is
     # entirely a rebuild the reference never pays reads as a kernel defect and
@@ -8038,7 +8099,127 @@ def _resolve_target(ctx: LoopContext) -> float:
                      f"instead (re-baseline §0 with a matching target_window: line)")
     except OSError:
         pass
+    # --- WP9 ---: [target] floor_margin — a run with no measured reference target
+    # (weak/absent ref) derives its stop from the analytic floor: floor x (1 + margin).
+    # Advisory and opt-in; a measured ref target always wins.
+    if ctx.target_ms is None and ctx.target_floor_margin > 0:
+        if (floor := _analytic_floor_ms(ctx)) is not None:
+            t = floor * (1.0 + ctx.target_floor_margin)
+            _log(f"target: no measured reference target — [target] floor_margin "
+                 f"{ctx.target_floor_margin:g} sets the stop at the analytic floor x "
+                 f"(1 + margin) = {t:.6g} ms (floor {floor:.6g} ms)")
+            return t
     return ctx.target_ms
+
+
+def _analytic_floor_ms(ctx: LoopContext) -> "float | None":
+    """The card's analytic floor (ms), read once off eval/leaderboard/problem.json
+    and cached on ctx (forgekernel.loop.analytic_floor is the single source)."""
+    if not ctx.floor_checked:
+        ctx.floor_checked = True
+        try:
+            from forgekernel.loop.analytic_floor import floor_from_op_dir
+            info = floor_from_op_dir(Path(ctx.milestone).parent,
+                                     arch=str(getattr(ctx, "kb_arch", "") or ""))
+            if info:
+                ctx.floor_info = info
+                ctx.floor_ms = info.get("floor_ms")
+        except (OSError, ValueError) as e:
+            _log(f"floor: no analytic floor on this card ({e})")
+    return ctx.floor_ms
+
+
+def _floor_teacher_line(ctx: LoopContext) -> str:
+    """The NCU ground-truth tail line (TEACHER side, never the student digest):
+    ``floor=<x.xx ms> (bytes=<n> flops=<n|n/a>)`` beside the SOL header — the
+    problem floor the measured SOL% reads against."""
+    if (floor := _analytic_floor_ms(ctx)) is None:
+        return ""
+    from forgekernel.loop.analytic_floor import floor_line
+    return floor_line(ctx.floor_info)
+
+
+def _mfu_teacher_line(records: list, ctx: LoopContext) -> str:
+    """The MFU -> headroom line (TEACHER side): ``MFU=<x>% (headroom <y>%)`` off the
+    sitting best KEEP — what reaching 100% MFU would still buy, the quantity the
+    floor_opt arithmetic needs. No reading, no line."""
+    mfu = getattr(_best_keep_record(records, ctx.gate_window), "mfu", None) \
+        if records else None
+    from forgekernel.loop.analytic_floor import mfu_headroom_line
+    return mfu_headroom_line(mfu)
+
+
+def _floor_stop_check(ctx: LoopContext, best_ms: "float | None",
+                      meta_steps: int) -> "dict | None":
+    """[loop] floor_stop (opt-in, default off) — the weak-ref/absent-ref companion
+    of the target stop: when the best sits within floor x (1 + floor_stop_margin)
+    of the analytic floor AND the structural channel has been explored (a
+    verified-BLOCKED diagnosis, WP5's machine gate; STAGNATION is WP10), a further
+    meta diagnosis has nothing provable left to chase, so the run closes as
+    "floor". Returns the stop record, or None to keep the loop's own semantics.
+    Advisory only: the INFEASIBLE gate, the target stop and every other verdict
+    are untouched."""
+    if not ctx.floor_stop or best_ms is None:
+        return None
+    floor = _analytic_floor_ms(ctx)
+    if not floor or best_ms > floor * (1.0 + ctx.floor_stop_margin):
+        return None
+    if not ctx.wp5_reach_blocked:
+        _log(f"floor_stop: the best is inside the floor band ({best_ms:.6g} ms vs "
+             f"{floor:.6g} ms floor) but no verified-BLOCKED diagnosis has explored "
+             f"the structural channel yet — not stopping (the band alone is not the gate)")
+        return None
+    _log(f"floor_stop: best {best_ms:.6g} ms <= floor x (1 + "
+         f"{ctx.floor_stop_margin:g}) ({floor:.6g} ms floor) and a verified-BLOCKED "
+         f"diagnosis explored the structural channel -> stopping as 'floor' "
+         f"([loop] floor_stop)")
+    return {"stop": "floor", "meta_steps": meta_steps,
+            "floor_ms": floor, "best_ms": best_ms}
+
+
+def _reanchor_memo(ctx: LoopContext) -> "tuple[float, str] | None":
+    """The re-anchor memo, (best, note) — rebuilt once from reanchor.jsonl when
+    the process holds none (C5: a driver restart must not re-buy the same-card
+    re-measure the audit trail already paid for). The file's confirmed_gap
+    records carry every number the in-memory note was built from; the rebuilt
+    note states them compactly. In-memory memos (this session's) always win."""
+    if ctx.reanchor_memo is not None:
+        return ctx.reanchor_memo
+    if not ctx.reanchor_memo_loaded:
+        ctx.reanchor_memo_loaded = True
+        try:
+            path = Path(ctx.milestone).parent / "reanchor.jsonl"
+            lines = [json.loads(ln) for ln in
+                     path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        except (OSError, ValueError):
+            return None
+        for rec in reversed(lines):
+            if (rec.get("verdict") == "confirmed_gap"
+                    and rec.get("best_ms") and rec.get("median_ratio")
+                    and rec.get("equivalence_ratio")
+                    # a same-card re-measure does not travel across machines
+                    # (the paired_memo's own rule, held across the restart too)
+                    and (rec.get("cluster") or "") == _active_cluster(ctx)):
+                eq, med = rec["equivalence_ratio"], rec["median_ratio"]
+                residual = rec.get("paired_residual", eq / med - 1.0)
+                # the paired-residual memo reads off the same record (both memos
+                # were process memory; both are audit-trail backed)
+                if ctx.paired_residual_memo is None:
+                    ctx.paired_residual_memo = (float(rec["best_ms"]), float(residual))
+                note = (
+                    f"\n## Same-card paired re-measure (reanchored from the previous "
+                    f"session's audit trail)\n"
+                    f"The best ({rec['best_ms']:.6g} ms) was re-measured same-card "
+                    f"{len(rec.get('student_jobs') or [])} time(s): median same-job ratio "
+                    f"**{med:.4f}** (>= {eq:g} reaches the stop line) -> true residual to "
+                    f"the stop line = **+{residual:.1%}**. Diagnose and price against this "
+                    f"residual; do not propose a structural reopen (R1) whose expected "
+                    f"gain is below it. ")
+                ctx.reanchor_memo = (float(rec["best_ms"]), note)
+                _log(f"meta/re-anchor: memo rebuilt from {path.name} (best "
+                     f"{rec['best_ms']:.6g} ms, ratio {med:.4f}) — no new ref jobs")
+                break
+    return ctx.reanchor_memo
 
 
 def _persist_reanchor(ctx: LoopContext, record: dict) -> None:
@@ -8150,7 +8331,7 @@ def _false_win_replay(ctx: LoopContext, best: float) -> None:
     — so after a false win the SECOND meta entry would diagnose against the
     stale target again. The memo is keyed by best, like the phantom-gap one.
     """
-    memo = ctx.reanchor_memo
+    memo = _reanchor_memo(ctx)   # --- WP9 (C5): restart-safe
     if memo and memo[0] == best and not ctx.reanchor_note:
         ctx.reanchor_note = memo[1]
 
@@ -8460,10 +8641,10 @@ def _phantom_gap_reanchor(ctx: LoopContext, best: float | None) -> dict | None:
              f"(--target-ms / toml constant) — no launch-period anchor to "
              f"transport drift from. Skipping (residual is suspect).")
         return None
-    if ctx.reanchor_memo and ctx.reanchor_memo[0] == best:
+    if (memo := _reanchor_memo(ctx)) and memo[0] == best:   # --- WP9 (C5)
         # nothing moved since the last confirmed-gap check; the answer cannot
         # have changed except by further drift — re-issue the note, spend nothing.
-        ctx.reanchor_note = ctx.reanchor_memo[1]
+        ctx.reanchor_note = memo[1]
         _log("meta/re-anchor: best unchanged since the last confirmed-gap check "
              "— reusing its verdict (no new ref jobs)")
         return None
@@ -8588,8 +8769,8 @@ def _paired_reanchor(ctx: LoopContext, best: float, gap: float | None) -> dict |
     """
     eq = ctx.equivalence_ratio
     sha = _best_good_ref_here(load_records(ctx.status_path), ctx)
-    if ctx.reanchor_memo and ctx.reanchor_memo[0] == best:
-        ctx.reanchor_note = ctx.reanchor_memo[1]
+    if (memo := _reanchor_memo(ctx)) and memo[0] == best:   # --- WP9 (C5)
+        ctx.reanchor_note = memo[1]
         _log("meta/re-anchor: best unchanged since the last same-job check — "
              "reusing its verdict (no new jobs)")
         return None
@@ -12548,6 +12729,17 @@ def _run_arch_probes(ctx: LoopContext) -> None:
             win = requests[0] if t0 <= t1 else requests[1]
             _log(f"meta/distill: ARCH_PROBE decisive candidate {win} "
                  f"(resolution floor {floor:.1%} from resolvable_diff)")
+            # --- WP9 (C4): pin the run's candidate architecture to the measured
+            # winner — `{CANDIDATE}` rendered "(not pinned)" in every prompt since
+            # the binding existed (nobody assigned it). The probe winner IS the
+            # machine-readable "recon 选定的候选架构": the freeze follows it
+            # (distill_blackbox_prompt's own rule), so re-distills and later
+            # teacher turns read the pinned name instead of re-deriving it.
+            winner = Path(win).stem
+            if ctx.candidate != winner:
+                ctx.candidate = winner
+                _log(f"meta/distill: candidate pinned to the ARCH_PROBE winner: "
+                     f"{winner} ({'{CANDIDATE}'} now renders it)")
 
 
 def run_distill_step(ctx: LoopContext) -> "MetaResult":
@@ -13150,6 +13342,10 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
         records = load_records(ctx.status_path)
         best_before = _best_ms(_on_cluster(records, ctx), ctx.gate_window)
         good_ref = _best_good_ref_here(records, ctx) or baseline_ref
+        # --- WP9 ---: [loop] floor_stop (opt-in, default off) — the weak-ref/absent-ref
+        # companion of the target stop (see _floor_stop_check).
+        if (floor_stop := _floor_stop_check(ctx, best_before, meta_steps)) is not None:
+            return floor_stop
         # Before spending the meta budget on a gap-driven diagnosis, make sure the
         # gap exists: stall pricing, the verdict probes and the prescription all
         # reason from the residual, and a residual inside the noise band may be

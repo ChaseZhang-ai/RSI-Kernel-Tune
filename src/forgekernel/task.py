@@ -109,7 +109,11 @@ _MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
 _KEYS = {
     "task": {"language", "arch"},
     "reference": {"run", "source", "blackbox", "deny", "deny_urls", "deny_modules"},
-    "target": {"ratio", "ms", "timing"},
+    "target": {"ratio", "ms", "timing",
+               # WP9: floor_margin — a run with no measured reference target derives
+               # its stop from the analytic floor: target = floor x (1 + margin).
+               # Advisory, default absent (off); parsed by _read_target.
+               "floor_margin"},
     # WP1: [timing] protocol = "device" (the default harness window, unchanged) |
     # "board" (the card also carries a board-protocol SECONDARY reading: locked
     # clocks + L2 flushed before every timed call + single-call median,
@@ -174,6 +178,8 @@ class Target:
     ratio: float | None
     ms: float | None
     timing: str
+    # WP9: the analytic-floor fallback margin (see _KEYS["target"]): absent/0 = off.
+    floor_margin: float = 0.0
 
 
 # WP1: which measurement protocol the card carries. "device" (the default) is the
@@ -665,8 +671,15 @@ def _read_target(cfg: dict, problems: list[str]) -> Target:
     timing = t.get("timing")
     if timing not in TIMINGS:
         problems.append(f"[target] timing must be one of {list(TIMINGS)}, got {timing!r}")
+    # WP9: floor_margin — a non-negative fraction; 0/absent = off (no floor stop).
+    margin = t.get("floor_margin")
+    if margin is not None and (not isinstance(margin, (int, float))
+                               or isinstance(margin, bool) or margin < 0):
+        problems.append(f"[target] floor_margin must be a non-negative number, got {margin!r}")
+        margin = None
     return Target(ratio=float(ratio) if _positive(ratio) else None,
-                  ms=float(ms) if _positive(ms) else None, timing=timing)
+                  ms=float(ms) if _positive(ms) else None, timing=timing,
+                  floor_margin=float(margin) if margin is not None else 0.0)
 
 
 def _read_timing(cfg: dict, problems: list[str]) -> Timing:

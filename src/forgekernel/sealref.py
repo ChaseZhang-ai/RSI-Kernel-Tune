@@ -209,7 +209,13 @@ def ref_tree_gpu_entry(card_text: str, module: str, key_env: str = KEY_ENV,
             "#   check | crosscheck | bench (= ref) | ncu | sealref (check + bench + ncu)"
             " | cmd <CMD> (guarded)\n")
     before = _with_key_preamble(head + before.split("\n", 1)[1], key_env)
+    # WP9: --cache-control none / --clock-control none anchor the profile on the
+    # timing regime — warm L2 (timing.py never flushes) and the board's own clock
+    # state (gpu_entry.sh locked it before this task ran; NCU's default
+    # cache-control all + clock-control base would flush L2 and re-lock to base
+    # every pass, reading a regime the timing numbers never ran in).
     ncu = ('ncu_bounded ncu --csv --target-processes all --profile-from-start off \\\n'
+           '            --cache-control none --clock-control none \\\n'
            '            --launch-count 24 --kill yes --metrics "$NCU_METRICS" python3 eval/ncu_run.py')
     tasks = f'''case "$TASK" in
     check)       run_with_timeout python3 sealref.py check ;;

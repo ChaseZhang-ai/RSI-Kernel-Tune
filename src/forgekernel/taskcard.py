@@ -20,6 +20,7 @@ readable.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tomllib
@@ -308,6 +309,8 @@ def write_board_loop_toml(run, task, op_dir: Path, *, deny: list[str], ncu: bool
         [str(p) for p in lc.get("ref_source_paths", [])] + list(deny)))
     lc.setdefault("ref_source_urls", [])
     lc.setdefault("ref_from_goal", "off")
+    if ncu and timeline_probe_auto(task):   # --- WP9 (C1): latency-shaped -> auto
+        lc.setdefault("timeline_probe", "auto")
     if not ncu:
         lc.update(ncu_available=False, job_env_preflight="warn", timeline_probe="off",
                   stall_pricing=False, orch_census=False)
@@ -347,6 +350,20 @@ def write_submit(tree: Path, task, machine, timeout: int = JOB_TIMEOUT_S) -> Pat
     p = Path(tree) / "submit.toml"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p
+
+
+_TIMELINE_AUTO_RE = re.compile(r"\b(latency|decode|single call)\b", re.I)
+
+
+def timeline_probe_auto(task) -> bool:
+    """WP9 (C1): a latency-shaped problem writes ``timeline_probe = "auto"`` into
+    the generated loop.toml — the driver then turns the time-axis probe on exactly
+    when the milestone declares ``bottleneck: latency``. Nothing else writes the
+    key (historical default "off"), so non-latency cards are byte-identical.
+    Underscores / hyphens read as separators, so `mla_paged_decode` matches."""
+    text = " ".join([getattr(task, "description", "") or "", task.name]
+                    + [s.name for s in task.shapes])
+    return bool(_TIMELINE_AUTO_RE.search(text.replace("_", " ").replace("-", " ")))
 
 
 def write_loop_toml(run, task, op_dir: Path, *, deny: list[str], ncu: bool = True) -> Path:
@@ -410,6 +427,9 @@ def write_loop_toml(run, task, op_dir: Path, *, deny: list[str], ncu: bool = Tru
             "stall_pricing     = false",
             "orch_census       = false",
         ]
+    elif timeline_probe_auto(task):   # --- WP9 (C1): latency-shaped -> auto
+        lines += ['timeline_probe    = "auto"   # latency-shaped problem: on when the '
+                  'milestone declares bottleneck: latency']
     p = Path(op_dir) / "loop.toml"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p

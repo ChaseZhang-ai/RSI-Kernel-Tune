@@ -20,6 +20,11 @@ and defers verification to the gate row).
 `profiler_from_ncu` automatically picks the **slowest kernel** (largest `gpu__time_active.sum`) as the bottleneck
 kernel and keeps only the decision-relevant metrics (below).
 
+> **Reading regime (WP9)**: the collection runs `--cache-control none --clock-control none`, so these
+> readings describe the timing protocol's regime — warm L2, the board's own clock state — not a flushed,
+> base-locked machine. Historical records (pre-WP9) were collected flushed + base-locked: the two regimes
+> do not mix, and `l2_hit_rate_pct` / SOL pct especially are only comparable within one.
+
 ## How to use it (the meta agent calls it directly)
 
 ```bash

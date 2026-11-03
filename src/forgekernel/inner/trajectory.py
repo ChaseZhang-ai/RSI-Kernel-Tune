@@ -54,6 +54,12 @@ class IterationRecord:
     host_enqueue_ms: float | None = None
     host_bound_ratio: float | None = None
     ref_host_bound_ratio: float | None = None
+    # What one call of the in-job reference costs to enqueue (WP2 parsed it into
+    # EvalResult; WP9 records it) — the ref-side host tax's evolution over the run,
+    # a thick python wrapper showing up as drift the device window never explains.
+    # Kept out of the digest (the teacher reads it off the row like
+    # ref_host_bound_ratio).
+    ref_host_enqueue_ms: float | None = None
     # The basis device_median_ms was read on (plain_batch / cuda_graph /
     # cupti_kernel_span). host_bound_ratio is None BY DESIGN under a host-free
     # basis, and a reader of the trajectory needs this to tell "unmeasured" from
@@ -132,6 +138,12 @@ class IterationRecord:
     clock_drift: bool = False
     # WP4: a KEEP slower than the best, +x%
     regression_vs_best_pct: float | None = None
+    # WP9: the row's fresh_recheck FAILED — the timed calls did not compute what
+    # correctness measured on the same instance (a state/pointer-keyed cache).
+    # Set by the driver on the REVERT it records for that reading; the objective
+    # flag travels the trajectory so a later resume cannot mistake the row for an
+    # ordinary regression. Digest stays row-free (the teacher reads it on the row).
+    suspicious: bool = False
 
     def __post_init__(self):
         if self.verdict not in ("KEEP", "REVERT", "NEUTRAL"):

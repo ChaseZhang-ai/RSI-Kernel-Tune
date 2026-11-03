@@ -2840,6 +2840,13 @@ def _main(argv: list[str] | None = None) -> int:
         # [loop] m0_probe_rounds: ARCH_PROBE's GPU-job budget (WP6; default 2 —
         # one job per of the two candidate skeletons, 0 disables, <2 skips).
         m0_probe_rounds=int(cfg.get("loop", {}).get("m0_probe_rounds", 2)),
+        # --- WP9: measurement anchoring — [target] floor_margin (a weak/absent-ref
+        # run's stop derives from the analytic floor) and [loop] floor_stop /
+        # floor_stop_margin (stop at floor x (1 + margin) once a verified-BLOCKED
+        # diagnosis explored the structural channel). Both default off.
+        target_floor_margin=float((cfg.get("target") or {}).get("floor_margin", 0) or 0),
+        floor_stop=bool(cfg.get("loop", {}).get("floor_stop", False)),
+        floor_stop_margin=float(cfg.get("loop", {}).get("floor_stop_margin", 0.10)),
     )
     # The re-anchor's measurement channel: the same fresh-ref path the finish
     # confirmation uses (measure_ref_fresh — parsed readings, never archived, so

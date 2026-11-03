@@ -234,13 +234,20 @@ def ref_tree_gpu_entry(card_text: str, sources: list[str]) -> str:
     crosscheck)  run_with_timeout python3 binref.py crosscheck ;;
     bench|ref)   run_with_timeout python3 binref.py bench ;;
     ncu)
+        # WP9: --cache-control none / --clock-control none anchor the profile on the
+        # timing regime — warm L2 (timing.py never flushes) and the board's own
+        # clock state (gpu_entry.sh locked it before this task ran; NCU's default
+        # cache-control all + clock-control base would flush L2 and re-lock to
+        # base every pass, reading a regime the timing numbers never ran in).
         ncu_bounded ncu --csv --target-processes all --profile-from-start off \\
+            --cache-control none --clock-control none \\
             --launch-count 24 --kill yes --metrics "$NCU_METRICS" python3 eval/ncu_run.py
         ;;
     binref)
         run_with_timeout python3 binref.py check
         run_with_timeout python3 binref.py bench
         ncu_bounded ncu --csv --target-processes all --profile-from-start off \\
+            --cache-control none --clock-control none \\
             --launch-count 24 --kill yes --metrics "$NCU_METRICS" python3 eval/ncu_run.py
         ;;
     cmd)         blackbox_guard "$*"; run_with_timeout bash -c "$*" ;;

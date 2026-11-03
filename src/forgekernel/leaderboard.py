@@ -1019,7 +1019,15 @@ case "$TASK" in
         if [ "$NCU_METRICS" != "$NCU_METRICS_DESIRED" ]; then
             echo "[gpu_entry.sh] ncu: metrics filtered for this arch: $NCU_METRICS"
         fi
+        # WP9: --cache-control none / --clock-control none anchor the profile on
+        # the timing regime — warm L2 (timing.py never flushes) and the clock
+        # state this entry itself set before the case above (a board lock, or
+        # free-running clocks; NCU's default cache-control all + clock-control
+        # base would flush L2 and re-lock to base every pass, reading a regime
+        # the timing numbers never ran in — lts__t_sector_hit_rate.pct read cold
+        # while the gate timed warm, and SOL pct against base-clock peaks).
         ncu_bounded ncu --csv --target-processes all --profile-from-start off \
+            --cache-control none --clock-control none \
             --launch-count 24 --kill yes --metrics "$NCU_METRICS" python3 eval/ncu_run.py
         ;;
     cmd)         run_with_timeout bash -c "$*" ;;

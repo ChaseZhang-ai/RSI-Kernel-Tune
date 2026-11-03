@@ -983,3 +983,133 @@ def test_t5_r1_gates_cofire_in_one_prompt(tmp_path):
     assert "## Format requirement (binding)" in second
     assert "## A reopen must be priced first (driver check)" in second
     assert "reopen" in second.lower() and "reachability:" in second
+
+
+# --- task 4: student digest binding (C13) + teacher NCU bounding ----------------
+
+from forgekernel.inner.trajectory import IterationRecord, append_record
+
+
+def _t4_records(ctx, n=6):
+    for i in range(n):
+        append_record(ctx.status_path, IterationRecord(
+            iter=i, decision_id=f"D2.{i}", change=f"did D2.{i}",
+            correctness=True, verdict="KEEP" if i % 2 == 0 else "REVERT",
+            metric_before=2.6, bwd_median_ms=2.0 + 0.05 * i,
+            device_median_ms=2.0 + 0.05 * i,
+            profiler={"tensor_pct": 40.0 + i}))
+
+
+def test_t4_digest_off_by_default_no_file_no_binding(tmp_path):
+    be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    assert not (tmp_path / "student" / "status_digest.jsonl").exists()
+    student_prompt = next(p for p in be.prompts if "You are the **student**" in p)
+    assert str(ctx.status_path) in student_prompt       # byte-identical baseline binding
+    assert "status_digest" not in student_prompt
+
+
+def test_t4_digest_on_projects_existing_fields_only(tmp_path):
+    be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    _t4_records(ctx)
+    ctx.student_digest_binding = True
+    driver._write_student_digest(ctx)
+    path = tmp_path / "student" / "status_digest.jsonl"
+    lines = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
+    assert len(lines) == 1 + 6                    # summary + one line per decision
+    summary = lines[0]
+    assert set(summary) == {"sol", "target", "achieved", "flags"}   # the digest head
+    # decision rows are the standing projection fields (zero new types)
+    assert set(lines[1]) == {"iter", "id", "change", "correctness",
+                             "metric_before", "metric_after", "verdict"}
+    assert lines[1]["id"] == "D2.0"
+
+
+def test_t4_digest_tail_window(tmp_path):
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    _t4_records(ctx, n=6)
+    ctx.student_digest_binding = True
+    ctx.student_tail_lines = 2
+    driver._write_student_digest(ctx)
+    lines = [json.loads(l) for l in
+             (tmp_path / "student" / "status_digest.jsonl")
+             .read_text(encoding="utf-8").splitlines()]
+    assert [r["id"] for r in lines[1:]] == ["D2.4", "D2.5"]   # the tail, only
+    # the raw status.jsonl reader is untouched: all six records still there
+    assert len(load_records(ctx.status_path)) == 6
+
+
+def test_t4_student_prompt_binding_swap_is_render_local(tmp_path):
+    # switch ON: the STUDENT render reads the digest; a teacher render keeps
+    # the raw path (raw status.jsonl readers unaffected — C13)
+    be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    ctx.student_digest_binding = True
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    digest = str(tmp_path / "student" / "status_digest.jsonl")
+    assert (tmp_path / "student" / "status_digest.jsonl").is_file()
+    student_prompt = next(p for p in be.prompts if "You are the **student**" in p)
+    assert digest in student_prompt and str(ctx.status_path) not in student_prompt
+    # a teacher prompt (diagnose) still names the raw trajectory
+    from test_blackbox_fixes import _STALL_LOG_OK, _DIAG
+    (tmp_path / "t2").mkdir(exist_ok=True)
+    be2 = FakeBackend([_DIAG, _patching(tmp_path / "t2", "\n### D0.9\nx\n",
+                                        "patch_class: structural\nchanged_entries: [D0.9]\npatch: ...\n")],
+                      [_STALL_LOG_OK])
+    ctx2 = _ctx(tmp_path / "t2", be2)
+    ctx2.student_digest_binding = True
+    driver.run_meta_step(ctx2)
+    assert all(str(ctx2.status_path) in p for p in be2.prompts[:1])
+
+
+def test_t4_teacher_ncu_bound_off_is_full_history(tmp_path, monkeypatch):
+    import forgekernel.inner.ncu as ncu_mod
+    seen = {}
+    monkeypatch.setattr(ncu_mod, "render_ncu_trace",
+                        lambda recs: seen.setdefault("n", len(recs)) or "")
+    monkeypatch.setattr(ncu_mod, "render_ncu_report", lambda recs, baseline=None: "")
+    ctx, be = _t5_ctx(tmp_path, ["cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"])
+    _t4_records(ctx, n=12)
+    driver.run_meta_step(ctx)
+    assert seen["n"] == 12                        # every record (baseline view)
+
+
+def test_t4_teacher_ncu_bound_best_plus_tail(tmp_path, monkeypatch):
+    import forgekernel.inner.ncu as ncu_mod
+    seen = {}
+    monkeypatch.setattr(ncu_mod, "render_ncu_trace",
+                        lambda recs: seen.setdefault("iters", [r.iter for r in recs]) or "")
+    monkeypatch.setattr(ncu_mod, "render_ncu_report", lambda recs, baseline=None: "")
+    ctx, be = _t5_ctx(tmp_path, ["cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"])
+    _t4_records(ctx, n=12)
+    ctx.teacher_context_bound = True
+    ctx.teacher_ncu_tail_lines = 3
+    driver.run_meta_step(ctx)
+    iters = seen["iters"]
+    assert iters[0] == 4                          # the best KEEP row stays whole (2.4 ms)
+    assert iters[1:] == [9, 10, 11]               # the chronological tail
+    assert len(iters) == 4                        # rows, never a byte slice
+
+
+def test_t4_wp19_apply_cfg_reads_context_keys(tmp_path, monkeypatch):
+    import forgekernel.paths as paths_mod
+    gcfg = tmp_path / "global_config"
+    gcfg.mkdir(exist_ok=True)
+    (gcfg / "loop.toml").write_text(
+        "[loop]\nstudent_digest_binding = true\nstudent_tail_lines = 7\n"
+        "teacher_context_bound = true\nteacher_ncu_tail_lines = 3\n", encoding="utf-8")
+    # defaults first (no loop.toml at all): binding off, tails 50 / 8
+    (tmp_path / "w2").mkdir(exist_ok=True)
+    ctx2 = _ctx(tmp_path / "w2", FakeBackend([], []))
+    driver._wp19_apply_cfg(ctx2)
+    assert ctx2.student_digest_binding is False and ctx2.student_tail_lines == 50
+    assert ctx2.teacher_context_bound is False and ctx2.teacher_ncu_tail_lines == 8
+    monkeypatch.setattr(paths_mod, "global_config_dir", lambda: gcfg)
+    (tmp_path / "w").mkdir(exist_ok=True)
+    ctx = _ctx(tmp_path / "w", FakeBackend([], []))
+    driver._wp19_apply_cfg(ctx)
+    assert ctx.student_digest_binding is True and ctx.student_tail_lines == 7
+    assert ctx.teacher_context_bound is True and ctx.teacher_ncu_tail_lines == 3

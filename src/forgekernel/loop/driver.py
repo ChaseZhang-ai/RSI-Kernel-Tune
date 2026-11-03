@@ -49,6 +49,7 @@ from forgekernel.inner.trajectory import (
     GATE_WINDOWS,
     IterationRecord,
     append_record,
+    build_digest,
     constant_output_flag,
     gate_ms,
     load_records,
@@ -334,6 +335,23 @@ class LoopContext:
     # consuming package (WP17/WP18) teaches the teacher to. loop.toml
     # [loop] probe_manifest = false disables the branch entirely.
     probe_manifest: bool | None = None
+    # WP19 (task 4, contract C13): the student-side trajectory digest. When
+    # ``student_digest_binding`` is on, the STUDENT prompt's trajectory token
+    # reads student/status_digest.jsonl — a deterministic build_digest
+    # projection of the existing records, bounded to the last
+    # ``student_tail_lines`` decision rows — instead of the raw, unbounded
+    # status.jsonl. Off (the default) the prompt is byte-identical to the
+    # baseline and no digest file is written; every raw status.jsonl reader
+    # (the teacher prompts included) is untouched either way.
+    student_digest_binding: bool | None = None
+    student_tail_lines: int | None = None
+    # WP19 (task 4, teacher side): the diagnose prompt's NCU view bounded by
+    # ROWS — the best iteration's report stays whole (best-only), the
+    # per-iteration history keeps its last ``teacher_ncu_tail_lines`` rows.
+    # Block-based, never a byte cut (the 4k-truncation incident). Off by
+    # default: the full-history view is the baseline.
+    teacher_context_bound: bool | None = None
+    teacher_ncu_tail_lines: int | None = None
     # INFEASIBLE GATE: the fewest diagnoses (this one included; the distillation
     # and a clean M0 audit do not count) before a stop request can be accepted.
     # 1 = the reachability check alone gates the stop (see _infeasible_refusal).
@@ -1191,7 +1209,69 @@ def _student_prompt(ctx: LoopContext, iter_no: int, probe_feedback: str = "") ->
         extra += note
     if probe_feedback:
         extra += probe_feedback
-    return render_prompt(_meta_prompt(ctx, "student_prompt.md"), _bindings(ctx), extra)
+    bindings = _bindings(ctx)
+    if ctx.student_digest_binding:
+        # WP19 (task 4, contract C13): the student's trajectory read goes to the
+        # digest — a deterministic projection of the existing records — while
+        # every other reader (the teacher prompts) keeps the raw file. The
+        # swap is per-render: the shared bindings dict is copied, never
+        # mutated.
+        _write_student_digest(ctx)
+        digest = str(_student_digest_path(ctx))
+        bindings = {**bindings, "{STATUS_JSONL}": digest, "{TRAJECTORY_PATH}": digest}
+    return render_prompt(_meta_prompt(ctx, "student_prompt.md"), bindings, extra)
+
+
+def _student_digest_path(ctx: LoopContext) -> Path:
+    return Path(ctx.workspace) / "student" / "status_digest.jsonl"
+
+
+def _bounded_ncu_records(records: list, ctx: LoopContext) -> list:
+    """WP19 (task 4): the diagnose prompt's NCU view input — the best
+    iteration (whole, best-only compression) plus the last
+    ``teacher_ncu_tail_lines`` records, chronological rows intact. A row list,
+    never a byte slice."""
+    n = ctx.teacher_ncu_tail_lines or 8
+    shown = list(records[-n:]) if len(records) > n else list(records)
+    best = _best_keep_profiler(records, ctx.gate_window)
+    if best is not None:
+        best_rec = next((r for r in records if r.iter == best[1]), None)
+        if best_rec is not None and all(r is not best_rec for r in shown):
+            shown.insert(0, best_rec)
+    return shown
+
+
+def _write_student_digest(ctx: LoopContext) -> None:
+    """WP19 (task 4, contract C13): project the existing iteration records
+    through build_digest into student/status_digest.jsonl.
+
+    Zero new record types — every field is build_digest's projection of what
+    status.jsonl already carries. The file is JSONL: line 1 the summary
+    (sol/target/achieved/flags), then one line per decision row, the last
+    ``student_tail_lines`` rows (the tail window is the point — the raw file
+    grows unbounded). Best-effort: a projection failure leaves the previous
+    digest (or none) in place and the run untouched."""
+    try:
+        records = load_records(ctx.status_path)
+        digest = build_digest(records, {"value": ctx.target_ms},
+                              gate_window=ctx.gate_window)
+        n = ctx.student_tail_lines or 50
+        rows = digest.get("decisions", [])
+        digest["decisions"] = rows[-n:] if len(rows) > n else rows
+        curve = digest.get("curve", [])
+        digest["curve"] = curve[-n:] if len(curve) > n else curve
+        regressions = digest.get("regressions", [])
+        digest["regressions"] = regressions[-n:] if len(regressions) > n else regressions
+        path = _student_digest_path(ctx)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({k: digest[k] for k in
+                                 ("sol", "target", "achieved", "flags")},
+                                ensure_ascii=False) + "\n")
+            for row in digest["decisions"]:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except (OSError, ValueError, KeyError, TypeError):
+        return
 
 
 # --- inner loop -------------------------------------------------------------
@@ -2352,6 +2432,20 @@ def _wp19_apply_cfg(ctx: LoopContext) -> None:
     if ctx.probe_manifest is None:
         raw = loop_cfg.get("probe_manifest", True)
         ctx.probe_manifest = raw if isinstance(raw, bool) else True
+    if ctx.student_digest_binding is None:
+        raw = loop_cfg.get("student_digest_binding", False)
+        ctx.student_digest_binding = raw if isinstance(raw, bool) else False
+    if ctx.student_tail_lines is None:
+        raw = loop_cfg.get("student_tail_lines", 50)
+        ctx.student_tail_lines = raw if isinstance(raw, int) and not isinstance(raw, bool) \
+            and raw > 0 else 50
+    if ctx.teacher_context_bound is None:
+        raw = loop_cfg.get("teacher_context_bound", False)
+        ctx.teacher_context_bound = raw if isinstance(raw, bool) else False
+    if ctx.teacher_ncu_tail_lines is None:
+        raw = loop_cfg.get("teacher_ncu_tail_lines", 8)
+        ctx.teacher_ncu_tail_lines = raw if isinstance(raw, int) \
+            and not isinstance(raw, bool) and raw > 0 else 8
 
 
 _WP11_TELEMETRY_FIELDS = ("agent_turn_s", "eval_job_s", "ncu_job_s",
@@ -8536,10 +8630,18 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
         recon = render_ncu_reconciliation(
             best_prof, recon_baseline.ncu, student_iter=best_iter,
             ref_role=recon_baseline.role, ref_name=recon_baseline.ref_name)
+    shown = records
+    if ctx.teacher_context_bound:
+        # WP19 (task 4): the NCU view bounded by ROWS (blocks), never by bytes
+        # (the 4k-truncation incident): the best iteration's report stays whole
+        # (best-only), the per-iteration history keeps its tail. This is the
+        # whole reduction — nothing else is added to the prompt (the
+        # addition/reduction ledger lives in CHANGES-WP19).
+        shown = _bounded_ncu_records(records, ctx)
     ncu_view = (f"\n\n## NCU hardware ground truth (inline, per-iteration bottleneck verdicts — "
                 f"primary evidence, read before judging)\n"
-                f"{render_ncu_report(records, baseline=arch_ncu)}"
-                f"\n\n### Metric evolution table\n{render_ncu_trace(records)}\n")
+                f"{render_ncu_report(shown, baseline=arch_ncu)}"
+                f"\n\n### Metric evolution table\n{render_ncu_trace(shown)}\n")
     if recon:
         # Two-sided reconciliation: the digest above never quoted the ref side,
         # so "tensor occupancy gap ≈ the whole residual" — the decisive plateau

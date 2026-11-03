@@ -30,13 +30,16 @@ from forgekernel.submit import direct
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx, _MILESTONE
 from test_wp11_throughput import _WP11_TELEMETRY
 
-# WP23 integration: WP15's documented additive record fields (resolution/
-# confirmation digest, dataclass defaults — zero behavior change) ride the
-# same records this golden pins; they are stripped alongside WP11's telemetry
-# so the field-by-field identity keeps pinning exactly the merge-base fields.
+# WP23 integration: the documented additive record fields of the merged
+# generations (dataclass defaults — zero behavior change) ride the same records
+# this golden pins; they are stripped alongside WP11's telemetry so the
+# field-by-field identity keeps pinning exactly the merge-base fields.
+# WP15: the confirmation accounting (confirm jobs/readings, best se/confidence).
+# WP14: the per-shape ledger (per_shape_ratios/per_shape_best, C8's schema).
 _WP15_FIELDS = ("best_low_confidence", "best_standard_error",
                 "confirm_jobs", "confirm_readings")
-_STRIP_FIELDS = _WP11_TELEMETRY + _WP15_FIELDS
+_WP14_FIELDS = ("per_shape_ratios", "per_shape_best")
+_STRIP_FIELDS = _WP11_TELEMETRY + _WP15_FIELDS + _WP14_FIELDS
 
 import pytest
 

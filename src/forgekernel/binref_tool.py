@@ -76,8 +76,8 @@ def compile_flags(opts: dict | None) -> tuple[list[str], list[str], list[str]]:
 
 def _lb():
     sys.path.insert(0, str(HERE / "eval"))
-    import leaderboard  # the card's judge, inputs and clock (a verbatim copy)
-    return leaderboard
+    import benchkit  # the card's bench engine, inputs and clock (a verbatim copy)
+    return benchkit
 
 
 def build() -> int:
@@ -166,7 +166,7 @@ def crosscheck() -> int:
 
 def bench() -> int:
     _ensure_built()
-    return _lb().run_leaderboard_bench(["--mode", "ref"])
+    return _lb().run_bench(["--mode", "ref"])
 
 
 def ncu() -> int:

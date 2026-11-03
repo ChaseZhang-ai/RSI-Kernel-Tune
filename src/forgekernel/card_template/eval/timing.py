@@ -884,9 +884,6 @@ def paired_performance(paired: dict, *, e2e_key: str = "bwd_median_ms",
         # numbers as one measurement condition.
         "gpu_state": gpu_state_report(),
     }
-    if isinstance(paired.get("board"), dict):
-        # WP1: the workload's board-protocol secondary reading, report-only
-        out["board"] = paired["board"]
     r = paired.get("ref")
     if r:
         out.update({
@@ -1009,15 +1006,6 @@ def measure_windows_workloads(workloads, *, prep=None,
     results = []
     for name, kernel_fns, ref_fns in items:
         paired = measure_paired(kernel_fns, ref_fns, prep=preps[name], burn_in_s=0.0)
-        if SECONDARY_PROTOCOL == "board":
-            # WP1: one board-protocol reading beside the gate window, report-only.
-            # The workload's own kernel callable, fed its own prep tensors.
-            fns = _as_fns(kernel_fns)
-            call, _state = _bind_prep(fns[0], preps[name])
-            try:
-                paired["board"] = measure_board(call)
-            except Exception as exc:  # noqa: BLE001 — a secondary reading never fails the bench
-                paired["board"] = {"protocol": "board", "error": f"{type(exc).__name__}: {exc}"}
         paired["name"] = name
         results.append(paired)
     return {"workloads": results, "burn_in_rounds": rounds}
@@ -1093,15 +1081,6 @@ def workloads_performance(result: dict, *, e2e_key: str = "bwd_median_ms",
             out["in_job_ref"] = f"partial: no reference pair on {', '.join(missing)}"
     if (prep := _workloads_prep_block(runs)) is not None:
         out["prep"] = prep
-    boards = [p["board"] for p in runs if isinstance(p.get("board"), dict)]
-    if boards:
-        # WP1: the board-protocol secondary reading, report-only (the gate never
-        # reads it). Aggregate = geomean over the workloads, like the gate.
-        meds = [b.get("median_ms") for b in boards
-                if isinstance(b.get("median_ms"), (int, float))]
-        out["board"] = {"protocol": "board", "n_workloads": len(boards),
-                        "median_ms": round(_geomean(meds), ndigits) if meds else None,
-                        **({"error": boards[0]["error"]} if "error" in boards[0] else {})}
     per = []
     for paired in runs:
         block = paired_performance(paired, e2e_key=e2e_key, ndigits=ndigits)
@@ -1252,75 +1231,3 @@ def measure_windows_with_graph(fn, *, prep=None) -> dict:
     if state is not None:
         out["prep"] = state.block()      # after the replays: they read the tensors too
     return out
-
-
-# --- board-protocol secondary window (WP1) -------------------------------------
-#
-# The harness gate is a warm-L2 back-to-back batch at the GPU's own clocks; the
-# SOL-ExecBench board is locked clocks (SM 1500 / mem 3996, the gpu_entry lock
-# the card asks for) + L2 FLUSHED before every timed call + a single-call median.
-# docs/leaderboards.md's own warning: a kernel tuned under a warm-L2 pipelined
-# window can win here and lose there. A card may opt into carrying the board's
-# READING beside its gate (task.toml [timing] protocol = "board"; the generated
-# bench sets SECONDARY_PROTOCOL = "board" below): measure_windows_workloads then
-# takes one board reading per workload and workloads_performance reports the
-# aggregate under performance.board. REPORT-ONLY — the gate, the best, the
-# plateau and every verdict keep reading the gate window; this number exists so
-# a win that only lives warm-L2 is visible before the board tells you.
-
-SECONDARY_PROTOCOL = "device"   # the generated bench may set this to "board"
-
-# SOL-ExecBench eval_driver's BenchmarkConfig warmup / iters for one reading.
-BOARD_WARMUP = 10
-BOARD_ITERS = 50
-
-
-def _flush_buffer(device=None):
-    """A buffer twice the L2's size: zeroing it after the reset evicts what the
-    previous call left (the leaderboard template's own approach, mirrored here so
-    timing.py stays self-contained)."""
-    try:
-        l2 = int(torch.cuda.get_device_properties(
-            torch.device(device or "cuda")).L2_cache_size)
-    except Exception:  # noqa: BLE001 — an unknown device still gets a big buffer
-        l2 = 1 << 20
-    return torch.empty(max(2 * l2, 1 << 20), dtype=torch.int8,
-                       device=device or "cuda")
-
-
-def measure_board(fn, *, warmup: int = BOARD_WARMUP, iters: int = BOARD_ITERS) -> dict:
-    """The board-protocol reading of one callable: L2 flushed before every timed
-    call, single call per sample, median of the per-call event spans.
-
-    Clocks are NOT set here — the lock is GPU state and belongs to the job's
-    entry script (the card's gpu_entry.sh pins the board's clocks when the task
-    opts in; this function only measures under whatever clocks it finds). A
-    flush that cannot run (no device, no cudart) degrades to measuring without
-    one — the reading then carries ``flushed: false`` and is NOT a board number.
-    """
-    flush_buf = _flush_buffer()
-
-    def flush():
-        try:
-            torch.cuda.cudart().cudaCtxResetPersistingL2Cache()
-        except Exception:  # noqa: BLE001 — best effort, like the suites' own reset
-            pass
-        flush_buf.zero_()
-        torch.cuda.synchronize()
-
-    for _ in range(warmup):
-        fn()
-    torch.cuda.synchronize()
-    start = torch.cuda.Event(enable_timing=True)
-    stop = torch.cuda.Event(enable_timing=True)
-    samples = []
-    for _ in range(iters):
-        flush()
-        start.record()
-        fn()
-        stop.record()
-        torch.cuda.synchronize()
-        samples.append(start.elapsed_time(stop))
-    return {"protocol": "board", "flushed": True, "warmup": warmup, "iters": iters,
-            "median_ms": statistics.median(samples),
-            "min_ms": min(samples)}

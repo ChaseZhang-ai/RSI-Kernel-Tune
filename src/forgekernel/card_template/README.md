@@ -105,8 +105,8 @@ A multi-file solution (`sources` of a solution JSON, or a directory) is sealed i
 `seal solution.json` / `seal <dir> --entry k.py::run` and loaded in the job as an in-memory private
 package (relative / absolute imports between its files map into the package); the source is visible to
 the JIT only while loading and during calls through `entry()`, and exceptions thrown by the reference
-keep only their type and `file:line`. A leaderboard tree needs no hand assembly:
-`forge init <op> --leaderboard ... --sealed-ref solution.json` generates the tree, the reference tree,
+keep only their type and `file:line`. A sealed reference needs no hand assembly:
+`forge run` (taskcard.seal_reference) generates the tree, the reference tree,
 the key and the fence in one go (`forgekernel.sealref`).
 
 ### Performance is judged on the geomean of 3 workloads
@@ -548,13 +548,15 @@ Same job, same batch of inputs: measured in both the correctness and the all mod
   gate and gives the error ratio. **Default strict for trees with their own bench.**
 - `official`: recorded only (the top-level `precision` block of the job JSON, the run log, the
   iteration record's `precision` field), never blocks.
-- `off`: not read. **Default off for leaderboard trees** — a leaderboard is judged by the
-  leaderboard's rules: `eval/leaderboard.py` matches the official evaluator exactly, does no float64
+- `off`: not read, and not measured. **The strict contract is every task's default
+  (WP24)**: the generated bench measures the precision record on every card; a card
+  opts out with `precision_contract` = "off". `eval/benchkit.py` no longer skips the
+  float64
   recompute, runs no stressed inputs and emits no `precision` block; the driver does not warn and the
   SASS check does not report.
 
-To measure on a leaderboard tree, write `"precision_contract": "official"` (or `"strict"`) in
-`eval/leaderboard/problem.json`: `eval/leaderboard.py` recognizes only this key (copy in
+To turn the measure off on a card, write `"precision_contract": "off"` in
+`eval/problem/problem.json`: `eval/benchkit.py` recognizes only this key (copy in
 `eval/precision.py`; do not edit it), the loop reads it by default as well, and `[loop]
 precision_contract` can override it. When the loop wants strict / official but problem.json has not
 turned it on, the bench measures nothing: strict refuses a fresh start (exit code 20), the others only
@@ -571,7 +573,7 @@ eval that brings no `precision` block (the kernel and the bench share a process,
 turn the measurement off), strict REVERTs it as a correctness failure;
 `FK_PRECISION=0` is read only once, when the bench is imported; the kernel changing it later has no effect.
 
-**Stressed inputs** (part of the precision gate): a leaderboard tree with the precision gate on also
+**Stressed inputs** (part of the precision gate): a card with the precision gate on also
 measures precision once more on every timed workload with each of a set of stressed inputs —
 `offset` (normal sample +1), `spikes` (0.1% of elements set to ±12), `amp` (×4). Only float inputs that
 are pure normal samples are touched (heuristic tensors, workload files, custom and fp8 inputs are left

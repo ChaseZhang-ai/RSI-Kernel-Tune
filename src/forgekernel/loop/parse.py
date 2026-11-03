@@ -200,7 +200,7 @@ class EvalResult:
     # sitting best's, so the two are not one measurement condition — see
     # loop/driver.py _CLOCK_DRIFT_BAND.
     clock_drift: bool = False
-    # WP9: the timing-fresh-input recheck (eval/leaderboard.py, run after ALL
+    # WP9: the timing-fresh-input recheck (eval/benchkit.py, run after ALL
     # timing windows close): {"mode": "process"|"regen", "pass": bool|None,
     # "layers": [...]}. pass=False — the timed calls did not compute what
     # correctness measured on the same instance — is a reward-hack reading the
@@ -367,9 +367,9 @@ def parse_eval(text: str) -> EvalResult:
             # RealBackend.submit_gpu never returns such a log; another submitter
             # might — say what happened instead of "the job died"
             return EvalResult(correctness=False,
-                              error=f"the job timed nothing: the board's clock lock did not "
-                                    f"hold on its node (a node fault, not the kernel): "
-                                    f"{why[:300]}")
+                              error=f"the job timed nothing: the card's declared clock lock "
+                                    f"did not hold on its node (a node fault, not the "
+                                    f"kernel): {why[:300]}")
         # WP11 (task 5): the tail rides every failure error — the job died before
         # its verdict, and its log is the only evidence of why. Same sentence as
         # always, the evidence now attached.

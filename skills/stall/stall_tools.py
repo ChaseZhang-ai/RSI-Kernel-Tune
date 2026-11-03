@@ -107,8 +107,8 @@ MIN_DURATION_NS = 20_000   # a "dominant" kernel shorter than this is a mis-aim 
                            # the profiler window vouches for it (window_vouches below)
 COVERAGE_FLOOR = 90.0      # the ledger's whole point: rows must sum
 
-# Short kernels (an audit of every earlier SOL-ExecBench job log): the two floors above were set
-# for attention-sized kernels and fail closed on the SOL-ExecBench ones, which mostly run
+# Short kernels (an audit of every earlier GPU job log): the two floors above were set
+# for attention-sized kernels and fail closed on the short ones, which mostly run
 # 5-20 us. PC sampling lands ~24 samples/us on one launch (1083 STALL-OK runs: p10-p90
 # 22-29), so a single launch reaches MIN_SAMPLES only at ~20 us -- the duration floor
 # is the samples floor in disguise. Over every job: 1642 logs STALL-FAIL mis-aim and 335

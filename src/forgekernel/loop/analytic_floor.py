@@ -400,7 +400,7 @@ def floor_for(problem: dict) -> dict:
             "floor_ms_band": band, "family": family, "assumptions": assumptions}
 
 
-# --- problem from a leaderboard card --------------------------------------------
+# --- problem from a card ---------------------------------------------------------
 
 def problem_from_card(problem_json: dict, workload: dict | None = None,
                       arch: str = "") -> dict | None:
@@ -462,8 +462,8 @@ def mfu_headroom_line(mfu: float | None) -> str:
 
 def floor_from_op_dir(op_dir: Path, arch: str = "") -> dict | None:
     """The floor of an operator card's representative workload, read off
-    ``eval/leaderboard/problem.json``. None when the card has no problem file."""
-    p = Path(op_dir) / "eval" / "leaderboard" / "problem.json"
+    ``eval/problem/problem.json``. None when the card has no problem file."""
+    p = Path(op_dir) / "eval" / "problem" / "problem.json"
     if not p.is_file():
         return None
     import json

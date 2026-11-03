@@ -1,5 +1,5 @@
-"""Sealed SOURCE reference for a leaderboard card: a Python solution (PyTorch, Triton,
-CuTe DSL; one file or many) the agents can run, time and profile but never read.
+"""Sealed SOURCE reference: a Python solution (PyTorch, Triton, CuTe DSL; one file or
+many) the agents can run, time and profile but never read.
 
 The binary route (forgekernel.binref) needs a compiled solution. A Python solution has
 no binary to ship, so it ships as source the agents cannot decode: every file of the
@@ -8,24 +8,24 @@ format), committed into the card and its recon tree; the key sits in the gitigno
 ``submit.local.toml`` ``[env]`` of both trees (denied to the student and a blackbox
 teacher by the agent policy) and reaches every job as ``FK_REF_KEY``, which the tree's
 gpu_entry.sh moves at once into ``ref_bin/ref_payload.key`` and out of the environment
-every later process would inherit (key_preamble); inside the job the card's judge
+every later process would inherit (key_preamble); inside the job the card's bench engine
 decodes the payload IN MEMORY into a private package and times it beside the kernel:
 
-    forge init <op> --leaderboard sol-execbench ... --sealed-ref solution.json \\
-        [--ref-source-path PATH ...]
+    (the task's reference is sealed automatically by `forge run` -- taskcard.seal_reference)
         -> card: problem.json reference_impl kind "sealed" (ref_bin/ref_payload.bin, timed
            in-job beside the kernel), eval/closed_ref.py, the key in submit.local.toml, a
            fence on kernel.py (loader, payload, key, environment, reflection hooks, JIT
-           caches), a guarded `cmd` task, and a blackbox loop.toml.example;
+           caches), a guarded `cmd` task;
         -> recon tree operators/_<op>ref/: the same payload and key, sealref.json,
            sealref.py (check / crosscheck / bench / ncu), a copy of the card's eval/, and
            a gpu_entry.sh whose `cmd` task is guarded.
 
 There is nothing to build: both trees run as soon as they are committed. No plaintext of
-the reference is written into either tree (``forge new`` checks both with
+the reference is written into either tree (``forge run`` checks both with
 ``closed_ref.check_tree`` before it returns); where the solution itself lives goes into
 loop.toml ``ref_source_paths``.
 """
+
 from __future__ import annotations
 
 import hashlib

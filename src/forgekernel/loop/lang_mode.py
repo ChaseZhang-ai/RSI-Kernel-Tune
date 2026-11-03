@@ -30,8 +30,8 @@ MODE_CUTEDSL = "cutedsl"
 MODE_CUDA = "cuda"
 
 # The languages whose student writes a CUDA C++ kernel file the card builds with
-# nvcc. cuda-sol is the leaderboard cuda_cpp solution (one .cu with its own
-# PYBIND11_MODULE binding, built the way SOL-ExecBench builds it); it is the only
+# nvcc. cuda-sol is the CUDA C++ solution mode (one .cu with its own
+# PYBIND11_MODULE binding, built by the card's bench engine); it is the only
 # CUDA language with a card harness behind it.
 CUDA_LANGUAGES = frozenset({"cuda-sol"})
 CUDA_KERNEL_SUFFIXES = (".cu",)

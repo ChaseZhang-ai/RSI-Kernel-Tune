@@ -58,7 +58,7 @@
 # `import tempfile` while protecting nothing, since what actually guards the
 # unsealed tree is its `fkref` prefix plus the blob, the key, the module object and
 # the source-introspection helpers, all still listed here.
-BLACKBOX_FORBID_BASE='closed/|\.enc\b|_REF_KEY|keystream|unseal|decrypt|fkref|closed_ref|ref_payload|_REF_DIR|_REF_PATH|_SRC_PATH|_module\(\)|linecache|getsource|getsourcefile|inspect\.getfile|inspect\.getmodule|sys\.modules\[|_COMPILE_CACHE|py_compile|\bdis\.|print-source[= ]+(cuda|all|sass,cuda|cuda,sass)|import-source|--source-folders|find / .*-name|find /tmp|ls .*/tmp|mit-han-lab|kernel-design-agents|NVlabs|mlsys2026|contest-solution|flashinfer-bench|\bstrings\b|xxd|hexdump|base64 -d'
+BLACKBOX_FORBID_BASE='closed/|\.enc\b|_REF_KEY|keystream|unseal|decrypt|fkref|closed_ref|ref_payload|_REF_DIR|_REF_PATH|_SRC_PATH|_module\(\)|linecache|getsource|getsourcefile|inspect\.getfile|inspect\.getmodule|sys\.modules\[|_COMPILE_CACHE|py_compile|\bdis\.|print-source[= ]+(cuda|all|sass,cuda|cuda,sass)|import-source|--source-folders|find / .*-name|find /tmp|ls .*/tmp|mit-han-lab|kernel-design-agents|NVlabs|mlsys2026|contest-solution|benchmark-solution|\bstrings\b|xxd|hexdump|base64 -d'
 
 # This file, as it is being sourced. The driver seeds it into notes/, and notes/ is
 # what blackbox_guard scans — while this file's own comments and forbid list carry

@@ -7,15 +7,14 @@ never changes ``correctness.pass`` for it; what a failed check costs is the card
 ``[loop] precision_contract``:
 
     strict    a failed check is a correctness failure: REVERT, the record's error names
-              the precision gate and the worst ratio. The default for a card that judges
-              with its own eval/bench.py (its tolerance is the author's, and nothing else
-              would see an fp32 accumulation dropped to bf16 inside it).
+              the precision gate and the worst ratio. THE DEFAULT for every card (WP24:
+              the board-default-off semantic is gone with the board) -- a card's
+              tolerance is calibrated or authored, and nothing else would see an fp32
+              accumulation dropped to bf16 inside the bench.
     official  recorded only (job JSON, run log, iteration record).
-    off       not read, and on a leaderboard card not measured either: the DEFAULT for a
-              leaderboard card, whose verdict must be the board's alone -- its bench runs
-              no float64 re-run and no stressed inputs. A leaderboard card turns the
-              measure on with ``precision_contract`` in eval/leaderboard/problem.json
-              (``strict`` / ``official``), which is also its default here.
+    off       not read, and not measured either (the bench skips the float64 re-run and
+              the stressed inputs). A card turns the measure off with
+              ``precision_contract`` in eval/problem/problem.json ("off"), or here.
 
 A bench that reports no block under ``strict`` cannot be held to it: a fresh start over
 such a card is refused (``bench_findings``; a resumed run only warns), and at run time the
@@ -33,7 +32,7 @@ STRICT = "strict"
 OFFICIAL = "official"
 OFF = "off"
 CONTRACTS = (STRICT, OFFICIAL, OFF)
-LEADERBOARD_PROBLEM = Path("eval") / "leaderboard" / "problem.json"
+PROBLEM_FILE = Path("eval") / "problem" / "problem.json"
 HELPER = Path("eval") / "precision.py"
 MISSING_BLOCK = ("precision gate (strict): the eval JSON carries no `precision` block although "
                  "the card's bench reports one — an eval that skipped the measurement (e.g. "
@@ -41,15 +40,17 @@ MISSING_BLOCK = ("precision gate (strict): the eval JSON carries no `precision` 
                  "strict card; leave the bench's environment alone")
 
 
-def is_leaderboard_card(op_dir: Path) -> bool:
-    return (Path(op_dir) / LEADERBOARD_PROBLEM).is_file()
+def is_generated_card(op_dir: Path) -> bool:
+    """A card whose bench is generated from problem.json (``forge run``'s cards) -- as
+    opposed to a hand-written eval/bench.py, which must call PrecisionRecorder itself."""
+    return (Path(op_dir) / PROBLEM_FILE).is_file()
 
 
 def card_contract(op_dir: Path) -> str | None:
-    """A leaderboard card's own ``precision_contract`` (eval/leaderboard/problem.json), the
-    switch its bench measures by; None when the card does not set one."""
+    """The card's own ``precision_contract`` (eval/problem/problem.json), the switch its
+    bench measures by; None when the card does not set one."""
     try:
-        raw = json.loads((Path(op_dir) / LEADERBOARD_PROBLEM).read_text(encoding="utf-8")) \
+        raw = json.loads((Path(op_dir) / PROBLEM_FILE).read_text(encoding="utf-8")) \
             .get("precision_contract")
     except (OSError, ValueError, AttributeError):
         return None
@@ -57,19 +58,16 @@ def card_contract(op_dir: Path) -> str | None:
 
 
 def resolve_contract(cfg: dict, op_dir: Path) -> tuple[str, bool]:
-    """([loop] precision_contract, else the card's default, and whether it was defaulted).
-    A leaderboard card defaults to its problem.json ``precision_contract``, else off (its
-    verdict is the board's; the bench then measures nothing). ValueError on anything
-    outside CONTRACTS -- a typo must not read as off."""
+    """([loop] precision_contract, else the card's ``precision_contract``, else STRICT,
+    and whether it was defaulted). STRICT is every card's default (WP24). ValueError on
+    anything outside CONTRACTS -- a typo must not read as off."""
     raw = (cfg.get("loop", {}) or {}).get("precision_contract")
     if raw is None:
-        if is_leaderboard_card(op_dir):
-            raw = card_contract(op_dir) or OFF
-            if raw not in CONTRACTS:
-                raise ValueError(f"{LEADERBOARD_PROBLEM} precision_contract must be one of "
-                                 f"{', '.join(CONTRACTS)}, got {raw!r}")
-            return raw, True
-        return STRICT, True
+        raw = card_contract(op_dir) or STRICT
+        if raw not in CONTRACTS:
+            raise ValueError(f"{PROBLEM_FILE} precision_contract must be one of "
+                             f"{', '.join(CONTRACTS)}, got {raw!r}")
+        return raw, True
     value = str(raw).strip().lower()
     if value not in CONTRACTS:
         raise ValueError(f"[loop] precision_contract must be one of {', '.join(CONTRACTS)}, "
@@ -92,19 +90,16 @@ def _calls_recorder(src: str) -> bool:
 
 
 def bench_findings(op_dir: Path) -> list[str]:
-    """Why the card's bench cannot report the precision block ([] = it can). A
-    leaderboard card's bench is generated (eval/leaderboard.py measures); only the helper
-    file has to be there. A hand-written bench must call PrecisionRecorder itself."""
+    """Why the card's bench cannot report the precision block ([] = it can). A generated
+    card's bench measures (eval/benchkit.py); only the helper file has to be there. A
+    hand-written bench must call PrecisionRecorder itself."""
     op_dir = Path(op_dir)
     out = []
-    if is_leaderboard_card(op_dir) and card_contract(op_dir) not in (STRICT, OFFICIAL):
-        out.append(f"{LEADERBOARD_PROBLEM} does not set precision_contract to \"strict\" / "
-                   f"\"official\" — its bench measures nothing (the leaderboard default is off)")
     if not (op_dir / HELPER).is_file():
         out.append(f"{HELPER} is missing — copy it from src/forgekernel/card_template/eval/"
-                   + (" (with the current eval/leaderboard.py)" if is_leaderboard_card(op_dir)
+                   + (" (with the current eval/benchkit.py)" if is_generated_card(op_dir)
                       else ""))
-    if not is_leaderboard_card(op_dir):
+    if not is_generated_card(op_dir):
         bench = op_dir / "eval" / "bench.py"
         try:
             src = bench.read_text(encoding="utf-8")

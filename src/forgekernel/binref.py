@@ -1,23 +1,17 @@
-"""Sealed binary reference for a leaderboard card.
+"""Sealed binary reference.
 
 A blackbox run needs a reference the agents can run, time and profile (SASS included)
-but never read. For a compiled solution that is its binary: a CUDA C++ kernel (e.g. a
-gqa_paged_decode solution) is sealed with its sources in a recon tree and the .so in the
-card's ref_bin/. This module does it for any SOL-ExecBench / FlashInfer-Bench cuda_cpp
-solution — typically an existing best solution for the card's problem:
+but never read. For a compiled solution that is its binary: a CUDA C++ kernel is sealed
+with its sources in a recon tree and the .so in the card's ref_bin/. This module does it
+for any compiled solution of the card's problem:
 
-    forge init <op> --leaderboard sol-execbench ... --binary-ref solution.json \\
-        [--ref-source-path PATH ...]
-        -> card: problem.json reference_impl kind "binary" (ref_bin/<module>.so, timed
-           in-job beside the kernel), a fence on kernel.py, a guarded `cmd` task, and a
-           blackbox loop.toml.example;
-        -> recon tree operators/_<op>ref/: src/ (the sources), binref.json (module,
-           entry, compile options), binref.py (build / check / crosscheck / bench / ncu),
-           a copy of the card's eval/ and a gpu_entry.sh whose `cmd` task is guarded.
-    (recon tree, on a GPU)  bash gpu_entry.sh build      -> ref_bin/<module>.so
+    (the recon tree, on a GPU)  bash gpu_entry.sh build   -> ref_bin/<module>.so
     python -m forgekernel.binref install <card> <so> --ref-tree <recon tree> [--note K=V ...]
         -> the .so and PROVENANCE.txt committed into the card and the recon tree.
-"""
+
+(WP24: the board-solution scaffold that used to drive this flow is gone with the
+board; the sealing machinery stays -- the generic black-box reference route, ready
+for a compiled published kernel.)"""
 from __future__ import annotations
 
 import argparse
@@ -266,7 +260,7 @@ esac
 REF_NCU_RUN = '''"""NCU target of the recon tree: the sealed reference's calls on one input set inside
 the profiler window (input construction and warm-up stay outside it)."""
 
-from leaderboard import ncu_window
+from benchkit import ncu_window
 
 if __name__ == "__main__":
     ncu_window(which="ref")
@@ -338,7 +332,7 @@ def install(card_dir: Path, so_path: Path, notes: dict | None = None, commit: bo
     from a fresh extract of the tree, so without it every recon job rebuilds the .so —
     minutes each, and a rebuild is not byte-identical to what the card times."""
     card_dir = Path(card_dir).resolve()  # `git -C` resolves pathspecs against it
-    problem = json.loads((card_dir / "eval" / "leaderboard" / "problem.json").read_text())
+    problem = json.loads((card_dir / "eval" / "problem" / "problem.json").read_text())
     ref = problem.get("reference_impl") or {}
     if ref.get("kind") != "binary":
         raise ValueError(f"{card_dir}: the card's reference is not a binary one")

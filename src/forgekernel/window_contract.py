@@ -748,11 +748,11 @@ def ncu_run_prep_findings(ncu_src: str, prep_name: str) -> list[str]:
 
 MULTI_WORKLOAD_CALL = "measure_windows_workloads"
 PERF_WORKLOADS = 3   # mirrors src/forgekernel/card_template/eval/timing.py PERF_WORKLOADS
-# A leaderboard card's bench (src/forgekernel/card_template/eval/leaderboard.py) takes its input
-# sets from the board's own protocol — FlashInfer-Bench times its three judged draws,
-# SOL-ExecBench the last of its ten seeded rounds. The card's verdict must be the
-# board's, so the board decides what gets timed, not this rule.
-LEADERBOARD_CALL = "run_leaderboard_bench"
+# A generated card's bench (src/forgekernel/card_template/eval/benchkit.py) takes its
+# input sets from the task's own contract — every input group of every shape. The
+# card's workload count is the task's, so the task decides what gets timed, not this
+# rule.
+BENCH_CALL = "run_bench"
 
 
 def bench_workloads_findings(bench_src: str) -> list[str]:
@@ -769,7 +769,7 @@ def bench_workloads_findings(bench_src: str) -> list[str]:
         tree = ast.parse(bench_src)
     except SyntaxError as e:
         return [f"eval/bench.py does not parse: {e}"]
-    if any(isinstance(n, ast.Call) and _callee_name(n) == LEADERBOARD_CALL
+    if any(isinstance(n, ast.Call) and _callee_name(n) == BENCH_CALL
            for n in ast.walk(tree)):
         return []
     calls = [n for n in ast.walk(tree)
@@ -797,10 +797,10 @@ def bench_times_workloads(op_dir: Path) -> bool | None:
         tree = ast.parse(bench.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
         return None
-    if any(isinstance(n, ast.Call) and _callee_name(n) == LEADERBOARD_CALL for n in ast.walk(tree)):
-        # a leaderboard card: a workload GROUP (problem.json "group") reports the geomean
+    if any(isinstance(n, ast.Call) and _callee_name(n) == BENCH_CALL for n in ast.walk(tree)):
+        # a generated card: a shape GROUP (problem.json "group") reports the geomean
         try:
-            problem = json.loads((Path(op_dir) / "eval" / "leaderboard" / "problem.json")
+            problem = json.loads((Path(op_dir) / "eval" / "problem" / "problem.json")
                                  .read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return False

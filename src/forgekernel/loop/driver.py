@@ -169,7 +169,7 @@ class BackendError(RuntimeError):
 
 class NoRunError(BackendError):
     """A GPU submit that ended with NO job producing output: every job lost its
-    runner, or the GPU would not hold the board's clock lock (loop.cli raises the
+    runner, or the GPU would not hold the card's clock lock (loop.cli raises the
     concrete kinds). Nothing ran, so nothing may be
     charged to the payload — a caller that counts attempts against a tree
     (_ensure_ref_pricing: "the same tree would hang again") must not count one
@@ -424,8 +424,8 @@ class LoopContext:
     harness_anchor: str = ""
     # [loop] precision_contract (loop/precision_gate.py): "strict" makes a failed
     # precision check a correctness failure, "official" records it only, "off" does not
-    # read it. The CLI resolves the card kind's default (leaderboard card: official,
-    # own bench: strict); "off" here keeps scripted contexts neutral.
+    # read it. The CLI resolves the default (the card's problem.json contract, else
+    # strict); "off" here keeps scripted contexts neutral.
     precision_contract: str = "off"
     # The card's bench is wired to report the precision block (precision_gate.bench_findings
     # found nothing missing at launch): under strict an eval that comes back without one
@@ -565,7 +565,7 @@ class LoopContext:
     # (forgekernel.loop.analytic_floor): bytes/FLOPs computed from the card's
     # problem definition alone, timed against the arch's published peaks. TEACHER
     # side only — it renders at the tail of the NCU ground-truth section, never
-    # in the student digest. Lazily read off eval/leaderboard/problem.json on
+    # in the student digest. Lazily read off eval/problem/problem.json on
     # first use and cached here.
     floor_ms: float | None = None            # cached analytic floor (ms)
     floor_info: dict = field(default_factory=dict)   # the full floor dict (line rendering)
@@ -1016,8 +1016,7 @@ def _precision_reading(ctx: LoopContext, ev, iter_no: int) -> dict:
     """The precision gate (loop/precision_gate.py): summarize the eval JSON's
     ``precision`` block for the record, and under ``[loop] precision_contract = strict``
     turn a failed check into a correctness failure (``ev`` is changed in place).
-    ``official`` records and logs only -- the bench's own verdict stays what the board
-    would say."""
+    ``official`` records and logs only -- the bench's own verdict stays the bench's."""
     contract = ctx.precision_contract
     summary = precision_gate.summarize(contract, ev.precision)
     if not summary:
@@ -1033,7 +1032,7 @@ def _precision_reading(ctx: LoopContext, ev, iter_no: int) -> dict:
             _log(f"iter {iter_no}: WARNING precision ({contract}): the eval JSON carries no "
                  f"`precision` block — the bench does not report one (copy "
                  f"eval/precision.py from src/forgekernel/card_template and call PrecisionRecorder; a "
-                 f"leaderboard card needs the current eval/leaderboard.py), so the "
+                 f"generated card needs the current eval/benchkit.py), so the "
                  f"precision_contract cannot be applied; rows record `unreported`")
         return summary
     if (why := precision_gate.gate_failure(contract, summary)) and ev.correctness:
@@ -1060,7 +1059,7 @@ def _sass_precision(ctx: LoopContext, student: "dict | None", iter_no: int) -> d
                             .get("mma_precision"))
             dtypes = []
             try:
-                prob = json.loads((Path(ctx.workspace) / precision_gate.LEADERBOARD_PROBLEM)
+                prob = json.loads((Path(ctx.workspace) / precision_gate.PROBLEM_FILE)
                                   .read_text(encoding="utf-8"))
                 dtypes = [str(v.get("dtype")) for v in
                           (prob.get("definition") or {}).get("inputs", {}).values()]
@@ -9245,7 +9244,7 @@ def _resolve_target(ctx: LoopContext) -> float:
 
 
 def _analytic_floor_ms(ctx: LoopContext) -> "float | None":
-    """The card's analytic floor (ms), read once off eval/leaderboard/problem.json
+    """The card's analytic floor (ms), read once off eval/problem/problem.json
     and cached on ctx (forgekernel.loop.analytic_floor is the single source)."""
     if not ctx.floor_checked:
         ctx.floor_checked = True
@@ -10308,11 +10307,11 @@ _SINGLE_WORKLOAD_WARNED: set[str] = set()
 
 
 def _too_few_workloads(ctx: LoopContext, ev: EvalResult) -> bool:
-    """A plain bench's gate below PERF_WORKLOADS workloads. A board or task card times
-    what its suite says (a task: every input group of every shape, one workload block
-    per shape), so the count is not its contract."""
+    """A plain bench's gate below PERF_WORKLOADS workloads. A generated card times what
+    its task says (every input group of every shape, one workload block per shape), so
+    the count is not its contract."""
     return ev.n_workloads < PERF_WORKLOADS and \
-        not precision_gate.is_leaderboard_card(ctx.workspace)
+        not precision_gate.is_generated_card(ctx.workspace)
 
 # A ⊗ companion group whose members only pay off together cannot be priced one
 # member at a time: mounted alone each member is cost without gain, so per-iter

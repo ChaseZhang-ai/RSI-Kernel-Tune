@@ -13,9 +13,9 @@ instantiates such a repo from the tracked main-repo templates:
     for the driver to fill per iteration.
 
 ``new_operator`` is pure file I/O (no git) so it is trivially testable; the CLI
-adds the ``git init`` + initial commit side effect. (WP24: the leaderboard-card
-scaffold that used to live here is gone with the board -- the run's cards are
-generated from tasks by forgekernel.taskcard.)
+adds the ``git init`` + initial commit side effect. (WP24: the card scaffold that
+used to live here is gone with the board -- the run's cards are generated from
+tasks by forgekernel.taskcard.)
 """
 
 from __future__ import annotations

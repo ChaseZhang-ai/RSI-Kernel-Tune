@@ -1120,7 +1120,7 @@ def _bench_json(label: str, rc: int, out: str, err: str):
         return json.loads(m.group(1)[:m.group(1).rindex("}") + 1])
 
 
-# == leaderboard.WORKLOAD_SCOPE_ENV: a group card is timed on ONE workload -- its
+# == benchkit.WORKLOAD_SCOPE_ENV: a group card is timed on ONE workload -- its
 # representative, or the one `--workload <name>` names (the driver reads the card's
 # other meta workloads this way, one job each) -- and the slab launcher's ncu_window
 # follows the same variable, so the bench, the slab and the span denominator are one

@@ -33,7 +33,7 @@ import re
 from pathlib import Path
 from urllib.parse import unquote
 
-PROBLEM_FILE = Path("eval") / "leaderboard" / "problem.json"
+PROBLEM_FILE = Path("eval") / "problem" / "problem.json"
 # per-workload rounds when a table is priced on several workloads: the merged reading
 # pools them (2 rounds x 3 workloads = 6 readings per variant, against 3 on one)
 META_ROUNDS = 2

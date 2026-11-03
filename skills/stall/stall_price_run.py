@@ -50,7 +50,7 @@ import sys
 
 REPORT = "/tmp/stallprice"
 IR_DIR = "/tmp/dsl_ir"
-WORKLOAD_SCOPE_ENV = "FK_LB_WORKLOAD_SCOPE"   # == leaderboard.WORKLOAD_SCOPE_ENV
+WORKLOAD_SCOPE_ENV = "FK_LB_WORKLOAD_SCOPE"   # == benchkit.WORKLOAD_SCOPE_ENV
 
 # The analysis output, replayed compactly at the very END of the job log.
 # A log read back with a length cap keeps only its tail, and the pricing output

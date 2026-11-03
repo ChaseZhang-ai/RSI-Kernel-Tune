@@ -26,10 +26,11 @@ ratio of 20 that is no precision drop at all (tf32's own roundoff is 2^-11). Rel
 moves every element, which a norm sees with little noise; a NaN / inf where the truth is
 finite makes e_cand infinite (an overflowed fp16 intermediate is a precision failure).
 
-K_RATIO, FLOOR_ULPS and FLOOR_REL were calibrated on B200 over 14 SOL-ExecBench problems
-(GEMM, rmsnorm, GQA / MLA attention, fp8 MoE, fp32 L1/L2 blocks; 1956 readings):
-honest implementations -- the reference run in fp32 or with another reduction order,
-the repository's best leaderboard solutions -- reach at most a quarter of the limit
+K_RATIO, FLOOR_ULPS and FLOOR_REL were calibrated on B200 over 14 published GPU
+kernel problems (GEMM, rmsnorm, GQA / MLA attention, fp8 MoE, fp32 L1/L2 blocks;
+1956 readings): honest implementations -- the reference run in fp32 or with another
+reduction order, the repository's best published kernels -- reach at most a quarter
+of the limit
 (worst e_cand / limit 0.25, a split-K GEMM at 1.33x its reference's error), while
 the same references with bf16 / fp16 accumulation, tf32 matmuls, fp8-quantized inputs
 or fp32 intermediates rounded to bf16 / fp16 are caught on 643 of the 745 readings
@@ -50,9 +51,9 @@ Who acts on the verdict is the loop, not this file: the eval JSON carries a top-
 ``precision`` block (``PrecisionRecorder.block()``) and the driver applies the card's
 ``[loop] precision_contract`` -- ``strict`` (a failed check REVERTs like a correctness
 failure), ``official`` (recorded only) or ``off``. The bench's own ``correctness.pass``
-is never changed here. A leaderboard card measures only when its problem.json sets
-``precision_contract`` to strict / official; by default (off) eval/leaderboard.py judges
-exactly as the board does and never calls into this file.
+is never changed here. The generated bench measures by default (strict is every task's
+default, WP24); a card opts out with ``precision_contract`` = "off" in
+eval/problem/problem.json.
 
 A hand-written bench uses it like this::
 
@@ -185,7 +186,7 @@ def upcast_call(fn, inputs, to: torch.dtype = torch.float64):
 def truth_of(fn, inputs, normalize=None):
     """(outputs, basis, why) -- the reference's outputs in float64, else float32, else
     (None, "unavailable", the two exceptions). ``normalize`` maps a raw return value to
-    the output list (a leaderboard card's definition order)."""
+    the output list (the definition's output order)."""
     errors = []
     for to in (torch.float64, torch.float32):
         try:

@@ -184,7 +184,7 @@ def census(dump_dir: str, out=print, full: bool = False) -> Optional[dict]:
 
 
 # ---- CUDA C++ kernels (loop language cuda-sol) ----------------------------------
-# A CUDA-mode student's CUDA C++ kernel file is built by the card (eval/leaderboard.py
+# A CUDA-mode student's CUDA C++ kernel file is built by the card (eval/benchkit.py
 # load_cuda_entry) into <FK_KERNEL_BUILD_DIR | $TMP/fk_kernel_build>/fk_kernel_<key>/,
 # with a copy of the source staged next to the extension .so. No JIT dump switch
 # exists for it: the build the NCU run just used is found by that staged copy and

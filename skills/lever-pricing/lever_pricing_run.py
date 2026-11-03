@@ -164,10 +164,10 @@ _MEDIAN_SD_FACTOR = 1.2533
 # an outlier draw, not the node's noise: it stays out of the pooled σ
 _OUTLIER_SPREAD_FACTOR = 4.0
 MAX_SUBSETS = 6
-# A group card (one kernel tuned on a size class of workloads) is priced one workload
-# per job: the whole group x rounds x 2N+2 variants outlived the job clock (8
-# workloads were killed at TASK_TIMEOUT with no verdict). The card's leaderboard reads this
-# variable (== leaderboard.WORKLOAD_SCOPE_ENV) and tags its JSON; a card without group
+# A multi-shape card (one kernel serving a set of shapes) is priced one shape
+# per job: the whole set x rounds x 2N+2 variants outlived the job clock (8
+# workloads were killed at TASK_TIMEOUT with no verdict). The card's bench reads this
+# variable (== benchkit.WORKLOAD_SCOPE_ENV) and tags its JSON; a card without group
 # support ignores it and is timed whole. The table then says so (PRICE-SCOPE). The
 # workload is the representative, or the one `--workload <name>` names: the driver
 # prices each of the card's meta_workloads in its own job and merges the tables
@@ -178,7 +178,7 @@ WORKLOAD_SCOPE_ENV = "FK_LB_WORKLOAD_SCOPE"
 WORKLOAD_SCOPE = "representative"
 _SCOPE_SEEN: dict = {}
 _SCOPE_WANT = {"name": WORKLOAD_SCOPE}
-PROBLEM_FILE = os.path.join("eval", "leaderboard", "problem.json")
+PROBLEM_FILE = os.path.join("eval", "problem", "problem.json")
 AUTO_ALL_POS = "all-pos"
 _RESERVED = ("base", "all", AUTO_ALL_POS)
 MAX_ABLATIONS = 4
@@ -352,7 +352,7 @@ PREBUILD_MIN_S = 120
 # carried no ablation reading at all. The roles of the last variants (all-L, subsets)
 # read n/a instead; the ablations answer what each component of the kernel costs.
 ABLATION_RESERVE_CAP_S = 600
-_PREBUILD_SNIPPET = ("import sys; sys.path.insert(0, 'eval'); import leaderboard as L\n"
+_PREBUILD_SNIPPET = ("import sys; sys.path.insert(0, 'eval'); import benchkit as L\n"
                      "try:\n    L.load_cuda_entry(sys.argv[1], '__fk_prebuild__')\n"
                      "except AttributeError:\n    pass\n")
 

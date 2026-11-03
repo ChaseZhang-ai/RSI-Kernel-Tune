@@ -15,7 +15,7 @@ shapes, the reference's source when the task is in source mode) and writes three
                       teacher adds so every shape has at least three
 
 ``check_problems`` validates them without a GPU; the run then calibrates the judge against
-the reference on the GPU (eval/leaderboard.py ``--mode calibrate``) and hands the result
+the reference on the GPU (eval/bench.py ``--mode calibrate``) and hands the result
 back to the teacher until they agree. A task whose reference a /goal session writes gets a
 judge written from the description alone: the two are independent statements of the same
 operator, and the generated reference is accepted only when the judge passes it.

@@ -115,10 +115,10 @@ class RunnerLostError(NoRunError):
 
 
 class ClockLockRefusedError(NoRunError):
-    """The card's gpu_entry kept refusing to time because the board's clock lock did
-    not hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER). Nothing was judged or timed,
-    so it is a NoRunError — no caller may charge it to the tree, the iteration budget,
-    or a meta tool's attempts."""
+    """The card's gpu_entry kept refusing to time because the measurement clock lock it
+    declares did not hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER). Nothing was judged
+    or timed, so it is a NoRunError — no caller may charge it to the tree, the iteration
+    budget, or a meta tool's attempts."""
 
 
 class JobTransportError(BackendError):
@@ -272,8 +272,8 @@ class RealBackend:
 
     inflight_file = "fk-inflight.json"
 
-    # A job the card's gpu_entry refused to time because the board's clock lock did not
-    # hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER) is never returned to a caller:
+    # A job the card's gpu_entry refused to time because its declared clock lock did
+    # not hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER) is never returned to a caller:
     # submit_gpu resubmits it up to this many times, then stops with
     # ClockLockRefusedError (nothing is charged). The state rarely clears by waiting:
     # a GPU that would not lock its clocks kept refusing — a few retries rule out a
@@ -434,8 +434,8 @@ class RealBackend:
 
     def submit_gpu(self, branch: str, mode: str) -> str:
         """Submit, wait, and return the job's log (_submit_gpu_once) — never a log in
-        which the card's gpu_entry refused to time because the board's clock lock did not
-        hold on the GPU.
+        which the card's gpu_entry refused to time because its declared clock lock did
+        not hold on the GPU.
 
         Such a job judged and timed nothing: handed back, parse_eval reads "no eval
         JSON" as a correctness FAIL, the driver records a REVERT and spends an
@@ -451,10 +451,10 @@ class RealBackend:
             if why is None:
                 return log
             refusals += 1
-            head = (f"[loop] job {self.last_job_id or '?'} ({mode}): the board's clock lock "
-                    f"did not hold on {self.last_cluster or 'the GPU'} ({why[:160]}) — a "
-                    f"machine fault, not the kernel: no verdict is recorded and nothing is "
-                    f"charged")
+            head = (f"[loop] job {self.last_job_id or '?'} ({mode}): the card's declared "
+                    f"clock lock did not hold on {self.last_cluster or 'the GPU'} "
+                    f"({why[:160]}) — a machine fault, not the kernel: no verdict is "
+                    f"recorded and nothing is charged")
             if refusals >= max(1, int(self.clock_lock_retries)):
                 raise ClockLockRefusedError(f"{head} ({refusals} refusal(s) in a row)")
             print(f"{head}; resubmitting ({refusals}/{self.clock_lock_retries})", flush=True)
@@ -1029,13 +1029,14 @@ def _precision_preflight(op_dir: Path, contract: str, defaulted: bool, *, resumi
     """Say which precision contract the run is held to, and refuse a fresh ``strict``
     start whose bench cannot report the precision block (EXIT_PRECISION_UNREPORTED); a
     resume, a dry run or an ``official`` card only warns."""
-    kind = "leaderboard card" if precision_gate.is_leaderboard_card(op_dir) else "own bench"
+    kind = "generated bench" if precision_gate.is_generated_card(op_dir) else "own bench"
     print(f"[loop] precision_contract = {contract}"
-          + (f" (default for a {kind})" if defaulted else "")
+          + (f" (default for a card with a {kind})"
+             if defaulted and precision_gate.is_generated_card(op_dir)
+             else (f" (default)" if defaulted else ""))
           + {"strict": " — a failed precision check REVERTs like a correctness failure",
              "official": " — precision is recorded, never gated",
-             "off": (" — precision is neither measured nor read (the board's own verdict "
-                     "only)" if kind == "leaderboard card" else " — precision is not read")
+             "off": " — precision is neither measured nor read"
              }[contract], flush=True)
     if contract == precision_gate.OFF:
         return 0
@@ -1995,10 +1996,10 @@ LANGUAGES = ("cuda-cpp", "inline-ptx", "triton", "cutlass-cpp", "cutedsl", "cuda
 
 
 def _card_kernel_file(op_dir: Path) -> str:
-    """The kernel file a leaderboard card names (eval/leaderboard/problem.json kernel_file —
+    """The kernel file a generated card names (eval/problem/problem.json kernel_file —
     kernel.cu for a CUDA student), else kernel.py."""
     try:
-        return json.loads((op_dir / "eval" / "leaderboard" / "problem.json").read_text(
+        return json.loads((op_dir / "eval" / "problem" / "problem.json").read_text(
             encoding="utf-8")).get("kernel_file") or "kernel.py"
     except (OSError, ValueError):
         return "kernel.py"
@@ -2192,7 +2193,7 @@ def _main(argv: list[str] | None = None) -> int:
                    help="L0-isolated student workspace (single-branch clone)")
     p.add_argument("--milestone", help="path to the student-facing milestone.md")
     p.add_argument("--kernel-file", default=None,
-                   help="the student's kernel file (default: a leaderboard card's problem.json "
+                   help="the student's kernel file (default: a card's problem.json "
                         "kernel_file, else kernel.py)")
     p.add_argument("--oracle", default=None,
                    help="teacher-only oracle path (overrides the loop.toml default)")

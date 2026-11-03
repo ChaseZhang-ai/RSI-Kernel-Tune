@@ -3,7 +3,7 @@
 A job judges whatever ``gpu_entry.sh`` and ``eval/`` its tree carries, and the tree a
 job runs is the student's lineage: every student turn ends in ``git add -A``, so an edit
 to ``eval/bench.py`` (a looser tolerance, a correctness block that always passes, a
-leaderboard.py whose timer skips the kernel) used to reach the next eval and be judged
+benchkit.py whose timer skips the kernel) used to reach the next eval and be judged
 by itself. Nothing the launch preflights checked could see it -- they read the CARD's
 copies, before the run.
 

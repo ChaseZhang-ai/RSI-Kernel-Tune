@@ -47,10 +47,10 @@ BEGIN_MARKER = "FK_JOB_BEGIN"
 # The job never reached the GPU machine: the copy or the ssh session failed every
 # attempt. Not the kernel's failure -- the loop reports it as a transport problem.
 TRANSPORT_ERROR_MARKER = "[jobs] TRANSPORT ERROR (the job could not be delivered):"
-# A leaderboard card's gpu_entry.sh refuses to time when the board's clock lock does not
-# hold on the GPU. Matched at the START of a line only: a probe that runs a nested
-# gpu_entry prints it indented.
-CLOCK_LOCK_REFUSED_MARKER = "[gpu_entry.sh] REFUSED: this card times under the board's clock lock"
+# A card's gpu_entry.sh refuses to time when its declared measurement clock lock does
+# not hold on the GPU. Matched at the START of a line only: a probe that runs a nested
+# gpu_entry prints it indented. Keep the wording in sync with cardkit.py's template.
+CLOCK_LOCK_REFUSED_MARKER = "[gpu_entry.sh] REFUSED: this card times under a configured clock lock"
 
 # How long past the task's own timeout the runner waits before killing it.
 RUN_HEADROOM_S = 180

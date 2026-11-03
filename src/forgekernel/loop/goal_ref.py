@@ -1,7 +1,7 @@
 """No reference to distil from: generate one with a ``/goal`` session, then run as usual.
 
 A source-mode run distils its milestone from an oracle — the source of a kernel that already
-does what the student is asked to reproduce. A card that has none (a leaderboard card
+does what the student is asked to reproduce. A card that has none (a generated card
 scaffolded without ``--sealed-ref`` / ``--binary-ref``, a hand-made card whose loop.toml
 names no ``oracle``) had nothing to distil from: ``_has_distillation_input`` said no, the
 teacher never ran, and the student started against whatever milestone was on disk — on a
@@ -339,7 +339,7 @@ def _stamp(t) -> str:
 
 def _problem(op_dir: Path) -> dict | None:
     try:
-        d = json.loads((Path(op_dir) / "eval" / "leaderboard" / "problem.json")
+        d = json.loads((Path(op_dir) / "eval" / "problem" / "problem.json")
                        .read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
@@ -967,7 +967,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _contract_files(op_dir: Path, kernel_file: str) -> list[str]:
     out = [kernel_file]
-    for rel in ("eval/leaderboard/problem.json", "README.md", "eval/bench.py"):
+    for rel in ("eval/problem/problem.json", "README.md", "eval/bench.py"):
         if (Path(op_dir) / rel).is_file():
             out.append(rel)
     return out

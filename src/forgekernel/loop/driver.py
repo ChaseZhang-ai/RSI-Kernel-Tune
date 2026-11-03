@@ -38,7 +38,7 @@ from forgekernel.inner.ncu import (kernels_from_ncu, match_resusage, parse_resus
                                    profiler_from_ncu, resusage_fields, resusage_line)
 from forgekernel.skills.sass_census import parse_census_line, parse_serial_line
 from forgekernel.loop.job_env import env_failure
-from forgekernel.loop import harness_guard, precision_gate
+from forgekernel.loop import harness_guard, precision_gate, screening
 from forgekernel.loop.kb_lint import lint_kb_dir
 from forgekernel.loop import lang_mode
 from forgekernel.paths import operators_dir
@@ -559,6 +559,20 @@ class LoopContext:
     # the bracket clamps to it — the channel degrades to fewer candidates with
     # the cut recorded, it never spends jobs it does not have).
     m0_probe_candidates: int = 2
+    # --- WP17: screening primitive + M0 fidelity (contract C9) -------------------
+    # Card-layer [loop] keys (resolved by _wp17_apply_cfg; None = the sentinel the
+    # resolver fills). All three ARCH_PROBE keys are advisory-side switches over
+    # behavior that is inert without declared recipe fields: a recipe that
+    # declares no problem view is never re-ranked, a bracket with no spare job is
+    # never re-probed, and the ledger is bookkeeping a gate never reads.
+    arch_probe_floor_sort: bool | None = None      # analytic-floor pre-rank (task 2)
+    arch_probe_near_diff_reprobe: bool | None = None   # within-floor re-measure (task 3)
+    arch_probe_ledger: bool | None = None          # evidence/arch_probe_ledger.jsonl
+    # WP17 task 5 (opt-in, default off): every N-th meta step reserves one probe
+    # round for a CANDIDATES queue-head certification probe. 0 = off (the
+    # historical behavior). The batch mechanism is WP18's kb_cert_batch; this is
+    # the scheduling budget only.
+    cert_every_meta_steps: int | None = None
     probe_battles: dict[str, ProbeBattle] = field(default_factory=dict)
     # --- WP9: measurement anchoring (analytic floor; both opt-ins default off) ---
     # The machine denominator behind the teacher's hand-estimated floor_opt
@@ -1662,17 +1676,15 @@ def _best_keep_profiler(records, gate_window: str) -> tuple[dict, int] | None:
 # measurement condition (a >2% clock move alone moves most kernels more than the
 # resolution any quiet run can resolve). The gpu_state telemetry (timing.py) is
 # what makes the check possible; a reading without it is simply never flagged.
-_CLOCK_DRIFT_BAND = 0.02
+# WP17 (contract C9): the distance rule is the screening primitive's
+# (loop/screening.py) — the same band, one implementation.
+_CLOCK_DRIFT_BAND = screening.CLOCK_DRIFT_BAND
 
 
 def _sm_clock_drift(a, b) -> float | None:
     """Relative SM-clock distance of two gpu_state blocks, or None when either
     lacks a usable clock — an unmeasured condition, never a drift claim."""
-    va, vb = (a or {}).get("sm_clock_mhz"), (b or {}).get("sm_clock_mhz")
-    for v in (va, vb):
-        if not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0:
-            return None
-    return abs(va - vb) / min(va, vb)
+    return screening.clock_drift(a, b)
 
 
 def _best_keep_gpu_state(records, gate_window: str) -> dict:
@@ -4179,14 +4191,15 @@ def run_kb_certify(ctx: LoopContext, diagnosis: str) -> KbCertifyResult:
             _detach_kb_probes(ctx, pre_head, probes)
 
 
-def _detach_kb_probes(ctx: LoopContext, pre_head: str, probes: dict) -> None:
+def _detach_kb_probes(ctx: LoopContext, pre_head: str, probes: dict,
+                      what: str = "meta/kb") -> None:
     be = ctx.backend
     if lost := _edits_outside_notes(be, pre_head):
-        _note_discarded_edits(ctx, "meta/kb (certification reset)", lost)
+        _note_discarded_edits(ctx, f"{what} (certification reset)", lost)
     try:
         be.reset(pre_head)
     except BackendError as e:
-        _log(f"meta/kb: could not reset the workspace to {pre_head[:10]} after the "
+        _log(f"{what}: could not reset the workspace to {pre_head[:10]} after the "
              f"certification ({e}) — the kb-probe commits stay in the student lineage")
         return
     kept = []
@@ -4199,8 +4212,8 @@ def _detach_kb_probes(ctx: LoopContext, pre_head: str, probes: dict) -> None:
             dst.write_text(text)
             kept.append(path)
         except OSError as e:
-            _log(f"meta/kb: could not re-materialise {path}: {e}")
-    _log(f"meta/kb: workspace reset to the pre-certification head {pre_head[:10]}; "
+            _log(f"{what}: could not re-materialise {path}: {e}")
+    _log(f"{what}: workspace reset to the pre-certification head {pre_head[:10]}; "
          f"probe file(s) {kept or list(probes)} re-materialised untracked "
          f"(the -kbprobe branch keeps the commits)")
 
@@ -4257,6 +4270,67 @@ def _kb_certify_rounds(ctx: LoopContext, diagnosis: str, probes: dict) -> KbCert
             probe_feedback=_probe_feedback(turn.path, pv, kb_log, what="recipe probe"))
     _log("meta/kb: could not certify a recipe within the probe budget")
     return KbCertifyResult(False, None, ctx.max_probe_rounds)
+
+
+def _wp17_maybe_cert_candidates_head(ctx: LoopContext) -> None:
+    """WP17 task 5 (opt-in, card-layer [loop] ``cert_every_meta_steps``, default
+    0 = off): every N-th completed meta step reserves ONE probe round for the
+    recon CANDIDATES queue's head entry. The teacher writes a certification
+    probe for its leading hypothesis; the driver runs it on the -certprobe
+    branch (the kb probe's discipline: teacher material, reset away after, never
+    on the student line) and logs the verdict. One round, no retries — a turn
+    that writes no probe lapses the reservation. The batch certification
+    mechanism is WP18's ``kb_cert_batch``; this is the scheduling budget only,
+    and nothing reads the verdict into a gate (C10: WP17 renders no prompt
+    block)."""
+    n = _wp17_cert_every_meta_steps(ctx)
+    if n <= 0 or ctx.recon_path is None:
+        return
+    step = len(load_meta_records(ctx.meta_status_path)) if ctx.meta_status_path else 0
+    if step <= 0 or step % n != 0:
+        return
+    candidates = ctx.recon_path.parent / "candidates.md"
+    if not candidates.is_file():
+        _log("meta/wp17-cert: the reserved certification round lapses (no candidates.md)")
+        return
+    be = ctx.backend
+    prompt = (
+        "\n\n## Scheduled CANDIDATES certification (one probe round, reserved)\n\n"
+        f"The reconnaissance CANDIDATES queue (`{candidates}`) is due its head-entry "
+        f"certification (meta step {step}, [loop] cert_every_meta_steps={n}). Read the "
+        "queue's head entry — its first unresolved candidate row — and write ONE small "
+        "probe script (e.g. `notes/wp17_cert_probe.py`) that measures that entry's "
+        "leading hypothesis on the current tree (the verdict-probe rules apply: no "
+        "oracle text, the standard `PROBE PASS/FAIL` lines). End your turn with "
+        "`PROBE_REQUEST: <path>`. This reservation's budget is exactly one probe: no "
+        "design pivots, no second probe. If the head entry is already measured or is "
+        "not probe-able as-is, say so in prose — the reserved round then lapses.\n")
+    try:
+        pre_head = be.head()
+    except Exception:  # noqa: BLE001 — lineage bookkeeping, never a precondition
+        pre_head = ""
+    turn = parse_student_turn_safe(_teacher(be).run_agent(prompt))
+    if not isinstance(turn, ProbeRequest):
+        _log("meta/wp17-cert: the teacher wrote no probe — the reserved round lapses")
+        return
+    probes: dict = {}
+    try:
+        be.commit(f"wp17-cert: {turn.path}")
+        probes[turn.path] = _keep_probe_across_reset(ctx, turn.path)
+        branch = f"{ctx.branch_prefix}-certprobe"
+        be.push_branch(branch)
+        log = be.submit_gpu(branch, f"cmd:python3 {turn.path}")
+        pv = parse_probe_verdict(log)
+        job = str(getattr(be, "last_job_id", "") or "")
+        _log(f"meta/wp17-cert: CANDIDATES head certification probe {turn.path} -> "
+             f"PROBE {_probe_label(pv)} (max_diff={pv.diff_text}) (step {step}, "
+             f"job {job or '?'}) — the reserved round is spent")
+    except BackendError as e:
+        _log(f"meta/wp17-cert: certification probe job failed ({e}) — the reserved "
+             "round is spent")
+    finally:
+        if pre_head:
+            _detach_kb_probes(ctx, pre_head, probes, what="meta/wp17-cert")
 
 
 def kb_harvest_debt(ctx: LoopContext) -> list[ProbeBattle]:
@@ -4660,7 +4734,9 @@ _PRICE_TIMED_RE = re.compile(r"^PRICE-TIMED levers=", re.M)
 # WORKLOAD_SCOPE_ENV): the table is a reading on that shape, the gate the group's geomean
 _PRICE_SCOPE_RE = re.compile(r"^PRICE-SCOPE workloads=(\S+) rep=(\S+) of=(\S+)", re.M)
 _ABLATE_OK_RE = re.compile(r"^ABLATE-OK ablations=", re.M)
-_TOOL_TRACEBACK = "Traceback (most recent call last)"
+# WP17 (contract C9): the node-hygiene vocabulary lives once, in the screening
+# primitive; these names stay for the channel call sites and tests.
+_TOOL_TRACEBACK = screening.TOOL_TRACEBACK
 # the ablation pass: one line per ablation (an edit that removes a mechanism the
 # tree has, timed on the NCU kernel clock so a broken kernel still reads)
 _ABLATE_LINE_RE = re.compile(
@@ -4670,12 +4746,12 @@ _ABLATE_LINE_RE = re.compile(
     # carry a demangled name with spaces — the field runs to the next key
     r"kernel=(?P<kernel>.+?)(?: status=(?P<status>\S+))? h=(?P<h>.*)$", re.M)
 _ABLATE_NOISE_RE = re.compile(r"^PRICE ablation_noise_floor=([\d.]+)% metric=(\S+)", re.M)
-_ABLATE_FAIL_RE = re.compile(r"^ABLATE-FAIL reason=(.*)$", re.M)
+_ABLATE_FAIL_RE = screening.ABLATE_FAIL_RE
 # The seeded pricing tool's verdict when a timed-out variant left the GPU held
 # (lever_pricing_run.NODE_DIRTY_MARKER): PRICE-FAIL / ABLATE-FAIL reason=node-dirty
 # and a NODE-DIRTY line. Readings after that line are the orphan's share of the
 # GPU, not the variant's; the design is re-priced once.
-_NODE_DIRTY_MARKER = "NODE-DIRTY"
+_NODE_DIRTY_MARKER = screening.NODE_DIRTY_MARKER
 # --- WP4: sweep decisions (teacher-authored grids, driver-executed, student-landed) ---
 # sweep_run.py's output lines: one reading per variant + the winner + the verdict
 _SWEEP_LINE_RE = re.compile(
@@ -4754,13 +4830,10 @@ def _price_log_lost_reason(log: str) -> str:
 
 
 def _node_dirty_reason(fail: str | None, log: str) -> str | None:
-    if fail and fail.startswith("node-dirty"):
-        return f"PRICE-FAIL {fail}"
-    if (m := _ABLATE_FAIL_RE.search(log or "")) and m.group(1).strip().startswith("node-dirty"):
-        return f"ABLATE-FAIL {m.group(1).strip()}"
-    if _NODE_DIRTY_MARKER in (log or ""):
-        return "the job reported NODE-DIRTY"
-    return None
+    """WP17 (contract C9): the node-hygiene check is the screening primitive's
+    (loop/screening.py) — one rule for the pricing, sweep, prescreen and
+    timeline checkers."""
+    return screening.node_dirty_reason(fail, log)
 
 
 def _lever_price_job(be, branch: str, cmd: str, what: str,
@@ -4861,8 +4934,10 @@ _LEVER_MAX_SUBSETS = 6
 # `SWEEP_REQUEST: notes/<decision_id>.json` probe round at a time. The recipe is
 # teacher-authored in the milestone decision line; the driver only executes it
 # (hash-checked) and the student lands only the winner, through the standard gate.
-_SWEEP_MAX_VARIANTS = 8        # == sweep_run.MAX_VARIANTS
-_SWEEP_CRITERION = "min same-job ratio above floor"   # == sweep_run.CRITERION
+# WP17 (contract C9): the sweep's spec vocabulary lives once, in the screening
+# primitive; these names stay for the channel's call sites and tests.
+_SWEEP_MAX_VARIANTS = screening.SWEEP_MAX_VARIANTS
+_SWEEP_CRITERION = screening.SWEEP_CRITERION
 _SWEEP_CMD = "cmd:python3 notes/sweep_run.py"
 
 
@@ -5665,9 +5740,9 @@ def _sweep_request_path(out: str) -> str | None:
 def _canonical_recipe_hash(obj) -> str:
     """sha256 over the canonical JSON form (sorted keys, no whitespace): the
     content identity of a sweep recipe. Key order and formatting do not matter;
-    any added, dropped or changed variant does."""
-    return hashlib.sha256(json.dumps(obj, sort_keys=True, ensure_ascii=False,
-                                     separators=(",", ":")).encode("utf-8")).hexdigest()
+    any added, dropped or changed variant does. WP17: the screening primitive's
+    frozen-spec hash (contract C9) — loop/screening.py is the one implementation."""
+    return screening.canonical_spec_hash(obj)
 
 
 def _milestone_sweep_recipe(ctx: LoopContext, decision_id: str) -> dict | None:
@@ -5698,29 +5773,10 @@ def _milestone_sweep_recipe(ctx: LoopContext, decision_id: str) -> dict | None:
 
 
 def _sweep_spec_refused(recipe: dict) -> str | None:
-    """Why the driver would not run ``recipe`` as written, or None: at most
-    _SWEEP_MAX_VARIANTS variants, one-token unique names (never `base`), every
-    variant carrying at least one edit pair, and the criterion — when spelled —
-    the one mechanical rule the sweep implements."""
-    variants = recipe.get("variants")
-    if not isinstance(variants, list) or not variants:
-        return "recipe names no variants"
-    if len(variants) > _SWEEP_MAX_VARIANTS:
-        return f"{len(variants)} variants (max {_SWEEP_MAX_VARIANTS})"
-    seen = set()
-    for var in variants:
-        if not isinstance(var, dict):
-            return "a variant must be an object"
-        name = re.sub(r"\s+", "_", str(var.get("name", "")).strip())
-        if not name or name == "base" or name in seen:
-            return f"variant name {name!r} is empty, reserved or duplicated"
-        seen.add(name)
-        edits = var.get("edits")
-        if not isinstance(edits, list) or not edits:
-            return f"variant {name!r} has no edits"
-    if (crit := recipe.get("criterion")) and str(crit).strip() != _SWEEP_CRITERION:
-        return f"unknown criterion {crit!r}"
-    return None
+    """Why the driver would not run ``recipe`` as written, or None — the
+    screening primitive's frozen-spec check (contract C9, WP17):
+    loop/screening.py is the one implementation."""
+    return screening.sweep_spec_refused(recipe)
 
 
 def _seed_sweep_toolkits(ctx: LoopContext, be) -> None:
@@ -5776,43 +5832,17 @@ def _sweep_log_verdict(log: str) -> str | None:
 
 
 def _sweep_log_settled(be, log: str, what: str) -> str:
-    """``log`` once it carries a SWEEP verdict: as read, or the job's archive
-    read again (a first read that stopped short of the verdict may be complete
-    on a second read — the free recovery, the pricing checker's rule)."""
-    if _sweep_log_verdict(log) is not None:
-        return log
-    job = str(getattr(be, "last_job_id", "") or "")
-    reread = getattr(be, "reread_log", None)
-    if not job or not callable(reread):
-        return log
-    _log(f"{what}: job {job} log carries no SWEEP verdict — re-reading the archive")
-    try:
-        again = reread(job)
-    except BackendError as e:
-        _log(f"{what}: re-read of job {job} failed ({e})")
-        return log
-    return again if len(again or "") > len(log or "") else log
+    """``log`` once it carries a SWEEP verdict — the screening primitive's
+    settled-log recovery (WP17, contract C9)."""
+    return screening.log_settled(log, _sweep_log_verdict, be, what, word="SWEEP", log_fn=_log)
 
 
 def _sweep_job(be, branch: str, cmd: str, what: str, rerun: bool = True) -> "tuple[str, str]":
-    """One sweep job, settled: (log, job id). Re-bought once (``rerun``) when its
-    GPU was left dirty (sweep_run reuses the pricing tool's node hygiene and
-    NODE-DIRTY marker) or its log still carries no SWEEP verdict (a crashed tool
-    is not re-bought). BackendError propagates."""
-    attempts = 2 if rerun else 1
-    log = ""
-    for attempt in range(attempts):
-        log = _sweep_log_settled(be, be.submit_gpu(branch, cmd), what)
-        last = attempt == attempts - 1
-        if not last and (dirty := _node_dirty_reason(None, log)):
-            _log(f"{what}: {dirty} — re-running the same recipe once")
-            continue
-        if not last and _sweep_log_verdict(log) is None and _TOOL_TRACEBACK not in log:
-            _log(f"{what}: job {getattr(be, 'last_job_id', '') or '?'} log still carries no "
-                 f"SWEEP verdict — resubmitting the same recipe once")
-            continue
-        break
-    return log, str(getattr(be, "last_job_id", "") or "")
+    """One sweep job, settled: (log, job id) — the screening primitive's
+    re-buy-once policy (WP17, contract C9: the GPU was left dirty, or the log
+    still carries no SWEEP verdict; a crashed tool is not re-bought)."""
+    return screening.settled_job(be, branch, cmd, what, _sweep_log_verdict,
+                                 word="SWEEP", noun="recipe", rerun=rerun, log_fn=_log)
 
 
 def _sweep_feedback(path: str, rows: list, winner: str | None, fail: str | None,
@@ -6335,14 +6365,12 @@ def main(argv=None) -> int:
         open(kpath, "w").write(base_src)      # leave the tree as we found it
         return 0
     # phase 2 — base vs survivors, interleaved rounds, the pricing kernel
-    order = ["base"] + alive
+    order = lpr.paired_order(alive)
     dev = {v: [] for v in order}
     ratio = {v: [] for v in order}
     ok = {v: True for v in order}
-    budget = float(_MC_BUDGET_S)
-    left = lpr.job_seconds_left(t_job0)
-    if left is not None:
-        budget = max(0.0, min(budget, left - lpr.ROLE_PASS_MARGIN_S))
+    budget = lpr.clamp_pass_budget(_MC_BUDGET_S, lpr.job_seconds_left(t_job0),
+                                   lpr.ROLE_PASS_MARGIN_S)
     t0 = time.monotonic()
     done = 0
     try:
@@ -6429,41 +6457,16 @@ def _mc_log_verdict(log: str) -> str | None:
 
 
 def _mc_log_settled(be, log: str, what: str) -> str:
-    """``log`` once it carries an MC verdict: as read, or the job's archive read
-    again (the sweep/pricing checker's free recovery)."""
-    if _mc_log_verdict(log) is not None:
-        return log
-    job = str(getattr(be, "last_job_id", "") or "")
-    reread = getattr(be, "reread_log", None)
-    if not job or not callable(reread):
-        return log
-    _log(f"{what}: job {job} log carries no MC verdict — re-reading the archive")
-    try:
-        again = reread(job)
-    except BackendError as e:
-        _log(f"{what}: re-read of job {job} failed ({e})")
-        return log
-    return again if len(again or "") > len(log or "") else log
+    """``log`` once it carries an MC verdict — the screening primitive's
+    settled-log recovery (WP17, contract C9)."""
+    return screening.log_settled(log, _mc_log_verdict, be, what, word="MC", log_fn=_log)
 
 
 def _mc_job(be, branch: str, cmd: str, what: str, rerun: bool = True) -> "tuple[str, str]":
-    """One prescreen job, settled: (log, job id). Re-bought once when its GPU was
-    left dirty (mc_prescreen reuses the pricing tool's node hygiene) or its log
-    still carries no MC verdict (a crashed tool is not re-bought)."""
-    attempts = 2 if rerun else 1
-    log = ""
-    for attempt in range(attempts):
-        log = _mc_log_settled(be, be.submit_gpu(branch, cmd), what)
-        last = attempt == attempts - 1
-        if not last and (dirty := _node_dirty_reason(None, log)):
-            _log(f"{what}: {dirty} — re-running the same prescreen once")
-            continue
-        if not last and _mc_log_verdict(log) is None and _TOOL_TRACEBACK not in log:
-            _log(f"{what}: job {getattr(be, 'last_job_id', '') or '?'} log still carries no "
-                 f"MC verdict — resubmitting the same prescreen once")
-            continue
-        break
-    return log, str(getattr(be, "last_job_id", "") or "")
+    """One prescreen job, settled: (log, job id) — the screening primitive's
+    re-buy-once policy (WP17, contract C9)."""
+    return screening.settled_job(be, branch, cmd, what, _mc_log_verdict,
+                                 word="MC", noun="prescreen", rerun=rerun, log_fn=_log)
 
 
 def _mc_seed_toolkit(ctx: LoopContext, be) -> None:
@@ -13839,11 +13842,11 @@ def _arch_probe_stamp(requests: list[str], readings: dict, *, skipped: str = "",
         t0, t1 = readings.get(r0), readings.get(r1)
         if t0 is not None and t1 is not None:
             # faster reading wins; the gap is relative to the winner (the same
-            # ratio currency every other driver judgment reads)
+            # ratio currency every other driver judgment reads) — the decision
+            # core is the screening primitive's (WP17, contract C9)
             win_r, lose_r = (r0, r1) if t0 <= t1 else (r1, r0)
-            win_t, lose_t = min(t0, t1), max(t0, t1)
-            delta = (lose_t - win_t) / win_t
-            if delta > (floor if floor is not None else 0.015):
+            delta, decisive = screening.pair_outcome(t0, t1, floor)
+            if decisive:
                 return head + [
                     f"     candidates {r0} (preferred) vs {r1}: {t0:.6g} ms vs {t1:.6g} ms",
                     f"     winner {win_r} ({delta:+.1%} faster than {lose_r}, above the "
@@ -13870,8 +13873,8 @@ def _arch_probe_stamp(requests: list[str], readings: dict, *, skipped: str = "",
         lines.append(f"     {note}")
     if len(measured) >= 2:
         (win_r, win_t), (lose_r, lose_t) = sorted(measured, key=lambda rt: rt[1])[:2]
-        delta = (lose_t - win_t) / win_t
-        if delta > (floor if floor is not None else 0.015):
+        delta, decisive = screening.pair_outcome(win_t, lose_t, floor)
+        if decisive:
             lines += [
                 f"     winner {win_r} ({delta:+.1%} faster than {lose_r}, above the "
                 f"{(floor if floor is not None else 0.015):.1%} resolution floor)",
@@ -13897,6 +13900,104 @@ def _arch_probe_stamp(requests: list[str], readings: dict, *, skipped: str = "",
     ]
 
 
+def _read_recipes(ctx: LoopContext, paths: list) -> dict:
+    """The listed ARCH_PROBE candidates' recipe JSON as written; a missing or
+    unreadable file reads {} (a malformed recipe annotates as mock / no floor —
+    it never blocks the channel)."""
+    out = {}
+    for p in paths:
+        try:
+            recipe = json.loads((Path(ctx.workspace) / p).read_text(encoding="utf-8"))
+            out[p] = recipe if isinstance(recipe, dict) else {}
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            out[p] = {}
+    return out
+
+
+def _arch_probe_base_problem(ctx: LoopContext) -> dict | None:
+    """The task's own floor problem (analytic_floor's single source, the file
+    ``floor_from_op_dir`` reads) — the base a candidate recipe's declared
+    problem view merges over. None when the card has no problem.json or it does
+    not resolve: nothing is ranked, the file order stands."""
+    try:
+        from forgekernel.loop.analytic_floor import problem_from_card
+        p = Path(ctx.milestone).parent / "eval" / "leaderboard" / "problem.json"
+        if not p.is_file():
+            return None
+        card = json.loads(p.read_text(encoding="utf-8"))
+        return problem_from_card(card, arch=str(getattr(ctx, "kb_arch", "") or ""))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _arch_probe_stamp_annotations(tiers: dict | None, reprobed: list) -> list:
+    """The WP17 annotation lines (fidelity tiers, the near-diff re-probe) that
+    close the ARCH_PROBE stamp, or [] — every default-parameters stamp renders
+    byte for byte what it always rendered (both annotations ride declared
+    recipe fields / an actual re-probe, never the bare path)."""
+    lines = []
+    if tiers and any(t != "mock" for t in tiers.values()):
+        body = ", ".join(f"{Path(p).stem}={t}" for p, t in tiers.items())
+        lines.append(f"     fidelity tiers (declared per recipe): {body} — semi-real "
+                     "streams real-size data on the dominant axis, mock may mis-order "
+                     "near ties")
+    if reprobed:
+        lines.append("     re-probed once within the resolution floor "
+                     f"({', '.join(Path(p).stem for p in reprobed)}); the re-draw "
+                     "replaces the first reading")
+    return lines
+
+
+def _persist_arch_probe_ledger(ctx: LoopContext, listed: list, probed: list,
+                               readings: dict, floors: dict, tiers: dict,
+                               jobs: dict, reprobed: list) -> None:
+    """Bank the probe's readings into ``<evidence>/arch_probe_ledger.jsonl`` — the
+    (family, arch) machine reading cache WP19's price cache and WP16's graveyard
+    consume (the schema is the three-package seam; the integration step owns its
+    consumers). Bookkeeping only: nothing reads it back into a gate."""
+    ev = _evidence_dir(ctx, create=True)
+    if ev is None:
+        return
+    problem = _arch_probe_base_problem(ctx)
+    family = str((problem or {}).get("family") or "")
+    arch = str((problem or {}).get("arch") or getattr(ctx, "kb_arch", "") or "")
+    ts = ctx.now()
+    ok = True
+    for p in listed:
+        floor = floors.get(p) or {}
+        fam = str(floor.get("family") or family)
+        if p not in probed:
+            row = screening.ledger_row(ts=ts, op_family=fam, arch=arch,
+                                       candidate=p, name=Path(p).stem,
+                                       tier=tiers.get(p, "mock"),
+                                       floor_ms=floor.get("floor_ms"),
+                                       bytes_min=floor.get("bytes_min"),
+                                       flops=floor.get("flops"),
+                                       verdict="skipped-cut")
+        elif readings.get(p) is None:
+            row = screening.ledger_row(ts=ts, op_family=fam, arch=arch,
+                                       candidate=p, name=Path(p).stem,
+                                       tier=tiers.get(p, "mock"),
+                                       floor_ms=floor.get("floor_ms"),
+                                       bytes_min=floor.get("bytes_min"),
+                                       flops=floor.get("flops"),
+                                       verdict="no-reading", job=jobs.get(p, ""))
+        else:
+            row = screening.ledger_row(
+                ts=ts, op_family=fam, arch=arch, candidate=p, name=Path(p).stem,
+                tier=tiers.get(p, "mock"), floor_ms=floor.get("floor_ms"),
+                bytes_min=floor.get("bytes_min"), flops=floor.get("flops"),
+                ms=readings[p], job=jobs.get(p, ""),
+                verdict="reprobed" if p in reprobed else "measured")
+        ok = screening.append_ledger(ev / "arch_probe_ledger.jsonl", row) and ok
+    if ok:
+        _log(f"meta/distill: ARCH_PROBE ledger -> {ev / 'arch_probe_ledger.jsonl'} "
+             f"({len(listed)} candidate row(s))")
+    else:
+        _log("meta/distill: ARCH_PROBE ledger could not be written (bookkeeping only; "
+             "the probe outcome is unaffected)")
+
+
 def _run_arch_probes(ctx: LoopContext) -> None:
     """Pre-freeze ARCH_PROBE: execute the teacher's skeleton candidates and stamp
     the outcome into the milestone head, BEFORE the v1 freeze takes effect.
@@ -13909,9 +14010,21 @@ def _run_arch_probes(ctx: LoopContext) -> None:
     budget's count with the cut recorded in the stamp, it never buys jobs it
     does not have). The recipes + runner are committed for the jobs, then the
     probe workspace is reset away — the skeleton kernels are teacher material
-    and never reach the student line; the readings ride the milestone head note
+    and never reach the student; the readings ride the milestone head note
     (and this log). Correctness is never read: these are time-only readings for
-    the teacher's freeze decision, never a gate."""
+    the teacher's freeze decision, never a gate.
+
+    WP17: recipes may declare a ``problem`` view (analytic_floor's schema) — the
+    candidates are PRE-RANKED by their zero-GPU-cost bytes/FLOPs floor so a
+    budget-limited bracket probes the top of the ranking instead of the file
+    order (advisory only — a sort suggestion, never a price, never a verdict;
+    red line ①); readings land in ``<evidence>/arch_probe_ledger.jsonl`` (the
+    (family, arch) seam WP19 / WP16 consume). Recipes may declare a fidelity
+    tier — ``mock`` (the historical default) or ``semi-real`` (the skeleton
+    streams real-size data on the dominant axis; only the compute logic may
+    no-op): a within-floor pair is re-measured ONCE when the budget still has
+    the job (the re-draw replaces the first reading), and the stamp names the
+    tiers either way."""
     if ctx.m0_probe_rounds <= 0:
         return
     text = _read_milestone(ctx)
@@ -13931,7 +14044,7 @@ def _run_arch_probes(ctx: LoopContext) -> None:
         return
     # --- WP8: the candidate bracket (default 2 = the WP6 behavior) -----------
     want = max(2, int(ctx.m0_probe_candidates))
-    n = min(want, len(requests), ctx.m0_probe_rounds)
+    n = screening.clamp_bracket(want, len(requests), ctx.m0_probe_rounds)
     cut_note = ""
     if n < len(requests):
         cut_note = (f"{len(requests) - n} further listed candidate(s) beyond the probed "
@@ -13941,7 +14054,24 @@ def _run_arch_probes(ctx: LoopContext) -> None:
     elif want > 2:
         _log(f"meta/distill: ARCH_PROBE bracket widened to {want} candidates "
              f"({len(requests)} listed, budget {ctx.m0_probe_rounds})")
-    probed = requests[:n]
+    # --- WP17 (task 2): the analytic-floor pre-rank — advisory only ------------
+    recipes = _read_recipes(ctx, requests)
+    tiers = {p: screening.recipe_fidelity(recipes.get(p) or {}) for p in requests}
+    floors: dict = {}
+    ranked = requests
+    if _wp17_floor_sort(ctx):
+        base_problem = _arch_probe_base_problem(ctx)
+        floors = {p: screening.recipe_floor(recipes.get(p) or {}, base_problem)
+                  for p in requests}
+        ranked = screening.floor_rank(requests, lambda p: floors.get(p))
+        if ranked != requests:
+            _log("meta/distill: ARCH_PROBE pre-ranked by the analytic floor "
+                 "(advisory — a sort suggestion, never a price or a verdict): "
+                 + " -> ".join(Path(p).stem for p in ranked))
+            if n < len(requests):
+                cut_note += ("; probed top selected by the analytic-floor pre-rank "
+                             "(advisory)")
+    probed = ranked[:n]
     missing = [p for p in probed if not (Path(ctx.workspace) / p).is_file()]
     if missing:
         _log(f"meta/distill: ARCH_PROBE skipped (recipe file(s) missing: "
@@ -13963,6 +14093,9 @@ def _run_arch_probes(ctx: LoopContext) -> None:
         return
     branch = f"{ctx.branch_prefix}-archprobe"
     readings: dict = {}
+    jobs: dict = {}
+    reprobed: list = []
+    floor = resolvable_diff(load_records(ctx.status_path), ctx.gate_window)
     try:
         # The recipes travel only inside the probe commit: milestone + recipes +
         # runner ride one add -A snapshot, the jobs run on the -archprobe branch,
@@ -13972,11 +14105,34 @@ def _run_arch_probes(ctx: LoopContext) -> None:
         be.push_branch(branch)
         for path in probed:
             log = be.submit_gpu(branch, f"cmd:python3 {runner} {path}")
+            jobs[path] = str(getattr(be, "last_job_id", "") or "")
             stem = Path(path).stem
             readings[path] = _arch_probe_ms(log, stem)
             t = readings[path]
             _log(f"meta/distill: ARCH_PROBE {path} -> "
                  + (f"{t:.6g} ms" if t is not None else "no time reading"))
+        # --- WP17 (task 3): the near-diff forced re-probe ----------------------
+        # A within-floor pair is one noise draw until a second draw says
+        # otherwise: when the budget still has the job, the pair is re-measured
+        # ONCE (the frozen runner takes both recipes in that one job) and the
+        # re-draw replaces the first reading. Never more than the budget.
+        if _wp17_near_diff_reprobe(ctx):
+            due = screening.near_diff_reprobe(
+                readings, probed, floor, ctx.m0_probe_rounds - len(probed))
+            if due:
+                _log(f"meta/distill: ARCH_PROBE readings within the resolution floor "
+                     f"({', '.join(Path(p).stem for p in due)}) — one re-probe of the "
+                     f"pair ({ctx.m0_probe_rounds - len(probed)} spare job(s))")
+                rlog = be.submit_gpu(branch, f"cmd:python3 {runner} " + " ".join(due))
+                rjob = str(getattr(be, "last_job_id", "") or "")
+                for path in due:
+                    jobs[path] = rjob
+                    t = _arch_probe_ms(rlog, Path(path).stem)
+                    _log(f"meta/distill: ARCH_PROBE re-probe {path} -> "
+                         + (f"{t:.6g} ms" if t is not None else "no time reading"))
+                    if t is not None:
+                        reprobed.append(path)
+                        readings[path] = t
     except BackendError as e:
         _log(f"meta/distill: ARCH_PROBE job failed ({e}); freezing as authored")
     finally:
@@ -13986,10 +14142,17 @@ def _run_arch_probes(ctx: LoopContext) -> None:
             except Exception:  # noqa: BLE001 — the stamped rewrite below is the record
                 _log("meta/distill: ARCH_PROBE workspace reset failed — the probe "
                      "commit stays in the lineage (provenance, not a leak)")
-        floor = resolvable_diff(load_records(ctx.status_path), ctx.gate_window)
-        _stamp_milestone_head(ctx, _arch_probe_stamp(requests, readings, floor=floor,
-                                                     note=cut_note),
-                              text=text)
+        if _wp17_ledger(ctx):
+            _persist_arch_probe_ledger(ctx, requests, probed, readings, floors,
+                                       tiers, jobs, reprobed)
+        note = "; ".join(x for x in (cut_note, screening.floor_note(
+            probed, lambda p: floors.get(p)) if ranked != requests else "") if x)
+        stamp_lines = _arch_probe_stamp(requests, readings, floor=floor, note=note)
+        annotations = _arch_probe_stamp_annotations(tiers if any(
+            t != "mock" for t in tiers.values()) else None, reprobed)
+        if annotations:
+            stamp_lines = stamp_lines[:-1] + annotations + stamp_lines[-1:]
+        _stamp_milestone_head(ctx, stamp_lines, text=text)
         decisive = sorted(((r, readings[r]) for r in probed
                            if readings.get(r) is not None), key=lambda rt: rt[1])
         if len(decisive) >= 2:
@@ -14327,6 +14490,53 @@ def _wp5_apply_cfg(ctx: LoopContext) -> None:
         ctx.meta_ext_on_headroom = _boolean(budget_cfg, "meta_ext_on_headroom")
 
 
+def _wp17_apply_cfg(ctx: LoopContext) -> None:
+    """Resolve every WP17 config field still at its None sentinel from loop.toml
+    (the WP5 pattern, contract C17: card-layer [loop] keys, no cli forwarding).
+    An explicitly set field (tests, callers) wins and is never clobbered; a bad
+    value leaves the documented default. Defaults: the floor pre-rank, the
+    near-diff re-probe and the ledger are ON but inert without declared recipe
+    fields / spare budget (a default run renders and spends byte for byte what it
+    always did); the CANDIDATES certification schedule is OFF (0)."""
+    cfg = _wp5_cfg_sections(ctx)
+    loop_cfg = cfg.get("loop") if isinstance(cfg.get("loop"), dict) else {}
+
+    def _flag(key: str) -> bool:
+        v = loop_cfg.get(key, True)
+        return v if isinstance(v, bool) else True
+
+    if ctx.arch_probe_floor_sort is None:
+        ctx.arch_probe_floor_sort = _flag("arch_probe_floor_sort")
+    if ctx.arch_probe_near_diff_reprobe is None:
+        ctx.arch_probe_near_diff_reprobe = _flag("arch_probe_near_diff_reprobe")
+    if ctx.arch_probe_ledger is None:
+        ctx.arch_probe_ledger = _flag("arch_probe_ledger")
+    if ctx.cert_every_meta_steps is None:
+        raw = loop_cfg.get("cert_every_meta_steps", 0)
+        try:
+            v = int(raw)
+        except (TypeError, ValueError):
+            v = 0
+        ctx.cert_every_meta_steps = v if not isinstance(raw, bool) and v > 0 else 0
+
+
+def _wp17_floor_sort(ctx: LoopContext) -> bool:
+    return True if ctx.arch_probe_floor_sort is None else bool(ctx.arch_probe_floor_sort)
+
+
+def _wp17_near_diff_reprobe(ctx: LoopContext) -> bool:
+    return True if ctx.arch_probe_near_diff_reprobe is None \
+        else bool(ctx.arch_probe_near_diff_reprobe)
+
+
+def _wp17_ledger(ctx: LoopContext) -> bool:
+    return True if ctx.arch_probe_ledger is None else bool(ctx.arch_probe_ledger)
+
+
+def _wp17_cert_every_meta_steps(ctx: LoopContext) -> int:
+    return 0 if ctx.cert_every_meta_steps is None else max(0, int(ctx.cert_every_meta_steps))
+
+
 def _wp5_meta_format_retry(ctx: LoopContext) -> int:
     """The consecutive-free-format-bounce cap (1 = bill every bounce, the old
     behavior). Direct run_meta_step callers may see the unresolved sentinel."""
@@ -14517,6 +14727,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
     """
     _wp5_apply_cfg(ctx)
     _wp11_apply_cfg(ctx)
+    _wp17_apply_cfg(ctx)
     meta_steps = 0
     # --- WP5 (task 2): the meta cap breathes with the wall clock left. max_meta
     # stays the configured floor; a long remaining budget lifts the cap so a run
@@ -14650,6 +14861,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
                                  milestone_before=milestone_before, audit=True)
             _wp5_note_reachability(ctx, meta.diagnosis)   # --- WP5 (tasks 3+4)
             _apply_phase_close(ctx, meta)
+            _wp17_maybe_cert_candidates_head(ctx)   # --- WP17 (task 5, opt-in)
             if meta.patch_class == "audit-clean":
                 _log("meta/m0-audit: AUDIT_CLEAN — milestone consistent with the "
                      "hardware truth -> resuming the segment")
@@ -14815,6 +15027,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
                     format_bounces = 0   # a substantive outcome ends the free-bounce chain
                 # else: the Nth consecutive format bounce — billed, retried no more
             _apply_phase_close(ctx, meta)
+            _wp17_maybe_cert_candidates_head(ctx)   # --- WP17 (task 5, opt-in)
             if meta.patch_class == "infeasible-stop":
                 # the teacher's stop request ends the run here, budget unspent:
                 # the stop is the run's verdict, the notice its record.

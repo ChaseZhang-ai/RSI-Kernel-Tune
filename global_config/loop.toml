@@ -31,3 +31,29 @@ reference_hours = 8         # writing a reference when the task has none
 #   [loop] carry_dir              = "path"  # default tasks/<op>/carry/ (self_evolve)
 #   [loop] m0_probe_candidates    = 2       # ARCH_PROBE bracket width (budget stays
 #                                           # [loop] m0_probe_rounds)
+
+# --- WP17: screening primitive + M0 fidelity (contract C9) --------------------
+# This file's tables stay closed-vocabulary; the WP17 keys live on the card layer
+# (operators/<op>/loop.toml, read free-form by driver._wp17_apply_cfg — the WP5
+# pattern, no cli forwarding). Four keys:
+#   [loop] arch_probe_floor_sort        = true   # the analytic-floor PRE-RANK of
+#                                                # ARCH_PROBE candidates (a recipe
+#                                                # declaring a `problem` view gets
+#                                                # floor-ranked; advisory only — a
+#                                                # sort suggestion, never a price,
+#                                                # never a verdict; red line ①)
+#   [loop] arch_probe_near_diff_reprobe = true   # a within-floor pair is re-measured
+#                                                # ONCE when the probe budget still
+#                                                # has the job (task 3; default config
+#                                                # 2x2 has no spare job — inert)
+#   [loop] arch_probe_ledger            = true   # readings land in
+#                                                # <evidence>/arch_probe_ledger.jsonl
+#                                                # (the (family, arch) cache WP19/WP16
+#                                                # consume; bookkeeping, never a gate)
+#   [loop] cert_every_meta_steps        = 0      # every N-th meta step reserves ONE
+#                                                # probe round for the CANDIDATES
+#                                                # queue-head certification (task 5;
+#                                                # 0 = off — the historical behavior)
+# Job-side kill switches (env, read by the seeded tools): FK_SCREENING_INPROC=0
+# puts every screening bench back on the per-call subprocess (the historical
+# path); FK_SCREENING_CLOCK_GUARD=1 turns on the opt-in gpu_state clock guard.

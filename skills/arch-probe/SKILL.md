@@ -21,6 +21,8 @@ No divergence on any key axis → `ARCH_CANDIDATES: single`, no recipes, no prob
 ```json
 {"name": "<label>", "rationale": "<one sentence: why this reading>",
  "language": "cuda" | "python",
+ "fidelity": "mock" | "semi-real",          (optional, default "mock" — see below)
+ "problem": {"axes": {...}, "inputs": [...], "outputs": [...]},   (optional — see below)
  "rounds": <timed repeats, default 20>,
  "source": "<the skeleton>"}
 ```
@@ -34,6 +36,41 @@ The skeleton is a **topology mock, not a kernel implementation**: minimal, dummy
 correctness irrelevant — **wrong results are allowed, only the time is read**. The recipes never
 enter the milestone beyond the request lines, and the driver resets the probe workspace away
 after the jobs, so the skeletons never reach the student.
+
+## Fidelity tiers (WP17): `mock` vs `semi-real`
+
+A recipe declares its own fidelity. The driver cannot verify data sizes (correctness is never
+read here), so the declaration is a discipline you own, and the stamp names the tiers either
+way:
+
+- **`mock`** (the default) — the historical skeleton: launch geometry and loop shape, dummy
+  data. Fine when the candidates differ on an axis the mock already exercises (launch overhead,
+  occupancy at the topology's block shape, smem carveout).
+- **`semi-real`** — the skeleton must let the **dominant data axis flow through real-size
+  data**: the memory axis reads/writes the real byte volume (allocate and stream the actual
+  tensor shapes, even if the values are garbage), the compute axis issues the real MMA volume;
+  **only the compute LOGIC may be a no-op**. Write this tier when the candidates' readings
+  could plausibly be decided by data movement or issue rate — anything where a dummy-data
+  skeleton can mis-order the pair.
+
+**Choosing rule**: if the two candidates differ mainly in *how data moves* (tile scheme,
+vectorization width, staging topology, multicast) or *how much compute issues per byte* —
+write both recipes `semi-real`. If they differ in launch/occupancy/scheduling topology that a
+dummy body exercises the same — `mock` is honest. When unsure, `semi-real`: it costs the same
+rounds.
+
+**Pre-rank (advisory)**: a recipe may carry a `problem` view (analytic_floor's schema: `axes` /
+`inputs` / `outputs`; arch and family default from the task's own problem). The driver computes
+each candidate's zero-GPU-cost bytes/FLOPs floor and — when the bracket cannot probe every
+listed candidate — probes the top of that ranking instead of the file order. It is a SORT
+SUGGESTION only: never a price, never a verdict, and the readings (not the floor) decide.
+
+**Near-tie rule (driver-enforced)**: when the two decisive readings sit within the run's
+resolution floor AND the probe budget still has a job, the driver re-measures the pair once
+(the re-draw replaces the first reading) — a within-floor winner is one noise draw until a
+second draw says otherwise. The readings only ever freeze a candidate; **they are never a
+gate** (`meta_milestone.md`'s time-only rule), and a re-probe costs budget only when the
+bracket left it unspent.
 
 ## Execution and decision
 

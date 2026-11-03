@@ -168,7 +168,7 @@ files_touched:      <should be only {KERNEL_FILE}>
 ```
 
 > **Do not** write hypotheses, bottleneck judgements or any subjective analysis in the record block — that is your reasoning process and **does not go into the trajectory**.
-> The trajectory records only objective information: the optimization technique (change) + correctness/performance + NCU (filled in by the driver, for successful and failed iterations alike).
+> The trajectory records only objective information: the optimization technique (change) + correctness/performance + NCU (filled in by the driver, for successful and failed iterations alike), including the per-workload readings your own eval jobs produced (the driver's per-shape ledger is your own objective measurement record, not a teacher message).
 > The meta agent diagnoses from measured hardware ground truth, not from your prose.
 
 ## L0 hard rules (a violation voids this iteration)

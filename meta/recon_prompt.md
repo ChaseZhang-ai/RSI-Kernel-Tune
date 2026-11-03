@@ -465,6 +465,10 @@ the point-of-divergence line: the distill step can put the top-2 to the hardware
 skeleton recipes, time-only, one job per candidate) and the freeze then follows the measured winner. A back-solved
 value with no discriminating observation behind it must not be written as if it had been read — this table's job is
 to keep the bet visible (its derivation, its confidence, what would settle it), never to make it look settled.
+**Per shape regime** (group cards): when a candidate's topology reading is meant for one shape regime only (e.g. the
+reference's decode-shaped path diverges from its prefill path — the shape-heuristic disclaimer above), say so on the
+candidate row; the distill step writes the regime on the candidate line and the M0 contract per regime. A topology
+that was only read on the representative workload must not be frozen for regimes whose readings you do not have.
 
 Mark every decision `[VERIFY: ncu-direct | ncu-derived | sass-derived | correctness | none]`
 (see template A.3.1) — **the first four classes may enter the M0 Gate**. `sass-derived` is for decisions **the dossier axes can read mechanically**:

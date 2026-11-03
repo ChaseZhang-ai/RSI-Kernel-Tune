@@ -836,3 +836,190 @@ def parse_milestone_dag(text: str) -> list[Decision]:
         comp.discard(did)
         out.append(Decision(id=did, depends_on=frozenset(up), companions=frozenset(comp)))
     return out
+
+
+# --- WP14: shape-regime decision-channel protocol ------------------------------
+#
+# Two shape-keyed declaration forms a §3 decision line may carry (meta_milestone
+# "WP14 词汇段"), both machine-checked here. Everything below is NEW code on new
+# names: the existing parser/validator surfaces are untouched, and a milestone
+# that carries neither form validates exactly as before.
+#
+# `regime: <predicate>`  — a per-regime decision (an M0 topology contract line may
+#   carry one): the predicate is a PURE FUNCTION of the problem's shape axes
+#   (`m >= 1024`, `n == 3 and m < 512`). The teacher argues the family of
+#   predicates is mutually exclusive and covers every workload of the card; the
+#   machine check (regime_coverage, called by the driver with the card's workload
+#   axes) holds the argument against the actual workloads — a coverage failure
+#   makes the freeze invalid (it bounces the authoring like any §9 violation).
+#   The restricted grammar IS the purity rule: only comparisons of an axis against
+#   a literal number, conjunctions only — no data content, no timing readings, no
+#   runtime state can be spelled in it.
+# `per_shape: <lever>[<workload>]=<value>, ...` — shape-keyed lever value ranges
+#   on a decision (the receiver the `shape_split` class never had). The landing
+#   is still the student's own runtime shape-dispatch code judged by the full
+#   gate; the declaration only binds the decision's value ranges per workload.
+
+_REGIME_LINE = re.compile(r"(?m)^[ \t]*(?:[-*][ \t]*)?regime[ \t]*[:：][ \t]*(.+?)$")
+_PER_SHAPE_LINE = re.compile(r"(?m)^[ \t]*(?:[-*][ \t]*)?per_shape[ \t]*[:：][ \t]*(.+?)$")
+# one comparison: <axis> <op> <number> — the only thing a regime predicate may say
+_REGIME_CONJUNCT = re.compile(
+    r"^(?P<axis>[A-Za-z_][A-Za-z0-9_]*)\s*(?P<op>==|!=|>=|<=|>|<)\s*"
+    r"(?P<value>-?[0-9]+(?:\.[0-9]+)?)$")
+_OPS = {
+    "==": lambda a, b: a == b, "!=": lambda a, b: a != b,
+    ">=": lambda a, b: a >= b, "<=": lambda a, b: a <= b,
+    ">": lambda a, b: a > b, "<": lambda a, b: a < b,
+}
+
+
+def parse_regime_expr(expr: str) -> list[tuple[str, str, float]]:
+    """A `regime:` predicate into [(axis, op, value)] conjunctions, or ValueError.
+
+    The grammar is deliberately tiny — conjunctions of axis-vs-number comparisons —
+    because the whitelist is the red line: a predicate that reads anything but the
+    problem's shape axes (data content, a timing reading, "the best so far") does
+    not parse, and what does not parse cannot become a dispatch judge."""
+    conjuncts: list[tuple[str, str, float]] = []
+    for part in re.split(r"\s+and\s+", expr.strip(), flags=re.I):
+        m = _REGIME_CONJUNCT.match(part.strip())
+        if m is None:
+            raise ValueError(
+                f"'{part.strip()}' is not <axis> (<|<=|==|>=|>|!=) <number> — a regime "
+                f"predicate is a pure function of the problem's shape axes and nothing "
+                f"else (no data content, no timing readings, no runtime state)")
+        conjuncts.append((m["axis"], m["op"], float(m["value"])))
+    return conjuncts
+
+
+def regime_expr_matches(parsed: list[tuple[str, str, float]], axes: dict) -> bool:
+    """True when every conjunct holds against the workload's axes. An axis the
+    workload does not declare fails the conjunct (cannot-verify is not a match)."""
+    for axis, op, value in parsed:
+        v = axes.get(axis)
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            return False
+        if not _OPS[op](float(v), value):
+            return False
+    return True
+
+
+def parse_regime_predicates(text: str) -> list[tuple[str, str]]:
+    """[(decision_id, predicate_text)] for every `regime:` line in §3.
+
+    A tag sitting inside a decision block belongs to that decision (the
+    per-decision duty, like [SYNC:]/[GATHER:]/[PHASE:]); one outside any block is
+    attributed to the whole section with decision_id ""."""
+    sec = _section_body(text, DECISIONS_SECTION, DECISIONS_ENDS)
+    if not sec:
+        return []
+    headers = list(_DECISION_HEADER.finditer(sec))
+    spans = [(m.group(1), m.start(),
+              headers[i + 1].start() if i + 1 < len(headers) else len(sec))
+             for i, m in enumerate(headers)]
+    out: list[tuple[str, str]] = []
+    for m in _REGIME_LINE.finditer(sec):
+        did = ""
+        for d, a, b in spans:
+            if a <= m.start() < b:
+                did = d
+                break
+        out.append((did, m.group(1).strip()))
+    return out
+
+
+def regime_coverage(predicates: list[tuple[str, str]],
+                    workload_axes: dict) -> list[str]:
+    """Coverage/mutual-exclusion violations of a milestone's regime family, [] = holds.
+
+    ``workload_axes`` is {workload name: axes dict} (the driver reads it off the
+    card's problem.json — meta_shapes.card_workload_axes). The machine holds the
+    teacher's coverage argument against the ACTUAL workloads: every workload must
+    satisfy exactly one predicate of the family (mutually exclusive AND covering),
+    every predicate must be a pure shape-axis function, and a family with nothing
+    to check against is itself a violation — an unverifiable freeze is an invalid
+    freeze (the caller bounces authoring on any non-empty result)."""
+    v: list[str] = []
+    if not predicates:
+        return []
+    parsed: list[tuple[str, str, list]] = []
+    for did, expr in predicates:
+        try:
+            parsed.append((did, expr, parse_regime_expr(expr)))
+        except ValueError as e:
+            v.append(f"regime: {expr}" + (f" (on §3 {did})" if did else "")
+                     + f" — {e}")
+            parsed.append((did, expr, None))
+    if v:
+        return v
+    if not workload_axes:
+        return ["regime predicate(s) present but the card exposes no workload axes "
+                "to hold coverage against — a per-regime freeze is only valid where "
+                "every workload can be shown covered (a group card with shape axes)"]
+    known_axes = {a for ax in workload_axes.values() for a in (ax or {})}
+    for did, expr, conjuncts in parsed:
+        for axis, _op, _val in conjuncts:
+            if axis not in known_axes:
+                v.append(f"regime: {expr}" + (f" (on §3 {did})" if did else "")
+                         + f" — `{axis}` is no shape axis of this card "
+                           f"({', '.join(sorted(known_axes)) or 'none'}), so the "
+                           f"predicate is not a pure function of the problem's shape "
+                           f"axes (a timing reading / runtime name cannot judge a regime)")
+    if v:
+        return v
+    for wl, axes in sorted(workload_axes.items()):
+        hits = [did or expr for did, expr, p in parsed
+                if p is not None and regime_expr_matches(p, axes or {})]
+        if not hits:
+            v.append(f"regime coverage failed: workload `{wl}` matches no regime "
+                     f"predicate — the family must cover every workload "
+                     f"(覆盖失败 = 冻结无效)")
+        elif len(hits) > 1:
+            v.append(f"regime predicates are not mutually exclusive: workload `{wl}` "
+                     f"matches {', '.join(sorted(hits))}")
+    return v
+
+
+def parse_per_shape_declarations(text: str) -> dict[str, list[tuple[str, str]]]:
+    """{decision_id: [(key, value)]} for every `per_shape:` line in §3.
+
+    Grammar: comma-separated `lever[key]=value` pairs (the key names a workload, or
+    a regime-style axis predicate over them); the value is free text up to the next
+    top-level comma (bracket-balanced, so `{row,col}` stays one value). Unparseable
+    pairs come back with key "" so the driver can name them as violations."""
+    sec = _section_body(text, DECISIONS_SECTION, DECISIONS_ENDS)
+    if not sec:
+        return {}
+    headers = list(_DECISION_HEADER.finditer(sec))
+    spans = [(m.group(1), m.start(),
+              headers[i + 1].start() if i + 1 < len(headers) else len(sec))
+             for i, m in enumerate(headers)]
+    out: dict[str, list[tuple[str, str]]] = {}
+    for m in _PER_SHAPE_LINE.finditer(sec):
+        did = ""
+        for d, a, b in spans:
+            if a <= m.start() < b:
+                did = d
+                break
+        pairs = out.setdefault(did, [])
+        depth = 0
+        parts: list[str] = []
+        cur = ""
+        for ch in m.group(1):
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+            if ch == "," and depth <= 0:
+                parts.append(cur)
+                cur = ""
+            else:
+                cur += ch
+        parts.append(cur)
+        for raw in parts:
+            pair = raw.strip()
+            if not pair:
+                continue
+            km = re.match(r"^(\S+?)\[([^\[\]]+)\]\s*=\s*(.+)$", pair, re.S)
+            pairs.append((f"{km[1]}[{km[2]}]", km[3].strip()) if km else ("", pair))
+    return out

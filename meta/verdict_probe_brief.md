@@ -61,7 +61,12 @@ pre-written on that milestone decision line, hash-checked and run by the driver 
 the same interleaved single-job discipline, `SWEEP`/`SWEEP-WINNER` lines instead of `PROBE`),
 spending the iteration's probe-round budget. It measures a grid the milestone already fixed; it
 neither replaces a verdict experiment here nor loosens the student's sweep ban — only the winner
-is landed, through the standard eval gate.
+is landed, through the standard eval gate. On a group card whose decision line declares
+shape-keyed value ranges (`per_shape: <lever>[<workload>]=<value>`), the driver sweeps ONCE PER
+WORKLOAD instead (one scoped job each) and the feedback table reads per shape: one column per
+workload, the per-column winners named within their own jobs' same-job readings — the `per_shape:`
+declaration composes them into the dispatch, and the landing is still the student's ordinary
+delivery judged by the full eval gate (per-workload correctness included).
 
 ## ARCH_PROBE (the distill step's pre-freeze cousin of this channel)
 

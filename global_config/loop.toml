@@ -31,3 +31,13 @@ reference_hours = 8         # writing a reference when the task has none
 #   [loop] carry_dir              = "path"  # default tasks/<op>/carry/ (self_evolve)
 #   [loop] m0_probe_candidates    = 2       # ARCH_PROBE bracket width (budget stays
 #                                           # [loop] m0_probe_rounds)
+
+# --- WP14: shape-regime decision channel --------------------------------------
+# This file's tables stay closed-vocabulary ([loop] keys live on the card layer,
+# operators/<op>/loop.toml — the WP8 precedent). The WP14 key is read there:
+#   [loop] regime_ncu_max        = 2       # per-regime NCU evidence cap: new scoped
+#                                          # pricing jobs per meta step, one workload
+#                                          # per milestone `regime:` predicate (0 = off;
+#                                          # meta steps only, never the eval path)
+# Runs whose milestone carries no `regime:` lines buy nothing and render nothing
+# (byte-identical to the pre-WP14 loop).

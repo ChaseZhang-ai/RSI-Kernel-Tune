@@ -383,7 +383,143 @@ _WP11_ALLNCU_CASE = """    allncu)
 # A miss, a mismatch or any cache trouble runs the ordinary full build: the cache
 # never blocks and is never a correctness single point. NOT for sealed-reference
 # trees.
-_WP11_CACHE_BLOCK = r'''# --- WP11: content-addressed build cache (default OFF) ------------------------
+#
+# --- WP19 (task 1): the narrowed build key (default OFF) -----------------------
+#
+# The whole-tree payload sha misses across iterations by construction: every
+# student commit touches notes/ or the kernel itself, so the probe, eval and
+# pricing jobs of ONE iteration — the same compiled kernel — each paid the full
+# nvcc build. FK_BUILD_CACHE_KEY_NARROW=1 re-addresses the key on what the
+# COMPILER reads (contract C11: the enumeration is mechanical, and anything the
+# walk cannot prove it enumerated falls back to the whole-tree key):
+#   sha256(kernel .cu + its recursive quoted-#include closure, every file
+#   content-hashed + the fk-cuda-cflags line + the builder scripts
+#   (eval/benchkit.py, eval/bench.py) + eval/problem/problem.json)
+# combined with the same toolchain versions as before. The per-artifact hash
+# verification on a hit (fk_build_cache_brain verify) is UNCHANGED and remains
+# the second line of defense: a stale artifact is still a miss. An unresolved
+# quoted include, a missing builder file, a non-.cu kernel or ANY trouble in
+# the walk aborts the narrowed key (exit nonzero) and the function falls back
+# to the whole-tree key — the narrowing can only lose hits, never gain stale
+# ones. Sealed-reference trees keep the WP11 rule: the cache is opt-in per job
+# env, and sealed refs are not given FK_BUILD_CACHE.
+_WP19_KEY_ENUMERATOR = r'''fk_build_cache_key_narrowed() {
+    [ "${FK_BUILD_CACHE_KEY_NARROW:-0}" = "1" ] || return 1
+    python3 - <<'FKKEY' 2>/dev/null || return 1
+import hashlib, json, pathlib, re, sys
+
+root = pathlib.Path(".").resolve()
+prob = root / "eval/problem/problem.json"
+kf = "kernel.py"
+if prob.is_file():
+    kf = json.loads(prob.read_text(encoding="utf-8")).get("kernel_file", kf)
+k = (root / kf).resolve()
+# the narrowed key is a CUDA-build concept; anything else keeps the whole-tree key
+if k.suffix != ".cu" or not k.is_file():
+    sys.exit(1)
+try:
+    k.relative_to(root)
+except ValueError:
+    sys.exit(1)
+
+def sha(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+INC = re.compile(r'^[ \t]*#[ \t]*include[ \t]*"([^"]+)"', re.M)
+TEXT_SUFFIXES = (".cu", ".h", ".hpp", ".cuh")
+
+def strip_comments(text):
+    """The source modulo comments and whitespace runs: comments removed (they
+    change no codegen), every whitespace run outside a literal collapsed to
+    one space (comment-only edits must not move the key), string and char
+    literals preserved verbatim. The fk-cuda-cflags line is extracted from the
+    RAW text before this runs; the include walk uses the RAW text too."""
+    out, i, n = [], 0, len(text)
+    ws = " \t\r\n\f\v"
+    while i < n:
+        c = text[i]
+        if c in ws:
+            if not out or out[-1] != " ":
+                out.append(" ")
+            while i < n and text[i] in ws:
+                i += 1
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            j = text.find("\n", i)
+            i = n if j < 0 else j            # the newline joins the next run
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            j = text.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            out.append(" ")
+            continue
+        if c in ('"', "'"):
+            out.append(c)
+            i += 1
+            while i < n:
+                out.append(text[i])
+                if text[i] == "\\" and i + 1 < n:
+                    out.append(text[i + 1])
+                    i += 2
+                    continue
+                if text[i] == c:
+                    i += 1
+                    break
+                i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+def text_sha(p):
+    return hashlib.sha256(strip_comments(
+        p.read_text(encoding="utf-8", errors="replace")).encode("utf-8")).hexdigest()
+
+files: dict = {}
+stack = [k]
+while stack:
+    p = stack.pop()
+    rel = p.relative_to(root).as_posix()
+    if rel in files:
+        continue
+    text = p.read_text(encoding="utf-8", errors="replace")
+    files[rel] = text_sha(p) if p.suffix in TEXT_SUFFIXES else sha(p)
+    if p.suffix in TEXT_SUFFIXES:
+        for name in INC.findall(text):
+            cand = (p.parent / name).resolve()
+            if not cand.is_file():
+                cand = (root / name).resolve()
+            if not cand.is_file():
+                sys.exit(1)          # unresolvable include: not provably enumerated
+            try:
+                cand.relative_to(root)
+            except ValueError:
+                sys.exit(1)          # escapes the tree: not provably enumerated
+            if cand not in files:
+                stack.append(cand)
+
+# the builder scripts own the compile call and the flag defaults; the frozen
+# problem rides along conservatively (over-inclusion only costs hits)
+for b in ("eval/benchkit.py", "eval/bench.py", "eval/problem/problem.json"):
+    p = (root / b).resolve()
+    if not p.is_file():
+        sys.exit(1)
+    files[b] = sha(p)
+
+kernel_text = (root / kf).read_text(encoding="utf-8", errors="replace")
+cflags = "".join(re.findall(r'^[ \t]*//[ \t]*fk-cuda-cflags:(.*)$', kernel_text, re.M))
+payload = "\n".join(f"{rel}:{files[rel]}" for rel in sorted(files))
+payload += f"\ncflags:{cflags}\n"
+print(hashlib.sha256(payload.encode("utf-8")).hexdigest())
+FKKEY
+}
+
+'''
+_WP11_CACHE_BLOCK_BODY = r'''# --- WP11: content-addressed build cache (default OFF) ------------------------
 # See the block's origin (cardkit.py _WP11_CACHE_BLOCK) for the contract:
 # key = tree payload sha + nvcc + torch; hits are hash-verified; every failure
 # path is the ordinary full build.
@@ -394,11 +530,20 @@ fk_build_cache_key() {
     # every probe is guarded: an unavailable tool is an empty key line, never a
     # failed function (the script runs with set -o pipefail — an unguarded
     # failing probe would kill the job the cache exists to speed up)
-    local nvcc_ver="" torch_ver=""
+    local nvcc_ver="" torch_ver="" key=""
     nvcc_ver="$(nvcc --version 2>/dev/null | tail -n 1 || true)"
     torch_ver="$(python3 -c 'import torch; print(torch.__version__)' 2>/dev/null || true)"
-    printf '%s\n%s\n%s\n' "${FK_TREE_SHA256}" "${nvcc_ver}" "${torch_ver}" \
-        | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+    # WP19 (task 1): the narrowed build-input key when enabled; ANY trouble in
+    # the walk falls back to the whole-tree key below (C11: the narrowing can
+    # only lose hits, never gain stale ones).
+    key="$(fk_build_cache_key_narrowed)" || key=""
+    if [ -z "$key" ]; then
+        printf '%s\n%s\n%s\n' "${FK_TREE_SHA256}" "${nvcc_ver}" "${torch_ver}" \
+            | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+    else
+        printf '%s\n%s\n%s\n' "${key}" "${nvcc_ver}" "${torch_ver}" \
+            | python3 -c 'import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+    fi
 }
 
 fk_build_cache_brain() {  # verify <root> <key> | promote <root> <key> <staging>
@@ -497,6 +642,9 @@ FKPRE
     fi
     return 0
 }'''
+
+# The rendered block: the WP19 enumerator first, then the WP11 cache contract.
+_WP11_CACHE_BLOCK = _WP19_KEY_ENUMERATOR + _WP11_CACHE_BLOCK_BODY
 
 
 def render_gpu_entry(*, name: str, suite: str, arch: str, clock: str = "",

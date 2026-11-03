@@ -523,6 +523,15 @@ class LoopContext:
     # LoopContext(...) — added at the integration step; the default 2 governs
     # launches that don't set the key.)
     m0_probe_rounds: int = 2
+    # --- WP12 ----------------------------------------------------------------
+    # [loop] kb_menu (default True): the deterministic KB-MENU block (KB-HINTS /
+    # LEVER-MENU / CALIBRATION, synthesized by loop/kbmenu.py — contract C7's
+    # single implementation) injected into the teacher's diagnose prompt after
+    # REMOVE_CANDIDATES (contract C3's render order). Pure retrieval aid: no
+    # unmeasured number, no gate reads it. Like every [loop] key it resolves
+    # from the card layer's loop.toml (see _wp12_kb_menu_on); None = resolve
+    # from config, an explicit value (tests, callers) wins.
+    kb_menu: bool | None = None
     probe_battles: dict[str, ProbeBattle] = field(default_factory=dict)
     # Force a meta audit the first time a segment goes green (= the M0 gate lands).
     # The gate verifies the student against the milestone's OWN declared values — it
@@ -5854,6 +5863,102 @@ def _falsified_ledger_block(ctx: LoopContext) -> str:
     return "\n".join(lines) + "\n"
 
 
+# --- WP12: KB-MENU (deterministic retrieval aid; synthesizer = loop/kbmenu.py) --
+#
+# The last "from memory" stretches of the diagnose -> decide chain, made
+# lookup-based: which index row a reading points at, which lever families the
+# design round should weigh, and the teacher's own recent calibration record.
+# Everything here is teacher-side (contract C3: one KB-MENU section, after
+# REMOVE_CANDIDATES) and deterministic (contract C7: kbmenu.py is the single
+# implementation — this glue only gathers inputs and renders; no model call,
+# no gate reads it, and a missing ledger / short meta history / no index match
+# simply shortens the block).
+
+_WP12_INDEX_MAX_CHARS = 400_000
+
+
+def _wp12_kb_menu_on(ctx: LoopContext) -> bool:
+    """[loop] kb_menu (default True), card layer over global layer — the same
+    two-layer read every [loop] key uses (the global file's table vocabulary
+    is closed; [loop] keys live on the card layer). An explicitly set
+    LoopContext field wins and is never clobbered."""
+    if ctx.kb_menu is not None:
+        return bool(ctx.kb_menu)
+    loop_cfg = _wp5_cfg_sections(ctx).get("loop")
+    v = loop_cfg.get("kb_menu") if isinstance(loop_cfg, dict) else None
+    return v if isinstance(v, bool) else True
+
+
+def _wp12_readings(records) -> dict:
+    """The digest readings the menu triages on: the NEWEST live iteration that
+    carries a profiler (KEEP and REVERT alike — the ledger block reads the
+    same face), WP2 SOL header keys included. No profiler yet -> {}."""
+    for r in reversed(list(records)):
+        prof = getattr(r, "profiler", None) or {}
+        if prof:
+            return dict(prof)
+    return {}
+
+
+def _wp12_resusage(readings: dict) -> dict:
+    """The build-time resource fields ride in the profiler dict, namespaced
+    (resusage_regs / resusage_smem / resusage_cstack)."""
+    return {k.removeprefix("resusage_"): v for k, v in readings.items()
+            if k.startswith("resusage_") and not k.endswith("_kernel")}
+
+
+def _wp12_ledger_rows(ctx: LoopContext) -> list:
+    """The falsified-ledger rows the menu's exclusions quote — the same file
+    and the same tolerant read the LEDGER section uses (a missing / corrupt
+    line contributes nothing)."""
+    path = _falsified_ledger_path(ctx)
+    rows: list = []
+    try:
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError as e:
+        _log(f"meta/kb-menu: could not read {path.name} ({e})")
+    return rows
+
+
+def _wp12_index_text(ctx: LoopContext) -> str:
+    """This run's KB tree index (kb_read_dir/index.md), '' when absent — the
+    pointer section then renders nothing instead of guessing."""
+    try:
+        p = kb_read_dir(ctx) / "index.md"
+        if p.is_file():
+            return p.read_text(encoding="utf-8")[:_WP12_INDEX_MAX_CHARS]
+    except OSError as e:
+        _log(f"meta/kb-menu: could not read the index ({e})")
+    return ""
+
+
+def _wp12_kb_menu_block(ctx: LoopContext, live_records, prior_records) -> str:
+    """The rendered KB-MENU, or '' — injection-ready (leading newline)."""
+    from forgekernel.loop import kbmenu
+    readings = _wp12_readings(live_records)
+    menu = kbmenu.build_kb_menu(
+        readings=readings,
+        resusage=_wp12_resusage(readings),
+        ledger_rows=_wp12_ledger_rows(ctx),
+        meta_records=list(prior_records),
+        index_text=_wp12_index_text(ctx),
+        kb_label=f"{ctx.language}/{ctx.kb_arch}",
+        op=ctx.op,
+        # absolute: the teacher runs with cwd = the student workspace, so the
+        # recipe pointers must resolve from there (same convention as the
+        # other repo-file bindings)
+        recipe_dir=str(ctx.meta_dir.parent / "skills" / "probe-recipes"),
+    )
+    return f"\n{menu}\n" if menu else ""
+
+
 # --- price staleness ----------------------------------------------------------
 #
 # A price is a reading on one tree. The pricing round banks its table under the
@@ -7367,6 +7472,11 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
              f"best tree -> phase exhausted; demanding a phase_verdict "
              f"(unpriced: {exhaustion['unpriced'] or 'none'})")
         diagnose_extra += _phase_exhausted_block(exhaustion)
+    # --- WP12: KB-MENU (contract C3 render order: after REMOVE_CANDIDATES /
+    # STAGNATION, last in the injection area). Deterministic pointers and
+    # calibration only — never a price; empty inputs inject nothing.
+    if _wp12_kb_menu_on(ctx):
+        diagnose_extra += _wp12_kb_menu_block(ctx, live_records, prior_records)
     prompt_file = "m0_audit_prompt.md" if audit else "diagnose_prompt.md"
     enum_help = ("`OK` `G1` `G2` `G3` `G4` `G5` `R1` `R2`" if audit
                  else "`G1` `G2` `G3` `G4` `G5` `R1` `R2` `INFEASIBLE`")

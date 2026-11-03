@@ -77,6 +77,11 @@ PTX mechanism knowledge), then:
    - When one KEEP moved several axes at once, write them up separately per axis; if an axis reading changed but the ms did not move, record it anyway ("no value" is itself
      a transferable reading — it keeps the next run from taking it as the prime suspect again).
 
+## Freshness and dead ends (same round, still zero GPU)
+- **Freshness field**: every entry you write or update gains `last_confirmed: job <number>` beside its evidence parenthesis — the job whose measurement most recently confirmed that entry's reading (re-use the winning job's number; a job number, not a date — kb_lint forbids calendar dates in `{KB_DIR}`).
+- **Dead ends cross run**: at round end, convert each `MILESTONE` §4 "Known dead ends" row into one appended `{KB_DIR}/../falsified_ledger.jsonl` line — `{"op_family": <this op's family>, "arch": "{KB_ARCH}", "lever": <short name>, "class": "structural-dead-end", "condition": <one sentence, generic>, "run": <run id>, "date": <YYYY-MM-DD>}` — so the next same-family run's design round reads the wall before hitting it (append only; never rewrite existing lines).
+- **Stale-entry review**: scan `{META_TRAJECTORY_PATH}` for `reopen_price:` lines citing `via KB:<name>` — a KB entry whose last 2 citing records both read `REVERT_PATCH` is likely stale: append a CANDIDATES row (`{KB_DIR}/../CANDIDATES.md`, same table schema) with `Status` `STALE-REVIEW`, naming the entry and the two reverted reopens; leave the entry itself untouched for that review to decide.
+
 ## Hard rules
 
 - **Recipes are operator-agnostic**: only hardware / CUDA C++ / PTX mechanisms, never copy the operator's algorithmic logic (L0).

@@ -164,6 +164,13 @@ defect right now**. **Do not** write the full patch text (that is a later step) 
   while `cause_class` reports another class, and the loop does not stop — it only makes the student report EXHAUSTED and you diagnose a class with no lesion, spinning idle until the budget runs out.
 
 {VERDICT_PROBE_BRIEF}
+Pre-planted measurement recipes for common verdict hypotheses (occupancy-scaling curve, phase ablation, effective-BW triad): `skills/probe-recipes/` at the repo root (the KB-MENU names each script's absolute path) — copy one into `notes/`, adapt its hook to the tree's kernel, and `PROBE_REQUEST` it; they produce readings only, never a verdict.
+
+## KB-MENU (when the driver injects it)
+- `KB-HINTS:` deterministic symptom→index pointers — read the pointed row first, then judge from it.
+- `LEVER-MENU:` symptom→lever forms for the design round; a `LEDGER` row named there is a measured exclusion — do not re-propose it without naming what changed.
+- `CALIBRATION:` your own recent record (reopen payback, lever faded/reversed, REVERT streaks, stale-entry warnings) — spend a cheap probe before the next expensive direction.
+- **The menu is not a price, a pointer is not an answer**: every number you cite still comes from a measured table / probe / certified KB entry; entries the menu points at still go through the ordinary certification and pricing path.
 
 ## Output (structured; fill in every field)
 ```

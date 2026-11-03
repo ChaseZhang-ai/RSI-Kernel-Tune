@@ -144,6 +144,32 @@ class IterationRecord:
     # flag travels the trajectory so a later resume cannot mistake the row for an
     # ordinary regression. Digest stays row-free (the teacher reads it on the row).
     suspicious: bool = False
+    # --- WP20 (measure-side defense accounting; readings, never verdicts) ------
+    # The worst correctness error/tolerance ratio among the eval's checks: the
+    # judge's edge the REVERT sat on (>=1.0 fails; 0.9-1.1 is the edge the
+    # judge-edge recheck watches). None when no check carries both numbers.
+    corr_margin_ratio: float | None = None
+    # The precision gate went quietly blind on this row: unavailable precision
+    # rows beyond the card's gate_degraded_ratio (strict's gate_failure reads
+    # only status=="fail"). Accounting — zero verdict weight.
+    gate_degraded: bool | None = None
+    # A fresh_recheck FAIL's form: `nondeterministic` when the same-seed double
+    # run showed the kernel disagreeing with itself on identical content (an
+    # atomics reduction, not a cache replay). Still REVERT — a nondeterministic
+    # kernel is not deliverable — but the record says which fail it was. None =
+    # the default cache-replay shape (and mode=stream / mode=timer carry their
+    # own story in the mode field).
+    fresh_recheck_form: str | None = None
+    # The edge-band judge recheck fired and the fresh draw cleared the judge:
+    # `pass` on the KEEP row (one re-measured eval, judged by the unchanged
+    # protocol; the first edge-band offender of the run is the only buyer).
+    judge_edge_recheck: str | None = None
+    # The paired protocol's reference side spread beyond twice the kernel's on
+    # the same gate window: the ratio's noise was the reference's own. Report-
+    # only, rendered into the teacher's workload block. (The name is kept from
+    # the pre-deboard spec — the board's secondary protocol became this mirror
+    # pair; the WP23 integration seam greps this exact word.)
+    board_span_unstable: bool | None = None
     # --- WP11 (task 4): wall-clock composition telemetry -------------------------
     #
     # Where an iteration's wall clock actually went: the student's agent turns, the

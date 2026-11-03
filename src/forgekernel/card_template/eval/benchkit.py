@@ -46,6 +46,7 @@ from __future__ import annotations
 import argparse
 import ast
 import contextlib
+import hashlib
 import importlib.machinery
 import importlib.util
 import io
@@ -58,6 +59,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import time
 import tokenize
 from pathlib import Path
 
@@ -86,6 +88,330 @@ def _recheck_seed_shift() -> int:
         return int(os.environ.get(FRESH_SEED_ENV, 7919))
     except ValueError:
         return 7919
+
+
+# --- WP20: the measurement-side sentinels (the red-team defense zone) ------------
+#
+# The timed windows measure the CURRENT stream only (the CUDA event pairs record
+# on it), and they trust the clock functions and the process around them. A
+# kernel running inside this process can attack each of those assumptions, so
+# the bench carries three cheap sentinels, installed before the kernel module
+# imports and read only AFTER all timing windows close (never inside a window —
+# the window protocol above is untouched):
+#
+#   stream — work launched onto a side stream is unordered with the timing
+#     stream, so the event pairs cannot wait for it and the window reads fast
+#     while the work happens elsewhere. The sentinel re-times one call per timed
+#     group two ways OUTSIDE the windows — the protocol's event pair on the
+#     timing stream, then the same call drained by a full-device synchronize
+#     under a wall clock — and flags the span between them when the drained
+#     reading dwarfs the event reading. A kernel that chains its side stream
+#     back into the timing stream (wait_stream) reads the same both ways and
+#     passes; the span threshold is wide (STREAM_SPAN_*) so launch/sync overhead
+#     on an honest kernel never trips it. Sub-slack work is below the sentinel's
+#     floor — correctness, the fresh recheck and the judge stay the binding
+#     defenses there.
+#   timer — the identities of the clock functions and the window routines are
+#     captured before the kernel imports and re-resolved after the windows: an
+#     in-process monkey-patch moves at least one id (`timer_integrity: mismatch`).
+#   proc — a thread / direct-child census before the import, after it (the
+#     JIT-compile / toolchain baseline the kernel's own import paid) and after
+#     the windows: threads or children present only after the windows exceeded
+#     that baseline (`anomaly` — work spawned inside the timed region).
+#
+# Failure posture (the WP9 fresh-recheck posture, verbatim): an env failure
+# degrades to `unknown` and never convicts. A stream / timer violation rides the
+# EXISTING fresh_recheck fail path (`mode=stream` / `mode=timer`) — the driver's
+# judgment logic is unchanged; the proc census is accounting-only. The attack
+# fixtures these sentinels exist for live under tests/redteam/ (contract C16:
+# the red team's playbook is a test asset, never student-visible material).
+STREAM_SPAN_RATIO = 3.0
+"""drain/event above this times slack means timed-window work escaped."""
+STREAM_SPAN_SLACK_MS = 0.5
+"""absolute slack for launch + sync overhead, so honest kernels never trip."""
+GATE_DEGRADED_RATIO = 0.5
+"""[loop] gate_degraded_ratio: unavailable precision rows above this share mark
+the eval JSON `gate_degraded` (FK_GATE_DEGRADED_RATIO overrides; the driver
+forwards the loop.toml key)."""
+GATE_DEGRADED_RATIO_ENV = "FK_GATE_DEGRADED_RATIO"
+
+_TIMER_BASELINE: dict[str, int] | None = None
+_PROC_T0: dict | None = None
+_PROC_T1: dict | None = None
+_KERNEL_STREAMS: list = []
+_STREAM_READINGS: list = []
+
+
+def _timer_targets() -> dict:
+    """The clock / window identities the timer sentinel watches: what the kernel
+    runs alongside (same process, same modules) could rebind to fake a window."""
+    import timing
+    return {
+        "time.perf_counter": time.perf_counter, "time.time": time.time,
+        "torch.cuda.Event": torch.cuda.Event,
+        "torch.cuda.Event.record": torch.cuda.Event.record,
+        "torch.cuda.Event.elapsed_time": torch.cuda.Event.elapsed_time,
+        "torch.cuda.synchronize": torch.cuda.synchronize,
+        "timing.time_e2e": timing.time_e2e,
+        "timing.time_device": timing.time_device,
+        "timing.time_host_enqueue": timing.time_host_enqueue,
+        "timing.measure_windows": timing.measure_windows,
+        "timing.measure_paired": timing.measure_paired,
+        "timing.measure_windows_workloads": timing.measure_windows_workloads,
+    }
+
+
+def install_wp20_sentinels() -> None:
+    """Capture what the sentinels compare against, before any foreign code runs:
+    the clock / window identities, the process census, and a census of CUDA
+    streams created from here on (the eval's own code creates none). Never
+    raises — an install failure means `unknown`, never a conviction."""
+    global _TIMER_BASELINE, _PROC_T0
+    try:
+        _TIMER_BASELINE = {k: id(fn) for k, fn in _timer_targets().items()}
+    except Exception:  # noqa: BLE001 — the sentinel must never break the bench
+        _TIMER_BASELINE = None
+    try:
+        _PROC_T0 = _proc_census()
+    except Exception:  # noqa: BLE001
+        _PROC_T0 = None
+    try:
+        stream_init = torch.cuda.Stream.__init__
+
+        def _census_stream_init(self, *a, **kw):
+            _KERNEL_STREAMS.append(self)
+            return stream_init(self, *a, **kw)
+
+        torch.cuda.Stream.__init__ = _census_stream_init
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def timer_integrity() -> str:
+    """``ok`` | ``mismatch`` | ``unknown``: the watched clock / window identities
+    re-resolved and compared against the pre-import capture. A moved identity is
+    the timer monkey-patch signature; anything the sentinel cannot read is
+    ``unknown`` — a no-reading, never a fail."""
+    if _TIMER_BASELINE is None:
+        return "unknown"
+    try:
+        targets = _timer_targets()
+    except Exception:  # noqa: BLE001
+        return "unknown"
+    for k, fn in targets.items():
+        if id(fn) != _TIMER_BASELINE.get(k):
+            return "mismatch"
+    return "ok"
+
+
+def _proc_census() -> "dict | None":
+    """Threads and direct children of this process (Linux /proc). None elsewhere
+    or on any read failure: a census that cannot see is `unknown`, never an
+    anomaly."""
+    try:
+        me = os.getpid()
+        threads = len(os.listdir(f"/proc/{me}/task"))
+        children = 0
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry}/stat", "rb") as fh:
+                    raw = fh.read()
+                fields = raw.split(b")", 1)[1].split()   # after comm: state, ppid, ...
+                if int(fields[1]) == me:
+                    children += 1
+            except (OSError, ValueError, IndexError):
+                continue
+        return {"threads": threads, "children": children}
+    except OSError:
+        return None
+
+
+def note_first_calls_done() -> None:
+    """The proc sentinel's mid-run baseline (idempotent): captured after the FIRST
+    correctness round — the reference's and the kernel's first calls — so the
+    pools a compiled extension / JIT legitimately spins up on first call sit in
+    the baseline instead of the anomaly. What ``anomaly`` reports is threads or
+    children appearing only AFTER the timed region (accounting-only)."""
+    global _PROC_T1
+    if _PROC_T1 is not None:
+        return
+    try:
+        _PROC_T1 = _proc_census()
+    except Exception:  # noqa: BLE001
+        _PROC_T1 = None
+
+
+def proc_census_block() -> "dict | None":
+    """The census story of one job: pre-import, post-first-calls (the JIT /
+    thread-pool baseline the kernel's own first round paid), post-windows.
+    Threads or children present only after the windows exceed that baseline ->
+    ``anomaly``. Accounting-only — the record never fails on it; None = no
+    readings (a census that could not see is ``unknown``, never a conviction)."""
+    try:
+        t2 = _proc_census()
+    except Exception:  # noqa: BLE001
+        t2 = None
+    if _PROC_T0 is None or _PROC_T1 is None or t2 is None:
+        return None
+    anomaly = (t2["threads"] > _PROC_T1["threads"]
+               or t2["children"] > _PROC_T1["children"])
+    out = {"status": "anomaly" if anomaly else "ok",
+           "threads": {"pre_import": _PROC_T0["threads"],
+                       "post_import": _PROC_T1["threads"],
+                       "post_windows": t2["threads"]},
+           "children": {"pre_import": _PROC_T0["children"],
+                        "post_import": _PROC_T1["children"],
+                        "post_windows": t2["children"]}}
+    if anomaly:
+        out["detail"] = ("threads or child processes appeared after the timed "
+                         "region, beyond the kernel import's own baseline")
+    return out
+
+
+def _stream_span_check(work: list) -> "dict | None":
+    """One call per timed group, re-timed two ways OUTSIDE the windows: the
+    protocol's event pair on the timing stream, then the same call drained by a
+    full-device synchronize under a wall clock. Work the timed window cannot see
+    (launched onto a side stream, unordered with the timing stream) makes the
+    drained reading dwarf the event reading. None = nothing to check (no CUDA,
+    no work); any env failure degrades to ``unknown`` and never convicts."""
+    if not work or not torch.cuda.is_available():
+        return None
+    per, verdict = [], "ok"
+    try:
+        for name, kernel_calls, _ref_calls in work:
+            if not kernel_calls:
+                continue
+            call = kernel_calls[0]
+            torch.cuda.synchronize()
+            start = torch.cuda.Event(enable_timing=True)
+            stop = torch.cuda.Event(enable_timing=True)
+            start.record()
+            call()
+            stop.record()
+            torch.cuda.synchronize()
+            event_ms = start.elapsed_time(stop)
+            t0 = time.perf_counter()
+            call()
+            torch.cuda.synchronize()
+            drain_ms = (time.perf_counter() - t0) * 1e3
+            per.append({"group": str(name), "event_ms": round(event_ms, 4),
+                        "drain_ms": round(drain_ms, 4)})
+            if drain_ms > STREAM_SPAN_RATIO * event_ms + STREAM_SPAN_SLACK_MS:
+                verdict = "violation"
+    except Exception as exc:  # noqa: BLE001 — a sentinel env failure never convicts
+        return {"status": "unknown", "detail": f"{type(exc).__name__}: {exc}",
+                "kernel_streams": len(_KERNEL_STREAMS)}
+    out = {"status": verdict, "per_call": per,
+           "kernel_streams": len(_KERNEL_STREAMS)}
+    if verdict == "violation":
+        out["detail"] = ("a timed call drained far more than its event window "
+                         "measured — work ran outside the timed stream")
+    return out
+
+
+def _wp20_sentinel_blocks(result: dict) -> None:
+    """Read every sentinel after ALL timing windows closed and ride the readings
+    on the eval JSON. A stream / timer violation becomes a fresh_recheck FAIL
+    (``mode=stream`` / ``mode=timer``) — the driver's existing reward-hack path,
+    zero new judgment logic; ``unknown`` degradations ride as readings, never as
+    fails; the proc census is accounting-only."""
+    if _STREAM_READINGS:
+        violating = [r for r in _STREAM_READINGS if r.get("status") == "violation"]
+        if violating:
+            result["stream_sentinel"] = {**violating[0], "violations": len(violating)}
+            # a genuine recheck fail already on the result stays the riding fail:
+            # the driver reads ONE fresh_recheck block, the recheck is the stronger
+            # evidence, and the stream reading rides beside it (never under it).
+            if result.get("fresh_recheck", {}).get("pass") is not False:
+                result["fresh_recheck"] = {"mode": "stream", "pass": False,
+                                           "layers": [{"detail": violating[0].get("detail")}]}
+        elif all(r.get("status") == "unknown" for r in _STREAM_READINGS):
+            result["stream_sentinel"] = {**_STREAM_READINGS[0],
+                                         "detail": _STREAM_READINGS[0].get("detail")}
+        else:
+            result["stream_sentinel"] = {"status": "ok",
+                                         "kernel_streams": len(_KERNEL_STREAMS)}
+    result["timer_integrity"] = timer_integrity()
+    if result["timer_integrity"] == "mismatch" and \
+            result.get("fresh_recheck", {}).get("pass") is not False:
+        result["fresh_recheck"] = {"mode": "timer", "pass": False,
+                                   "layers": [{"detail": "a clock / window identity "
+                                                          "moved during the run"}]}
+    if (census := proc_census_block()) is not None:
+        result["proc_census"] = census
+
+
+# --- WP20: judge/gate accounting (readings, never verdicts) ----------------------
+#
+# Three zero-weight rows the eval JSON carries beside the verdict: the precision
+# contract the card actually ran under, whether the precision gate went quietly
+# blind (unavailable rows beyond the card's ratio), and — on a fresh-recheck
+# fail — whether the kernel even agrees with ITSELF on the same content. None of
+# them turns a pass into a fail or a fail into a pass; the driver's judgment
+# logic is untouched.
+
+def precision_audit_line(problem: dict) -> str:
+    """``<contract> (<source>)`` — naming the precision contract this card ran
+    under (``default`` when problem.json says nothing; the env kill switch, when
+    set, names itself). Pure visibility: ``precision_on`` above decides the
+    measuring, this line says which rule did."""
+    if PRECISION_ENV_OFF:
+        return f"off (env: {PRECISION_ENV}=0)"
+    raw = problem.get("precision_contract")
+    contract = str(raw or "strict").strip().lower()
+    return f"{contract} ({'default' if raw is None else 'problem'})"
+
+
+def gate_degraded(block) -> "bool | None":
+    """True when the precision rows that could not run (``unavailable``) exceed
+    ``FK_GATE_DEGRADED_RATIO`` (default GATE_DEGRADED_RATIO) of the block's rows:
+    under strict, gate_failure reads only ``status == "fail"``, so an
+    all-unavailable block is a gate that saw nothing — this row keeps that
+    visible. Accounting, never a verdict; None = no rows to speak of."""
+    if not isinstance(block, dict):
+        return None
+    rows = block.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return None
+    try:
+        ratio = float(os.environ.get(GATE_DEGRADED_RATIO_ENV) or GATE_DEGRADED_RATIO)
+    except ValueError:
+        ratio = GATE_DEGRADED_RATIO
+    unavailable = sum(1 for r in rows
+                      if isinstance(r, dict) and r.get("status") == "unavailable")
+    return unavailable > ratio * len(rows)
+
+
+def _nondeterminism_fingerprint(problem: dict, impl, dps: bool, device) -> dict:
+    """The same-seed double run behind a fresh-recheck fail (WP20): for every
+    input group the judge's inputs are drawn TWICE at the group's own seed and
+    the kernel runs on each draw — the max abs difference between the two runs'
+    outputs is the kernel's agreement with itself on identical content. Two runs
+    of one kernel disagreeing is nondeterminism (an atomics reduction), not a
+    cache replay; the driver records the fail's form either way (a
+    nondeterministic kernel is still not deliverable — REVERT — but the record
+    says which fail it was). ``unknown`` on any foreign exception: a no-reading,
+    never an extra conviction."""
+    try:
+        judge, make_inputs = _task_custom(problem)
+        del judge
+        diffs: list = []
+        for group in task_groups(problem):
+            runs = []
+            for _ in range(2):
+                inp = task_inputs(problem, group, device, make_inputs)
+                outs = call_impl(problem, impl, inp, dps, device, no_grad=True)
+                runs.append([t.detach().float().clone() for t in outs
+                             if torch.is_tensor(t)])
+            for a, b in zip(*runs):
+                diffs.append(float((a - b).abs().max()))
+        return {"status": "ran", "max_diff": max(diffs) if diffs else 0.0,
+                "n_pairs": len(diffs)}
+    except Exception as exc:  # noqa: BLE001 — the impl is foreign code
+        return {"status": "unknown", "detail": f"{type(exc).__name__}: {exc}"}
 
 
 # Packed fp4 (two E2M1 codes per byte); older torch builds lack it, and only fp4
@@ -987,12 +1313,28 @@ def _fresh_recheck_block(problem: dict) -> "dict | None":
     """The parent's recheck: layer 1 always (fresh process, fresh allocation);
     layer 2 (a different seed) whenever the card's inputs are drawn. The result
     rides the eval JSON's top-level ``fresh_recheck``; pass=None layers are
-    reported, never scored."""
+    reported, never scored. A FAIL also buys the WP20 nondeterminism
+    fingerprint (the same-seed double run): a kernel that disagrees with itself
+    on identical content is a different fail form than a cache replay — the
+    record says which (both still REVERT)."""
     if os.environ.get(FRESH_RECHECK_ENV):
         return None                      # a child never nests
     mode = _fresh_recheck_mode(problem)
     child = _fresh_child(problem, seed=None)
-    return {"mode": mode, "layers": [child], "pass": child.get("pass")}
+    block = {"mode": mode, "layers": [child], "pass": child.get("pass")}
+    if child.get("pass") is False:
+        try:
+            impl, dps = _impl(problem, "kernel")
+        except Exception:  # noqa: BLE001 — foreign code; a no-reading, never a conviction
+            impl = None
+        if impl is not None:
+            block["nondeterminism"] = _nondeterminism_fingerprint(
+                problem, impl, dps, os.environ.get("FK_FRESH_RECHECK_DEVICE", "cuda"))
+            fp = block["nondeterminism"]
+            if fp.get("status") == "ran" and \
+                    isinstance(fp.get("max_diff"), (int, float)) and fp["max_diff"] > 0.0:
+                block["form"] = "nondeterministic"
+    return block
 
 
 def _run_fresh_recheck_child(problem: dict, args) -> int:
@@ -1499,6 +1841,8 @@ def _task_side(problem: dict, sets: list, kernel, kernel_dps: bool, ref=None,
     work = [(name, calls(kernel, kernel_dps, inp), calls(ref, ref_dps, inp))
             for name, inp in zip(groups, sets)]
     result = timing.measure_windows_workloads(work, burn_in_s=BURN_IN_S)
+    if (span := _stream_span_check(work)) is not None:
+        _STREAM_READINGS.append(span)   # WP20: the post-window span audit, one per timed shape
     block = timing.workloads_performance(result)
     block["device_window_basis"] = BASIS_PLAIN
     block["bench"] = {
@@ -1541,6 +1885,7 @@ def _run_task(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, timed
     for v in views:
         verdict, sets = _correctness(v, impl, dps, device)
         per.append((v, verdict))
+        note_first_calls_done()   # WP20: the proc sentinel's baseline sits after the first round
         print(f"[task] {v['_wl_name']} {json.dumps(v['workload'].get('axes'))}: correctness "
               f"{verdict['status']}" + (f" — {verdict.get('error')}" if not verdict["pass"] else ""))
         if not verdict["pass"]:
@@ -1556,6 +1901,11 @@ def _run_task(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, timed
                  if block.get("ref_device_ms") else f" [reference: {block.get('in_job_ref')}]"))
     verdict = group_verdict(per, len(views), first_bad)
     result = {"correctness": _correctness_json(verdict), "performance": None}
+    if verdict.get("precision") is not None:      # --- WP20: the block rides TOP level
+        result["precision"] = verdict["precision"]   # (WP24's rename dropped the re-attach)
+    result["precision_audit"] = precision_audit_line(problem)   # --- WP20: zero-weight row
+    if (degraded := gate_degraded(result.get("precision"))) is not None:
+        result["gate_degraded"] = degraded          # --- WP20: the gate's own visibility
     print(f"[task] correctness: {verdict['status']} ({len(per)}/{len(views)} shapes judged)"
           + (f" — {verdict.get('error')}" if not verdict["pass"] else ""))
     if not verdict["pass"] or args.mode == "correctness":
@@ -1569,6 +1919,7 @@ def _run_task(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, timed
              if perf.get("vs_ref_device") else f" [reference: {perf.get('in_job_ref')}]")
           + f"; clock {clock_state()}")
     _maybe_fresh_recheck(result, problem, args)   # --- WP9: after ALL windows
+    _wp20_sentinel_blocks(result)                 # --- WP20: sentinels read after ALL windows
     _emit(result)
     return 0
 
@@ -1656,6 +2007,7 @@ def run_bench(argv=None, problem_path=None) -> int:
     problem = load_problem(problem_path)
     if args.fresh_recheck:
         return _run_fresh_recheck_child(problem, args)
+    install_wp20_sentinels()   # --- WP20: armed before any foreign code imports
     _SCOPE.clear()
     if scope := apply_workload_scope(problem):
         _SCOPE.update(scope)

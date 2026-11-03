@@ -456,6 +456,23 @@ class LoopContext:
     # 0 disables. The threshold is on the *fight* (cumulative rounds per probe
     # path), not on one iteration's sub-loop.
     kb_tripwire_rounds: int = 6
+    # --- WP20 -----------------------------------------------------------------
+    # Measure-side defense accounting (readings, never verdicts). None = the
+    # spec default applies (resolved by _wp20_apply_cfg from loop.toml [loop],
+    # or the default below); an explicitly-set value wins over both.
+    #   gate_degraded_ratio — unavailable precision rows beyond this share of the
+    #     block's rows mark the eval `gate_degraded` (the gate went quietly blind;
+    #     strict's gate_failure reads only status=="fail").
+    #   judge_edge_recheck — the first correctness FAIL whose error/tolerance
+    #     ratio sits in (0.9, 1.1) buys one fresh-draw re-eval judged by the
+    #     UNCHANGED protocol (the task draws are unseeded: a new job IS a new
+    #     seed). One job, once per run.
+    #   board_span_guard — the paired reference's own mirror spread beyond 2x the
+    #     kernel's marks the row board_span_unstable (report-only; name kept from
+    #     the pre-deboard spec — the WP23 integration seam greps it).
+    gate_degraded_ratio: float | None = None
+    judge_edge_recheck: bool | None = None
+    board_span_guard: bool | None = None
     # --- WP5 -----------------------------------------------------------------
     # Budget & stop governance. None = resolve from loop.toml ([loop] / [budget],
     # card layer first, global layer beneath — see _wp5_apply_cfg) with the
@@ -1042,7 +1059,127 @@ def _precision_reading(ctx: LoopContext, ev, iter_no: int) -> dict:
         how = ("the eval already failed correctness" if why else "recorded only")
         _log(f"iter {iter_no}: precision ({contract}, {how}): "
              f"{precision_gate.describe(summary)}")
+    # --- WP20: the gate's own visibility. Unavailable rows beyond the card's
+    # gate_degraded_ratio mean the precision gate saw (almost) nothing this eval
+    # — gate_failure only reads status=="fail", so blindness must be recorded
+    # here or it is silent. Accounting on the eval (the row reads it); zero
+    # verdict weight.
+    ev.gate_degraded = _precision_degraded(ctx, ev.precision)
     return summary
+
+
+_WP20_GATE_DEGRADED_DEFAULT = 0.5
+_WP20_EDGE_BAND = (0.9, 1.1)
+_JUDGE_EDGE_RECHECKED: set[str] = set()
+"""status paths whose first edge-band offender already bought its recheck."""
+
+
+def _wp20_ratio(ctx: LoopContext) -> float:
+    """The card's gate_degraded_ratio: the explicitly-set value, else loop.toml
+    (resolved once by _wp20_apply_cfg), else the spec default."""
+    return (_WP20_GATE_DEGRADED_DEFAULT if ctx.gate_degraded_ratio is None
+            else ctx.gate_degraded_ratio)
+
+
+def _precision_degraded(ctx: LoopContext, block) -> bool | None:
+    """WP20: unavailable precision rows beyond the card's gate_degraded_ratio —
+    the gate blind on this card. None = no rows to speak of (the measure off, or
+    a block without rows)."""
+    if not isinstance(block, dict) or not isinstance(block.get("rows"), list):
+        return None
+    rows = block["rows"]
+    if not rows:
+        return None
+    unavailable = sum(1 for r in rows
+                      if isinstance(r, dict) and r.get("status") == "unavailable")
+    return unavailable > _wp20_ratio(ctx) * len(rows)
+
+
+def _judge_edge_recheck(ctx: LoopContext, be, branch, ev, iter_no: int):
+    """WP20: the edge-band judge recheck — a correctness FAIL whose worst
+    error/tolerance ratio sits inside (0.9, 1.1) may be the judge's calibrated
+    edge rolling against draw noise, not a kernel defect. The FIRST such row of
+    the run buys one re-measured eval (the task draws are unseeded: a fresh job
+    IS a different seed) judged by the UNCHANGED protocol — pass keeps the row
+    as a KEEP carrying judge_edge_recheck=pass, fail (or an unusable job)
+    REVERTs exactly as measured. Zero verdict-logic change: one more
+    measurement, the original rules. Returns the replacement EvalResult, or
+    None to REVERT as measured."""
+    if ctx.judge_edge_recheck is False:
+        return None
+    margin = getattr(ev, "corr_margin_ratio", None)
+    lo, hi = _WP20_EDGE_BAND
+    if margin is None or not (lo < margin < hi):
+        return None
+    key = str(ctx.status_path)
+    if key in _JUDGE_EDGE_RECHECKED:
+        return None
+    _JUDGE_EDGE_RECHECKED.add(key)
+    _log(f"iter {iter_no}: correctness FAIL at the judge's edge "
+         f"(corr_margin_ratio {margin:.3f}) — buying one fresh-draw recheck "
+         f"(judge_edge_recheck, once this run)")
+    try:
+        ev2 = _enforce_single_ref(ctx, parse_eval(be.submit_gpu(branch, "all")))
+        ev2 = _enforce_prep_contract(ctx, ev2)
+    except BackendError as e:
+        _log(f"iter {iter_no}: judge_edge_recheck job failed ({e}) — REVERT stands")
+        return None
+    _precision_reading(ctx, ev2, iter_no)
+    if not ev2.correctness:
+        _log(f"iter {iter_no}: judge_edge_recheck: the fresh draw failed too — REVERT stands")
+        return None
+    _log(f"iter {iter_no}: judge_edge_recheck: the fresh draw cleared the same judge — "
+         f"judging the fresh reading")
+    ev2.judge_edge_recheck = "pass"
+    return ev2
+
+
+def _board_span_unstable(ctx: LoopContext, ev) -> str | None:
+    """WP20 (report-only): the paired protocol's reference side carries its own
+    mirrored reading pair per workload; when its spread exceeds twice the
+    kernel's on the same gate window, the pair ratio's noise is the reference's
+    own — a fusion / direction decision reading that ratio would be chasing
+    reference variance. Rendered into the teacher's workload block; never a
+    verdict. Name kept from the pre-deboard spec (the board's secondary
+    protocol became this mirror pair). Returns the render fragment, None when
+    quiet or unmeasurable."""
+    if ctx.board_span_guard is False or not getattr(ev, "workloads", None):
+        return None
+    frags = []
+    for w in ev.workloads:
+        k = readings_spread_pct(w.get("device_readings_ms"))
+        r = readings_spread_pct(w.get("ref_device_readings_ms"))
+        if k is None or r is None or not (r > 2.0 * k):
+            continue
+        frags.append(f"{w.get('name')} ref-spread {r * 100:.2f}% > "
+                     f"2x kernel-spread {k * 100:.2f}%")
+    return "; ".join(frags) if frags else None
+
+
+def _wp20_apply_cfg(ctx: LoopContext) -> None:
+    """Resolve the WP20 switches from loop.toml (the WP11 pattern: card layer's
+    [loop] over the global file, best-effort; an explicitly set field — tests,
+    callers — wins and is never clobbered; a bad value leaves the default).
+
+    ``gate_degraded_ratio`` defaults 0.5; ``judge_edge_recheck`` and
+    ``board_span_guard`` default True (an explicit false is the kill switch that
+    restores the bare-baseline judgment for the zero-verdict-control test)."""
+    cfg = _wp5_cfg_sections(ctx)
+    loop_cfg = cfg.get("loop") if isinstance(cfg.get("loop"), dict) else {}
+    if ctx.gate_degraded_ratio is None:
+        raw = loop_cfg.get("gate_degraded_ratio", _WP20_GATE_DEGRADED_DEFAULT)
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            v = _WP20_GATE_DEGRADED_DEFAULT
+        ctx.gate_degraded_ratio = (v if not isinstance(v, bool) and v == v
+                                   and 0.0 < v <= 1.0 else _WP20_GATE_DEGRADED_DEFAULT)
+    if ctx.judge_edge_recheck is None:
+        v = loop_cfg.get("judge_edge_recheck", True)
+        ctx.judge_edge_recheck = v if isinstance(v, bool) else True
+    if ctx.board_span_guard is None:
+        v = loop_cfg.get("board_span_guard", True)
+        ctx.board_span_guard = v if isinstance(v, bool) else True
 
 
 def _sass_precision(ctx: LoopContext, student: "dict | None", iter_no: int) -> dict:
@@ -2947,27 +3084,38 @@ def run_inner_iteration(
         precision = {**precision, "sass": sass}
 
     if not ev.correctness:
-        # relaxed-revert keeps perf regressions, but a correctness break is a hard REVERT.
-        # Carry the bench's own verdict text into the record: the student and the meta
-        # diagnoser debug from this string, and "correctness FAIL" alone once hid a
-        # harness-level rejection (forbidden-op scan) behind 14h of phantom-bug chasing.
-        detail = f"correctness FAIL: {ev.error}" if ev.error else "correctness FAIL"
-        _log(f"iter {iter_no}: {record.decision_id} REVERT ({detail})")
-        if last_good_ref:
-            be.reset(last_good_ref)
-        rec = IterationRecord(
-            iter=iter_no, decision_id=record.decision_id, change=record.change,
-            correctness=False, verdict="REVERT", metric_before=metric_before,
-            error=detail, profiler=profiler, cluster=cluster,
-            orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
-            prep=ev.prep or {}, precision=precision,
-            gpu_state=ev.gpu_state or {},   # WP1 telemetry: objective, rides every eval
-            **_wp11_wallclock_fields(ctx, agent_s=wp11_agent_s, eval_s=eval_job_s,
-                                     ncu_s=ncu_job_s, queue_s=queue_wait_s),
-            variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
-        )
-        append_record(ctx.status_path, rec)
-        return rec
+        # --- WP20: the judge's edge band (corr_margin_ratio in (0.9, 1.1)) buys
+        # the first offender of the run one fresh-draw recheck, judged by the
+        # UNCHANGED protocol; a pass swaps the reading for the fresh one and the
+        # delivery proceeds down the ordinary (fresh_recheck, confirm, KEEP)
+        # path. Anything else REVERTs exactly as measured.
+        rechecked = _judge_edge_recheck(ctx, be, branch, ev, iter_no)
+        if rechecked is not None:
+            ev = rechecked
+        else:
+            # relaxed-revert keeps perf regressions, but a correctness break is a hard REVERT.
+            # Carry the bench's own verdict text into the record: the student and the meta
+            # diagnoser debug from this string, and "correctness FAIL" alone once hid a
+            # harness-level rejection (forbidden-op scan) behind 14h of phantom-bug chasing.
+            detail = f"correctness FAIL: {ev.error}" if ev.error else "correctness FAIL"
+            _log(f"iter {iter_no}: {record.decision_id} REVERT ({detail})")
+            if last_good_ref:
+                be.reset(last_good_ref)
+            rec = IterationRecord(
+                iter=iter_no, decision_id=record.decision_id, change=record.change,
+                correctness=False, verdict="REVERT", metric_before=metric_before,
+                error=detail, profiler=profiler, cluster=cluster,
+                orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
+                prep=ev.prep or {}, precision=precision,
+                corr_margin_ratio=ev.corr_margin_ratio,   # WP20: the judge's edge the REVERT sat on
+                gate_degraded=ev.gate_degraded,           # WP20: the gate's own visibility
+                gpu_state=ev.gpu_state or {},   # WP1 telemetry: objective, rides every eval
+                **_wp11_wallclock_fields(ctx, agent_s=wp11_agent_s, eval_s=eval_job_s,
+                                         ncu_s=ncu_job_s, queue_s=queue_wait_s),
+                variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
+            )
+            append_record(ctx.status_path, rec)
+            return rec
 
     # --- WP9 (task 4): the timing-fresh-input recheck. The bench re-ran the
     # correctness protocol in a fresh process AFTER all timing windows closed
@@ -2977,9 +3125,12 @@ def run_inner_iteration(
     # student's own work, not a protocol change: correctness itself is untouched).
     if (fr := getattr(ev, "fresh_recheck", None)) and fr.get("pass") is False:
         mode = fr.get("mode", "?")
+        form = fr.get("form")
         layers = "; ".join(str(l.get("detail") or l.get("status") or "verdict moved")
                            for l in (fr.get("layers") or [{}]))
-        detail = (f"fresh_recheck FAIL (mode={mode}): the correctness verdict did not "
+        detail = (f"fresh_recheck FAIL (mode={mode}"
+                  + (f", form={form}" if form else "")
+                  + f"): the correctness verdict did not "
                   f"reproduce on fresh inputs after timing — {layers}")
         _log(f"iter {iter_no}: {record.decision_id} REVERT ({detail})")
         if last_good_ref:
@@ -2990,6 +3141,11 @@ def run_inner_iteration(
             error=detail, profiler=profiler, cluster=cluster,
             orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
             prep=ev.prep or {}, precision=precision,
+            corr_margin_ratio=ev.corr_margin_ratio,   # WP20: the judge's edge the REVERT sat on
+            gate_degraded=ev.gate_degraded,           # WP20: the gate's own visibility
+            fresh_recheck_form=form,   # WP20: `nondeterministic` = the same-seed double run
+                                       # disagreed with itself — a different fail form than a
+                                       # cache replay (both REVERT; the record says which)
             gpu_state=ev.gpu_state or {},
             suspicious=True,      # WP9: the reward-hack marker
             variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
@@ -3005,6 +3161,7 @@ def run_inner_iteration(
     clock_drift = (_sm_clock_drift(
         ev.gpu_state, _best_keep_gpu_state(load_records(ctx.status_path),
                                            ctx.gate_window)) or 0.0) > _CLOCK_DRIFT_BAND
+    span_note = _board_span_unstable(ctx, ev)   # WP20: report-only mirror-spread guard
     rec = IterationRecord(
         iter=iter_no, decision_id=record.decision_id, change=record.change,
         correctness=True, verdict="KEEP", bwd_median_ms=ev.bwd_median_ms, mfu=ev.mfu,
@@ -3023,6 +3180,10 @@ def run_inner_iteration(
         # spread, so a best set on a quiet draw is tellable from one set on a noisy
         # one. The arrays themselves ride the workload blocks / stay out of the digest.
         gate_spread_pct=readings_spread_pct(ev.device_readings_ms),
+        # --- WP20: the row's accounting readings (zero verdict weight) -----------
+        gate_degraded=ev.gate_degraded,   # the precision gate saw (almost) nothing
+        judge_edge_recheck=getattr(ev, "judge_edge_recheck", None),
+        board_span_unstable=(span_note is not None),   # the ref's mirror pair is the noisy side
         # WP1 telemetry: the GPU state the job's windows ran under, and whether the
         # reading's SM clock sat >2% off the best's (such a row must not take the
         # watermark on its own — it went through the confirmation above if it did).
@@ -3051,6 +3212,9 @@ def run_inner_iteration(
     if ev.workloads:
         _log(f"iter {iter_no}: gate = geomean over {ev.n_workloads} workloads: "
              + describe_workload_readings(ev.workloads))
+    if span_note:
+        _log(f"iter {iter_no}: WARNING board_span_unstable — {span_note} "
+             f"(report-only: the reference's own mirror pair is the noisy side)")
     if _too_few_workloads(ctx, ev) and str(ctx.status_path) not in _SINGLE_WORKLOAD_WARNED:
         _SINGLE_WORKLOAD_WARNED.add(str(ctx.status_path))
         _log(f"iter {iter_no}: WARNING the gate reading covers {ev.n_workloads} workload(s), "
@@ -9008,6 +9172,12 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
         # so the closure arithmetic below can be read against it, never
         # re-prompted — see milestone.dependency_warnings
         _log(f"meta: milestone DAG warning — {w}")
+    for w in _milestone_tagwipe_warnings(ctx.milestone, baseline=at_entry):
+        # WP20 (N-B16): a patch that deletes every tag from a new-era milestone
+        # passes resume validation (milestone.py's accepted residual hole) — the
+        # silence becomes this line. Advisory only: logged, never a violation,
+        # never a re-prompt; the accepted ruling stands.
+        _log(f"meta: milestone tag wipe warning — {w}")
     changed = _parse_list(patch_out, "changed_entries")
     patch_class = _parse_field(patch_out, "patch_class")
     if patch_class in ("structural", "split") and reopens_capped:
@@ -9170,6 +9340,18 @@ def _dependency_warnings_file(milestone: Path) -> list[str]:
     from forgekernel.milestone import dependency_warnings
     try:
         return dependency_warnings(Path(milestone).read_text(encoding="utf-8"))
+    except OSError:
+        return []
+
+
+def _milestone_tagwipe_warnings(milestone: Path, baseline: str | None) -> list[str]:
+    """WP20 (N-B16): the milestone validator's accepted residual hole made visible
+    — a baseline carrying pipeline tags whose patch deletes every one of them
+    still passes resume validation; the advisory line is all this is (see
+    milestone.tag_wipe_warnings). Never a violation, never a re-prompt."""
+    from forgekernel.milestone import tag_wipe_warnings
+    try:
+        return tag_wipe_warnings(baseline, Path(milestone).read_text(encoding="utf-8"))
     except OSError:
         return []
 
@@ -14516,6 +14698,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
     """
     _wp5_apply_cfg(ctx)
     _wp11_apply_cfg(ctx)
+    _wp20_apply_cfg(ctx)
     meta_steps = 0
     # --- WP5 (task 2): the meta cap breathes with the wall clock left. max_meta
     # stays the configured floor; a long remaining budget lifts the cap so a run

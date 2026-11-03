@@ -206,6 +206,34 @@ class EvalResult:
     # correctness measured on the same instance — is a reward-hack reading the
     # driver turns into a suspicious REVERT; None layers are 'no reading'.
     fresh_recheck: dict | None = None
+    # --- WP20: measure-side defense accounting (readings, never verdicts) -----
+    # The worst correctness error/tolerance ratio among the eval's checks: how
+    # close to the judge's edge the worst output sat (>=1.0 fails). The edge-band
+    # judge recheck and the corr_margin_ratio bookkeeping read this.
+    corr_margin_ratio: float | None = None
+    # The precision gate went quietly blind: unavailable rows beyond the card's
+    # gate_degraded_ratio (the bench-side reading; the driver recomputes with the
+    # loop.toml ratio when the precision block is present).
+    gate_degraded: bool | None = None
+    # The precision contract the card ran under, as the bench reported it
+    # (`strict (default)` / `off (problem)` / `off (env: FK_PRECISION=0)`).
+    precision_audit: str | None = None
+    # The stream sentinel's post-window span audit ({"status": "ok"|"violation"|
+    # "unknown", ...}): a timed call that drained far more than its event window
+    # measured. A violation rides the fresh_recheck fail path (mode=stream).
+    stream_sentinel: dict | None = None
+    # `ok` | `mismatch` | `unknown`: the clock / window identities re-resolved
+    # against the pre-import capture. A mismatch rides fresh_recheck (mode=timer).
+    timer_integrity: str | None = None
+    # The thread / child census ({"status": "ok"|"anomaly", ...}): accounting
+    # only — threads or children appearing after the timed region, beyond the
+    # first-call baseline.
+    proc_census: dict | None = None
+    # Set by the driver (never the bench): the edge-band judge recheck cleared —
+    # `pass` on the fresh draw that replaced a failed edge-band reading. A field,
+    # not an attribute, so a dataclasses.replace (the watermark confirmation's
+    # median) carries it through.
+    judge_edge_recheck: str | None = None
 
 
 _WORKLOAD_KEYS = ("device_median_ms", "bwd_median_ms", "ref_device_ms", "vs_ref_device", "vs_ref")
@@ -358,6 +386,29 @@ def _correctness_error(corr_obj: dict) -> str:
     return "; ".join(parts) if parts else "no failure detail in the eval JSON"
 
 
+def corr_margin_ratio(corr_obj: dict) -> float | None:
+    """The worst normalized-error / tolerance ratio among the correctness checks
+    (WP20 task 3): how close to the judge's edge the worst output sat — >=1.0
+    fails, the 0.9-1.1 band is the edge the judge recheck watches. The ratio was
+    buried verbatim in the error text (max_diff / tolerance strings); a REVERT
+    row that carries it can be aggregated afterwards. None when no check carries
+    both numbers (a harness-level fail, or a legacy verdict) — an absent
+    reading, never a passing one."""
+    checks = corr_obj.get("checks")
+    if not isinstance(checks, list):
+        return None
+    worst = None
+    for c in checks:
+        if not isinstance(c, dict):
+            continue
+        e, t = c.get("error"), c.get("tolerance")
+        if isinstance(e, (int, float)) and not isinstance(e, bool) \
+                and isinstance(t, (int, float)) and not isinstance(t, bool) and t > 0:
+            r = float(e) / float(t)
+            worst = r if worst is None else max(worst, r)
+    return worst
+
+
 def parse_eval(text: str) -> EvalResult:
     """Parse the gpu_entry ``=== JSON ===`` eval block (correctness + perf)."""
     obj = _last_json_object(text)
@@ -448,6 +499,18 @@ def parse_eval(text: str) -> EvalResult:
         ref_host_enqueue_ms=_opt_any("ref_host_enqueue_ms", "cublas_host_enqueue_ms"),
         fresh_recheck=(obj.get("fresh_recheck")
                        if isinstance(obj.get("fresh_recheck"), dict) else None),
+        # --- WP20: the eval JSON's accounting rows (readings, never verdicts) ---
+        corr_margin_ratio=corr_margin_ratio(corr_obj),
+        gate_degraded=(obj["gate_degraded"]
+                       if isinstance(obj.get("gate_degraded"), bool) else None),
+        precision_audit=(str(obj["precision_audit"])
+                         if isinstance(obj.get("precision_audit"), str) else None),
+        stream_sentinel=(obj["stream_sentinel"]
+                         if isinstance(obj.get("stream_sentinel"), dict) else None),
+        timer_integrity=(str(obj["timer_integrity"])
+                         if isinstance(obj.get("timer_integrity"), str) else None),
+        proc_census=(obj["proc_census"]
+                     if isinstance(obj.get("proc_census"), dict) else None),
     )
 
 

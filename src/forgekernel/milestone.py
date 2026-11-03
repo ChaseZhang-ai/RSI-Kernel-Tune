@@ -143,6 +143,28 @@ def dependency_warnings(text: str) -> list[str]:
     return warns
 
 
+def tag_wipe_warnings(baseline: str | None, text: str) -> list[str]:
+    """Advisory (not violations; WP20 / N-B16): the resume-mode residual hole made
+    visible. A patch that deletes every [SYNC:]/[GATHER:]/[PHASE:] tag from a
+    new-era milestone passes resume validation — the docstring at
+    ``validate_milestone`` records that hole as accepted (the patch landing
+    rules, not this validator, hold the deletions), so this is not a rejection
+    or a re-prompt: a baseline that carried tags and a current text carrying
+    none becomes one logged line, and nothing more."""
+    if not baseline:
+        return []
+
+    def n(t: str) -> int:
+        return (len(_SYNC_TAG.findall(t)) + len(_GATHER_TAG.findall(t))
+                + len(_PHASE_TAG.findall(t)))
+
+    if n(baseline) > 0 and n(text) == 0:
+        return ["the baseline milestone carried pipeline tags and this text "
+                "carries none — every tag was deleted (resume validation "
+                "accepts this; the deletion is visible here only)"]
+    return []
+
+
 def _dag_shape_findings(blocks, upstream: dict[str, set[str]]) -> list[str]:
     """⇐ holes on non-root decisions and ⇐ cycles, as message lines.
 

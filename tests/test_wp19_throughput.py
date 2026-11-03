@@ -1089,7 +1089,7 @@ def test_t4_teacher_ncu_bound_best_plus_tail(tmp_path, monkeypatch):
     ctx.teacher_ncu_tail_lines = 3
     driver.run_meta_step(ctx)
     iters = seen["iters"]
-    assert iters[0] == 4                          # the best KEEP row stays whole (2.4 ms)
+    assert iters[0] == 0                          # the best KEEP row stays whole (2.0 ms)
     assert iters[1:] == [9, 10, 11]               # the chronological tail
     assert len(iters) == 4                        # rows, never a byte slice
 

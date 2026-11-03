@@ -212,14 +212,14 @@ def test_parse_stagnation_override():
 # --- task 2: the flags decision axis ---------------------------------------------
 
 
-def _card_leaderboard_module():
-    """The card's eval/leaderboard.py (the whitelist's single source), imported
+def _card_benchkit_module():
+    """The card's eval/benchkit.py (the whitelist's single source), imported
     with a stand-in torch when there is none — the same loader shape the
     cuda-student tests use."""
     import importlib.util
     import sys
     import types
-    path = REPO / "src" / "forgekernel" / "card_template" / "eval" / "leaderboard.py"
+    path = REPO / "src" / "forgekernel" / "card_template" / "eval" / "benchkit.py"
     created = None
     if importlib.util.find_spec("torch") is None:
         created = types.ModuleType("torch")
@@ -264,7 +264,7 @@ _KERNEL_TAIL = (
 
 
 def test_flags_whitelist_accepts_the_wp10_lever_examples():
-    mod = _card_leaderboard_module()
+    mod = _card_benchkit_module()
     # every flag family the diagnose prompt teaches, on one fk-cuda-cflags line
     line = ("// fk-cuda-cflags: --maxrregcount=168 --ftz=true --fmad=false "
             "--prec-div=false --prec-sqrt=false --extra-device-vectorization -lineinfo\n")
@@ -279,7 +279,7 @@ def test_flags_whitelist_accepts_the_wp10_lever_examples():
 
 
 def test_flags_whitelist_refuses_what_the_prompt_does_not_teach():
-    mod = _card_leaderboard_module()
+    mod = _card_benchkit_module()
     for bad in ("-I/secrets", "-lmylib", "-L/tmp", "-Xlinker ../ref_bin/x.so",
                 "--use-fast-math=true"):      # not a whitelist spelling
         with pytest.raises(ValueError):
@@ -290,7 +290,7 @@ def test_use_fast_math_is_listed_with_the_precision_gate_caveat():
     """The prompt lists --use_fast_math but routes its numerics through the
     precision gate: the whitelist itself accepts the flag (the card's default
     already carries it), and the diagnose prompt's flags section says so."""
-    mod = _card_leaderboard_module()
+    mod = _card_benchkit_module()
     assert "--use_fast_math" in mod.cuda_kernel_flags(
         "// fk-cuda-cflags: --use_fast_math\n" + _KERNEL_TAIL)
     text = (REPO / "meta" / "diagnose_prompt.md").read_text(encoding="utf-8")

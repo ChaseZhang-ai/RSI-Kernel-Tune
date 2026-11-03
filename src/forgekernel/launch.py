@@ -111,9 +111,10 @@ def cmd_init(argv) -> int:
 
 
 def _find_kernel_tree(op: str, arch: str | None) -> Path:
-    """kernels/<family>/<op>/<arch>/kernel.py for the op (one family expected)."""
+    """kernels/<family>/<op>/<arch>/{kernel.py,kernel.cu} for the op (one family)."""
     root = repo_root() / "kernels"
-    trees = sorted(p for p in root.glob(f"*/{op}/*/kernel.py") if p.is_file())
+    trees = sorted(p for pat in (f"*/{op}/*/kernel.py", f"*/{op}/*/kernel.cu")
+                   for p in root.glob(pat) if p.is_file())
     if arch:
         trees = [t for t in trees if t.parent.name == arch]
     if len(trees) != 1:
@@ -134,12 +135,29 @@ def new_kernels_task(argv) -> int:
     p = argparse.ArgumentParser(prog="forge init --from-kernels",
                                 description="Create tasks/<op>/ from a published kernel.")
     p.add_argument("op")
+    p.add_argument("--from-kernels", action="store_true",
+                   help=argparse.SUPPRESS)      # the dispatch key; accepted and ignored here
     p.add_argument("--arch", default=None, help="the kernel tree's GPU dir (h100 / b200); "
                                                 "needed when the op ships several")
+    p.add_argument("--shape-name", default="campaign",
+                   help="the single shape shapes.json starts with")
+    p.add_argument("--axes", required=True,
+                   help="JSON object: the campaign point's axes, from the kernel docstring's "
+                        "frozen contract (the tool scaffolds; it does not guess the contract)")
     args = p.parse_args(argv)
     d = repo_root() / TASKS_DIR / args.op
     if d.exists():
         sys.stderr.write(f"[forge] {d} already exists\n")
+        return 2
+    try:
+        axes = json.loads(args.axes)
+    except ValueError as e:
+        sys.stderr.write(f"[forge] --axes does not parse: {e}\n")
+        return 2
+    if not isinstance(axes, dict) or not axes or \
+            not all(isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool) and v > 0
+                    for k, v in axes.items()):
+        sys.stderr.write("[forge] --axes must be a JSON object of axis name -> positive integer\n")
         return 2
     kfile = _find_kernel_tree(args.op, args.arch)
     if kfile.suffix == ".cu":
@@ -185,7 +203,8 @@ def new_kernels_task(argv) -> int:
         f"reference on the GPU before the loop.\n",
         encoding="utf-8")
     (d / "shapes.json").write_text(
-        '[\n  {"name": "campaign", "axes": {}}\n]\n', encoding="utf-8")
+        json.dumps([{ "name": args.shape_name, "axes": axes}], indent=2) + "\n",
+        encoding="utf-8")
     _say(f"wrote {d}/ from {kfile.relative_to(repo_root())}: fill shapes.json's axes and "
          f"description.md's signature from the frozen contract, then "
          f"`forge new {TASKS_DIR}/{args.op}`")

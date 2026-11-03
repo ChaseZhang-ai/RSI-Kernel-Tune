@@ -1,4 +1,4 @@
-"""Short kernels (5-20 us, the SOL-ExecBench sizes): the profiler window vouches for a
+"""Short kernels (5-20 us, the decode-class sizes): the profiler window vouches for a
 dominant kernel below the 20 us mis-aim floor, its samples pool over its timed
 launches, and a starved PM timeline is re-collected once at a finer interval."""
 import sys

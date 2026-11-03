@@ -1,4 +1,4 @@
-"""The forgekernel task suite of src/forgekernel/card_template/eval/leaderboard.py: input groups, the
+"""The forgekernel task suite of src/forgekernel/card_template/eval/benchkit.py: input groups, the
 judge, the calibrated tolerance and the calibration itself. CPU only (timing needs CUDA)."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ torch = pytest.importorskip("torch")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location(
-    "fk_template_leaderboard_task", REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval" / "leaderboard.py")
+    "fk_template_benchkit_task", REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval" / "benchkit.py")
 lb = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(lb)
 
@@ -46,7 +46,7 @@ GROUPS = [{"name": "plain", "kind": "generated", "seed": 1},
 def _problem(tmp_path, shapes=(("small", 4, 16),), groups=GROUPS, tolerance=None) -> dict:
     wls = [{"uuid": n, "axes": {"m": m, "n": k}, "input_groups": [dict(g) for g in groups]}
            for n, m, k in shapes]
-    p = {"suite": lb.SUITE_TASK, "definition": json.loads(json.dumps(DEFN)), "workload": wls[0],
+    p = {"definition": json.loads(json.dumps(DEFN)), "workload": wls[0],
          "dps": False, "timing": "device", "_dir": str(tmp_path),
          "reference_impl": {"kind": "definition"}, "time_reference": False}
     if len(wls) > 1:

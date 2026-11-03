@@ -34,7 +34,7 @@ _GEMM_CARD = {
 def _ctx_with_card(tmp_path, be, **over):
     """A ctx whose operator card carries a gemm problem.json (sm90 peaks)."""
     ctx = _ctx(tmp_path, be, **over)
-    card_dir = tmp_path / "eval" / "leaderboard"
+    card_dir = tmp_path / "eval" / "problem"
     card_dir.mkdir(parents=True, exist_ok=True)
     (card_dir / "problem.json").write_text(json.dumps(_GEMM_CARD), encoding="utf-8")
     ctx.kb_arch = "sm90"

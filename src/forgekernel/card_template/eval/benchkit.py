@@ -37,8 +37,8 @@ Entry points (the generated eval/bench.py and eval/ncu_run.py call these):
     run_bench()   --mode all|correctness|perf|ref|calibrate  [--impl kernel|ref]
     ncu_window()  the kernel's calls inside a profiler start/stop window
 
-Provenance: the random-input draw and the input name heuristics are adapted from
-SOL-ExecBench (core/bench/io.py, Apache-2.0); see NOTICE at the repository root.
+Provenance: the random-input draw and the input name heuristics are adapted code
+(Apache-2.0); see NOTICE at the repository root for the source and the file mapping.
 """
 
 from __future__ import annotations

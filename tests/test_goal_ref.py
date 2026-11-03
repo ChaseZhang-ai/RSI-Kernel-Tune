@@ -29,10 +29,10 @@ def _git(cwd: Path, *args: str) -> None:
 
 def _card(root: Path, op: str = "demo", *, time_reference: bool = True) -> Path:
     op_dir = root / "operators" / op
-    (op_dir / "eval" / "leaderboard").mkdir(parents=True)
+    (op_dir / "eval" / "problem").mkdir(parents=True)
     (op_dir / "kernel.py").write_text('"""stub: def run(x, out) — fill out = x"""\n'
                                       "def run(x, out):\n    raise NotImplementedError\n")
-    (op_dir / "eval" / "leaderboard" / "problem.json").write_text(json.dumps(
+    (op_dir / "eval" / "problem" / "problem.json").write_text(json.dumps(
         {"kernel_file": "kernel.py", "time_reference": time_reference}))
     (op_dir / "README.md").write_text("demo card\n")
     _git(op_dir, "init", "-q", "-b", "main")

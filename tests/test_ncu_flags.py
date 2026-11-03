@@ -1,11 +1,11 @@
 """WP9 task 1: every NCU command generation point carries the regime-alignment flags.
 
-The timing protocol is warm-L2 + the board's own clock state; NCU's defaults
+The timing protocol is warm-L2 + the card's own clock state; NCU's defaults
 (flush all caches every pass, lock to base clocks) describe a different machine.
-Four generation points exist — the two sealed-reference recon trees, the board
-card's gpu_entry template and the leaderboard gpu_entry template — and all four
-must opt out of both defaults, or a teacher reads l2_hit_rate / SOL pct from a
-regime the gate numbers never ran in.
+Three generation points exist — the two sealed-reference recon trees and the
+generated card's gpu_entry template — and all three must opt out of both
+defaults, or a teacher reads l2_hit_rate / utilization pct from a regime the
+gate numbers never ran in.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from forgekernel import binref, leaderboard, sealref
+from forgekernel import binref, cardkit, sealref
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -52,27 +52,23 @@ def test_binref_recon_tree_ncu_carries_the_flags() -> None:
     assert all(_CMD_RE.search(c) for c in cmds)
 
 
-def test_leaderboard_gpu_entry_template_ncu_carries_the_flags() -> None:
-    text = leaderboard.GPU_ENTRY_TEMPLATE.format(
-        name="op", suite=leaderboard.SUITE_SOL, arch="sm_100a", clock="1500",
-        mem_clock="3996", require_lock="1", clock_note="n",
-        wp11_cache_block=leaderboard._WP11_CACHE_BLOCK,
-        wp11_allncu_case=leaderboard._WP11_ALLNCU_CASE)
+def test_gpu_entry_template_ncu_carries_the_flags() -> None:
+    text = cardkit.render_gpu_entry(name="op", suite="forgekernel", arch="sm_100a",
+                                    clock="1500", mem_clock="3996", require_lock="1",
+                                    clock_note="n")
     cmds = _ncu_commands(text)
     assert cmds
     assert all(_CMD_RE.search(c) for c in cmds)
     # The launch-count post-edit in taskcard.write_card keys on the literal
-    # "--launch-count 24": keep it, or every board card silently keeps 24.
+    # "--launch-count 24": keep it, or every card silently keeps 24.
     assert "--launch-count 24" in text
 
 
-def test_generated_board_card_entry_carries_the_flags() -> None:
+def test_generated_card_entry_carries_the_flags() -> None:
     """End to end through the same .replace() taskcard.write_card applies."""
-    text = leaderboard.GPU_ENTRY_TEMPLATE.format(
-        name="op", suite=leaderboard.SUITE_SOL, arch="sm_100a", clock="1500",
-        mem_clock="3996", require_lock="1", clock_note="n",
-        wp11_cache_block=leaderboard._WP11_CACHE_BLOCK,
-        wp11_allncu_case=leaderboard._WP11_ALLNCU_CASE)
+    text = cardkit.render_gpu_entry(name="op", suite="forgekernel", arch="sm_100a",
+                                    clock="1500", mem_clock="3996", require_lock="1",
+                                    clock_note="n")
     text = text.replace("--launch-count 24", "--launch-count 48")
     cmds = _ncu_commands(text)
     assert all(_CMD_RE.search(c) for c in cmds)

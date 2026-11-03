@@ -529,13 +529,13 @@ def test_card_emits_carry_into_the_snapshot_not_the_repo_tree(tmp_path):
     assert "teacher_prior_art" not in cfg
 
 
-def test_board_card_emits_the_prior_keys_too(tmp_path):
+def test_a_task_with_a_carry_emits_the_prior_keys_too(tmp_path):
     import tomllib
     from forgekernel import taskcard
     task, run = _loaded(tmp_path, 'prior_survey = true\nprior_art = "prior-art/op.md"\n',
                         carry=True)
     opdir = tmp_path / "opdir"; opdir.mkdir()
-    out = taskcard.write_board_loop_toml(run, task, opdir, deny=[])
+    out = taskcard.write_loop_toml(run, task, opdir, deny=[])
     cfg = tomllib.loads(out.read_text())["loop"]
     assert cfg["teacher_prior_survey"] is True
     assert cfg["teacher_prior_art"] == str(run.task_dir / "prior-art" / "op.md")
@@ -544,7 +544,7 @@ def test_board_card_emits_the_prior_keys_too(tmp_path):
 
 def test_card_without_prior_keys_is_byte_unchanged(tmp_path):
     """No keys, no carry -> none of the three lines: the generated file is the
-    pre-WP8 shape (and the board variant likewise)."""
+    pre-WP8 shape."""
     import tomllib
     from forgekernel import taskcard
     task, run = _loaded(tmp_path, "")
@@ -553,11 +553,6 @@ def test_card_without_prior_keys_is_byte_unchanged(tmp_path):
     cfg = tomllib.loads(text)["loop"]
     for key in ("teacher_prior_survey", "teacher_prior_art", "carry_dir"):
         assert key not in cfg
-    opdir2 = tmp_path / "opdir2"; opdir2.mkdir()
-    board = taskcard.write_board_loop_toml(run, task, opdir2,
-                                           deny=[]).read_text()
-    for key in ("teacher_prior_survey", "teacher_prior_art", "carry_dir"):
-        assert key not in tomllib.loads(board)["loop"]
 
 
 def test_cli_carry_default_prefers_the_run_snapshot(tmp_path, monkeypatch):

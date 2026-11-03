@@ -488,6 +488,6 @@ def test_the_workload_count_warning_is_a_plain_bench_contract(tmp_path):
     assert _too_few_workloads(ctx, SimpleNamespace(n_workloads=2))
     assert not _too_few_workloads(ctx, SimpleNamespace(n_workloads=PERF_WORKLOADS))
     # a task card: two shapes, each a geomean over its own input groups
-    (tmp_path / "eval" / "leaderboard").mkdir(parents=True)
-    (tmp_path / "eval" / "leaderboard" / "problem.json").write_text('{"suite": "forgekernel"}')
+    (tmp_path / "eval" / "problem").mkdir(parents=True)
+    (tmp_path / "eval" / "problem" / "problem.json").write_text('{"kernel_file": "kernel.py"}')
     assert not _too_few_workloads(ctx, SimpleNamespace(n_workloads=2))

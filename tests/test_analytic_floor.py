@@ -254,7 +254,7 @@ def test_family_inferred_from_op_type_and_axes() -> None:
     assert af.family_of({"op_type": "something_else", "name": "", "axes": {}}) is None
 
 
-def test_problem_from_card_resolves_a_leaderboard_definition() -> None:
+def test_problem_from_card_resolves_a_generated_definition() -> None:
     card = {"definition": {"name": "rmsnorm_h64", "op_type": "rmsnorm",
                            "inputs": {"hidden_states": {"shape": ["batch_size", "hidden_size"],
                                                         "dtype": "float32"},

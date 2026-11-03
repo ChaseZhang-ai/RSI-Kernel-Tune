@@ -1,6 +1,6 @@
-"""A GPU that cannot hold the board's clock lock is a machine fault, not a kernel verdict.
+"""A GPU that cannot hold the card's declared clock lock is a machine fault, not a kernel verdict.
 
-A leaderboard card's gpu_entry.sh refuses every timing task when ``nvidia-smi -lgc`` is
+A generated card's gpu_entry.sh refuses every timing task when ``nvidia-smi -lgc`` is
 accepted but not honoured (rc=3, no eval JSON). Handed back, parse_eval would read that as
 "correctness FAIL", the driver would record a REVERT and spend an iteration, and the
 confirmation and meta tools would spend their attempts on it. RealBackend.submit_gpu
@@ -16,15 +16,15 @@ from forgekernel.loop.parse import parse_eval
 from forgekernel.submit import jobs
 
 REFUSED_LOG = """\
-=== gpu_entry.sh (010_gemm_n6144_k4096, sol-execbench) ===
+=== gpu_entry.sh (010_gemm_n6144_k4096) ===
   task:      all
   GPU:       NVIDIA B200, 1155 MHz, 3996 MHz, 1965 MHz
   clocks:    lock not held (asked sm=1500 mem=3996, read 1155,3996)
 
-[gpu_entry.sh] REFUSED: this card times under the board's clock lock, and it did not hold here (lock not held (asked sm=1500 mem=3996, read 1155,3996)). LB_REQUIRE_CLOCK_LOCK=0 times anyway (the readings are then not comparable to the board's).
+[gpu_entry.sh] REFUSED: this card times under a configured clock lock, and it did not hold here (lock not held (asked sm=1500 mem=3996, read 1155,3996)). LB_REQUIRE_CLOCK_LOCK=0 times anyway (the readings are then not the declared measurement condition).
 """
 LOCKED_LOG = """\
-=== gpu_entry.sh (010_gemm_n6144_k4096, sol-execbench) ===
+=== gpu_entry.sh (010_gemm_n6144_k4096) ===
   task:      all
   clocks:    locked sm=1500 mem=3996
 === JSON ===

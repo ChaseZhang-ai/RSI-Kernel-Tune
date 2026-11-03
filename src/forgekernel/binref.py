@@ -96,7 +96,7 @@ def solution_problems(sol: dict, definition: str) -> list[str]:
         errs.append(f"entry_point {ep!r} is not '<file>::<function>'")
     if not any("/" not in str(s.get("path", "")) and Path(str(s.get("path", ""))).suffix in CPP_SUFFIXES
                for s in sol.get("sources") or []):
-        errs.append("no C/C++/CUDA source at the top of the solution: SOL-ExecBench compiles only "
+        errs.append("no C/C++/CUDA source at the top of the solution: the build compiles only "
                     "those (binref_tool.compiled_sources); files in subdirectories are #included")
     if not any("PYBIND11_MODULE(TORCH_EXTENSION_NAME" in (s.get("content") or "").replace(" ", "")
                for s in sol.get("sources") or []):
@@ -296,7 +296,7 @@ def write_ref_tree(ref_dir: Path, card_dir: Path, sol: dict, module: str) -> lis
         "module": module, "definition": sol.get("definition"), "solution": sol.get("name"),
         "entry": spec["entry_point"].split("::", 1)[1], "languages": spec.get("languages"),
         "dps": bool(spec.get("destination_passing_style", True)),
-        # null vs {} matters: SOL-ExecBench gives no flags without compile_options but the
+        # null vs {} matters: the solution format gives no flags without compile_options but the
         # defaults (-O3 --use_fast_math, -lcuda) for every key a present one leaves out.
         "compile_options": spec.get("compile_options"), "sources": sources}, indent=2) + "\n")
     shutil.copy2(TOOL, ref_dir / "binref.py")

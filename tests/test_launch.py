@@ -20,7 +20,6 @@ from forgekernel.localenv import load_machine
 from forgekernel.runs import list_runs, new_run, open_run
 from forgekernel.task import load_task
 
-from test_leaderboard import fib_root  # noqa: F401 -- a tiny flashinfer-trace dataset
 
 DESCRIPTION = "y = x / sqrt(mean(x^2) + 1e-6) * w over the last axis\n"
 SHAPES = [{"name": "small", "axes": {"m": 4, "n": 16}},
@@ -189,7 +188,7 @@ def test_write_card_generates_a_committed_task_card(repo):
     op_dir = taskcard.write_card(run, task, check, load_machine(repo, environ={}))
     assert op_dir == run.operators_dir / "rmsnorm"
     problem = json.loads((op_dir / taskcard.PROBLEM).read_text())
-    assert problem["suite"] == "forgekernel" and problem["timing"] == "device"
+    assert problem["timing"] == "device"
     assert [g["name"] for g in problem["group"]] == ["small", "large"]
     assert [g["name"] for g in problem["workload"]["input_groups"]] == ["plain", "spiky", "tiny"]
     assert problem["definition"]["reference"] == JUDGE
@@ -218,7 +217,7 @@ def test_seal_reference_rides_the_card_and_writes_the_recon_tree(repo):
         assert "FK_REF_KEY" in (tree / "submit.local.toml").read_text()
         assert "submit.local.toml" not in _git(tree, "ls-files").split()
         assert "rsqrt" not in "".join(p.read_text(errors="ignore") for p in tree.rglob("*.py")
-                                      if ".git" not in p.parts and "leaderboard.py" != p.name
+                                      if ".git" not in p.parts
                                       and "problem.json" not in p.name)
 
 
@@ -474,71 +473,10 @@ def test_meta_tools_and_ncu_cover_every_shape_and_group(repo):
     assert "--launch-count 48" in (op_dir / "gpu_entry.sh").read_text()
 
 
-# -- leaderboard tasks ----------------------------------------------------------------------
+# -- export ------------------------------------------------------------------------
 
 
-def _board_task(repo, fib_root, monkeypatch, op="rms") -> Path:
-    monkeypatch.setattr(launch, "repo_root", lambda: repo)
-    rc = launch.cmd_init([op, "--leaderboard", "flashinfer-bench", "--dataset", str(fib_root),
-                         "--definition", "rmsnorm_h8", "--workload", "0"])
-    assert rc == 0
-    return repo / "tasks" / op
-
-
-def test_forge_new_leaderboard_freezes_the_board_problem_into_a_task(repo, fib_root, monkeypatch):
-    d = _board_task(repo, fib_root, monkeypatch)
-    assert (d / "leaderboard" / "card" / taskcard.PROBLEM).is_file()
-    assert not (d / "description.md").exists() and not (d / "shapes.json").exists()
-    task = load_task(d)
-    assert task.mode == "leaderboard" and task.leaderboard.suite == "flashinfer-bench"
-    assert [s.name for s in task.shapes] == ["aaaa-1111"]
-    assert task.shapes[0].axes == {"batch_size": 7} and task.shapes[0].groups_to_add == 0
-    assert task.reference is None and task.target.ratio == 1.2
-
-
-def test_a_leaderboard_task_runs_without_a_judge_or_a_calibration(repo, fib_root, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
-    d = _board_task(repo, fib_root, monkeypatch)
-    calls = {}
-    monkeypatch.setattr(loop_cli.RealBackend, "run_agent",
-                        lambda *a, **k: pytest.fail("no judge to write"))
-    monkeypatch.setattr(launch, "calibrate", lambda *a: pytest.fail("nothing to calibrate"))
-    monkeypatch.setattr(loop_cli, "main", _loop_ends(lambda argv: calls.setdefault("loop", argv)))
-    assert _start(d) == 0
-    run = list_runs()[0]
-    op_dir = run.operators_dir / "rms"
-    assert (op_dir / ".git").exists() and not (run.dir / "check").exists()
-    cfg = tomllib.loads((op_dir / "loop.toml").read_text())["loop"]
-    assert cfg["kb_arch"] == "sm100" and cfg["gate_window"] == "device"
-    assert str(run.task_dir / "leaderboard") in cfg["ref_source_paths"]
-    sub = tomllib.loads((op_dir / "submit.toml").read_text())
-    assert sub["repo"]["delivery"] == "local"
-    assert calls["loop"][0] == "rms"
-
-
-def test_export_writes_the_boards_solution_from_the_best_kernel(repo, fib_root, monkeypatch,
-                                                                capsys):
-    from forgekernel.loop import cli as loop_cli
-    d = _board_task(repo, fib_root, monkeypatch)
-    monkeypatch.setattr(loop_cli, "main", _loop_ends())
-    _start(d)
-    run = list_runs()[0]
-    op_dir = run.operators_dir / "rms"
-    kernel = "import torch\n\ndef run(hidden_states, weight, output):\n    output.copy_(hidden_states)\n"
-    (run.ws / "kernel.py").write_text(kernel)
-    subprocess.run(["git", "-C", str(run.ws), "-c", "user.name=t", "-c", "user.email=t@t",
-                    "commit", "-qam", "best"], check=True)
-    sha = _git(run.ws, "rev-parse", "HEAD").strip()
-    (op_dir / "best_confirmation.json").write_text(json.dumps(
-        {"sha": sha, "window": "device", "median_ms": 0.01, "median_ratio": 1.3}))
-    capsys.readouterr()
-    assert launch.cmd_export([str(run.dir)]) == 0
-    sol = json.loads(capsys.readouterr().out)
-    assert sol["definition"] == "rmsnorm_h8" and sol["name"] == "rms_forgekernel"
-    assert sol["sources"][0]["content"] == kernel
-
-
-def test_a_task_that_is_not_a_board_problem_exports_the_kernel_source(repo, monkeypatch,
+def test_export_writes_the_kernel_source_from_the_best_kernel(repo, monkeypatch,
                                                                       capsys):
     from forgekernel.loop import cli as loop_cli
     task_dir = _task(repo)
@@ -590,7 +528,7 @@ def test_deny_urls_and_modules_reach_the_policy_the_guards_and_the_fence(repo):
         assert subprocess.run(["grep", "-Eq", "--", forbid.pattern], input=site.encode()).returncode == 0
 
     spec = importlib.util.spec_from_file_location(
-        "_fk_test_lb", taskcard.template_dir() / "eval" / "leaderboard.py")
+        "_fk_test_bk", taskcard.template_dir() / "eval" / "benchkit.py")
     lbm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(lbm)
     problem = dict(json.loads((op_dir / taskcard.PROBLEM).read_text()),

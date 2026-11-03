@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 
 from forgekernel.inner.trajectory import IterationRecord, append_record, load_records
-from forgekernel.leaderboard import (GPU_ENTRY_TEMPLATE, _WP11_ALLNCU_CASE,
-                                     _WP11_CACHE_BLOCK)
+from forgekernel.cardkit import (GPU_ENTRY_TEMPLATE, _WP11_ALLNCU_CASE,
+                                 _WP11_CACHE_BLOCK)
 from forgekernel.loop import driver
 from forgekernel.loop.parse import (EVAL_TAIL_CHARS, EVAL_TAIL_LINES, job_log_tail,
                                     parse_eval)
@@ -97,7 +97,7 @@ def test_numeric_fail_error_carries_the_tail():
 
 
 def test_compile_error_status_keeps_its_error_and_gains_the_tail():
-    log = ("[leaderboard] correctness: COMPILE_ERROR — ValueError: bad flag\n"
+    log = ("[bench] correctness: COMPILE_ERROR — ValueError: bad flag\n"
            + FAIL_EVAL + "\nptxas fatal : Internal error\n")
     ev = parse_eval(log)
     assert not ev.correctness
@@ -375,7 +375,7 @@ def test_job_env_carries_the_tree_sha_for_the_build_cache():
 
 def _rendered_gpu_entry() -> str:
     return GPU_ENTRY_TEMPLATE.format(
-        name="t", suite="sol-execbench", arch="sm_100a", clock="", mem_clock="",
+        name="t", suite="forgekernel", arch="sm_100a", clock="", mem_clock="",
         require_lock="0", clock_note="n",
         wp11_cache_block=_WP11_CACHE_BLOCK, wp11_allncu_case=_WP11_ALLNCU_CASE)
 
@@ -508,12 +508,12 @@ def test_rendered_template_is_valid_bash_and_carries_both_blocks(tmp_path):
 
 def _git_op(tmp_path: Path, *, with_inputs: bool = True) -> tuple[Path, SubmitConfig]:
     d = tmp_path / "operators" / "op"
-    (d / "leaderboard" / "inputs" / "s1").mkdir(parents=True)
+    (d / "eval" / "problem" / "inputs" / "s1").mkdir(parents=True)
     (d / "gpu_entry.sh").write_text("#!/bin/bash\necho ok\n")
     (d / "kernel.py").write_text("x = 1\n")
     (d / "small.txt").write_text("tiny\n")
     if with_inputs:
-        (d / "leaderboard" / "inputs" / "s1" / "g.safetensors").write_text(
+        (d / "eval" / "problem" / "inputs" / "s1" / "g.safetensors").write_text(
             "I" * (direct.INPUTS_SYNC_MIN_BYTES + 100), encoding="utf-8")
     (d / "submit.toml").write_text(
         '[job]\ntimeout = 60\n[repo]\ndelivery = "local"\nbranch = "main"\n'
@@ -534,7 +534,7 @@ def test_inputs_sync_manifest_and_store(tmp_path, monkeypatch):
     monkeypatch.setenv(direct.INPUTS_STORE_ENV, str(tmp_path / "store"))
     d, cfg = _git_op(tmp_path)
     manifest = direct.sync_inputs_to_store(cfg)
-    assert manifest and manifest[0]["path"] == "leaderboard/inputs/s1/g.safetensors"
+    assert manifest and manifest[0]["path"] == "eval/problem/inputs/s1/g.safetensors"
     assert manifest[0]["sha256"]
     assert (tmp_path / "store" / manifest[0]["sha256"]).is_file()
     # small files and non-input files never enter the manifest
@@ -550,7 +550,7 @@ def test_archive_exclude_and_restore_roundtrip(tmp_path, monkeypatch):
     manifest = direct.sync_inputs_to_store(cfg)
     stripped = direct._git_archive(cfg, "main", exclude_inputs=True)
     assert len(stripped) < len(full)
-    input_rel = "leaderboard/inputs/s1/g.safetensors"
+    input_rel = "eval/problem/inputs/s1/g.safetensors"
     assert input_rel in _members(full)
     assert input_rel not in _members(stripped)
     # restore reproduces the stripped tree byte-identically to the full extract
@@ -597,7 +597,7 @@ def test_store_gap_falls_back_to_the_full_archive(tmp_path, monkeypatch):
     monkeypatch.setenv(direct.INPUTS_STORE_ENV, str(tmp_path / "store"))
     monkeypatch.setenv(direct.LOCK_DIR_ENV, str(tmp_path / "locks"))
     from forgekernel.submit import jobs as ds
-    entry = ("#!/bin/bash\nls leaderboard/inputs/s1/g.safetensors > /dev/null\n"
+    entry = ("#!/bin/bash\nls eval/problem/inputs/s1/g.safetensors > /dev/null\n"
              'echo "task=$1 finished"\n')
     d, cfg = _git_op(tmp_path)
     (d / "gpu_entry.sh").write_text(entry, encoding="utf-8")

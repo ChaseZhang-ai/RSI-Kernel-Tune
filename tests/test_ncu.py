@@ -698,20 +698,20 @@ def test_resusage_fields_are_namespaced_against_ncu_keys():
 
 # --- the card template ships the same set and the same filter -------------------
 #
-# gpu_entry.sh is generated from forgekernel.leaderboard's GPU_ENTRY_TEMPLATE; its
+# gpu_entry.sh is generated from forgekernel.cardkit's GPU_ENTRY_TEMPLATE; its
 # hardcoded NCU_METRICS string is a second copy of KEY_METRICS by necessity (the
 # job image has no forgekernel), so a drift would be silent without this test.
 
 def test_gpu_entry_template_requests_exactly_what_the_parser_reads():
     import re as _re
-    from forgekernel.leaderboard import GPU_ENTRY_TEMPLATE
+    from forgekernel.cardkit import GPU_ENTRY_TEMPLATE
     m = _re.search(r'NCU_METRICS="([^"]+)"', GPU_ENTRY_TEMPLATE)
     assert m, "gpu_entry template lost its NCU_METRICS line"
     assert set(m.group(1).split(",")) == set(NCU_METRICS_ARG.split(","))
 
 
 def test_gpu_entry_template_intersects_the_set_with_the_device():
-    from forgekernel.leaderboard import GPU_ENTRY_TEMPLATE
+    from forgekernel.cardkit import GPU_ENTRY_TEMPLATE
     # the ncu task filters before it profiles, and --query-metrics answers the
     # base-name shape the filter compares
     assert "ncu_filter_metrics" in GPU_ENTRY_TEMPLATE
@@ -728,7 +728,7 @@ def test_gpu_entry_bash_filter_matches_the_python_reference(tmp_path):
     if shutil.which("bash") is None:  # pragma: no cover
         import pytest
         pytest.skip("no bash on PATH")
-    from forgekernel.leaderboard import GPU_ENTRY_TEMPLATE
+    from forgekernel.cardkit import GPU_ENTRY_TEMPLATE
     m = _re.search(r"ncu_filter_metrics\(\) \{\{\n(.*?)\n\}\}", GPU_ENTRY_TEMPLATE, _re.S)
     assert m, "ncu_filter_metrics not found in the gpu_entry template"
     body = m.group(0).replace("{{", "{").replace("}}", "}")

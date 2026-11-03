@@ -18,7 +18,7 @@ from forgekernel.loop.driver import run_inner_iteration  # noqa: E402
 # --- what counts as harness ----------------------------------------------------------
 
 @pytest.mark.parametrize("path, want", [
-    ("eval/bench.py", True), ("eval/leaderboard/problem.json", True), ("gpu_entry.sh", True),
+    ("eval/bench.py", True), ("eval/problem/problem.json", True), ("gpu_entry.sh", True),
     ("ref_bin/binref_x.so", True), (".gitattributes", True), ("./eval/timing.py", True),
     ("kernel.py", False), ("notes/probe.py", False), ("evaluation.py", False),
     ("gpu_entry.sh.bak", False), ("window.toml", False), ("README.md", False),
@@ -60,12 +60,12 @@ def _commit(repo, msg="c"):
 
 def _card(tmp_path):
     card = tmp_path / "card"
-    (card / "eval" / "leaderboard").mkdir(parents=True)
+    (card / "eval" / "problem").mkdir(parents=True)
     (card / "ref_bin").mkdir()
     (card / "kernel.py").write_text("def run(): pass\n")
     (card / "gpu_entry.sh").write_text("#!/bin/bash\npython3 eval/bench.py\n")
     (card / "eval" / "bench.py").write_text("print('judge')\n")
-    (card / "eval" / "leaderboard" / "blob.bin").write_bytes(bytes(range(256)) * 4)
+    (card / "eval" / "problem" / "blob.bin").write_bytes(bytes(range(256)) * 4)
     (card / "ref_bin" / "ref.so").write_bytes(b"\x7fELF\x00\x01binary")
     (card / ".gitignore").write_text("ref_bin/*.key\n")
     (card / "ref_bin" / "ref_payload.key").write_text("SECRET")      # gitignored
@@ -103,7 +103,7 @@ def test_the_job_tree_carries_the_cards_harness_whatever_the_lineage_holds(tmp_p
     card, ws = _card(tmp_path)
     (ws / "eval" / "bench.py").write_text("print('PASS always')\n")
     (ws / "eval" / "sitecustomize.py").write_text("import os\n")       # added by the student
-    (ws / "eval" / "leaderboard" / "blob.bin").write_bytes(b"zero")
+    (ws / "eval" / "problem" / "blob.bin").write_bytes(b"zero")
     (ws / "gpu_entry.sh").write_text("echo hacked\n")
     (ws / "kernel.py").write_text("def run(): return 1\n")
     head = _commit(ws, "student")
@@ -111,7 +111,7 @@ def test_the_job_tree_carries_the_cards_harness_whatever_the_lineage_holds(tmp_p
     job = be._with_job_env(head)
     assert job != head and _git(ws, "rev-parse", "HEAD") == head      # lineage untouched
     assert _show(ws, job, "eval/bench.py") == b"print('judge')\n"
-    assert _show(ws, job, "eval/leaderboard/blob.bin") == bytes(range(256)) * 4
+    assert _show(ws, job, "eval/problem/blob.bin") == bytes(range(256)) * 4
     assert _show(ws, job, "gpu_entry.sh").startswith(b"#!/bin/bash")
     assert _show(ws, job, "kernel.py") == b"def run(): return 1\n"    # the student's work
     tree = _tree(ws, job)

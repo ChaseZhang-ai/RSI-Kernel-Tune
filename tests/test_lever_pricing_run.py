@@ -939,7 +939,7 @@ def test_run_bench_scopes_a_group_card_to_its_representative_and_the_table_says_
 
 
 def _meta_card(tmp_path, meta=("wl0", "wl2")):
-    p = tmp_path / "eval" / "leaderboard" / "problem.json"
+    p = tmp_path / "eval" / "problem" / "problem.json"
     p.parent.mkdir(parents=True)
     p.write_text(json.dumps({"group": [{"name": f"wl{i}"} for i in range(3)],
                              **({"meta_workloads": list(meta)} if meta else {})}))
@@ -986,7 +986,7 @@ def test_workload_flag_is_refused_on_a_card_without_meta_workloads(tmp_path, mon
     assert "bad workload" in lpr.scoped_workload_refused("wl1;rm", root=str(tmp_path))
     # a correctness-only workload (problem.json check_only) is a workload of the card too
     e = _meta_card(tmp_path / "e")
-    pj = e / "eval" / "leaderboard" / "problem.json"
+    pj = e / "eval" / "problem" / "problem.json"
     pj.write_text(json.dumps(dict(json.loads(pj.read_text()), check_only=[{"name": "wl9"}])))
     assert lpr.scoped_workload_refused("wl9", root=str(e)) is None
     monkeypatch.setattr(lpr, "ROOT", str(_meta_card(tmp_path / "d", meta=())))

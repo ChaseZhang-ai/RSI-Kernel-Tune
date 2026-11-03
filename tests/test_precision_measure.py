@@ -1,5 +1,5 @@
-"""The precision gate's measure (src/forgekernel/card_template/eval/precision.py) and a leaderboard
-card's record of it (eval/leaderboard.py). Needs torch (skipped without it)."""
+"""The precision gate's measure (src/forgekernel/card_template/eval/precision.py) and a
+generated card's record of it (eval/benchkit.py). Needs torch (skipped without it)."""
 from __future__ import annotations
 
 import importlib.util
@@ -24,7 +24,7 @@ def _load(name, path):
 
 
 P = _load("fk_template_precision", TEMPLATE_EVAL / "precision.py")
-lb = _load("fk_template_leaderboard_prec", TEMPLATE_EVAL / "leaderboard.py")
+lb = _load("fk_template_benchkit_prec", TEMPLATE_EVAL / "benchkit.py")
 
 
 def _rms_ref(x, w):
@@ -129,7 +129,7 @@ def test_merge_blocks_names_the_workloads():
     assert P.merge_blocks([]) is None
 
 
-# --- a leaderboard card records it, and never moves the verdict ----------------------------
+# --- a generated card records it, and never moves the verdict ----------------------------
 
 RMS_DEF = {
     "name": "rmsnorm_h512", "op_type": "rmsnorm",
@@ -141,16 +141,22 @@ RMS_DEF = {
                   "    x = hidden_states.to(torch.float32)\n"
                   "    y = x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + 1e-5)"
                   " * weight.to(torch.float32)\n"
-                  "    return y.to(hidden_states.dtype)\n"),
+                  "    return y.to(hidden_states.dtype)\n"
+                  "\ndef make_inputs(axes, group='plain', seed=0, device='cpu'):\n"
+                  "    g = torch.Generator().manual_seed(seed)\n"
+                  "    b = axes['batch_size']\n"
+                  "    return {'hidden_states': torch.randn(b, 512, generator=g).to(device),\n"
+                  "            'weight': torch.ones(512).to(device)}\n"),
+    "custom_inputs_entrypoint": "make_inputs",
 }
 
 
 def _problem(contract="official"):
-    p = {"suite": lb.SUITE_SOL, "definition": json.loads(json.dumps(RMS_DEF)),
+    p = {"definition": json.loads(json.dumps(RMS_DEF)),
          "workload": {"uuid": "w0", "axes": {"batch_size": 16},
-                      "inputs": {"hidden_states": {"type": "random"},
-                                 "weight": {"type": "random"}}},
-         "dps": True, "_dir": "."}
+                      "input_groups": [{"name": "plain", "kind": "generated", "seed": 1}]},
+         "dps": True, "_dir": ".",
+         "tolerance": {"outputs": {"output": 2e-2}}}
     if contract is not None:
         p["precision_contract"] = contract
     return p
@@ -176,13 +182,13 @@ def test_the_card_records_precision_and_keeps_the_boards_verdict(monkeypatch):
     assert lowp["precision"]["status"] == "fail"
     stress = {r.get("stress") for r in honest["precision"]["rows"]}
     assert {"offset", "spikes", "amp"} <= stress
-    assert len([r for r in honest["precision"]["rows"] if r["case"].startswith("round")]) \
-        == lb.PRECISION_SETS
-    # the suite's own draws are untouched by the record (seed-200 sequence, every round)
+    # every input group is measured once (the task suite draws per group, unseeded
+    # content, so the record rides the same sets the verdict came from)
+    assert len([r for r in honest["precision"]["rows"] if r["case"] == "group_plain"]) == 1
     monkeypatch.setattr(lb, "PRECISION_ENV_OFF", True)
     plain, _ = lb._correctness(_problem(), _rms_bf16, True, "cpu")
     assert "precision" not in plain
-    assert [c["max_abs"] for c in plain["checks"]] == [c["max_abs"] for c in lowp["checks"]]
+    assert [c["error"] for c in plain["checks"]] == [c["error"] for c in lowp["checks"]]
 
 
 def test_the_json_carries_it_at_the_top_level():
@@ -196,17 +202,16 @@ def test_the_json_carries_it_at_the_top_level():
 
 
 def test_a_card_without_the_helper_says_so(tmp_path):
-    shutil.copy2(TEMPLATE_EVAL / "leaderboard.py", tmp_path / "leaderboard.py")
-    old = _load("fk_lb_no_helper", tmp_path / "leaderboard.py")
+    shutil.copy2(TEMPLATE_EVAL / "benchkit.py", tmp_path / "benchkit.py")
+    old = _load("fk_bk_no_helper", tmp_path / "benchkit.py")
     verdict, _ = old._correctness(_problem(), _rms_fp32, True, "cpu")
     assert verdict["pass"] and verdict["precision"]["status"] == "unavailable"
     assert "precision.py is missing" in verdict["precision"]["why"]
 
 
-def test_the_reference_timed_alone_and_correctness_only_workloads_are_not_measured():
+def test_the_reference_timed_alone_is_not_measured():
     v, _ = lb._correctness(dict(_problem(), _no_precision=True), _rms_fp32, True, "cpu")
-    c, _ = lb._correctness(dict(_problem(), _check_only=True), _rms_fp32, True, "cpu")
-    assert "precision" not in v and "precision" not in c
+    assert "precision" not in v
 
 
 def test_an_fp32_output_a_few_ulps_off_is_not_a_precision_drop():
@@ -224,21 +229,21 @@ def test_an_fp32_output_a_few_ulps_off_is_not_a_precision_drop():
     assert rec.rows[0]["ratio"] > 5
 
 
-def test_a_leaderboard_card_by_default_judges_exactly_as_its_board(monkeypatch):
-    """No precision_contract in problem.json (the default, off): no float64 re-run, no
-    stressed inputs, no block -- the same verdict, from the same draws, as the board."""
+def test_precision_off_keeps_the_verdict_clean(monkeypatch):
+    """precision_contract "off": no float64 re-run, no stressed inputs, no block."""
     calls = []
     monkeypatch.setattr(lb, "_precision", lambda: calls.append(1) or P)
-    off, _ = lb._correctness(_problem(None), _rms_bf16, True, "cpu")
-    on, _ = lb._correctness(_problem("official"), _rms_bf16, True, "cpu")
-    assert "precision" not in off and on["precision"]["status"] == "fail"
-    assert [c["max_abs"] for c in off["checks"]] == [c["max_abs"] for c in on["checks"]]
-    assert off["pass"] is on["pass"] is True
-    assert lb.precision_on(_problem(None)) is False and lb.precision_on(_problem("off")) is False
-    assert lb.precision_on(_problem("strict")) is True
+    off, _ = lb._correctness(_problem("off"), _rms_bf16, True, "cpu")
+    assert "precision" not in off and off["pass"] is True
+    assert lb.precision_on(_problem("off")) is False
+    on, _ = lb._correctness(_problem("strict"), _rms_bf16, True, "cpu")
+    assert on["precision"]["status"] == "fail"
+    assert lb.precision_on(_problem(None)) is True                      # the default: strict
+    assert lb.precision_on(_problem("official")) is True
     n_on = len(calls)
-    lb._correctness(_problem(None), _rms_bf16, True, "cpu")
+    off2, _ = lb._correctness(_problem("off"), _rms_bf16, True, "cpu")
     assert len(calls) == n_on                            # off never reaches precision.py
+    assert off2["pass"] is True
 
 
 def test_the_kernel_cannot_switch_the_measure_off_from_its_own_process(monkeypatch):

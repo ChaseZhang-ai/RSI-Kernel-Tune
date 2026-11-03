@@ -123,7 +123,7 @@ class _AxesEnv(dict):
 
 class _ShapeResolver(ast.NodeVisitor):
     """Safe evaluation of a shape expression: integer literals, axis names and
-    + - * / // only (SOL-ExecBench's shapes.py grammar, minus the exotic)."""
+    + - * / // only (the shapes-grammar subset; see NOTICE)."""
 
     def __init__(self, axes: dict):
         self.axes = axes

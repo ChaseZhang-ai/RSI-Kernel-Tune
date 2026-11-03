@@ -21,11 +21,11 @@ from forgekernel.loop.parse import parse_eval  # noqa: E402
 
 # --- the loop's contract (no torch) ----------------------------------------------------
 
-def _card(tmp_path, *, leaderboard=False, helper=True, bench=None, card_contract=None):
+def _card(tmp_path, *, generated=True, helper=True, bench=None, card_contract=None):
     card = tmp_path / "card"
-    (card / "eval" / "leaderboard").mkdir(parents=True)
-    if leaderboard:
-        (card / "eval" / "leaderboard" / "problem.json").write_text(json.dumps(
+    (card / "eval" / "problem").mkdir(parents=True)
+    if generated:
+        (card / "eval" / "problem" / "problem.json").write_text(json.dumps(
             {} if card_contract is None else {"precision_contract": card_contract}))
     if helper:
         (card / "eval" / "precision.py").write_text("# helper\n")
@@ -34,14 +34,16 @@ def _card(tmp_path, *, leaderboard=False, helper=True, bench=None, card_contract
     return card
 
 
-def test_contract_defaults_by_card_kind(tmp_path):
-    lbcard = _card(tmp_path, leaderboard=True)
-    assert pg.resolve_contract({}, lbcard) == ("off", True)          # the board's rules only
+def test_contract_defaults(tmp_path):
+    gen = _card(tmp_path)
+    assert pg.resolve_contract({}, gen) == ("strict", True)     # WP24: strict everywhere
     assert pg.resolve_contract({}, tmp_path / "plain") == ("strict", True)
-    assert pg.resolve_contract({"loop": {"precision_contract": "Strict"}}, lbcard) == ("strict", False)
-    on = _card(tmp_path / "on", leaderboard=True, card_contract="official")
-    assert pg.resolve_contract({}, on) == ("official", True)          # the card turned it on
-    bad = _card(tmp_path / "bad", leaderboard=True, card_contract="lenient")
+    assert pg.resolve_contract({"loop": {"precision_contract": "Strict"}}, gen) == ("strict", False)
+    on = _card(tmp_path / "on", card_contract="official")
+    assert pg.resolve_contract({}, on) == ("official", True)          # the card opted to record only
+    off = _card(tmp_path / "off", card_contract="off")
+    assert pg.resolve_contract({}, off) == ("off", True)              # the card opted out
+    bad = _card(tmp_path / "bad", card_contract="lenient")
     with pytest.raises(ValueError, match="precision_contract"):
         pg.resolve_contract({}, bad)
 
@@ -54,17 +56,15 @@ def test_a_misspelt_contract_is_an_error():
 def test_bench_findings_want_a_recorder_call_not_a_mention(tmp_path):
     called = "from precision import PrecisionRecorder\nprec = PrecisionRecorder()\n"
     mentioned = "# PrecisionRecorder()\nX = 'PrecisionRecorder()'\n"
-    assert pg.bench_findings(_card(tmp_path / "a", bench=called)) == []
-    assert any("never calls" in f for f in pg.bench_findings(_card(tmp_path / "b", bench=mentioned)))
+    assert pg.bench_findings(_card(tmp_path / "a", generated=False, bench=called)) == []
+    assert any("never calls" in f for f in pg.bench_findings(
+        _card(tmp_path / "b", generated=False, bench=mentioned)))
     assert any("precision.py is missing" in f
-               for f in pg.bench_findings(_card(tmp_path / "c", helper=False, bench=called)))
-    # a leaderboard card's bench is generated: the helper has to be there and its
-    # problem.json has to turn the measure on
-    assert pg.bench_findings(_card(tmp_path / "d", leaderboard=True, card_contract="strict")) == []
-    assert pg.bench_findings(_card(tmp_path / "e", leaderboard=True, helper=False,
-                                   card_contract="strict"))
-    assert any("measures nothing" in f
-               for f in pg.bench_findings(_card(tmp_path / "f", leaderboard=True)))
+               for f in pg.bench_findings(_card(tmp_path / "c", generated=False, helper=False,
+                                                bench=called)))
+    # a generated card's bench measures: the helper has to be there, that is all
+    assert pg.bench_findings(_card(tmp_path / "d")) == []
+    assert pg.bench_findings(_card(tmp_path / "e", helper=False))
 
 
 def _block(status="pass", ratio=1.1, stress=None):
@@ -163,7 +163,8 @@ def test_off_contract_does_not_read_it(tmp_path):
 
 
 def test_preflight_refuses_a_fresh_strict_start_without_the_block(tmp_path, capsys):
-    card = _card(tmp_path, bench="print('judge')\n")
+    # a hand-written bench that never calls PrecisionRecorder cannot report the block
+    card = _card(tmp_path, generated=False, bench="print('judge')\n")
     rc = cli._precision_preflight(card, "strict", True, resuming=False, dry_run=False)
     assert rc == cli.EXIT_PRECISION_UNREPORTED == 20
     assert "never calls" in capsys.readouterr().err
@@ -172,19 +173,19 @@ def test_preflight_refuses_a_fresh_strict_start_without_the_block(tmp_path, caps
     assert cli._precision_preflight(card, "off", False, resuming=False, dry_run=False) == 0
     ok = _card(tmp_path / "ok", bench="from precision import PrecisionRecorder\nPrecisionRecorder()\n")
     assert cli._precision_preflight(ok, "strict", True, resuming=False, dry_run=False) == 0
-    assert "precision_contract = strict (default for a own bench)" in capsys.readouterr().out
+    assert "precision_contract = strict" in capsys.readouterr().out
 
 
-def test_preflight_leaderboard_default_off_is_silent(tmp_path, capsys):
-    card = _card(tmp_path, leaderboard=True)
+def test_preflight_off_is_silent_and_strict_needs_a_reporting_bench(tmp_path, capsys):
+    card = _card(tmp_path / "off", card_contract="off")
     contract, defaulted = pg.resolve_contract({}, card)
     assert cli._precision_preflight(card, contract, defaulted, resuming=False, dry_run=False) == 0
     out = capsys.readouterr()
-    assert "precision_contract = off (default for a leaderboard card)" in out.out
+    assert "precision_contract = off" in out.out
     assert "neither measured nor read" in out.out and out.err == ""
-    # a loop that asks for strict over a card whose bench measures nothing is refused
-    assert cli._precision_preflight(card, "strict", False, resuming=False,
-                                    dry_run=False) == cli.EXIT_PRECISION_UNREPORTED
+    # a fresh strict start whose bench cannot report the block is refused
+    assert cli._precision_preflight(_card(tmp_path / "plain"), "strict", False,
+                                    resuming=False, dry_run=False) == 0
 
 
 def test_exit_20_names_nothing_else():

@@ -144,7 +144,7 @@ BENCH_DPS = BENCH.replace(
 
 # The task suite's way: the inputs come from the judge's make_inputs, compiled by the
 # bench from source (filename "<op judge>"), and the kernel is loaded by file path
-# under a name of the bench's own (eval/leaderboard.py load_entry)
+# under a name of the bench's own (eval/benchkit.py load_entry)
 BENCH_TASK = BENCH.replace(
     "def make(seed):\n"
     "    g = torch.Generator().manual_seed(seed)\n"
@@ -268,7 +268,7 @@ def test_a_task_judges_draws_and_a_by_path_kernel_are_both_seen(tmp_path):
 def test_load_entry_hands_the_kernel_to_the_monitor_hook(tmp_path, monkeypatch):
     sys.path.insert(0, str(Path(monitor.__file__).resolve().parents[1] / "card_template" / "eval"))
     try:
-        import leaderboard as lb_eval
+        import benchkit as lb_eval
     finally:
         sys.path.pop(0)
     seen = []

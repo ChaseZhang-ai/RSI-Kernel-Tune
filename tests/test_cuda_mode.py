@@ -23,10 +23,48 @@ from forgekernel.loop import lang_mode
 from forgekernel.skills import job_env_check, lever_pricing_run, orch_census_run
 from forgekernel.skills import timeline_probe as tp
 from test_loop_driver import FakeBackend, _ctx
-from test_leaderboard_cuda_student import STUDENT, card_lb  # noqa: F401  (fixture)
-from test_binref import base, sol_root, _no_network  # noqa: F401  (fixtures card_lb needs)
+from test_binref import base, repo  # noqa: F401  (the fixtures card_lb builds on)
 
 REPO = Path(__file__).resolve().parents[1]
+
+STUDENT = """// fk-cuda-cflags: -Xptxas=-v -lineinfo
+#include <torch/extension.h>
+// a comment naming dlopen and ref_bin is not a reach
+__global__ void mul(const float* x, const float* w, float* o, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) o[i] = x[i] * w[i % 64];
+}
+void run(torch::Tensor hidden_states, torch::Tensor weight, torch::Tensor output) {
+    int n = hidden_states.numel();
+    mul<<<(n + 255) / 256, 256>>>(hidden_states.data_ptr<float>(), weight.data_ptr<float>(),
+                                  output.data_ptr<float>(), n);
+}
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) { m.def("run", &run); }
+"""
+
+
+@pytest.fixture
+def card_lb(base, monkeypatch):
+    """A generated task card with a sealed binary reference; its eval/benchkit.py imported
+    with a stand-in torch (the fence and the loader need none)."""
+    import importlib.util
+    import json
+    from test_binref import new_card
+    card, ref, module = new_card(base)
+    # the timed build must not carry -lineinfo from the source's own flags line:
+    # the lineinfo test separates the env-driven build from the timed one
+    (card / "kernel.cu").write_text(STUDENT.replace(" -lineinfo", ""))
+    if importlib.util.find_spec("torch") is None:
+        fake = types.ModuleType("torch")
+        fake.__getattr__ = lambda n: _Any()
+        fake.__version__ = "0.0+fake"
+        monkeypatch.setitem(sys.modules, "torch", fake)
+    spec = importlib.util.spec_from_file_location("_test_cuda_card_bk", card / "eval" / "benchkit.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    problem = json.loads((card / "eval" / "problem" / "problem.json").read_text())
+    problem["_dir"] = str(card / "eval" / "problem")
+    yield mod, problem, card, module
 
 MARKED = STUDENT.replace(
     "#include <torch/extension.h>\n",
@@ -282,7 +320,7 @@ def test_the_dsl_timeline_path_is_untouched():
 def test_the_prebuild_builds_every_variant_under_the_kernels_own_name(tmp_path, monkeypatch):
     (tmp_path / "eval").mkdir()
     log = tmp_path / "built.txt"
-    (tmp_path / "eval" / "leaderboard.py").write_text(
+    (tmp_path / "eval" / "benchkit.py").write_text(
         "import os\n"
         "def load_cuda_entry(path, entry):\n"
         "    src = open(path).read()\n"
@@ -383,17 +421,6 @@ def test_the_cuda_students_notice_names_headers_not_the_dsl(tmp_path):
     assert any("cuda_source_dirs is empty" in w for w in warns)
 
 
-def test_a_cuda_card_suggests_the_cuda_mode():
-    from forgekernel import leaderboard as lb
-    prob = types.SimpleNamespace(reference_impl={"kind": "baseline_solution", "name": "r"},
-                                 workload={"uuid": "u", "axes": {}}, name="n", group=None,
-                                 suite="other", board=None)
-    cu = lb.render_loop_toml_example(prob, "op", "kernel.cu")
-    py = lb.render_loop_toml_example(prob, "op")
-    assert 'language    = "cuda-sol"         # what' in cu
-    assert 'language    = "cutedsl"          # what' in py
-
-
 def test_an_unchanged_cuda_source_is_not_restaged(card_lb, monkeypatch):
     """A fresh mtime on the build's source copy makes ninja recompile an unchanged kernel."""
     lbm, problem, card, _ = card_lb
@@ -454,7 +481,7 @@ def test_a_build_error_larger_than_a_pipe_does_not_stall_the_prebuild(tmp_path, 
     """stderr used to be a pipe nobody read: a CUTLASS-sized error blocked the builder until
     the prebuild's timeout."""
     (tmp_path / "eval").mkdir()
-    (tmp_path / "eval" / "leaderboard.py").write_text(
+    (tmp_path / "eval" / "benchkit.py").write_text(
         "import sys\n"
         "def load_cuda_entry(path, entry):\n"
         "    sys.stderr.write('error: template instantiation\\n' * 12000)\n"

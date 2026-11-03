@@ -48,7 +48,7 @@ BASIS_GRAPH = "cuda_graph"    # replay of a captured graph: the host is out of t
 # CUPTI device-event spans (torch.profiler CUDA activity), per call: the host is out of
 # the loop too. The reading for a launch-bound call whose launcher cannot be captured
 # into a graph (a tvm-ffi / driver-API launcher that torch's capture stream never sees
-# comes back as an EMPTY graph), and the same currency the FlashInfer-Bench harness
+# comes back as an EMPTY graph), and the same currency a published-kernel harness
 # reports. Host-free for every check that exempts the graph basis.
 BASIS_CUPTI = "cupti_kernel_span"
 HOST_FREE_BASES = (BASIS_GRAPH, BASIS_CUPTI)

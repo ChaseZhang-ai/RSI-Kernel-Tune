@@ -1,13 +1,11 @@
-"""forge init --sealed-ref: a Python solution (one file or many) as a leaderboard card's
-sealed in-job SOURCE reference (forgekernel.sealref) — the card, the recon tree, the key,
-the fence, the guards."""
+"""The sealed SOURCE reference (forgekernel.sealref) on a generated task card: the card,
+the recon tree, the key, the fence, the guards."""
 
 from __future__ import annotations
 
 import importlib.util
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -16,30 +14,35 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import leaderboard as lb
 from forgekernel import sealref
-from forgekernel.scaffold import main as scaffold_main
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_EVAL = REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval"
-DEF = {
-    "name": "001_rms", "description": "rmsnorm",
-    "axes": {"batch_size": {"type": "var"}, "hidden_size": {"type": "const", "value": 64}},
-    "inputs": {"hidden_states": {"shape": ["batch_size", "hidden_size"], "dtype": "bfloat16"},
-               "weight": {"shape": ["hidden_size"], "dtype": "bfloat16"}},
-    "outputs": {"output": {"shape": ["batch_size", "hidden_size"], "dtype": "bfloat16"}},
-    "reference": "import torch\n\ndef run(hidden_states, weight):\n    return hidden_states * weight\n",
-}
 KERNEL = ("from launch_helpers import launch_the_scaled_product_kernel\n\n\n"
           "def run(hidden_states, weight, output):\n"
           "    launch_the_scaled_product_kernel(hidden_states, weight, output)\n")
 HELPERS = ("def launch_the_scaled_product_kernel(hidden_states, weight, output):\n"
            "    output.append(('secret_tiling_choice_for_the_product', hidden_states, weight))\n")
 
+DESCRIPTION = "y = x / sqrt(mean(x^2) + 1e-6) * w over the last axis\n"
+SHAPES = [{"name": "small", "axes": {"m": 4, "n": 16}},
+          {"name": "large", "axes": {"m": 64, "n": 16}}]
+TASK_TOML = ('[task]\nlanguage = "cutedsl"\narch = "sm100"\n'
+             '[reference]\nrun = "reference/run.py:run"\nblackbox = true\n')
+REF_PY = "import torch\n\ndef run(x, w):\n    return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-6) * w\n"
+DEFINITION = {"inputs": {"x": {"shape": ["m", "n"], "dtype": "float32"},
+                         "w": {"shape": ["n"], "dtype": "float32"}},
+              "outputs": {"y": {"shape": ["m", "n"], "dtype": "float32"}}}
+JUDGE = ("import torch\n\n"
+         "def run(x, w):\n"
+         "    return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-6) * w\n")
+GROUPS = {s["name"]: [{"name": "plain", "intent": "randn", "seed": 1}] for s in SHAPES}
+
 
 def solution(**over) -> dict:
-    sol = {"name": "rms_triton", "definition": "001_rms", "author": "t",
-           "spec": {"languages": ["triton"], "target_hardware": ["B200"], "entry_point": "kernel.py::run",
+    sol = {"name": "rms_triton", "definition": "rmsnorm", "author": "t",
+           "spec": {"languages": ["triton"], "target_hardware": ["B200"],
+                    "entry_point": "kernel.py::run",
                     "dependencies": ["triton"], "destination_passing_style": True},
            "sources": [{"path": "kernel.py", "content": KERNEL},
                        {"path": "launch_helpers.py", "content": HELPERS}]}
@@ -47,40 +50,66 @@ def solution(**over) -> dict:
     return sol
 
 
-@pytest.fixture(autouse=True)
-def _no_network(monkeypatch) -> None:
-    monkeypatch.setattr(lb, "_http_json", lambda url, timeout=30.0: (_ for _ in ()).throw(OSError("offline")))
+@pytest.fixture
+def repo(tmp_path: Path, monkeypatch) -> Path:
+    monkeypatch.setenv("FORGEKERNEL_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("FORGEKERNEL_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("FORGEKERNEL_OPERATORS_DIR", raising=False)
+    monkeypatch.setenv("FK_DELIVERY", "local")
+    monkeypatch.setenv("FK_GPU", "0")
+    return tmp_path
 
 
 @pytest.fixture
-def sol_root(tmp_path: Path) -> Path:
-    root = tmp_path / "sol" / "benchmark"
-    pdir = root / "L1" / "001_rms"
-    pdir.mkdir(parents=True)
-    (pdir / "definition.json").write_text(json.dumps(DEF))
-    (pdir / "workload.jsonl").write_text(json.dumps(
-        {"uuid": "u-0", "axes": {"batch_size": 4},
-         "inputs": {"hidden_states": {"type": "random"}, "weight": {"type": "random"}}}) + "\n")
-    return root
+def base(repo: Path) -> Path:
+    shutil.copytree(REPO_ROOT / "meta", repo / "meta")
+    shutil.copytree(REPO_ROOT / "src" / "forgekernel" / "card_template",
+                    repo / "src" / "forgekernel" / "card_template")
+    return repo
 
 
-@pytest.fixture
-def base(tmp_path: Path) -> Path:
-    shutil.copytree(REPO_ROOT / "meta", tmp_path / "repo" / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "forgekernel" / "card_template", tmp_path / "repo" / "src" / "forgekernel" / "card_template")
-    return tmp_path / "repo"
-
-
-def new_card(base: Path, sol_root: Path, tmp_path: Path, sol: dict | None = None,
-             git: bool = False) -> tuple[Path, Path, str]:
-    sp = tmp_path / "solution" / "solution.json"
-    sp.parent.mkdir(exist_ok=True)
-    sp.write_text(json.dumps(sol or solution()))
-    scaffold_main(["rms", "--base-dir", str(base), *([] if git else ["--no-git"]), "--leaderboard",
-                   "sol-execbench", "--dataset", str(sol_root), "--definition", "L1/001_rms",
-                   "--workload", "0", "--no-sol-board", "--sealed-ref", str(sp),
-                   "--ref-source-path", "/elsewhere/plain"])
-    return base / "operators" / "rms", base / "operators" / "_rmsref", sealref.module_name(sol or solution())
+def new_card(base: Path, sol: dict | None = None, *, git: bool = False,
+             definition: str = "rmsnorm") -> tuple[Path, Path, str]:
+    """A generated task card (taskcard.write_card) with the reference sealed into it:
+    sealref.write_trees, the loop.toml of a blackbox run, the recon tree next to it."""
+    from forgekernel import judge as judge_mod, taskcard
+    from forgekernel.localenv import load_machine
+    from forgekernel.runs import new_run
+    from forgekernel.task import load_task
+    sol = sol or solution()
+    d = base / "tasks" / "rmsnorm"
+    (d / "reference").mkdir(parents=True, exist_ok=True)
+    (d / "task.toml").write_text(TASK_TOML)
+    (d / "description.md").write_text(DESCRIPTION)
+    (d / "shapes.json").write_text(json.dumps(SHAPES))
+    (d / "reference" / "run.py").write_text(REF_PY)
+    machine = load_machine(base, environ={})
+    run = new_run(load_task(d), machine=machine)
+    task = load_task(run.task_dir, name=run.task_name)
+    check_dir = run.dir / judge_mod.CHECK_DIR
+    check_dir.mkdir(parents=True, exist_ok=True)
+    (check_dir / judge_mod.DEFINITION).write_text(json.dumps(DEFINITION))
+    (check_dir / judge_mod.JUDGE).write_text(JUDGE)
+    (check_dir / judge_mod.GROUPS).write_text(json.dumps(GROUPS))
+    check = judge_mod.load_check(check_dir)
+    op_dir = taskcard.write_card(run, task, check, machine)
+    errs = sealref.solution_problems(sol, definition, TEMPLATE_EVAL)
+    assert not errs, errs
+    module = sealref.module_name(sol)
+    impl = sealref.reference_impl(sol, module)
+    taskcard.update_problem(op_dir, reference_impl=impl, time_reference=True)
+    deny = [str(base / "solution"), "/elsewhere/plain"]
+    taskcard.write_loop_toml(run, task, op_dir, deny=deny, ncu=True)
+    ref_dir = run.operators_dir / taskcard.ref_tree(task.name)
+    sealref.write_trees(op_dir, ref_dir, sol, module, TEMPLATE_EVAL,
+                        kernel_file=taskcard.kernel_file(task))
+    if git:
+        for tree in (op_dir, ref_dir):
+            subprocess.run(["git", "init", "-q"], cwd=tree, check=True)
+            subprocess.run(["git", "-C", str(tree), "add", "-A"], check=True)
+            subprocess.run(["git", "-C", str(tree), "-c", "user.name=t", "-c", "user.email=t@t",
+                            "commit", "-q", "-m", "init"], check=True)
+    return op_dir, ref_dir, module
 
 
 def _closed_ref():
@@ -95,26 +124,32 @@ def _key(tree: Path) -> str:
     return tomllib.loads((tree / "submit.local.toml").read_text())["env"]["FK_REF_KEY"]
 
 
-def test_card_times_a_sealed_source_reference(base: Path, sol_root: Path, tmp_path: Path) -> None:
-    card, ref, module = new_card(base, sol_root, tmp_path)
-    problem = json.loads((card / "eval" / "leaderboard" / "problem.json").read_text())
+def test_card_times_a_sealed_source_reference(base: Path) -> None:
+    card, ref, module = new_card(base)
+    problem = json.loads((card / "eval" / "problem" / "problem.json").read_text())
     assert problem["reference_impl"] == {
         "kind": "sealed", "name": f"sealed source reference {module}",
         "path": "../../ref_bin/ref_payload.bin", "module": module, "entry": "run", "dps": True,
         "key_env": "FK_REF_KEY", "languages": ["triton"]}
-    assert problem["time_reference"] is True            # SOL card, but a real kernel: timed in-job
+    assert problem["time_reference"] is True            # a real kernel: timed in-job
     assert (card / "eval" / "closed_ref.py").read_text() == (TEMPLATE_EVAL / "closed_ref.py").read_text()
-    loop = (card / "loop.toml.example").read_text()
-    assert 'oracle_mode        = "blackbox"' in loop and 'recon_op           = "_rmsref"' in loop
-    assert 'ref_mode           = "sealref"' in loop and '["python3", "sealref.py", "ncu"]' in loop
-    assert json.dumps([str(tmp_path / "solution"), "/elsewhere/plain"]) in loop
-    assert "sealed source reference" in (card / "window.toml").read_text()
+    loop = tomllib_load(card / "loop.toml")["loop"]
+    assert loop["oracle_mode"] == "blackbox" and loop["recon_op"] == "_rmsnormref"
+    assert loop["ref_mode"] == "sealref" and loop["ref_price_app"] == ["python3", "sealref.py", "ncu"]
+    assert str(base / "solution") in loop["ref_source_paths"] \
+        and "/elsewhere/plain" in loop["ref_source_paths"]
     assert "loop.toml" in (card / ".gitignore").read_text().split()
 
 
+def tomllib_load(p: Path) -> dict:
+    import tomllib
+    with open(p, "rb") as fh:
+        return tomllib.load(fh)
+
+
 def test_the_payload_opens_with_the_key_of_either_tree_and_no_plaintext_is_written(
-        base: Path, sol_root: Path, tmp_path: Path) -> None:
-    card, ref, _ = new_card(base, sol_root, tmp_path)
+        base: Path) -> None:
+    card, ref, _ = new_card(base)
     cr = _closed_ref()
     payload = (card / "ref_bin" / "ref_payload.bin").read_bytes()
     assert (ref / "ref_bin" / "ref_payload.bin").read_bytes() == payload
@@ -131,43 +166,41 @@ def test_the_payload_opens_with_the_key_of_either_tree_and_no_plaintext_is_writt
     assert meta["module"] == sealref.module_name(solution()) and meta["files"] == 2
     assert meta["payload_sha256"] == cr.payload_digest(payload)
     assert (ref / "sealref.py").read_text() == sealref.TOOL.read_text()
-    assert (ref / "eval" / "leaderboard.py").read_text() == (card / "eval" / "leaderboard.py").read_text()
+    assert (ref / "eval" / "benchkit.py").read_text() == (card / "eval" / "benchkit.py").read_text()
     assert 'ncu_window(which="ref")' in (ref / "eval" / "ncu_run.py").read_text()
 
 
 def test_the_key_is_gitignored_in_both_trees_and_the_payload_committed(
-        base: Path, sol_root: Path, tmp_path: Path, monkeypatch) -> None:
+        base: Path, monkeypatch) -> None:
     for k, v in (("GIT_AUTHOR_NAME", "t"), ("GIT_AUTHOR_EMAIL", "t"),
                  ("GIT_COMMITTER_NAME", "t"), ("GIT_COMMITTER_EMAIL", "t")):
         monkeypatch.setenv(k, v)
-    card, ref, _ = new_card(base, sol_root, tmp_path, git=True)
+    card, ref, _ = new_card(base, git=True)
     for tree in (card, ref):
         files = subprocess.run(["git", "-C", str(tree), "ls-files"], capture_output=True, text=True,
                                check=True).stdout.split()
         assert "ref_bin/ref_payload.bin" in files and "submit.local.toml" not in files
         assert (tree / "submit.local.toml").is_file()
     from forgekernel.submit.config import load_config
-    for name in ("rms", "_rmsref"):
-        (base / "operators" / name / "submit.toml").write_text(
-            (base / "operators" / name / "submit.toml").read_text().replace(
-                'delivery = "local"', 'delivery = "local"'))
-        assert load_config(name, base_dir=base).env["FK_REF_KEY"] == _key(card)
+    for tree in (card, ref):
+        assert load_config(tree).env["FK_REF_KEY"] == _key(card)
 
 
-def test_the_agent_policy_denies_both_keys(base: Path, sol_root: Path, tmp_path: Path) -> None:
+def test_the_agent_policy_denies_both_keys(base: Path, monkeypatch) -> None:
     from forgekernel.loop import agent_policy
-    card, ref, _ = new_card(base, sol_root, tmp_path)
-    secrets = agent_policy.secret_files_for(base, "rms", [ref])
+    card, ref, _ = new_card(base)
+    monkeypatch.setenv("FORGEKERNEL_OPERATORS_DIR", str(card.parent))
+    secrets = agent_policy.secret_files_for(base, "rmsnorm", [ref])
     assert card / "submit.local.toml" in secrets and ref / "submit.local.toml" in secrets
 
 
-def test_recon_tree_gpu_entry_and_fresh_start(base: Path, sol_root: Path, tmp_path: Path) -> None:
-    card, ref, _ = new_card(base, sol_root, tmp_path)
+def test_recon_tree_gpu_entry_and_fresh_start(base: Path) -> None:
+    card, ref, _ = new_card(base)
     for tree in (card, ref):
         assert subprocess.run(["bash", "-n", str(tree / "gpu_entry.sh")]).returncode == 0
         assert (tree / "gpu_entry.sh").read_text().count("BLACKBOX_FORBID=") == 1
     entry = (ref / "gpu_entry.sh").read_text()
-    for tree in (card, ref):   # a Triton reference needs the SOL image's fbtriton launch.h fix
+    for tree in (card, ref):   # a Triton reference needs the image's fbtriton launch.h fix
         assert "backends/nvidia/launch.h" in (tree / "gpu_entry.sh").read_text()
     for task in ("check)", "crosscheck)", "bench|ref)", "ncu)", "sealref)", "cmd)"):
         assert f"    {task}" in entry
@@ -184,8 +217,8 @@ def _guard(tree: Path, cmd: str) -> str:
     return "ALLOWED" if r.stdout.strip() == "ALLOWED" else "REFUSED"
 
 
-def test_guards(base: Path, sol_root: Path, tmp_path: Path) -> None:
-    card, ref, module = new_card(base, sol_root, tmp_path)
+def test_guards(base: Path) -> None:
+    card, ref, module = new_card(base)
     refused_both = ["python3 eval/closed_ref.py digest ref_bin/ref_payload.bin", "echo $FK_REF_KEY",
                     "cat /proc/self/environ", "printenv", "python3 -c 'import os; print(os.environ)'",
                     "cat submit.local.toml | grep _REF_KEY", "ls ~/.triton/cache", "cat /tmp/x.ttgir",
@@ -210,14 +243,14 @@ def test_guards(base: Path, sol_root: Path, tmp_path: Path) -> None:
 
 
 def test_the_loops_own_jobs_pass_both_guards_with_notes_seeded_as_the_loop_seeds_them(
-        base: Path, sol_root: Path, tmp_path: Path) -> None:
+        base: Path) -> None:
     """As binref's: the loop seeds the pricing toolkit into the student's tree and the
     recon tree, the recon toolkit and blackbox-guard.sh into the recon tree; every job
     the loop itself sends must pass, a probe reaching for the reference must not."""
     from types import SimpleNamespace
     from forgekernel import binref
     from forgekernel.loop import driver
-    card, ref, module = new_card(base, sol_root, tmp_path)
+    card, ref, module = new_card(base)
     stub = SimpleNamespace(commit=lambda *a, **k: None)
     driver._seed_pricing_toolkits(card, stub)
     driver._seed_pricing_toolkits(ref, stub)
@@ -239,9 +272,8 @@ def test_the_loops_own_jobs_pass_both_guards_with_notes_seeded_as_the_loop_seeds
     assert _guard(ref, "python3 notes/r2.py") == "REFUSED"
 
 
-def test_the_generic_routes_to_the_key_are_words_of_the_cmd_guard(base: Path, sol_root: Path,
-                                                                   tmp_path: Path) -> None:
-    card, ref, _ = new_card(base, sol_root, tmp_path)
+def test_the_generic_routes_to_the_key_are_words_of_the_cmd_guard(base: Path) -> None:
+    card, ref, _ = new_card(base)
     for cmd in ("python3 -c \"import os; print(os.getenv('FK_' + 'REF' + '_KEY'))\"",
                 "cat /proc/$PPID/cmdline", "cat /proc/self/e?viron", "cat ref_bin/ref_payload.key"):
         assert _guard(card, cmd) == "REFUSED", ("card", cmd)
@@ -254,26 +286,26 @@ DUMP_ENV = ("import json, os, sys\n"
 
 
 @pytest.mark.parametrize("tree_name", ["card", "recon"])
-def test_the_key_leaves_the_job_environment_before_any_task_runs(base: Path, sol_root: Path,
-                                                                 tmp_path: Path, tree_name) -> None:
+def test_the_key_leaves_the_job_environment_before_any_task_runs(base: Path,
+                                                                 tree_name) -> None:
     """The key arrives in the job environment; gpu_entry.sh moves it into the key file beside
     the payload and re-executes itself without it, so a `cmd` job (or anything it starts)
     inherits none of it — while the loader still finds it."""
-    card, ref, _ = new_card(base, sol_root, tmp_path)
+    card, ref, _ = new_card(base)
     tree = card if tree_name == "card" else ref
     key = _key(tree)
-    bin_dir = tmp_path / "fakebin"
-    bin_dir.mkdir()
+    bin_dir = tree.parent / "fakebin"
+    bin_dir.mkdir(exist_ok=True)
     for name, text in (("timeout", FAKE_TIMEOUT), ("nvidia-smi", "#!/bin/bash\necho FAKE\n")):
         (bin_dir / name).write_text(text)
         (bin_dir / name).chmod(0o755)
     (tree / "notes").mkdir(exist_ok=True)
     (tree / "notes" / "dump.py").write_text(DUMP_ENV)
-    out = tmp_path / "dump.json"
+    out = tree.parent / "dump.json"
     env = {k: v for k, v in os.environ.items()
            if k not in ("LB_SM_CLOCK_MHZ", "LB_MEM_CLOCK_MHZ", "LB_REQUIRE_CLOCK_LOCK")}
     env.update({"PATH": f"{bin_dir}:{os.environ['PATH']}", "LB_SM_CLOCK_MHZ": "", "LB_CLOCK_SETTLE_S": "0",
-                "LB_INSTALL_CUPTI": "0", "TASK_TIMEOUT": "60", "FK_REF_KEY": key})
+                "TASK_TIMEOUT": "60", "FK_REF_KEY": key})
     proc = subprocess.run(["bash", str(tree / "gpu_entry.sh"), "cmd", f"python3 notes/dump.py {out}"],
                           cwd=tree, env=env, capture_output=True, text=True, timeout=120)
     assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
@@ -289,25 +321,18 @@ def test_the_key_leaves_the_job_environment_before_any_task_runs(base: Path, sol
 
 
 @pytest.mark.parametrize("over, why", [
-    ({"spec": {"languages": ["cuda_cpp"], "entry_point": "k.cu::run"}}, "--binary-ref"),
+    ({"spec": {"languages": ["cuda_cpp"], "entry_point": "k.cu::run"}}, "binary"),
     ({"definition": "002_other"}, "the card for"),
     ({"spec": {"languages": ["triton"], "entry_point": "kernel.py"}}, "<file>.py::<function>"),
     ({"sources": [{"path": "../kernel.py", "content": "x"}]}, "inside the bundle"),
 ])
-def test_unusable_solutions_are_refused(base: Path, sol_root: Path, tmp_path: Path, over, why) -> None:
-    with pytest.raises(SystemExit, match=re.escape(why)):
-        new_card(base, sol_root, tmp_path, solution(**over))
-    assert not (base / "operators" / "rms").exists() and not (base / "operators" / "_rmsref").exists()
+def test_unusable_solutions_are_refused(base: Path, over, why) -> None:
+    errs = sealref.solution_problems(solution(**over), "rmsnorm", TEMPLATE_EVAL)
+    assert any(why in e for e in errs), errs
 
 
-def test_binary_and_sealed_are_exclusive(base: Path, sol_root: Path, tmp_path: Path) -> None:
-    with pytest.raises(SystemExit):
-        scaffold_main(["rms", "--base-dir", str(base), "--no-git", "--leaderboard", "sol-execbench",
-                       "--dataset", str(sol_root), "--definition", "L1/001_rms", "--workload", "0",
-                       "--binary-ref", "a.json", "--sealed-ref", "b.json"])
+# --- the job side: the card's bench engine loads the reference, the fence -------------
 
-
-# --- the job side: the card's judge loads the reference, the fence ------------------
 
 class _Any:
     def __init__(self, *a, **k): pass
@@ -320,10 +345,10 @@ class _Any:
 
 
 @pytest.fixture
-def card_lb(base: Path, sol_root: Path, tmp_path: Path, monkeypatch):
-    """The card's eval/leaderboard.py, imported with a stand-in torch (the fence and the
+def card_lb(base: Path, monkeypatch):
+    """The card's eval/benchkit.py, imported with a stand-in torch (the fence and the
     loader need none)."""
-    card, ref, module = new_card(base, sol_root, tmp_path)
+    card, ref, module = new_card(base)
     if importlib.util.find_spec("torch") is None:
         fake = types.ModuleType("torch")
         fake.__getattr__ = lambda n: _Any()
@@ -331,18 +356,18 @@ def card_lb(base: Path, sol_root: Path, tmp_path: Path, monkeypatch):
         # _Any() per read would key two loads of the same source differently
         fake.__version__ = "0.0+fake"
         monkeypatch.setitem(sys.modules, "torch", fake)
-    spec = importlib.util.spec_from_file_location("_test_card_lb", card / "eval" / "leaderboard.py")
+    spec = importlib.util.spec_from_file_location("_test_card_bk", card / "eval" / "benchkit.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    problem = json.loads((card / "eval" / "leaderboard" / "problem.json").read_text())
-    problem["_dir"] = str(card / "eval" / "leaderboard")
+    problem = json.loads((card / "eval" / "problem" / "problem.json").read_text())
+    problem["_dir"] = str(card / "eval" / "problem")
     yield mod, problem, card, module
     for name in [m for m in sys.modules if m.startswith(module)]:
         sys.modules.pop(name, None)
     sys.meta_path[:] = [f for f in sys.meta_path if getattr(f, "pkg", None) != module]
 
 
-def test_the_judge_loads_the_sealed_reference_with_the_job_key_and_drops_it(card_lb, monkeypatch) -> None:
+def test_the_bench_loads_the_sealed_reference_with_the_job_key_and_drops_it(card_lb, monkeypatch) -> None:
     lbm, problem, card, module = card_lb
     monkeypatch.delenv("FK_REF_KEY", raising=False)
     with pytest.raises(PermissionError, match="FK_REF_KEY"):

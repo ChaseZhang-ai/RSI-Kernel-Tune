@@ -25,7 +25,7 @@ PAYLOAD FORMAT (one ASCII line, base85). A single file::
     mode "p"  plain:  body = zlib(source)
     mode "k"  keyed:  body = zlib(source) XOR keystream(key)
 
-A BUNDLE — every source file of a solution (a FlashInfer-Bench / SOL-ExecBench
+A BUNDLE — every source file of a solution (a compiled-submission-format
 solution JSON's ``sources``, or a directory) and its ``<file>.py::<function>`` entry::
 
     FKCR2 + mode + sha256(manifest) + u16 n + n x sha256(file) + body
@@ -39,7 +39,7 @@ A bundle loads as a PACKAGE that lives in memory only: file ``a/b.py`` becomes m
 ``<name>.a.b`` with ``__file__`` ``/nonexistent/closed_reference/<name>/a/b.py`` (never
 created). Relative imports resolve inside the package; so do the absolute imports a
 solution makes of its own files (``from helpers import x``, or a subdirectory it puts
-on ``sys.path`` from its ``__file__``, the way SOL-ExecBench runs a solution from its
+on ``sys.path`` from its ``__file__``, the way the harness runs a solution from its
 directory): each bundle module imports through its own ``__import__``, which maps a
 top-level name the bundle provides to the in-memory module and leaves every other
 name (torch, triton, cutlass, ...) to the real import system. So nothing of the
@@ -200,7 +200,7 @@ def bundle_manifest(files: dict, entry: str) -> dict:
 
 
 def bundle_from_solution(sol: dict) -> dict:
-    """The manifest of a FlashInfer-Bench / SOL-ExecBench solution JSON (its ``sources``
+    """The manifest of a solution JSON (its ``sources``
     and ``spec.entry_point``)."""
     files = {s["path"]: s.get("content") or "" for s in sol.get("sources") or []}
     return bundle_manifest(files, (sol.get("spec") or {}).get("entry_point") or "")

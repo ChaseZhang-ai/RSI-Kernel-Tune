@@ -99,18 +99,18 @@ PROBLEM = {
     "time_reference": False,
 }
 
-BENCH = '''from leaderboard import run_leaderboard_bench
+BENCH = '''from benchkit import run_bench
 
 if __name__ == "__main__":
-    raise SystemExit(run_leaderboard_bench())
+    raise SystemExit(run_bench())
 '''
 
 
 def _card(tmp_path: Path, kernel: str, problem: dict = PROBLEM) -> Path:
-    """A minimal self-contained card: eval/leaderboard.py + eval/bench.py + problem.json
+    """A minimal self-contained card: eval/benchkit.py + eval/bench.py + problem.json
     + kernel.py — what a generated card carries (no forgekernel import in the job)."""
     (tmp_path / "eval").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(EVAL_SRC / "leaderboard.py", tmp_path / "eval" / "leaderboard.py")
+    shutil.copy2(EVAL_SRC / "benchkit.py", tmp_path / "eval" / "benchkit.py")
     shutil.copy2(EVAL_SRC / "timing.py", tmp_path / "eval" / "timing.py")
     shutil.copy2(EVAL_SRC / "precision.py", tmp_path / "eval" / "precision.py")
     for f in ("closed_ref.py", "ncu_probe.py"):
@@ -118,8 +118,8 @@ def _card(tmp_path: Path, kernel: str, problem: dict = PROBLEM) -> Path:
         if src.is_file():
             shutil.copy2(src, tmp_path / "eval" / f)
     (tmp_path / "eval" / "bench.py").write_text(BENCH, encoding="utf-8")
-    (tmp_path / "eval" / "leaderboard").mkdir(exist_ok=True)
-    (tmp_path / "eval" / "leaderboard" / "problem.json").write_text(
+    (tmp_path / "eval" / "problem").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "eval" / "problem" / "problem.json").write_text(
         json.dumps(problem), encoding="utf-8")
     (tmp_path / "kernel.py").write_text(kernel, encoding="utf-8")
     return tmp_path

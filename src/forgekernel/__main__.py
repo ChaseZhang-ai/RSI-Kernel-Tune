@@ -1,13 +1,12 @@
 """forge -- ForgeKernel's command line (forge --version prints the version).
 
   forge init <op>                      -> tasks/<op>/ from tasks/_template/
-  forge init <op> --leaderboard <suite> --dataset ... --definition ... [--workload ...]
-                                       -> a task that IS one board problem
+  forge init <op> --from-kernels       -> tasks/<op>/ from a published kernel (kernels/)
   forge new tasks/<op> [--dry-run]     -> a new run of the task: .artifacts/<op>_<id>/
   forge run .artifacts/<op>_<id>       -> run it, or continue it where it stopped
   forge status [.artifacts/<op>_<id>]  -> where a run is (every run when omitted)
   forge harvest .artifacts/<op>_<id>   -> the knowledge-base write-up of a stopped run
-  forge export .artifacts/<op>_<id>    -> the best kernel (a board task's as the board's solution)
+  forge export .artifacts/<op>_<id>    -> the best kernel's source
 
 `forge run` exits 0 when the final confirmation meets the target (and the correctness
 monitor raised no alarm on that kernel), and 2 otherwise.
@@ -30,7 +29,6 @@ to configure one.
   forge <op> loop --workspace ...      -> run the two-layer loop
   forge <op> ncu-trace                 -> per-iteration NCU metric evolution (meta view)
   forge <op> window                    -> check window.toml (timed-window contract) + ledger
-  forge <op> leaderboard show|export   -> the card's problem / the board's solution JSON
   forge <op> monitor [--sha ...]       -> correctness monitor: the card's own check under
                                           stressed inputs + kernel-output watch (advisory)
   forge <op> submit|status|logs|stop   -> GPU-job harness (forgekernel.submit)
@@ -74,11 +72,6 @@ def main(argv: list[str] | None = None) -> int:
         from forgekernel.window_contract import main as window_main
 
         return window_main([argv[0], *argv[2:]])
-
-    if len(argv) >= 2 and argv[1] == "leaderboard":
-        from forgekernel.leaderboard import main as leaderboard_main
-
-        return leaderboard_main([argv[0], *argv[2:]])
 
     if len(argv) >= 2 and argv[1] == "monitor":
         from forgekernel.monitor.cli import main as monitor_main

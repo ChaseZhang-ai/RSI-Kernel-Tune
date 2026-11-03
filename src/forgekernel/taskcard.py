@@ -23,19 +23,18 @@ import json
 import re
 import shutil
 import subprocess
-import tomllib
 from pathlib import Path
 
-from forgekernel import leaderboard as lbmod
+from forgekernel import cardkit
 from forgekernel import scaffold, sealref
 from forgekernel.paths import repo_root, template_dir
 
 SUITE = "forgekernel"
-PROBLEM = lbmod.PROBLEM_FILE                     # eval/leaderboard/problem.json
-LB_DIR = lbmod.LEADERBOARD_DIR
+PROBLEM = cardkit.PROBLEM_FILE                   # eval/problem/problem.json
+PROBLEM_DIR = cardkit.PROBLEM_DIR
 KERNEL_FILE = {"cutedsl": "kernel.py", "cuda": "kernel.cu"}
 CUTE_ARCH = {"sm90": "sm_90a", "sm100": "sm_100a", "sm103": "sm_103a", "sm120": "sm_120a"}
-EVAL_FILES = ("leaderboard.py", "timing.py", "precision.py", "closed_ref.py", "ncu_probe.py")
+EVAL_FILES = ("benchkit.py", "timing.py", "precision.py", "closed_ref.py", "ncu_probe.py")
 NCU_PROBE_MODE = "cmd:ncu --csv --metrics gpu__time_active.sum python3 eval/ncu_probe.py"
 JOB_TIMEOUT_S = 1800
 FIRST_SEED = 1000
@@ -73,7 +72,6 @@ def card_problem(task, check, *, reference_impl: dict | None = None,
         workloads.append({"uuid": s.name, "axes": dict(s.axes), "input_groups": groups})
     out = {
         "schema": 1,
-        "suite": SUITE,
         "definition": definition,
         "workload": workloads[0],
         "dps": False,
@@ -83,9 +81,6 @@ def card_problem(task, check, *, reference_impl: dict | None = None,
                                              "name": "the judge (not timed)"},
         "time_reference": reference_impl is not None,
         "timing": task.target.timing,
-        # WP1: which measurement protocol the card carries ("device" default —
-        # the harness window alone; "board" adds the report-only board reading).
-        "timing_protocol": task.timing.protocol,
         "tolerance": {"outputs": dict(tolerance or {}),
                       "rule": "max|y - judge| / max|judge| per output, never below two units "
                               "of the output dtype's rounding"},
@@ -103,7 +98,7 @@ def card_problem(task, check, *, reference_impl: dict | None = None,
 
 def ncu_launch_count(problem: dict) -> int:
     """NCU's launch cap for a card whose profile window spreads its calls over every input
-    group of every shape (eval/leaderboard.py ncu_window)."""
+    group of every shape (eval/benchkit.py ncu_window)."""
     pairs = sum(len(w["workload"]["input_groups"]) for w in problem.get("group") or []) \
         or len(problem["workload"]["input_groups"])
     return min(256, max(24, 8 * pairs))
@@ -133,13 +128,13 @@ def write_card(run, task, check, machine) -> Path:
     scaffold.new_operator(task.name, kernel_file=kf, base_dir=run.dir,
                           templates_root=repo_root())
     op_dir = ops / task.name
-    lb_dir = op_dir / LB_DIR
-    lb_dir.mkdir(parents=True, exist_ok=True)
+    problem_dir = op_dir / PROBLEM_DIR
+    problem_dir.mkdir(parents=True, exist_ok=True)
     for name in EVAL_FILES:
         shutil.copy2(template_dir() / "eval" / name, op_dir / "eval" / name)
     for s in task.shapes:
         for g in s.inputs:
-            dst = lb_dir / _input_rel(s.name, g)
+            dst = problem_dir / _input_rel(s.name, g)
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(g.file, dst)
     problem = card_problem(task, check)
@@ -148,40 +143,35 @@ def write_card(run, task, check, machine) -> Path:
            "workload": ", ".join(s.name for s in task.shapes),
            "group_note": "Every input group of every shape is judged and timed; the gate is "
                          "the geomean over the groups, then over the shapes.\n"}
-    # WP1: a board-protocol card gets a bench that asks timing.py for the
-    # secondary, report-only board reading beside the gate window.
-    bench_tpl = BOARD_BENCH_TEMPLATE if task.timing.protocol == TIMING_PROTOCOL_BOARD \
-        else lbmod.BENCH_TEMPLATE
-    (op_dir / "eval" / "bench.py").write_text(bench_tpl.format(**fmt), encoding="utf-8")
-    (op_dir / "eval" / "ncu_run.py").write_text(lbmod.NCU_TEMPLATE.format(**fmt), encoding="utf-8")
-    if task.timing.protocol == TIMING_PROTOCOL_BOARD:
-        # The board-protocol secondary reading pins the board's own clocks for the
-        # whole job (the gate runs locked too — one measurement condition per job).
-        # A clock lock is permission-gated GPU state: it outlives the job that set
-        # it, so the entry clears it again on the way out, and it is refused loudly
-        # when it cannot be taken (require_lock).
-        entry_args = dict(clock=str(BOARD_CLOCK_SM_MHZ), mem_clock=str(BOARD_CLOCK_MEM_MHZ),
+    (op_dir / "eval" / "bench.py").write_text(cardkit.BENCH_TEMPLATE.format(**fmt),
+                                              encoding="utf-8")
+    (op_dir / "eval" / "ncu_run.py").write_text(cardkit.NCU_TEMPLATE.format(**fmt),
+                                                encoding="utf-8")
+    if task.protocol.sm_clock_mhz:
+        # The task's declared measurement clock ([protocol]) pins the whole job —
+        # one measurement condition per job. A clock lock is permission-gated GPU
+        # state: it outlives the job that set it, so the entry clears it again on
+        # the way out, and it is refused loudly when it cannot be taken.
+        entry_args = dict(clock=str(task.protocol.sm_clock_mhz),
+                          mem_clock=str(task.protocol.mem_clock_mhz or ""),
                           require_lock="1",
-                          clock_note=f"This card opts into the board-protocol secondary "
-                                     f"reading ([timing] protocol = \"board\"): it pins the "
-                                     f"SOL board's clocks (SM {BOARD_CLOCK_SM_MHZ} / mem "
-                                     f"{BOARD_CLOCK_MEM_MHZ} MHz) and its eval JSON carries "
-                                     f"the board reading beside the gate. A clock lock needs "
-                                     f"permission to set, is GPU state — it outlives the job "
-                                     f"and slows every later tenant — and is cleared on exit.")
+                          clock_note=f"This card declares its measurement clock ([protocol] "
+                                     f"sm_clock_mhz = {task.protocol.sm_clock_mhz}"
+                                     + (f" / mem_clock_mhz = {task.protocol.mem_clock_mhz}"
+                                        if task.protocol.mem_clock_mhz else "")
+                                     + f" MHz). A clock lock needs permission to set, is "
+                                       f"GPU state — it outlives the job and slows every "
+                                       f"later tenant — and is cleared on exit; the card "
+                                       f"refuses to time when the lock does not hold.")
     else:
         entry_args = dict(clock="", mem_clock="", require_lock="0",
                           clock_note="A task runs at the GPU's own clocks unless "
                                      "LB_SM_CLOCK_MHZ / LB_MEM_CLOCK_MHZ pin one (that "
                                      "needs permission to lock); the eval JSON records "
-                                     "which (leaderboard.clock).")
+                                     "which (bench.clock).")
     entry = op_dir / "gpu_entry.sh"
-    text = lbmod.GPU_ENTRY_TEMPLATE.format(
+    text = cardkit.render_gpu_entry(
         name=task.name, suite=SUITE, arch=CUTE_ARCH.get(task.arch, task.arch + "a"),
-        # WP11: the merged eval+NCU task and the build-cache block ride every
-        # generated card (both are dormant without their env/config switches).
-        wp11_cache_block=lbmod._WP11_CACHE_BLOCK,
-        wp11_allncu_case=lbmod._WP11_ALLNCU_CASE,
         **entry_args)
     entry.write_text(text.replace("--launch-count 24", f"--launch-count {ncu_launch_count(problem)}"),
                      encoding="utf-8")
@@ -240,113 +230,6 @@ def set_tolerance(op_dir: Path, tolerance: dict, how: str) -> None:
     if (ref / PROBLEM).exists():
         shutil.copy2(Path(op_dir) / PROBLEM, ref / PROBLEM)
         _commit(ref, "Chore: freeze the judge's tolerance")
-
-
-BOARD_DIR = "leaderboard"           # tasks/<op>/leaderboard/{card,ref}
-
-
-# --- WP1: the board-protocol secondary reading ---------------------------------
-#
-# task.toml [timing] protocol = "board" opts a task card into carrying the
-# SOL-ExecBench board's reading beside its gate: the board's clock_lock preset
-# pinned by gpu_entry.sh (permission-gated GPU state), L2 flushed before every
-# timed call, single-call median — report-only, the gate never reads it. The
-# default ("device") renders the card byte for byte as before.
-
-TIMING_PROTOCOL_BOARD = "board"     # == task.TIMING_PROTOCOL_BOARD
-BOARD_CLOCK_SM_MHZ = 1500           # SUITE_CLOCK (forgekernel/leaderboard.py), SOL B200
-BOARD_CLOCK_MEM_MHZ = 3996          # preset
-
-BOARD_BENCH_TEMPLATE = '''"""{name} — task bench with the board-protocol secondary reading.
-
-The primary gate path is the standard task bench (eval/leaderboard.py, the
-forgekernel task suite): burn-in, then mirrored reference / kernel / kernel /
-reference per input group, geomean over the groups. This card opted into
-``[timing] protocol = "board"`` (task.toml), so timing.py additionally takes ONE
-board-protocol reading per workload — L2 flushed before every timed call,
-single-call median, the job pinned to the board's clocks by gpu_entry.sh — and
-reports it under ``performance.board`` (and per workload). REPORT-ONLY: the
-gate, the best and every verdict read the gate window; the board number exists
-because a kernel tuned under the warm-L2 pipelined window can win here and lose
-there (docs/leaderboards.md).
-"""
-
-import timing
-
-timing.SECONDARY_PROTOCOL = "board"   # WP1: flushed-L2 single-call reading per workload
-
-from leaderboard import run_leaderboard_bench
-
-if __name__ == "__main__":
-    raise SystemExit(run_leaderboard_bench())
-'''
-
-
-def install_board_trees(run, task, machine) -> Path:
-    """A leaderboard task's trees: its frozen card (and recon tree) from the run's snapshot,
-    with this machine's submit.toml, committed."""
-    lb = task.leaderboard
-    op_dir = run.operators_dir / task.name
-    run.operators_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(lb.card, op_dir)
-    trees = [(op_dir, JOB_TIMEOUT_S)]
-    if lb.ref is not None:
-        ref = run.operators_dir / ref_tree(task.name)
-        shutil.copytree(lb.ref, ref)
-        trees.append((ref, 2700))
-    for tree, timeout in trees:
-        write_submit(tree, task, machine, timeout=timeout)
-        _ignore(tree, "loop.toml")
-        _git_init(tree, f"Chore: the {task.name} board problem, from its task")
-    return op_dir
-
-
-def write_board_loop_toml(run, task, op_dir: Path, *, deny: list[str], ncu: bool = True) -> Path:
-    """loop.toml for a leaderboard task: the card's own suggestion (loop.toml.example,
-    written by `forge init --leaderboard`) with this run's hardware, deny list and NCU."""
-    example = Path(op_dir) / "loop.toml.example"
-    cfg = tomllib.loads(example.read_text(encoding="utf-8")) if example.is_file() else {}
-    lc = dict(cfg.get("loop") or {})
-    lc["kb_arch"] = task.arch
-    lc["gate_window"] = task.target.timing
-    lc["ref_source_paths"] = sorted(dict.fromkeys(
-        [str(p) for p in lc.get("ref_source_paths", [])] + list(deny)))
-    lc.setdefault("ref_source_urls", [])
-    lc.setdefault("ref_from_goal", "off")
-    if ncu and timeline_probe_auto(task):   # --- WP9 (C1): latency-shaped -> auto
-        lc.setdefault("timeline_probe", "auto")
-    # --- WP8: teacher-side prior supply (absent keys -> no line, the file then
-    # reads exactly as before). prior_art resolves to the run snapshot's copy
-    # (the driver uses absolute values as given); carry travels inside the
-    # snapshot, so the card points the loop at the snapshot's carry/ directly.
-    if task.teacher.prior_survey:
-        lc["teacher_prior_survey"] = True
-    if task.teacher.prior_art:
-        lc["teacher_prior_art"] = str(
-            _snapshot_path(run, task, task.dir / task.teacher.prior_art))
-    if (task.dir / "carry").is_dir():
-        lc["carry_dir"] = str(run.task_dir / "carry")
-    if not ncu:
-        lc.update(ncu_available=False, job_env_preflight="warn", timeline_probe="off",
-                  stall_pricing=False, orch_census=False)
-    lines = ["# GENERATED by `forge run` from the card's loop.toml.example -- not a place to",
-             "# configure anything.", "[loop]"]
-    lines += [f"{k} = {_toml_value(v)}" for k, v in lc.items()]
-    p = Path(op_dir) / "loop.toml"
-    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return p
-
-
-def _toml_value(v) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, (int, float)):
-        return repr(v)
-    if isinstance(v, str):
-        return json.dumps(v)
-    if isinstance(v, list):
-        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
-    raise TypeError(f"{type(v).__name__} is not a loop.toml value")
 
 
 def write_submit(tree: Path, task, machine, timeout: int = JOB_TIMEOUT_S) -> Path:
@@ -486,7 +369,7 @@ def render_kernel_stub(task, check) -> str:
             f"{task.name} -- the student's kernel, CUDA C++ (one file, its own torch binding).",
             "", "Value-returning: return the output tensor.", "", "Shapes (one kernel serves all):",
             *shapes.splitlines(), "Inputs:", *ins.splitlines(), "Outputs:", *outs.splitlines(),
-            "", "Judged against the task's judge (eval/leaderboard/problem.json, \"reference\")."))
+            "", "Judged against the task's judge (eval/problem/problem.json, \"reference\")."))
         return f"""{comment}
 
 #include <torch/extension.h>
@@ -511,8 +394,8 @@ Inputs:
 Outputs:
 {outs}
 
-Judged against the task's judge (eval/leaderboard/problem.json, "reference") on every input
-group of every shape, and timed on all of them (eval/leaderboard.py).
+Judged against the task's judge (eval/problem/problem.json, "reference") on every input
+group of every shape, and timed on all of them (eval/benchkit.py).
 """
 
 import torch  # noqa: F401

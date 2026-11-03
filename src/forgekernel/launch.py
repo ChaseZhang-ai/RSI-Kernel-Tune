@@ -38,7 +38,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from forgekernel import judge as judge_mod
@@ -48,7 +47,7 @@ from forgekernel.agents import agent_command
 from forgekernel.localenv import MachineError, load_machine
 from forgekernel.paths import OPERATORS_ENV, repo_root
 from forgekernel.runs import RunError, new_run, open_run
-from forgekernel.task import (MODE_BLACKBOX, MODE_GENERATE, MODE_LEADERBOARD, MODE_SOURCE,
+from forgekernel.task import (MODE_BLACKBOX, MODE_GENERATE, MODE_SOURCE,
                               TaskError, load_task)
 
 TASKS_DIR = "tasks"
@@ -64,20 +63,24 @@ def _say(msg: str) -> None:
 
 # -- init -----------------------------------------------------------------------------------
 
-BOARD_TASK_TOML = """# {op} -- one {suite} problem, frozen from the board (`forge init --leaderboard`).
-# The board decides the judge, the inputs and the clock; the card below carries them.
+FROM_KERNELS_TASK_TOML = """# {op} -- a task frozen from the published kernel kernels/{kernel_dir} (`forge init --from-kernels`).
+# The published kernel is the reference (sealed into the card's jobs by `forge run`, its
+# source withheld); the judge is written from description.md, then calibrated against the
+# reference on the GPU.
 
 [task]
 language = "{language}"
-arch     = "sm100"
+arch     = "{arch}"
 
-[leaderboard]
-suite = "{suite}"
-card  = "leaderboard/card"{ref_line}
+[reference]
+run      = "reference/run.py:run"
+blackbox = true
 
 # Everything else takes its value from global_config/; write only what changes.
+# [protocol]
+# sm_clock_mhz = 1500                 # optional: pin + verify the measurement clock
 # [target]
-# ratio  = 1.2                       # x the reference the card declares
+# ratio  = 1.05                       # x the published kernel's speed (true overtaking)
 # [budget]
 # hours    = 4
 # max_meta = 3
@@ -85,10 +88,11 @@ card  = "leaderboard/card"{ref_line}
 
 
 def cmd_init(argv) -> int:
-    """tasks/<op>/: a copy of tasks/_template/ to fill in; with --leaderboard, one board
-    problem; with any other option, an operator tree made directly (forgekernel.scaffold)."""
-    if "--leaderboard" in argv or any(a.startswith("--leaderboard=") for a in argv):
-        return new_board_task(argv)
+    """tasks/<op>/: a copy of tasks/_template/ to fill in; with --from-kernels, a task
+    frozen from a published kernel (kernels/); with any other option, an operator tree
+    made directly (forgekernel.scaffold)."""
+    if any(a.startswith("--from-kernels") for a in argv):
+        return new_kernels_task(argv)
     if any(a.startswith("-") and a not in ("-h", "--help") for a in argv):
         from forgekernel.scaffold import main as scaffold_main
         return scaffold_main(argv)
@@ -106,36 +110,85 @@ def cmd_init(argv) -> int:
     return 0
 
 
-def new_board_task(argv) -> int:
-    """tasks/<op>/ for one board problem: the card `forge init --leaderboard` generates (the
-    board's judge, inputs, clock and, when one is given, its sealed reference with a recon
-    tree), frozen under leaderboard/, and a task.toml naming it."""
-    from forgekernel import scaffold
-    if not argv or argv[0].startswith("-"):
-        sys.stderr.write("[forge] usage: forge init <op> --leaderboard <suite> ...\n")
-        return 2
-    op = argv[0]
-    d = repo_root() / TASKS_DIR / op
+def _find_kernel_tree(op: str, arch: str | None) -> Path:
+    """kernels/<family>/<op>/<arch>/kernel.py for the op (one family expected)."""
+    root = repo_root() / "kernels"
+    trees = sorted(p for p in root.glob(f"*/{op}/*/kernel.py") if p.is_file())
+    if arch:
+        trees = [t for t in trees if t.parent.name == arch]
+    if len(trees) != 1:
+        have = ", ".join(f"{t.parent.parent.name}/{t.parent.name}" for t in trees) or "none"
+        raise SystemExit(f"[forge] kernels/: {op}: {len(trees)} kernel tree(s) ({have}); "
+                         f"pass --arch to disambiguate")
+    return trees[0]
+
+
+def new_kernels_task(argv) -> int:
+    """tasks/<op>/ from a published kernel (``forge init <op> --from-kernels``): the
+    kernel's own file is the reference (sealed black-box by `forge run`), its docstring
+    is the frozen contract seeding description.md, and shapes.json starts with one
+    campaign shape to fill from that contract. The framework's own task supply: the
+    self-evolution has a problem to work on, and beating the published kernel here is
+    a true overtaking."""
+    import ast
+    p = argparse.ArgumentParser(prog="forge init --from-kernels",
+                                description="Create tasks/<op>/ from a published kernel.")
+    p.add_argument("op")
+    p.add_argument("--arch", default=None, help="the kernel tree's GPU dir (h100 / b200); "
+                                                "needed when the op ships several")
+    args = p.parse_args(argv)
+    d = repo_root() / TASKS_DIR / args.op
     if d.exists():
         sys.stderr.write(f"[forge] {d} already exists\n")
         return 2
-    with tempfile.TemporaryDirectory(prefix="forge-new-") as tmp:
-        rc = scaffold.main([*argv, "--base-dir", tmp, "--no-git"])
-        card = Path(tmp) / "operators" / op
-        if rc != 0 or not card.is_dir():
-            return rc          # --list-workloads, or a refusal already explained
-        (d / taskcard.BOARD_DIR).mkdir(parents=True)
-        shutil.copytree(card, d / taskcard.BOARD_DIR / "card")
-        ref = Path(tmp) / "operators" / taskcard.ref_tree(op)
-        if ref.is_dir():
-            shutil.copytree(ref, d / taskcard.BOARD_DIR / "ref")
-    problem = json.loads((d / taskcard.BOARD_DIR / "card" / taskcard.PROBLEM).read_text())
-    language = "cuda" if str(problem.get("kernel_file", "")).endswith(".cu") else "cutedsl"
-    ref_line = '\nref   = "leaderboard/ref"' if (d / taskcard.BOARD_DIR / "ref").is_dir() else ""
-    (d / "task.toml").write_text(BOARD_TASK_TOML.format(
-        op=op, suite=problem["suite"], language=language, ref_line=ref_line), encoding="utf-8")
-    _say(f"wrote {d}/ ({problem['suite']} {problem['definition']['name']}): adjust task.toml, "
-         f"then `forge new {TASKS_DIR}/{op}`")
+    kfile = _find_kernel_tree(args.op, args.arch)
+    if kfile.suffix == ".cu":
+        sys.stderr.write(f"[forge] {kfile}: a CUDA C++ published kernel is not sealed as a "
+                         f"source reference yet (binref path is a P2 backlog item)\n")
+        return 2
+    src = kfile.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    doc = ast.get_docstring(tree) or ""
+    entry = None
+    for node in reversed(tree.body):        # the published kernel's entry: its last top def
+        if isinstance(node, ast.FunctionDef) and not node.name.startswith("_"):
+            entry = node.name
+            break
+    if entry is None:
+        sys.stderr.write(f"[forge] {kfile}: no top-level entry function found\n")
+        return 2
+
+    d.mkdir(parents=True)
+    task_toml = FROM_KERNELS_TASK_TOML.format(
+        op=args.op, kernel_dir=kfile.parent.parent.name + "/" + kfile.parent.name,
+        language="cutedsl",
+        arch={"h100": "sm90", "b200": "sm100"}.get(kfile.parent.name, kfile.parent.name))
+    (d / "task.toml").write_text(task_toml, encoding="utf-8")
+    (d / "reference").mkdir()
+    (d / "reference" / "run.py").write_text(
+        src + ("" if src.endswith("\n") else "\n")
+        + f"\n\n# `forge init --from-kernels`: the published kernel, exposed under the\n"
+          f"# task reference's entry name. Sealed into the card's jobs by `forge run`\n"
+          f"# (forgekernel.sealref) -- the agents run, time and profile it, never read it.\n"
+          f"run = {entry}\n",
+        encoding="utf-8")
+    (d / "description.md").write_text(
+        f"# {args.op}\n\n"
+        f"Published kernel `kernels/{kfile.parent.parent.name}/{kfile.parent.name}/kernel.py` "
+        f"(its docstring below is the frozen contract: axes, dtypes, input semantics). The "
+        f"reference is that kernel, sealed.\n\n"
+        f"## Semantics (from the published kernel)\n\n{doc}\n\n"
+        f"## Signature\n\n"
+        f"- Fill every input/output: name, shape over the axes in shapes.json, dtype -- from "
+        f"the frozen contract above.\n"
+        f"- The judge is written from this file alone; calibrate it against the sealed "
+        f"reference on the GPU before the loop.\n",
+        encoding="utf-8")
+    (d / "shapes.json").write_text(
+        '[\n  {"name": "campaign", "axes": {}}\n]\n', encoding="utf-8")
+    _say(f"wrote {d}/ from {kfile.relative_to(repo_root())}: fill shapes.json's axes and "
+         f"description.md's signature from the frozen contract, then "
+         f"`forge new {TASKS_DIR}/{args.op}`")
     return 0
 
 
@@ -143,13 +196,9 @@ def new_board_task(argv) -> int:
 
 
 def describe(task, machine) -> str:
-    if task.mode == MODE_LEADERBOARD:
-        shapes = "; ".join(f"{s.name} {json.dumps(s.axes)}" for s in task.shapes) \
-            + " (inputs per the board's protocol)"
-    else:
-        shapes = "; ".join(f"{s.name} {json.dumps(s.axes)} ({len(s.inputs)} input group(s) given"
-                           + (f", {s.groups_to_add} to add" if s.groups_to_add else "") + ")"
-                           for s in task.shapes)
+    shapes = "; ".join(f"{s.name} {json.dumps(s.axes)} ({len(s.inputs)} input group(s) given"
+                       + (f", {s.groups_to_add} to add" if s.groups_to_add else "") + ")"
+                       for s in task.shapes)
     lines = [f"task {task.name}: {task.language} on {task.arch}, mode {task.mode}",
              "  shapes: " + shapes]
     if task.reference is not None:
@@ -339,12 +388,6 @@ def deny_paths(run, task) -> list[str]:
         if src.is_dir() and (src / "reference").exists():
             out.append(str(src / "reference"))
         out += [str(p) for p in task.reference.deny]
-    if task.leaderboard is not None:
-        # the frozen card carries the sealed reference and its key, the recon tree too
-        out.append(str(task.leaderboard.card.parent))
-        src = Path(run.record().get("task_source", ""))
-        if (src / taskcard.BOARD_DIR).is_dir():
-            out.append(str(src / taskcard.BOARD_DIR))
     for other in runs_mod.list_runs(run.dir.parent):
         if other.dir != run.dir:
             out.append(str(other.dir))
@@ -395,8 +438,6 @@ def confirmed_at_target(run, task) -> bool:
 
 
 def _drive(run, task, machine, *, resuming: bool, harvest_only: bool) -> int:
-    if task.mode == MODE_LEADERBOARD:
-        return _drive_board(run, task, machine, resuming=resuming, harvest_only=harvest_only)
     check_dir = run.dir / judge_mod.CHECK_DIR
     op_dir = run.operators_dir / task.name
     deny = deny_paths(run, task)
@@ -450,24 +491,6 @@ def _drive(run, task, machine, *, resuming: bool, harvest_only: bool) -> int:
         _say("NCU cannot profile on this machine: the run degrades to timing only (no "
              "per-kernel signatures, no timeline / stall pricing)")
     taskcard.write_loop_toml(run, task, op_dir, deny=deny, ncu=ncu)
-    taskcard.clone_workspace(op_dir, run.ws)
-    return run_loop(run, task, resuming=resuming, harvest_only=harvest_only)
-
-
-def _drive_board(run, task, machine, *, resuming: bool, harvest_only: bool) -> int:
-    """A board problem: the board's judge and clock come with the card, so there is no
-    judge to write and nothing to calibrate."""
-    op_dir = run.operators_dir / task.name
-    deny = deny_paths(run, task)
-    if not op_dir.exists():
-        run.update(stage="installing the board's trees")
-        taskcard.install_board_trees(run, task, machine)
-    else:
-        _refresh_machine(run, task, machine)
-    run.update(stage="probing NCU")
-    ncu = probe_ncu(task, op_dir)
-    run.update(ncu_available=ncu, stage="the loop")
-    taskcard.write_board_loop_toml(run, task, op_dir, deny=deny, ncu=ncu)
     taskcard.clone_workspace(op_dir, run.ws)
     return run_loop(run, task, resuming=resuming, harvest_only=harvest_only)
 
@@ -658,15 +681,10 @@ def write_report(run, task, rc: int) -> Path:
 
 
 def cmd_export(argv) -> int:
-    """The run's best kernel: a leaderboard task's as the board's solution JSON, any other
-    task's as its source."""
-    from forgekernel import leaderboard as lbmod
+    """The run's best kernel: its source."""
     p = argparse.ArgumentParser(prog="forge export")
     p.add_argument("run")
     p.add_argument("--out", default=None, help="write here (default: stdout)")
-    p.add_argument("--name", default=None, help="the solution's name")
-    p.add_argument("--author", default="forgekernel")
-    p.add_argument("--hardware", default="B200")
     args = p.parse_args(argv)
     try:
         run = open_run(args.run)
@@ -678,35 +696,11 @@ def cmd_export(argv) -> int:
     if best is None or not best.get("kernel"):
         sys.stderr.write("[forge] the run has no confirmed best kernel to export yet\n")
         return 2
-    if task.mode != MODE_LEADERBOARD:
-        # no board to submit to: the kernel source itself
-        if args.out:
-            Path(args.out).write_text(best["kernel"], encoding="utf-8")
-            _say(f"wrote {args.out} (the best kernel, {best['sha'][:12]})")
-        else:
-            sys.stdout.write(best["kernel"])
-        return 0
-    card = run.operators_dir / task.name
-    with tempfile.TemporaryDirectory(prefix="forge-export-") as tmp:
-        # the card with the best kernel in place of its working copy
-        tmp_card = Path(tmp) / task.name
-        shutil.copytree(card, tmp_card, ignore=shutil.ignore_patterns(".git", "student",
-                                                                     "*.local.toml"))
-        kf = json.loads((card / taskcard.PROBLEM).read_text()).get("kernel_file", "kernel.py")
-        (tmp_card / kf).write_text(best["kernel"], encoding="utf-8")
-        try:
-            sol = lbmod.export_solution(tmp_card, name=args.name or f"{task.name}_forgekernel",
-                                        author=args.author, hardware=args.hardware)
-        except (OSError, ValueError) as e:
-            sys.stderr.write(f"[forge] export refused: {e}\n")
-            return 2
-    text = json.dumps(sol, indent=2) + "\n"
     if args.out:
-        Path(args.out).write_text(text, encoding="utf-8")
-        _say(f"wrote {args.out} ({task.leaderboard.suite} solution {sol['name']}, best "
-             f"{best['sha'][:12]})")
+        Path(args.out).write_text(best["kernel"], encoding="utf-8")
+        _say(f"wrote {args.out} (the best kernel, {best['sha'][:12]})")
     else:
-        sys.stdout.write(text)
+        sys.stdout.write(best["kernel"])
     return 0
 
 

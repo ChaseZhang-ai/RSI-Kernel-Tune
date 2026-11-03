@@ -90,13 +90,6 @@ MIN_INPUT_GROUPS = 3
 MODE_SOURCE = "source"
 MODE_BLACKBOX = "blackbox"
 MODE_GENERATE = "generate"   # no reference: a /goal session writes one, then source mode
-MODE_LEADERBOARD = "leaderboard"   # one board problem: the board's judge, inputs and clock
-
-# A leaderboard task (`forge init <op> --leaderboard ...`) carries the card generated from
-# the board problem, frozen: [leaderboard] card = the card's directory, ref = its recon tree
-# when the reference is sealed. Its shapes are the board's workloads; it has no
-# description.md / shapes.json / [reference] of its own.
-LEADERBOARD_PROBLEM = "eval/leaderboard/problem.json"
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # `forge <name> ...` dispatches these as commands, so no task (operator tree) may be one.
@@ -114,11 +107,9 @@ _KEYS = {
                # its stop from the analytic floor: target = floor x (1 + margin).
                # Advisory, default absent (off); parsed by _read_target.
                "floor_margin"},
-    # WP1: [timing] protocol = "device" (the default harness window, unchanged) |
-    # "board" (the card also carries a board-protocol SECONDARY reading: locked
-    # clocks + L2 flushed before every timed call + single-call median,
-    # report-only — the gate never reads it).
-    "timing": {"protocol"},
+    # WP24: [protocol] declares the measurement clock the card's jobs pin and verify
+    # (MHz; a key left out = run at the GPU's own clocks). Absent table = unlocked.
+    "protocol": {"sm_clock_mhz", "mem_clock_mhz"},
     # WP8: [agent.teacher] prior_survey (a teacher-side SOTA survey before
     # recon/distill, writing notes/prior_art.md per skills/sota-survey/) and
     # prior_art (an offline dossier, resolved relative to the task directory).
@@ -126,7 +117,6 @@ _KEYS = {
     "agent.role": {"backend", "provider", "model", "effort", "timeout_s",
                    "prior_survey", "prior_art"},
     "budget": {"hours", "max_meta", "reference_hours"},
-    "leaderboard": {"suite", "card", "ref"},
 }
 _KEYS["agent"] = _KEYS["agent.role"] | set(ROLES)
 
@@ -153,13 +143,10 @@ class Shape:
     name: str
     axes: dict
     inputs: tuple = ()    # InputGroup, in the order shapes.json lists them
-    board: bool = False   # a board workload: its inputs follow the board's protocol
 
     @property
     def groups_to_add(self) -> int:
         """How many input groups the teacher picks for this shape."""
-        if self.board:
-            return 0
         return max(0, MIN_INPUT_GROUPS - len(self.inputs))
 
 
@@ -187,17 +174,12 @@ class Target:
     floor_margin: float = 0.0
 
 
-# WP1: which measurement protocol the card carries. "device" (the default) is the
-# historical card, byte for byte; "board" adds a board-protocol secondary reading
-# (report-only) and pins the board's clocks, permission-gated.
-TIMING_PROTOCOL_DEVICE = "device"
-TIMING_PROTOCOL_BOARD = "board"
-TIMING_PROTOCOLS = (TIMING_PROTOCOL_DEVICE, TIMING_PROTOCOL_BOARD)
-
-
+# WP24: the measurement clock a task declares ([protocol] in task.toml), pinned and
+# verified by the generated card's gpu_entry.sh. Absent = run at the GPU's own clocks.
 @dataclass(frozen=True)
-class Timing:
-    protocol: str = TIMING_PROTOCOL_DEVICE
+class Protocol:
+    sm_clock_mhz: int | None = None
+    mem_clock_mhz: int | None = None
 
 
 @dataclass(frozen=True)
@@ -222,13 +204,6 @@ class Budget:
 
 
 @dataclass(frozen=True)
-class Leaderboard:
-    suite: str
-    card: Path            # absolute: the frozen card
-    ref: Path | None      # absolute: its recon tree, when the reference is sealed
-
-
-@dataclass(frozen=True)
 class Task:
     name: str
     dir: Path
@@ -242,13 +217,10 @@ class Task:
     student: AgentSpec
     budget: Budget
     notes: tuple = field(default=())   # non-fatal remarks worth printing at launch
-    leaderboard: Leaderboard | None = None
-    timing: Timing = field(default_factory=Timing)
+    protocol: Protocol = field(default_factory=Protocol)
 
     @property
     def mode(self) -> str:
-        if self.leaderboard is not None:
-            return MODE_LEADERBOARD
         if self.reference is None:
             return MODE_GENERATE
         if self.reference.blackbox or self.reference.source is None:
@@ -296,20 +268,11 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
             problems.append(f"[task] arch = {arch!r}: there is no hardware knowledge base for "
                             f"{language} on it ({kb} is missing)")
 
-    board = _read_leaderboard(d, cfg, problems) if "leaderboard" in cfg else None
-    if board is None:
-        description = _read_description(d, problems)
-        shapes = _read_shapes(d, problems)
-    else:
-        p = d / DESCRIPTION_FILE
-        description = p.read_text(encoding="utf-8") if p.is_file() else ""
-        shapes = _board_shapes(board, problems)
-        if "reference" in own:
-            problems.append("[reference]: a leaderboard task's reference is the board's "
-                            "(sealed into its card at `forge new`); leave the table out")
+    description = _read_description(d, problems)
+    shapes = _read_shapes(d, problems)
     reference = _read_reference(d, cfg, problems)
     target = _read_target(cfg, problems)
-    timing = _read_timing(cfg, problems)
+    protocol = _read_protocol(cfg, problems)
     teacher = _read_agent(cfg.get("agent", {}), "teacher", problems)
     student = _read_agent(cfg.get("agent", {}), "student", problems)
     budget = _read_budget(cfg, problems)
@@ -323,9 +286,7 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
     if problems:
         raise TaskError(d, problems)
     notes = []
-    if board is not None:
-        notes.append(f"{board.suite} problem: the board's judge, inputs and clock")
-    elif reference is None:
+    if reference is None:
         notes.append("no [reference]: a /goal session writes one first "
                      f"(budget {budget.reference_hours:g} h)")
     for s in shapes:
@@ -334,41 +295,7 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
                          f"adds {s.groups_to_add}")
     return Task(name=name, dir=d, language=language, arch=arch, description=description,
                 shapes=tuple(shapes), reference=reference, target=target, teacher=teacher,
-                student=student, budget=budget, notes=tuple(notes), leaderboard=board,
-                timing=timing)
-
-
-BOARD_SUITES = ("flashinfer-bench", "sol-execbench")
-
-
-def _read_leaderboard(d: Path, cfg: dict, problems: list[str]) -> Leaderboard | None:
-    lb = cfg.get("leaderboard") if isinstance(cfg.get("leaderboard"), dict) else {}
-    suite = lb.get("suite")
-    if suite not in BOARD_SUITES:
-        problems.append(f"[leaderboard] suite must be one of {list(BOARD_SUITES)}, got {suite!r}")
-    card = _inside(d, lb.get("card"), "[leaderboard] card", problems)
-    if card is not None and not (card / LEADERBOARD_PROBLEM).is_file():
-        problems.append(f"[leaderboard] card: {card} holds no {LEADERBOARD_PROBLEM}")
-        card = None
-    ref = _inside(d, lb["ref"], "[leaderboard] ref", problems) if "ref" in lb else None
-    if card is None or suite not in BOARD_SUITES:
-        return None
-    return Leaderboard(suite=suite, card=card, ref=ref)
-
-
-def _board_shapes(board: Leaderboard | None, problems: list[str]) -> list[Shape]:
-    """The board workloads the frozen card judges and times, as shapes."""
-    if board is None:
-        return []
-    try:
-        problem = json.loads((board.card / LEADERBOARD_PROBLEM).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        problems.append(f"[leaderboard] card: {LEADERBOARD_PROBLEM} does not read: {e}")
-        return []
-    rows = problem.get("group") or [{"name": str(problem["workload"].get("uuid", "workload")),
-                                     "workload": problem["workload"]}]
-    return [Shape(name=str(r.get("name")), axes=dict(r["workload"].get("axes") or {}),
-                  board=True) for r in rows]
+                student=student, budget=budget, notes=tuple(notes), protocol=protocol)
 
 
 def read_task_toml(task_dir: str | Path) -> dict:
@@ -440,8 +367,7 @@ def dump_task_toml(cfg: dict) -> str:
         raise TypeError(f"{type(v).__name__} is not a task.toml value")
 
     out = []
-    for table in ("task", "leaderboard", "reference", "target", "timing", "agent",
-                  "budget"):
+    for table in ("task", "protocol", "reference", "target", "agent", "budget"):
         body = cfg.get(table)
         if not isinstance(body, dict):
             continue
@@ -698,15 +624,21 @@ def _read_target(cfg: dict, problems: list[str]) -> Target:
                   floor_margin=float(margin) if margin is not None else 0.0)
 
 
-def _read_timing(cfg: dict, problems: list[str]) -> Timing:
-    """[timing] protocol: absent = "device" (the historical card, byte for byte)."""
-    t = _table(cfg, "timing", problems)
-    protocol = t.get("protocol", TIMING_PROTOCOL_DEVICE)
-    if protocol not in TIMING_PROTOCOLS:
-        problems.append(f"[timing] protocol must be one of {list(TIMING_PROTOCOLS)}, "
-                        f"got {protocol!r}")
-        protocol = TIMING_PROTOCOL_DEVICE
-    return Timing(protocol=protocol)
+def _read_protocol(cfg: dict, problems: list[str]) -> Protocol:
+    """[protocol]: the measurement clock the card's jobs pin (MHz; a key left out =
+    run at the GPU's own clocks). Positive integers only."""
+    t = _table(cfg, "protocol", problems)
+
+    def mhz(key: str) -> int | None:
+        v = t.get(key)
+        if v is None:
+            return None
+        if not isinstance(v, int) or isinstance(v, bool) or v <= 0:
+            problems.append(f"[protocol] {key} must be a positive integer (MHz), got {v!r}")
+            return None
+        return v
+
+    return Protocol(sm_clock_mhz=mhz("sm_clock_mhz"), mem_clock_mhz=mhz("mem_clock_mhz"))
 
 
 def _read_agent(agents: dict, role: str, problems: list[str]) -> AgentSpec:

@@ -460,6 +460,53 @@ class RealBackend:
             print(f"{head}; resubmitting ({refusals}/{self.clock_lock_retries})", flush=True)
             time.sleep(self.clock_lock_retry_sleep_s)
 
+    def submit_gpu_start(self, branch: str, mode: str) -> int:
+        """WP19 (task 3): the background lane's half of an overlapped submit —
+        submit (or adopt) and return the job id WITHOUT polling. The job's runner
+        detaches and runs under the GPU lock exactly as a foreground job would
+        (``gpu_lock`` semantics untouched); the caller collects with
+        ``submit_gpu_finish``. The fused ``submit_gpu`` above stays the only
+        gate-facing path."""
+        sub = self._retry_call(
+            lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode),
+            what=f"submit {mode}")
+        m = re.search(r"job=(\d+)", sub.stdout) or re.search(r'"id":\s*(\d+)', sub.stdout)
+        if not m:
+            raise BackendError(
+                f"could not parse job id from submit output:\n{sub.stdout[-800:]}")
+        job = m.group(1)
+        self._record_inflight(job, branch, mode)
+        self.last_job_id = job
+        self.last_mode = mode
+        return job
+
+    def submit_gpu_finish(self, job: str, mode: str) -> str:
+        """WP19 (task 3): the lane's collection half — poll to terminal, fetch the
+        log. A runner-lost or transport-failed lane job raises; the lane drops the
+        reading rather than retrying into the agent-turn window it must vacate."""
+        status = poll_until_terminal(
+            lambda: self._job_status(job), job, poll_s=self.poll_s,
+            timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+        if status in _LOST:
+            self._clear_inflight()
+            raise RunnerLostError(f"lane job {job} lost its runner without a verdict")
+        try:
+            log = self._fetch_log(job, status, task=_entry_task(mode))
+        except BackendError:
+            self._clear_inflight()
+            raise
+        self._clear_inflight()
+        if TRANSPORT_ERROR_MARKER in log:
+            detail = next((ln.strip() for ln in log.splitlines()
+                           if TRANSPORT_ERROR_MARKER in ln), TRANSPORT_ERROR_MARKER)
+            raise JobTransportError(
+                f"the lane job could not be delivered: {detail[:400]}")
+        if clock_lock_refusal(log) is not None:
+            # a lane reading taken without the declared clock is not a reading at
+            # all: dropped, the same rule the gate path resubmits under
+            raise BackendError(f"lane job {job}: the card's clock lock did not hold")
+        return log
+
     def _submit_gpu_once(self, branch: str, mode: str) -> str:
         """Submit (or adopt), poll, and return the job's log; a job that lost its runner
         without a verdict never produced output, so it is resubmitted rather than

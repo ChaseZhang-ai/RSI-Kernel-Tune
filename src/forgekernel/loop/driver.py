@@ -33,6 +33,7 @@ import statistics
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from collections import deque
 from typing import Callable, Protocol
 
 from forgekernel.inner.ncu import (kernels_from_ncu, match_resusage, parse_resusage_lines,
@@ -352,6 +353,14 @@ class LoopContext:
     # default: the full-history view is the baseline.
     teacher_context_bound: bool | None = None
     teacher_ncu_tail_lines: int | None = None
+    # WP19 (task 3, contract C15): the background measurement lane. Off by
+    # default; when on, run_two_layer constructs the lane and the student
+    # probe loop becomes the measurement window. ``lane_confirm_samples``
+    # collects near-best confirmation readings — a post-stop claim input, and
+    # structurally NEVER a gate input (the gate consumes only eval jobs).
+    background_lane: bool | None = None
+    background_lane_obj: "BackgroundLane | None" = None
+    lane_confirm_samples: list = field(default_factory=list)
     # INFEASIBLE GATE: the fewest diagnoses (this one included; the distillation
     # and a clean M0 audit do not count) before a stop request can be accepted.
     # 1 = the reachability check alone gates the stop (see _infeasible_refusal).
@@ -1224,6 +1233,159 @@ def _student_prompt(ctx: LoopContext, iter_no: int, probe_feedback: str = "") ->
 
 def _student_digest_path(ctx: LoopContext) -> Path:
     return Path(ctx.workspace) / "student" / "status_digest.jsonl"
+
+
+# --- WP19 (task 3): the idle-GPU background measurement lane (contract C15) ----
+#
+# During an agent turn the GPU is idle; the lane queues NON-GATE readings there.
+# Hard constraints, each structural:
+#   * gate never consumes a background reading — a lane reading travels to
+#     exactly one consumer (its task's ``deliver``); no eval/verdict code path
+#     reads a lane result (the confirm consumer is the post-stop claim's
+#     seed-sample pool, never a gate input);
+#   * cooldown guard — a lane job starts only ``cooldown_s`` after the last
+#     foreground GPU release (the burn-in/settle discipline), and the
+#     temperature check (the same gpu_state telemetry the eval JSON carries)
+#     can defer a start;
+#   * default off — ``background_lane`` reads loop.toml [loop], default false,
+#     and a run with it off constructs no lane and changes no byte;
+#   * gpu_lock semantics unchanged — a lane job is an ordinary submitted job
+#     (submit/direct's lock), just submitted during the window.
+_LANE_TASK_KINDS = ("confirm", "candidates")
+
+
+@dataclass
+class LaneTask:
+    """One background reading: what to run, and the ONLY place its log goes."""
+    kind: str
+    branch: str
+    mode: str
+    deliver: "Callable[[str], None]"
+
+
+class BackgroundLane:
+    """The agent-turn measurement window.
+
+    ``open_window`` starts the next due task (a non-blocking submit when the
+    backend has the start/finish pair, else nothing — the synchronous
+    ``submit_gpu`` path never runs inside the window); ``close_window``
+    collects the reading and hands it to its consumer; ``abandon`` forgets an
+    interrupted window's job without consuming it. Every failure path drops
+    the reading — the lane never retries into the window it must vacate and
+    never blocks the iteration it hides inside."""
+
+    def __init__(self, *, cooldown_s: float = 60.0,
+                 temperature_ok: "Callable[[], tuple[bool, str]] | None" = None,
+                 log: "Callable[[str], None] | None" = None):
+        self.queue: "deque[LaneTask]" = deque()
+        self.inflight: "tuple[LaneTask, object] | None" = None
+        self.last_release_s: float | None = None
+        self.cooldown_s = cooldown_s
+        self.temperature_ok = temperature_ok
+        self._log = log or (lambda m: None)
+
+    def enqueue(self, task: LaneTask) -> None:
+        if task.kind not in _LANE_TASK_KINDS:
+            raise ValueError(f"background lane accepts only confirm/candidates "
+                             f"tasks, not {task.kind!r}")
+        self.queue.append(task)
+
+    def note_gpu_release(self, now_s: float) -> None:
+        self.last_release_s = now_s
+
+    def _cooled(self, now_s: float) -> bool:
+        return (self.last_release_s is None
+                or now_s - self.last_release_s >= self.cooldown_s)
+
+    def open_window(self, start_fn, now_s: float) -> None:
+        if start_fn is None:
+            return
+        if self.inflight is not None:
+            # a window that never closed (the turn that opened it was
+            # interrupted): the job's runner detached, the reading is never
+            # consumed — abandon it so the lane stays usable
+            self.abandon()
+        if not self.queue:
+            return
+        if not self._cooled(now_s):
+            return
+        if self.temperature_ok is not None:
+            ok, why = self.temperature_ok()
+            if not ok:
+                self._log(f"lane: task deferred ({why})")
+                return
+        task = self.queue.popleft()
+        try:
+            handle = start_fn(task.branch, task.mode)
+        except Exception as e:  # noqa: BLE001 — a lane start never kills the turn
+            self._log(f"lane: {task.kind} start failed ({e}) — task dropped")
+            return
+        self.inflight = (task, handle)
+
+    def close_window(self, finish_fn) -> None:
+        if self.inflight is None:
+            return
+        task, handle = self.inflight
+        self.inflight = None
+        try:
+            log = finish_fn(handle, task.mode)
+        except Exception as e:  # noqa: BLE001 — a lost reading is dropped, not retried
+            self._log(f"lane: {task.kind} job lost ({e}) — reading dropped")
+            return
+        try:
+            task.deliver(log)
+        except Exception as e:  # noqa: BLE001
+            self._log(f"lane: {task.kind} deliver failed ({e})")
+
+    def abandon(self) -> None:
+        if self.inflight is None:
+            return
+        task, _handle = self.inflight
+        self.inflight = None
+        self._log(f"lane: {task.kind} job abandoned on interrupt (never consumed)")
+
+
+# the lane's v1 temperature guard: at/above this the GPU sits in the
+# throttle-adjacent zone (the cardkit clockdiag telemetry reads the same
+# sensor) — a foreground job inheriting it would time a different machine
+_LANE_TEMP_MAX_C = 83.0
+
+
+def _lane_temperature_check(ctx: LoopContext) -> "tuple[bool, str]":
+    """The lane's temperature guard, over the gpu_state telemetry the eval
+    JSON already carries (no new probe, no new job)."""
+    try:
+        records = load_records(ctx.status_path)
+    except Exception:  # noqa: BLE001 — a guard must never break the window
+        return True, ""
+    for r in reversed(records):
+        temp = (r.gpu_state or {}).get("temperature_c")
+        if temp is not None:
+            if float(temp) >= _LANE_TEMP_MAX_C:
+                return False, f"last gpu_state temperature {temp}C >= {_LANE_TEMP_MAX_C}C"
+            return True, ""
+    return True, ""
+
+
+def _lane_deliver_confirm(ctx: LoopContext, log: str) -> None:
+    """The confirm task's ONLY consumer: the post-stop claim's seed-sample
+    pool. No gate reads this list (C15) — the gate consumes eval jobs alone,
+    and the samples ride run_best_confirmation's ``seed_samples`` (a WP15
+    parameter) when the claim is formed."""
+    ev = _enforce_single_ref(ctx, parse_eval(log))
+    if ctx.gate_window == "device":
+        ms, ref_ms, ratio = ev.device_median_ms, ev.ref_device_ms, ev.vs_ref_device
+    else:
+        ms, ref_ms, ratio = ev.bwd_median_ms, ev.ref_median_ms, ev.vs_ref
+    if ratio is None and ms and ref_ms:
+        ratio = ref_ms / ms
+    job = getattr(ctx.backend, "last_job_id", "") or "?"
+    if not ev.correctness or ms is None:
+        _log(f"lane: confirm job {job} unusable ({ev.error or 'no reading'}) — dropped")
+        return
+    ctx.lane_confirm_samples.append(
+        {"job": job, "ms": ms, "ref_ms": ref_ms, "ratio": ratio,
+         "node": _job_node(ctx.backend, job)})
 
 
 def _bounded_ncu_records(records: list, ctx: LoopContext) -> list:
@@ -2446,6 +2608,9 @@ def _wp19_apply_cfg(ctx: LoopContext) -> None:
         raw = loop_cfg.get("teacher_ncu_tail_lines", 8)
         ctx.teacher_ncu_tail_lines = raw if isinstance(raw, int) \
             and not isinstance(raw, bool) and raw > 0 else 8
+    if ctx.background_lane is None:
+        raw = loop_cfg.get("background_lane", False)
+        ctx.background_lane = raw if isinstance(raw, bool) else False
 
 
 _WP11_TELEMETRY_FIELDS = ("agent_turn_s", "eval_job_s", "ncu_job_s",
@@ -2856,6 +3021,12 @@ def run_inner_iteration(
     last_pv, last_log = None, ""
     gate_refused = ""   # the last gate-row refusal (open placeholders), for the record
     wp11_agent_s = 0.0   # WP11 (task 4): every student agent turn of this iteration
+    _lane = ctx.background_lane_obj
+    if _lane is not None:
+        # WP19 (task 3): the probe loop is the measurement window — a due lane
+        # task starts here (non-blocking submit) and is collected right after
+        # the loop, before the iteration's own eval job
+        _lane.open_window(getattr(be, "submit_gpu_start", None), ctx.now())
     for _ in range(ctx.max_probe_rounds):
         _wp11_t0 = ctx.now()
         out = be.run_agent(prompt)
@@ -2993,6 +3164,8 @@ def run_inner_iteration(
         # outlived the iteration it was made for re-wrote stale text into
         # every later workspace (and every tree a later reset restored).
         ctx.kept_probes.clear()
+    if _lane is not None:
+        _lane.close_window(getattr(be, "submit_gpu_finish", None))
     if record is None:
         # budget exhausted with no landed decision (probe never certified, or the
         # student never emitted a parseable decision). Objective REVERT, roll back.
@@ -3123,6 +3296,8 @@ def run_inner_iteration(
         eval_log = be.submit_gpu(branch, "all")
     eval_job_s = ctx.now() - eval_t0
     queue_wait_s = _queue_wait_from_log(eval_log)
+    if _lane is not None:
+        _lane.note_gpu_release(ctx.now())
     ev = parse_eval(eval_log)
     ev = _enforce_single_ref(ctx, ev)
     ev = _enforce_prep_contract(ctx, ev)
@@ -3282,6 +3457,16 @@ def run_inner_iteration(
     )
     _wp4_note_regression(ctx, rec, iter_no, cluster)   # WP4: slow-decision bookkeeping (prior only)
     append_record(ctx.status_path, rec)
+    if _lane is not None and rec.verdict == "KEEP":
+        push_ref = getattr(be, "push_ref", None)
+        if push_ref is not None:
+            try:
+                lane_branch = f"{ctx.branch_prefix}-laneconfirm"
+                push_ref(rec.sha, lane_branch)
+                _lane.enqueue(LaneTask(kind="confirm", branch=lane_branch, mode="all",
+                                       deliver=lambda log: _lane_deliver_confirm(ctx, log)))
+            except Exception as e:  # noqa: BLE001 — the lane never breaks the iteration
+                _log(f"lane: confirm enqueue skipped ({e})")
     _log_axis_change(ctx, rec)
     _check_host_bound(ctx, iter_no, ev)
     # NCU reports device time, so the reconciliation compares against the device
@@ -14908,6 +15093,11 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
     _wp5_apply_cfg(ctx)
     _wp11_apply_cfg(ctx)
     _wp19_apply_cfg(ctx)
+    if ctx.background_lane and ctx.background_lane_obj is None:
+        # WP19 (task 3): the lane exists only when the switch is on; its
+        # readings go to the post-stop claim's seed pool, never to a gate (C15)
+        ctx.background_lane_obj = BackgroundLane(
+            temperature_ok=lambda: _lane_temperature_check(ctx), log=_log)
     meta_steps = 0
     # --- WP5 (task 2): the meta cap breathes with the wall clock left. max_meta
     # stays the configured floor; a long remaining budget lifts the cap so a run

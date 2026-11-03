@@ -1113,3 +1113,189 @@ def test_t4_wp19_apply_cfg_reads_context_keys(tmp_path, monkeypatch):
     driver._wp19_apply_cfg(ctx)
     assert ctx.student_digest_binding is True and ctx.student_tail_lines == 7
     assert ctx.teacher_context_bound is True and ctx.teacher_ncu_tail_lines == 3
+
+
+# --- task 3: the background measurement lane (C15) ------------------------------
+
+from forgekernel.loop.driver import BackgroundLane, LaneTask, _lane_temperature_check
+
+
+def _task(kind="confirm", log_box=None):
+    return LaneTask(kind=kind, branch="b", mode="all",
+                    deliver=(lambda lg: log_box.append(lg)) if log_box is not None
+                    else (lambda lg: None))
+
+
+def test_t3_lane_starts_due_task_in_window_and_collects():
+    box, starts, finishes = [], [], []
+    lane = BackgroundLane(cooldown_s=0.0, log=box.append)
+    lane.enqueue(_task(log_box=box))
+    lane.open_window(lambda b, m: (starts.append((b, m)), "job1")[1], now_s=100.0)
+    assert starts == [("b", "all")] and lane.inflight is not None
+    lane.close_window(lambda h, m: (finishes.append((h, m)), "PROBE LOG")[1])
+    assert finishes == [("job1", "all")] and box == ["PROBE LOG"]
+    assert lane.inflight is None
+
+
+def test_t3_lane_cooldown_guard_defers():
+    starts = []
+    lane = BackgroundLane(cooldown_s=60.0)
+    lane.enqueue(_task())
+    lane.note_gpu_release(100.0)
+    lane.open_window(lambda b, m: (starts.append(1), "j")[1], now_s=130.0)
+    assert not starts and lane.queue            # 30s < 60s cooldown: deferred, kept
+    lane.open_window(lambda b, m: (starts.append(1), "j")[1], now_s=160.0)
+    assert starts == [1] and not lane.queue     # cooled: started
+
+
+def test_t3_lane_temperature_guard_defers():
+    starts = []
+    lane = BackgroundLane(cooldown_s=0.0, temperature_ok=lambda: (False, "hot"))
+    lane.enqueue(_task())
+    lane.open_window(lambda b, m: (starts.append(1), "j")[1], now_s=0.0)
+    assert not starts and lane.queue            # deferred, NOT dropped
+    lane2 = BackgroundLane(cooldown_s=0.0, temperature_ok=lambda: (True, ""))
+    lane2.enqueue(_task())
+    lane2.open_window(lambda b, m: "j", now_s=0.0)
+    assert lane2.inflight is not None
+
+
+def test_t3_lane_interrupt_abandons_without_consuming():
+    box, logs = [], []
+    lane = BackgroundLane(cooldown_s=0.0, log=logs.append)
+    lane.enqueue(_task(log_box=box))
+    lane.open_window(lambda b, m: "j", now_s=0.0)
+    lane.abandon()                              # the interrupted window
+    assert lane.inflight is None and box == []  # never consumed
+    assert any("abandoned" in m for m in logs)
+    # a later window self-heals and the lane is usable again
+    lane.enqueue(_task(log_box=box))
+    lane.open_window(lambda b, m: "j2", now_s=1.0)
+    lane.close_window(lambda h, m: "LOG2")
+    assert box == ["LOG2"]
+
+
+def test_t3_lane_stale_inflight_self_heals_on_next_window():
+    box, logs = [], []
+    lane = BackgroundLane(cooldown_s=0.0, log=logs.append)
+    lane.enqueue(_task(log_box=box))
+    lane.open_window(lambda b, m: "j1", now_s=0.0)
+    # the window never closed (interrupt): the next open abandons, then starts
+    lane.enqueue(_task(log_box=box))
+    lane.open_window(lambda b, m: "j2", now_s=1.0)
+    assert lane.inflight is not None
+    lane.close_window(lambda h, m: f"LOG-{h}")
+    assert box == ["LOG-j2"]                    # only the fresh task's reading
+
+
+def test_t3_lane_rejects_other_kinds():
+    lane = BackgroundLane()
+    with pytest.raises(ValueError, match="confirm/candidates"):
+        lane.enqueue(_task(kind="sweep"))       # v1 scope: the two kinds only
+
+
+def test_t3_lane_failure_paths_drop_never_retry():
+    box, logs = [], []
+    lane = BackgroundLane(cooldown_s=0.0, log=logs.append)
+    lane.enqueue(_task(log_box=box))
+    lane.open_window(lambda b, m: (_ for _ in ()).throw(RuntimeError("down")), now_s=0.0)
+    assert lane.inflight is None and not lane.queue   # start failed: dropped
+    lane.enqueue(_task(log_box=box))
+    lane.open_window(lambda b, m: "j", now_s=1.0)
+    lane.close_window(lambda h, m: (_ for _ in ()).throw(RuntimeError("lost")))
+    assert box == [] and lane.inflight is None        # finish failed: dropped
+
+
+def test_t3_c15_default_off_no_lane_no_behavior_change(tmp_path):
+    be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    assert ctx.background_lane_obj is None          # nothing constructed
+    assert ctx.lane_confirm_samples == []
+    rows = [{k: v for k, v in r.__dict__.items() if k not in _WP11_TELEMETRY}
+            for r in load_records(ctx.status_path)]
+    assert rows[0]["verdict"] == "KEEP"             # the baseline record, untouched
+
+
+def test_t3_c15_lane_readings_never_reach_the_gate(tmp_path):
+    # a completed confirm reading lands in lane_confirm_samples and NOWHERE in
+    # the gate path: the next eval's verdict/records are byte-identical to a
+    # run whose lane sample did not exist
+    be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    ctx.background_lane_obj = BackgroundLane(cooldown_s=0.0, log=lambda m: None)
+    driver._lane_deliver_confirm(ctx, EVAL(2.55))
+    assert len(ctx.lane_confirm_samples) == 1
+    assert ctx.lane_confirm_samples[0]["ms"] == 2.55
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    rows = [{k: v for k, v in r.__dict__.items() if k not in _WP11_TELEMETRY}
+            for r in load_records(ctx.status_path)]
+    assert rows[0]["verdict"] == "KEEP" and rows[0]["bwd_median_ms"] == 2.6
+    assert rows[0]["gate_spread_pct"] is None       # no lane trace in the gate fields
+
+
+def test_t3_c15_lane_enqueue_on_keep_uses_confirm_branch(tmp_path):
+    # the wiring: a KEEP with the lane on enqueues exactly one confirm task on
+    # its own branch; the sample deliver parses the scripted log
+    class _PushBE(FakeBackend):
+        def push_ref(self, sha, branch):
+            self.calls.append(("push_ref", branch))
+    be = _PushBE([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    lane = BackgroundLane(cooldown_s=0.0, log=lambda m: None)
+    ctx.background_lane_obj = lane
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    assert len(lane.queue) == 1 and lane.queue[0].kind == "confirm"
+    assert "-laneconfirm" in lane.queue[0].branch and lane.queue[0].mode == "all"
+
+
+def test_t3_c15_lane_temperature_check_reads_gpu_state(tmp_path):
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    append_record(ctx.status_path, IterationRecord(
+        iter=0, decision_id="D2.0", change="x", correctness=True, verdict="KEEP",
+        metric_before=2.6, bwd_median_ms=2.6, device_median_ms=2.6,
+        gpu_state={"temperature_c": 88.0, "sm_clock_mhz": 1500}))
+    ok, why = _lane_temperature_check(ctx)
+    assert not ok and "88" in why
+    append_record(ctx.status_path, IterationRecord(
+        iter=1, decision_id="D2.1", change="x", correctness=True, verdict="KEEP",
+        metric_before=2.6, bwd_median_ms=2.6, device_median_ms=2.6,
+        gpu_state={"temperature_c": 61.0, "sm_clock_mhz": 1500}))
+    ok, why = _lane_temperature_check(ctx)
+    assert ok and why == ""
+
+
+def test_t3_lane_window_in_real_iteration_collects_before_eval(tmp_path):
+    # the wiring end to end: with the lane on, the confirm task submitted in
+    # the window is collected BEFORE the iteration's own eval submits
+    order = []
+
+    class _LaneBE(FakeBackend):
+        def push_ref(self, sha, branch):
+            self.calls.append(("push_ref", branch))
+
+        def submit_gpu_start(self, branch, mode):
+            order.append(("lane-start", branch))
+            return "j1"
+
+        def submit_gpu_finish(self, job, mode):
+            order.append(("lane-finish", job))
+            return "PROBE PASS max_diff=0.1\n"
+
+        def submit_gpu(self, branch, mode):
+            order.append(("fg", mode))
+            return super().submit_gpu(branch, mode)
+
+    lbe = _LaneBE([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, lbe)
+    lane = BackgroundLane(cooldown_s=0.0, log=lambda m: None)
+    ctx.background_lane_obj = lane
+    # a task enqueued by the PREVIOUS iteration's KEEP (the standing wiring:
+    # a KEEP enqueues for the next iteration's window)
+    lane.enqueue(LaneTask(kind="confirm", branch="fs-demo-laneconfirm", mode="all",
+                          deliver=lambda log: None))
+    driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    kinds = [k for k, _ in order]
+    assert "lane-start" in kinds and "lane-finish" in kinds
+    assert kinds.index("lane-finish") < kinds.index("fg")   # collected before the eval
+    assert len(lane.queue) == 1                     # this iteration's KEEP re-enqueued

@@ -7,7 +7,7 @@
 | 本提交 | 任务 1–3：STAGNATION 触发器、flags 决策轴、MC-DELIVERY（机制 + 提示词供给 + 测试） |
 | （紧随） | `CHANGES-WP10.md` |
 
-验收证据：`~/venvs/forgekernel/bin/python -m pytest tests/ -q` → **2242 passed, 0 failed**（分支顶端；基线 main = 2222 passed，新增 22 个 WP10 测试，零回归）。本机 GPU（RTX 3060 6GB）不代表目标硬件，验收以 pytest + fixtures + dry-run 为准。dry-run 证据：`test_stagnation_injection_is_minimal_block_or_nothing`（注入区出现 STAGNATION 块且含 override 句、组装 diff 恰好等于块本身）与 `test_mc_prescreen_script_runs_end_to_end_against_a_stubbed_timing_kernel`（driver 生成的预筛脚本真实执行：冒烟→交错计时→MC-WINNER 行→树还原）。后者在验收过程中抓到并修掉一个真 bug（脚本常量作用域缺失，见 §3 末）。
+验收证据：`~/venvs/forgekernel/bin/python -m pytest tests/ -q` → **2246 passed, 0 failed**（分支顶端；基线 main = 2222 passed；新增 24 个 WP10 测试 = 初验 22 条 + 验收后复核修复 2 条，原有 22 条一条未删，零回归）。本机 GPU（RTX 3060 6GB）不代表目标硬件，验收以 pytest + fixtures + dry-run 为准。dry-run 证据（两条均原样保持通过）：`test_stagnation_injection_is_minimal_block_or_nothing`（注入区出现 STAGNATION 块且含 override 句、组装 diff 恰好等于块本身）与 `test_mc_prescreen_script_runs_end_to_end_against_a_stubbed_timing_kernel`（driver 生成的预筛脚本真实执行：冒烟→交错计时→MC-WINNER 行→树还原）。后者在验收过程中抓到并修掉一个真 bug（脚本常量作用域缺失，见 §3 末）；复核阶段的两处真 bug 见 §6。
 
 ---
 
@@ -49,8 +49,8 @@ floor_stop 是 **WP9** 的 opt-in 门（解析地板给出 `floor_opt` 的机器
 1. **授权**：teacher 在 milestone 某决策行写 `multi_candidate: 2|3`（`_milestone_multi_candidate` 读 milestone 文件本体，与 sweep recipe 同通道同形状）；driver 侧钳到 `[loop] multi_candidate_max`（默认 3；0 = 通道关闭）。gate 行/REOPEN 行永不 fan-out。`meta/patch_prompt.md` 加授权句（6 行）：授权字段、变体命名（kernel 文件同目录同 stem：`<stem>_v0/_v1/_v2.<ext>`）、**变体间须是结构差异（循环组织/stage 划分/角色划分），不只是参数值——参数差异走 SWEEP**、字段不携带代码（L0 不变）。`meta/student_prompt.md` 追加**一句**（C6 允许的唯一一句）：授权决策的多变体交付说明。`multi_candidate` 字段只在 patch_prompt 声明，**meta_milestone.md（POLICY）一字未动**；实测带该字段的 milestone 过 `validate_milestone` 无违规。
 2. **变体交付**：学生一次标准 commit 交付多个**自己写的**同接口实现（记录块照旧）；无 L0 泄露面——变体是学生树内文件，driver 从不向学生树写任何实现文本。
 3. **预筛**（`_mc_deliver`，授权且 ≥2 个变体文件存在才走）：driver 生成 `notes/mc_prescreen.py`（源码常量 `_MC_PRESCREEN_SRC` 在 driver 内，随 `_mc_seed_toolkit` 落盘并 commit，连同 vendored `lever_pricing_run`——**与 sweep_run 同一复用手法：只复用其交错计时内核/节点卫生/噪声读法，SWEEP 分支语义零改动，契约 C4**）+ 提交时写入 spec（`notes/__mc_<did>.json`：kernel_file、变体表、rounds=2、代表 workload scope），一个 job（`cmd:python3 notes/mc_prescreen.py …`，`-i<iter>mc` 分支，结算重买语义与 sweep 相同）。job 内：**每变体先一次 correctness 冒烟**（单 workload 快速调用）——冒烟不过记 DNF、不进计时；幸存者与 base 交错计时；`MC/MC-WINNER/MC-OK/MC-FAIL` 行进日志；树原样还原。
-4. **赢家交付**：时延最优且冒烟通过者由 driver **应用**（写入 kernel 文件、全部变体文件移出交付树：非赢家归档 `notes/variants/<iter>/`，赢家内容已在 kernel 文件）、一次 driver 记账 commit，随后走**标准 eval job 全量 gate**（correctness + precision + measure_paired 原样，NCU 只测赢家——天然成立，NCU 跑在赢家树上）；其余路径不碰。赢家文件不可读等意外按无赢家处理。
-5. **失败语义**：变体级 DNF 不影响其余；**全部失败 → 普通 REVERT**（不买 eval，workspace 复位，REVERT 行 error 注明 multi-candidate，表照记）；预筛 job 本身失败（BackendError）→ 不阻塞交付，按原树普通 eval 继续（同 pricing"永不阻塞一步"纪律）。
+4. **赢家交付**：时延最优且冒烟通过者由 driver **应用**（写入 kernel 文件、全部变体文件移出交付树：非赢家归档 `notes/variants/<iter>/`，赢家内容已在 kernel 文件）。赢家路径前后落最多 3 类 driver 记账 commit（toolkit seed、prescreen spec、赢家应用）——**交付本体仍是学生的那 1 个 commit**；`rec.sha` 由调用方在 push eval branch 前重读为工作树 HEAD（§6 修复 1），即 eval job 实际测量的赢家树。随后走**标准 eval job 全量 gate**（correctness + precision + measure_paired 原样，NCU 只测赢家——天然成立，NCU 跑在赢家树上）；其余路径不碰。赢家文件不可读等意外按无赢家处理。
+5. **失败语义**：变体级 DNF 不影响其余；**全部失败 → 普通 REVERT**（不买 eval；**先** `be.reset` 复位工作树、**后**把变体源码从内存写回 `notes/variants/<iter>/` 为**未提交**的工作区便利件——同 probe 文件 "kept in the workspace (uncommitted)" 先例，后续自然 commit 会带进历史；**持久事实源是 status.jsonl 的 `variant_timings`**，归档文件丢了也不丢事实）；预筛 job 本身失败（BackendError）→ 不阻塞交付，按原树普通 eval 继续（同 pricing"永不阻塞一步"纪律），但 toolkit/spec 已落的 commit 使交付 sha 前进，`rec.sha` 同样在 push 前重读（§6 修复 1）。
 6. **记录**：`IterationRecord.variant_timings: list | None = None`（`inner/trajectory.py` 仅追加此一个可选字段，与 WP9/WP11 的字段追加互不冲突；load 侧 `_FIELDS` 白名单自动容忍旧文件）。行 schema：`{variant, smoke, ms, ratio, delta_vs_base_pct, winner}`——纯客观测量，学生自产工作的客观记录（红线 3 明文不算注入）。
 
 **防造假核查表（CHANGES §要求，逐条）**：
@@ -58,12 +58,16 @@ floor_stop 是 **WP9** 的 opt-in 门（解析地板给出 `floor_opt` 的机器
 | # | 项 | 落实 |
 |---|---|---|
 | ① | 变体是学生自写——无 L0 泄露面 | driver 全链路只读不写变体内容；授权句明文"字段不携带代码"；L0/断网/kb_lint 未触碰 |
-| ② | 交付仍是 1 commit | 赢家是**唯一交付实现**，标准 commit 交付；赢家应用 commit 是 driver 记账类（与 sweep/probe 的 seeding commit 同类），不是第二次学生交付；"每迭代一次交付"纪律不变 |
+| ② | 交付仍是 1 commit | 赢家是**唯一交付实现**，标准 commit 交付；赢家路径的 toolkit/spec/赢家应用 commit 是 driver 记账类（与 sweep/probe 的 seeding commit 同类），不是第二次学生交付；"每迭代一次交付"纪律不变 |
 | ③ | 赢家过全量 gate | 赢家树走原样 eval 路径（`parse_eval(be.submit_gpu(branch,"all"))` + precision + watermark + NCU），无任何 gate 稀释；未选中的变体永不进 eval |
 | ④ | teacher 只见客观时延表与冒烟结果 | 变体表只进 IterationRecord（机器 SSOT）；教师读集无新增注入 |
 | ⑤ | 预筛 job 计入本迭代预算 | 每授权迭代恰 1 个预筛 job，变体数 ≤ `multi_candidate_max`；语义上它先于该迭代的 eval，是授权决策的交付仲裁成本，不是新增 job 维度（无 probe 轮次消耗，学生无感） |
 
-**单测**：`test_mc_delivery_full_chain_winner_applied_and_banked`（2 变体：授权 → 预筛 job（mock backend）→ 赢家写入 kernel、变体归档、record 记表 → 标准 eval/NCU 恰好一对）；`test_mc_delivery_dnf_variants_revert_without_an_eval`（DNF 路径：无 eval、复位、表照记）；`test_mc_delivery_without_authorization_is_byte_identical_to_the_old_path`（无授权回归：job 序列恰为 `["all","ncu"]`、`variant_timings is None`）；`test_mc_delivery_authorized_but_no_variant_files_is_the_old_path`；`test_mc_prescreen_script_runs_end_to_end_against_a_stubbed_timing_kernel`（生成脚本真实执行，抓到真 bug：脚本引用的预算常量只定义在 driver 侧、脚本作用域缺失——已修进脚本本体；这类错误 mock 测试测不到，dry-run 能）。
+**单测**：`test_mc_delivery_full_chain_winner_applied_and_banked`（2 变体：授权 → 预筛 job（mock backend）→ 赢家写入 kernel、变体归档、record 记表 → 标准 eval/NCU 恰好一对；断言 `rec.sha == be.head()`，见 §6 修复 1）；`test_mc_delivery_dnf_variants_revert_without_an_eval`（DNF 路径：无 eval、复位、表照记、归档不再有自己的 commit）；`test_mc_dnf_archive_survives_a_git_semantics_reset`（§6 修复 2 的回归测试：git reset --hard 文件语义下归档必须仍在磁盘）；`test_mc_prescreen_job_failure_keeps_banked_sha_at_the_push_head`（§6 修复 1 的 BackendError 路径：toolkit/spec 已落 commit 时 `rec.sha` 仍是 push eval 时的 HEAD）；`test_mc_delivery_without_authorization_is_byte_identical_to_the_old_path`（无授权回归：job 序列恰为 `["all","ncu"]`、`variant_timings is None`）；`test_mc_delivery_authorized_but_no_variant_files_is_the_old_path`；`test_mc_prescreen_script_runs_end_to_end_against_a_stubbed_timing_kernel`（生成脚本真实执行，抓到真 bug：脚本引用的预算常量只定义在 driver 侧、脚本作用域缺失——已修进脚本本体；这类错误 mock 测试测不到，dry-run 能）。
+
+### 顺手项：`_MC_MAX_VARIANTS` 的去处
+
+选择"让授权钳制真正引用它"（而非删除）：`_mc_deliver` 的钳制现为 `min(milestone 授权, ctx.multi_candidate_max, _MC_MAX_VARIANTS)`（driver.py:6208-6210）。理由：配置键是操作者的天花板，常量是**代码级天花板**（防误配 `multi_candidate_max = 99` 时预筛 job 预算被打爆），两者构成纵深防御且语义不重复——键管"操作者愿意付多少"，常量管"实现愿意承受多少"；都须 ≥2 才有 fan-out。
 
 ## 4. 配置与词汇表选择（契约 C7）
 
@@ -85,3 +89,13 @@ floor_stop 是 **WP9** 的 opt-in 门（解析地板给出 `floor_opt` 的机器
 - **围栏**：改动文件 = `driver.py`、`inner/trajectory.py`（仅 variant_timings 字段）、`meta/diagnose_prompt.md`、`meta/patch_prompt.md`、`meta/student_prompt.md`（一句）、`skills/sweep-decision/SKILL.md`、`tests/test_wp10_search_depth.py`（新增）。未触碰：`parse.py`（resolvable_diff 直接导入）、`precision_gate.py`、`kb_lint.py`、`task.py`、`cli.py`、`global_config/loop.toml`（理由见 §4）、card_template 全部。
 - **每迭代一次交付**：赢家才是交付；变体表是客观记录。
 - **触发器只加压**：无机器改判、无诊断跳过；override 有通道且记账可见。
+
+## 6. 验收后复核修复（两处真 bug）
+
+**共同根因**：`tests/test_loop_driver.py` 的 `FakeBackend.commit/reset` 是 git 语义空操作（commit 只发 sha 计数器、reset 什么都不做）——两处 bug 都发生在"真实 git 会动工作树/树已前进"而 mock 看不见的缝隙里，因此全部逃过了初验的 mock 测试。修复均带能抓住原失败模式的测试（red-check 实测：未修复 driver 上 3 条测试全红，修复后全绿）。
+
+**修复 1 — MC 赢家迭代的 `record.sha` 是过期树**（driver.py:2568-2578 调用方，:6196-6204/:6241/:6282/:6292 返回契约）：`run_inner_iteration` 在 `_mc_deliver` **之前**已把 `sha` 定为学生交付 commit；赢家路径随后落 toolkit seed、prescreen spec、赢家应用共 3 个 driver 记账 commit，工作树已前进，但 record 仍存旧 sha。`rec.sha` 是承重锚：`last_good_ref = rec.sha`（后续 REVERT 的 `be.reset(last_good_ref)` 会把赢家内容从工作树抹掉、树与 best 账本分叉）、`run_best_confirmation(ref=rec.sha)`、lever 定价复用 `be.reset(best_ref)`、`_run_timeline(rec.sha)` 都会去测输掉的树。修复：`_mc_deliver` 一切"动过 git"的返回携带 `git_moved: True`（无授权/变体 <2/gate 行等未触碰 git 的早退仍返回 None、沿用旧值）；调用方在 `be.push_branch(eval branch)` 之前凡 `git_moved` 即 `sha = be.head()`——不变量：**IterationRecord.sha 必须 = eval job 实际测量的树（push eval branch 时的工作树 HEAD）**。BackendError 路径（toolkit/spec 已落 commit、job 没跑成）同享该重读（新测试 `test_mc_prescreen_job_failure_keeps_banked_sha_at_the_push_head`）；无授权回归测试原样保持通过。
+
+**修复 2 — DNF 路径的变体归档会被自己的 reset 抹掉**（driver.py:6168-6189 新 helper `_mc_write_variant_archive`，:6258-6273 分支重排）：原顺序是 `_mc_archive_variants`（move）+ `be.commit("archived")` **再** `be.reset(...)`；真实后端的 reset 是 `git reset --hard`（cli.py reset），弃掉的归档 commit 里 `notes/variants/<iter>/*` 不在目标树中，会连带从磁盘删除——"其余变体记档"的承诺在唯一需要它的路径上失效。修复：DNF 分支先把变体源码读进内存 → `be.reset(...)` 复位工作树 → 再把归档写到 `notes/variants/<iter>/`（**落盘不提交**，probe 文件 "kept in the workspace (uncommitted)" 先例，后续自然 commit 带进历史）。赢家路径不受影响（无 reset，move+commit 同 commit 落地）。**残余语义（如实记）**：归档文件是工作区便利件，持久事实源是 status.jsonl 的 `variant_timings`——归档被任何手段清掉，测量事实不丢。回归测试 `test_mc_dnf_archive_survives_a_git_semantics_reset` 用 commit 快照 + reset 删除离树文件的测试本地 fake（不改 `FakeBackend` 本体、不动其既有断言）复现 git reset --hard 的文件语义；`test_mc_delivery_dnf_variants_revert_without_an_eval` 补断言"归档不再有自己的 commit"。
+
+**修复后的测试清单变化**：新增 `test_mc_dnf_archive_survives_a_git_semantics_reset`、`test_mc_prescreen_job_failure_keeps_banked_sha_at_the_push_head`（2 条）；`test_mc_delivery_full_chain_winner_applied_and_banked` 补 `rec.sha == be.head()` 两条断言；其余 WP10 测试一字未动（22 条全数保留）。全绿数 **2246**（基线 2222 + WP10 24 条）。

@@ -410,6 +410,11 @@ def test_mc_delivery_full_chain_winner_applied_and_banked(tmp_path):
     # exactly one prescreen job, then the ordinary eval + ncu of the winner tree
     gpu = [c[1] for c in be.calls if c[0] == "gpu"]
     assert gpu[0].startswith(_MC_CMD) and gpu[1] == "all" and gpu[2] == "ncu"
+    # rec.sha is the anchor every later reset / confirmation / pricing re-read
+    # follows: it must name the tree the eval job measured (the winner-applied
+    # head), not the stale student delivery commit the iteration began with
+    assert rec.sha == be.head()
+    assert rec.sha != "sha1"    # sha1 = the student delivery commit (FakeBackend counter)
     # the winner IS the delivered kernel; the variants are out of the delivery tree
     assert (tmp_path / "flash_attn_dsl" / "flash_bwd.py").read_text(encoding="utf-8") == v1
     assert not (tmp_path / "flash_attn_dsl" / "flash_bwd_v0.py").exists()
@@ -446,10 +451,114 @@ def test_mc_delivery_dnf_variants_revert_without_an_eval(tmp_path):
     assert "multi-candidate" in rec.error
     assert not any(c == ("gpu", "all") for c in be.calls)      # no eval job bought
     assert any(c[0] == "reset" for c in be.calls)              # the workspace was restored
+    # the archive is written AFTER the reset and is NOT committed (a committed
+    # archive would die with the discarded commit on a real git reset --hard)
+    assert not any(c[0] == "commit" and c[1].startswith("mc: variants")
+                   for c in be.calls)
     assert rec.variant_timings is not None and len(rec.variant_timings) == 2
     assert not any(r["winner"] for r in rec.variant_timings)
     # the variants were archived for the record even on the failed fan-out
-    assert (tmp_path / "notes" / "variants" / "iter3" / "flash_bwd_v0.py").is_file()
+    assert (tmp_path / "notes" / "variants" / "iter3" / "flash_bwd_v0.py").read_text(
+        encoding="utf-8") == v0
+
+
+def test_mc_dnf_archive_survives_a_git_semantics_reset(tmp_path):
+    """The bug the no-op reset could not catch: with real reset --hard file
+    semantics the DNF path's reset rewinds the tree and would delete any
+    committed archive copy together with the variant sources. The fix reads the
+    sources into memory, resets, and writes the archive back uncommitted — the
+    files must be on disk after the iteration."""
+    from test_loop_driver import FakeBackend, _ctx, run_inner_iteration
+
+    class _HardResetBackend(FakeBackend):
+        """reset with git reset --hard's file semantics: tracked files the
+        target tree does not hold are removed from the disk workspace
+        (untracked files survive). Commits snapshot the workspace's relative
+        paths — the minimal model that makes the DNF archive's survival
+        observable, which a no-op reset cannot catch."""
+
+        def __init__(self, agent_outputs, gpu_logs, workspace):
+            super().__init__(agent_outputs, gpu_logs)
+            self.workspace = Path(workspace)
+            self._snapshots = {self.head(): frozenset()}
+            self._tracked_head = self.head()
+
+        def _walk(self):
+            out = set()
+            for p in self.workspace.rglob("*"):
+                if p.is_file() and ".git" not in p.parts:
+                    out.add(str(p.relative_to(self.workspace)))
+            return frozenset(out)
+
+        def commit(self, message: str) -> str:
+            sha = super().commit(message)
+            self._snapshots[sha] = self._walk()
+            self._tracked_head = sha
+            return sha
+
+        def reset(self, ref: str) -> None:
+            super().reset(ref)
+            gone = self._snapshots.get(self._tracked_head, frozenset()) - \
+                self._snapshots.get(ref, frozenset())
+            for rel in gone:
+                p = self.workspace / rel
+                if p.exists():
+                    p.unlink()
+            self._tracked_head = ref
+
+    v0, v1 = "def fwd_v0():\n    return 0\n", "def fwd_v1():\n    return 1\n"
+    be = _HardResetBackend(
+        [_mc_student(tmp_path, {"flash_attn_dsl/flash_bwd_v0.py": v0,
+                                "flash_attn_dsl/flash_bwd_v1.py": v1})],
+        [_MC_ALL_DNF_LOG], tmp_path)
+    ctx = _ctx(tmp_path, be)
+    ctx.milestone.write_text(_milestone_multi(), encoding="utf-8")
+    rec = run_inner_iteration(ctx, 3, metric_before=2.9)
+    assert rec is not None and rec.verdict == "REVERT" and "multi-candidate" in rec.error
+    # reset --hard took the tracked variant files off the tree, as a real backend does
+    assert not (tmp_path / "flash_attn_dsl" / "flash_bwd_v0.py").exists()
+    assert not (tmp_path / "flash_attn_dsl" / "flash_bwd_v1.py").exists()
+    # ...and the archive survives it, on disk, in the workspace
+    assert (tmp_path / "notes" / "variants" / "iter3" / "flash_bwd_v0.py").read_text(
+        encoding="utf-8") == v0
+    assert (tmp_path / "notes" / "variants" / "iter3" / "flash_bwd_v1.py").read_text(
+        encoding="utf-8") == v1
+    assert rec.variant_timings is not None and len(rec.variant_timings) == 2
+
+
+def test_mc_prescreen_job_failure_keeps_banked_sha_at_the_push_head(tmp_path):
+    """Authorized, but the prescreen job cannot run (BackendError): the toolkit
+    and spec commits already moved the tree, the delivery proceeds as committed —
+    and rec.sha must still name the HEAD the eval branch pushes (the anchor the
+    next reset / confirmation / pricing re-read follows), not the stale
+    student delivery commit."""
+    from test_loop_driver import EVAL, NCU, FakeBackend, _ctx, run_inner_iteration
+
+    class _PrescreenDownBackend(FakeBackend):
+        """submit_gpu fails ONLY for the prescreen job (the BackendError path);
+        every other job runs the ordinary queue."""
+
+        def submit_gpu(self, branch: str, mode: str) -> str:
+            if "mc_prescreen" in mode:
+                from forgekernel.loop.driver import BackendError
+                raise BackendError("node gone")
+            return super().submit_gpu(branch, mode)
+
+    v0, v1 = "def fwd_v0():\n    return 0\n", "def fwd_v1():\n    return 1\n"
+    be = _PrescreenDownBackend(
+        [_mc_student(tmp_path, {"flash_attn_dsl/flash_bwd_v0.py": v0,
+                                "flash_attn_dsl/flash_bwd_v1.py": v1})],
+        [EVAL(2.6), NCU])
+    ctx = _ctx(tmp_path, be)
+    ctx.milestone.write_text(_milestone_multi(), encoding="utf-8")
+    rec = run_inner_iteration(ctx, 3, metric_before=2.9)
+    assert rec is not None and rec.verdict == "KEEP"
+    assert rec.variant_timings is None                     # no reading, no table
+    assert rec.sha == be.head()                            # the tree the eval measured
+    assert rec.sha != "sha1"                               # not the stale delivery commit
+    # no winner was ever selected or applied
+    assert not any(c[0] == "commit" and "winner" in c[1] for c in be.calls)
+    assert (tmp_path / "flash_attn_dsl" / "flash_bwd_v0.py").exists()   # delivery as committed
 
 
 def test_mc_delivery_without_authorization_is_byte_identical_to_the_old_path(tmp_path):

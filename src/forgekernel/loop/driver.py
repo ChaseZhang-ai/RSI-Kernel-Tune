@@ -2567,6 +2567,15 @@ def run_inner_iteration(
         variant_timings = mc["rows"] or None
         if mc["revert"] is not None:
             return mc["revert"]
+        if mc.get("git_moved"):
+            # The prescreen path lands driver bookkeeping commits (toolkit seed,
+            # prescreen spec, winner application) after the delivery commit, so
+            # ``sha`` above is stale: rec.sha anchors every later reset (the
+            # next REVERT's be.reset(last_good_ref)), confirmation, pricing
+            # re-read and timeline — it must name the tree the eval job below
+            # actually measures, i.e. the HEAD pushed to the eval branch. Only
+            # an untouched early exit (None above) may keep the old value.
+            sha = be.head()
     branch = f"{ctx.branch_prefix}-i{iter_no}"
     be.push_branch(branch)
     _log(f"iter {iter_no}: decision {record.decision_id} committed; evaluating on GPU…")
@@ -5804,7 +5813,10 @@ _MC_OK_RE = re.compile(r"^MC-OK variants=(?P<n>\d+) rounds=(?P<r>\d+)"
                        r"(?: base_ms=(?P<base_ms>\S+))?(?: winner=(?P<winner>\S+))?", re.M)
 _MC_FAIL_RE = re.compile(r"^MC-FAIL reason=(?P<reason>.*)$", re.M)
 _MC_CMD = "cmd:python3 notes/mc_prescreen.py"
-_MC_MAX_VARIANTS = 3          # == multi_candidate_max's default; the clamp is the ctx key
+_MC_MAX_VARIANTS = 3          # code-level ceiling over the authorization clamp: a
+                              # misconfigured [loop] multi_candidate_max cannot blow the
+                              # prescreen job's budget; the config key is the operator's
+                              # own ceiling and BOTH must allow >= 2 for a fan-out
 _MC_ROUNDS = 2                # interleaved rounds per surviving variant (prescreen grade)
 _MC_BENCH_TIMEOUT = 900       # one bench call — the sweep/pricing precedent
 _MC_SMOKE_TIMEOUT = 600       # the correctness smoke: one quick call
@@ -6131,7 +6143,8 @@ def _mc_archive_variants(ctx: LoopContext, be, iter_no: int, variants: list,
                          winner: str | None) -> None:
     """Move the variant files out of the delivery tree: the non-winners under
     notes/variants/<iter>/ (the objective record of what was measured), the
-    winner too (its content now lives in the kernel file). Without this the
+    winner too (its content now lives in the kernel file). Winner path only —
+    no reset follows, so the move lands in the same commit. Without this the
     next iteration inherits stale kernel_v*.py files that a later authorized
     delivery would misread as its own variants."""
     root = Path(ctx.workspace)
@@ -6152,20 +6165,49 @@ def _mc_archive_variants(ctx: LoopContext, be, iter_no: int, variants: list,
              f"({', '.join(moved)})")
 
 
+def _mc_write_variant_archive(ctx: LoopContext, iter_no: int, sources: dict) -> None:
+    """Write ``sources`` (workspace-rel path -> text) under notes/variants/<iter>/
+    as UNCOMMITTED workspace files — the DNF path's archive, written AFTER the
+    reset that rewound the tree the variants lived on (a real backend's reset is
+    git reset --hard: an archive committed before the reset would be deleted off
+    the disk with the discarded commit). The kept-probe precedent: the files
+    survive as untracked workspace conveniences and ride the next natural
+    commit; the durable fact source is variant_timings in status.jsonl."""
+    dst_dir = Path(ctx.workspace) / "notes" / "variants" / f"iter{iter_no}"
+    written = []
+    for rel, src in sources.items():
+        try:
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            (dst_dir / Path(rel).name).write_text(src, encoding="utf-8")
+            written.append(rel)
+        except OSError as e:
+            _log(f"iter {iter_no}: mc archive write of {rel} failed ({e})")
+    if written:
+        _log(f"iter {iter_no}: mc variants archived under notes/variants/iter{iter_no}/ "
+             f"(uncommitted workspace record: {', '.join(written)})")
+
+
 def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
                 last_good_ref: str | None, metric_before: float | None) -> dict | None:
     """The MC-DELIVERY path of one delivery, or None (not authorized / nothing
-    to fan out — the caller proceeds exactly as before). Authorized with ≥2
-    variant files present: ONE prescreen job, then either the winner applied
-    (returns {"rows", "winner"} — the caller's eval measures the winner tree),
-    or the all-DNF ordinary REVERT (returns {"rows", "revert"} with the record
-    appended and the workspace reset; the caller returns it). A job that cannot
-    run at all (BackendError) never blocks the delivery: the caller's ordinary
-    eval proceeds on the tree as committed."""
+    to fan out — the caller proceeds exactly as before, and the delivery sha it
+    already holds still names the tree; nothing was committed). Authorized with
+    ≥2 variant files present: ONE prescreen job, then either the winner applied
+    ({"rows", "winner", "git_moved"} — the caller's eval measures the winner
+    tree), the all-DNF ordinary REVERT ({"rows", "revert", "git_moved"} with the
+    record appended and the workspace reset; the caller returns it), or a job
+    that could not run at all ({"git_moved": True, rows/winner/revert all None}:
+    BackendError never blocks the delivery, the caller's ordinary eval proceeds
+    on the tree as committed). ``git_moved`` — the prescreen path lands driver
+    bookkeeping commits (toolkit seed, spec, winner application) after the
+    student's delivery commit, so the caller must re-read the delivery sha off
+    the backend before pushing the eval branch: rec.sha has to name the tree
+    the eval job actually measures."""
     did = record.decision_id or ""
     if _GATE_ROW.search(did) or did in ("REOPEN", "REOPEN-REVERT"):
         return None
-    n = min(_milestone_multi_candidate(ctx, did), max(0, int(ctx.multi_candidate_max)))
+    n = min(_milestone_multi_candidate(ctx, did), max(0, int(ctx.multi_candidate_max)),
+            _MC_MAX_VARIANTS)
     if n < 2:
         return None
     variants = _mc_variant_files(ctx, n)
@@ -6196,7 +6238,7 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
                             f"iter{iter_no}: mc prescreen {did}")
     except BackendError as e:
         _log(f"iter {iter_no}: mc prescreen job failed ({e}) — delivering as committed")
-        return None
+        return {"rows": None, "winner": None, "revert": None, "git_moved": True}
     finally:
         try:
             spec_path.unlink()
@@ -6215,9 +6257,20 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
                        if rows else "the prescreen produced no reading")
         _log(f"iter {iter_no}: {did} multi-candidate prescreen -> no winner ({why}); "
              f"ordinary REVERT (no eval spent)")
-        _mc_archive_variants(ctx, be, iter_no, variants, None)
-        be.commit(f"mc: variants of {did} archived (no winner)")
+        # archive AFTER the reset, from memory: the sources are read before the
+        # reset rewinds the tree, and the archive is written back uncommitted —
+        # a reset on a real backend (git reset --hard) deletes tracked files the
+        # target tree does not hold, so a committed archive would not survive it
+        sources = {}
+        for rel in variants:
+            p = Path(ctx.workspace) / rel
+            if p.is_file():
+                try:
+                    sources[rel] = p.read_text(encoding="utf-8")
+                except OSError as e:
+                    _log(f"iter {iter_no}: mc archive of {rel} skipped ({e})")
         be.reset(last_good_ref or base_sha)
+        _mc_write_variant_archive(ctx, iter_no, sources)
         rec = IterationRecord(
             iter=iter_no, decision_id=did, change=record.change,
             correctness=None, verdict="REVERT", metric_before=metric_before,
@@ -6226,7 +6279,7 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
             variant_timings=timings or None,
         )
         append_record(ctx.status_path, rec)
-        return {"rows": timings, "winner": None, "revert": rec}
+        return {"rows": timings, "winner": None, "revert": rec, "git_moved": True}
     # the winner becomes THIS iteration's delivery: written into the kernel file,
     # the other variants archived, one driver bookkeeping commit (the delivery
     # itself is still one implementation, judged by the standard gate)
@@ -6236,7 +6289,7 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
               f"from the prescreen; judged by the standard gate)")
     _log(f"iter {iter_no}: {did} mc prescreen -> winner={Path(winner).name} "
          + "; ".join(f"{r['name']}={_fmt_pct(r['delta_pct'])}" for r in rows if r["smoke"]))
-    return {"rows": timings, "winner": winner, "revert": None}
+    return {"rows": timings, "winner": winner, "revert": None, "git_moved": True}
 
 
 def _normalise_ablations(ctx: LoopContext, ablations: list, known_ids: set) -> list:

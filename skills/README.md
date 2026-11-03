@@ -21,3 +21,5 @@ imports the same files as `forgekernel.skills.<module>` to read their verdict li
 | [job-env-check](job-env-check/SKILL.md) | whether a GPU job's `python3` can run the tools at all |
 | [ncu-trace](ncu-trace/SKILL.md) | NCU metrics across iterations, for the teacher |
 | [arch-probe](arch-probe/SKILL.md) | pre-freeze M0 topology skeletons, teacher-written and driver-timed (teacher-side) |
+
+Not mirrored (teacher-side libraries, no SKILL.md): [probe-recipes](probe-recipes/README.md) — pre-planted verdict-probe measurement recipes (occupancy-scaling curve / phase ablation / effective-BW triad); the diagnose prompt and the KB-MENU name their scripts by absolute path, so they never enter an agent's mirrored read set.

@@ -1,7 +1,7 @@
-# prior: b200
+# prior: Attention backward, causal, MHA
 
 - Kernel: `kernels/attention/attn_bwd_mha/b200/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +2.5% vs FlashAttention-4 (Figure 3)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

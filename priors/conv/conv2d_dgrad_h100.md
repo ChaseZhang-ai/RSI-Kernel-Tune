@@ -1,7 +1,7 @@
-# prior: h100
+# prior: Conv2d data gradient, stride 2
 
 - Kernel: `kernels/conv/conv2d_dgrad/h100/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +0.7% vs cuDNN (Figure 3)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

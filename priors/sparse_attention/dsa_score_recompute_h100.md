@@ -1,7 +1,7 @@
-# prior: h100
+# prior: DSA score recompute
 
 - Kernel: `kernels/sparse_attention/dsa_score_recompute/h100/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +6.2% vs cuDNN-frontend (Figure 3)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

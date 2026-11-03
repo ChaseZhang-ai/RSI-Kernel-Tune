@@ -1,7 +1,7 @@
-# prior: b200
+# prior: FP8 × FP4 grouped GEMM (MoE)
 
 - Kernel: `kernels/gemm/fp4_grouped_gemm/b200/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +0.6% vs DeepGEMM (Figure 3)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

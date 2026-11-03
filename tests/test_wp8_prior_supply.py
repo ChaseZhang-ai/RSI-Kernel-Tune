@@ -475,3 +475,103 @@ def test_build_priors_help_and_hermetic_write(tmp_path):
     out.write_text("# prior: k1\n- Status: filled\n\nmine.\n", encoding="utf-8")
     assert bp.main(["--write", "--force", "--repo", str(root)]) == 0
     assert "mine." in out.read_text(encoding="utf-8")
+
+
+# -- the launch seam: the card emits the prior keys onto [loop] -----------------------
+
+def _loaded(tmp_path, extra_agent: str, *, opname="demoop", carry=False):
+    """A loaded task (directory ``opname``), its run (snapshot taken), and the
+    loaded task's dir — the shapes write_loop_toml consumes at `forge run`."""
+    import shutil
+    from forgekernel.runs import new_run
+    d = _task_dir(tmp_path, extra_agent)
+    if opname != "demoop":
+        renamed = tmp_path / opname
+        shutil.move(d, renamed)
+        d = renamed
+    if carry:
+        (d / "carry").mkdir()
+        (d / "carry" / "milestone.md").write_text("# parent\n", encoding="utf-8")
+    task = load_task(d, kb_root=tmp_path)
+    return task, new_run(task, root=tmp_path / "runs")
+
+
+def test_card_emits_the_prior_keys_and_points_at_the_snapshot(tmp_path):
+    import tomllib
+    from forgekernel import taskcard
+    task, run = _loaded(tmp_path, 'prior_survey = true\nprior_art = "prior-art/op.md"\n')
+    opdir = tmp_path / "opdir"; opdir.mkdir()
+    out = taskcard.write_loop_toml(run, task, opdir, deny=[])
+    cfg = tomllib.loads(out.read_text())["loop"]
+    assert cfg["teacher_prior_survey"] is True
+    # prior_art is the run snapshot's copy, and it exists (the driver uses
+    # absolute values as given, so the chain is live)
+    assert cfg["teacher_prior_art"] == str(run.task_dir / "prior-art" / "op.md")
+    assert Path(cfg["teacher_prior_art"]).is_file()
+    assert "carry_dir" not in cfg                       # no carry in the task -> no line
+
+
+def test_card_emits_carry_into_the_snapshot_not_the_repo_tree(tmp_path):
+    """The generation shape (self_evolve): directory foo-g2, carry/ inside the
+    task -> the card names the snapshot's carry (which exists), never a
+    repo-level tasks/<name>/carry that gen0 owns."""
+    import tomllib
+    from forgekernel import taskcard
+    task, run = _loaded(tmp_path, "", opname="foo-g2", carry=True)
+    opdir = tmp_path / "opdir"; opdir.mkdir()
+    out = taskcard.write_loop_toml(run, task, opdir, deny=[])
+    cfg = tomllib.loads(out.read_text())["loop"]
+    assert cfg["carry_dir"] == str(run.task_dir / "carry")
+    assert Path(cfg["carry_dir"]).is_dir()              # it exists
+    assert f"tasks/{task.name}/carry" not in cfg["carry_dir"]
+    # the cli-style read of the emitted text: all three faces read back
+    assert cfg.get("teacher_prior_survey") is None       # not opted in this task
+    assert "teacher_prior_art" not in cfg
+
+
+def test_board_card_emits_the_prior_keys_too(tmp_path):
+    import tomllib
+    from forgekernel import taskcard
+    task, run = _loaded(tmp_path, 'prior_survey = true\nprior_art = "prior-art/op.md"\n',
+                        carry=True)
+    opdir = tmp_path / "opdir"; opdir.mkdir()
+    out = taskcard.write_board_loop_toml(run, task, opdir, deny=[])
+    cfg = tomllib.loads(out.read_text())["loop"]
+    assert cfg["teacher_prior_survey"] is True
+    assert cfg["teacher_prior_art"] == str(run.task_dir / "prior-art" / "op.md")
+    assert cfg["carry_dir"] == str(run.task_dir / "carry")
+
+
+def test_card_without_prior_keys_is_byte_unchanged(tmp_path):
+    """No keys, no carry -> none of the three lines: the generated file is the
+    pre-WP8 shape (and the board variant likewise)."""
+    import tomllib
+    from forgekernel import taskcard
+    task, run = _loaded(tmp_path, "")
+    opdir = tmp_path / "opdir"; opdir.mkdir()
+    text = taskcard.write_loop_toml(run, task, opdir, deny=[]).read_text()
+    cfg = tomllib.loads(text)["loop"]
+    for key in ("teacher_prior_survey", "teacher_prior_art", "carry_dir"):
+        assert key not in cfg
+    opdir2 = tmp_path / "opdir2"; opdir2.mkdir()
+    board = taskcard.write_board_loop_toml(run, task, opdir2,
+                                           deny=[]).read_text()
+    for key in ("teacher_prior_survey", "teacher_prior_art", "carry_dir"):
+        assert key not in tomllib.loads(board)["loop"]
+
+
+def test_cli_carry_default_prefers_the_run_snapshot(tmp_path, monkeypatch):
+    """Resume / --harvest-only / a bare `forge loop` has no card write: the
+    default resolves the run snapshot's carry first (the generation's own
+    record), falling back to the repo tree beside the task."""
+    import forgekernel.loop.cli as loop_cli
+    run_ops = tmp_path / "runs" / "r1" / "operators"
+    monkeypatch.setattr(loop_cli, "operators_dir", lambda *a, **k: run_ops)
+    # no snapshot carry anywhere -> the repo tree beside the task
+    assert loop_cli._default_carry_dir("foo-g2") == \
+        str(loop_cli._repo_root() / "tasks" / "foo-g2" / "carry")
+    # the run snapshot carries one -> that wins (even though task.name would
+    # point the repo fallback at gen0's directory)
+    snap_carry = tmp_path / "runs" / "r1" / "task" / "carry"
+    snap_carry.mkdir(parents=True)
+    assert loop_cli._default_carry_dir("foo-g2") == str(snap_carry)

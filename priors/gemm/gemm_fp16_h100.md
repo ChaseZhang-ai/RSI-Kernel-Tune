@@ -1,7 +1,7 @@
-# prior: h100
+# prior: Dense GEMM, 16-bit
 
 - Kernel: `kernels/gemm/gemm_fp16/h100/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +0.9% vs cuBLAS (Figure 3)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

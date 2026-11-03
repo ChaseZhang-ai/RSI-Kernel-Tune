@@ -1,7 +1,7 @@
-# prior: from_agent
+# prior: Attention forward, causal, GQA 16:1
 
 - Kernel: `kernels/attention/attn_fwd_gqa16/h100/from_agent/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +5.0% (+29% vs FlashAttention-4) vs /goal agent kernel (sealed) (Table 1)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

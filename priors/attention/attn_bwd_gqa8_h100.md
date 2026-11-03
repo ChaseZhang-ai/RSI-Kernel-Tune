@@ -1,7 +1,7 @@
-# prior: h100
+# prior: Attention backward, causal, GQA 8:1
 
 - Kernel: `kernels/attention/attn_bwd_gqa8/h100/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +2.7% vs FlashAttention-4 (Figure 3)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

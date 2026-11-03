@@ -1,7 +1,7 @@
-# prior: b200
+# prior: Recurrent Kimi Delta Attention prefill
 
 - Kernel: `kernels/linear_attention/recurrent_kda_prefill/b200/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +0.4% vs CAKE (Figure 4)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

@@ -1,7 +1,7 @@
-# prior: gen1
+# prior: Attention forward, causal, GQA 16:1, gen 1
 
 - Kernel: `kernels/attention/attn_fwd_gqa16/h100/gen1/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +9.9% (+10% vs FlashAttention-4) vs ForgeKernel gen 0 (sealed) (Table 1)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

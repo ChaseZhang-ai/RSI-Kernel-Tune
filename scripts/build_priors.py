@@ -35,14 +35,11 @@ KERNELS = REPO / "kernels"
 README = KERNELS / "README.md"
 PRIORS = REPO / "priors"
 
-# A published kernel leaf: a directory holding kernel.py (CuTe DSL kernels,
-# the paper era) or a .cu source (the CUDA era).
-_KERNEL_FILES = ("kernel.py",)
-
 # A kernels/README.md table row: | operator | gpu | vs | speedup | source | [`dir`](dir/) |
+# (the directory cell is a markdown link — the optional `[` before the backtick)
 _ROW_RE = re.compile(
     r"^\|(?P<op>[^|]+)\|(?P<gpu>[^|]+)\|(?P<vs>[^|]+)\|(?P<speedup>[^|]+)\|"
-    r"(?P<source>[^|]+)\|\s*`(?P<dir>[^`]+)`", re.M)
+    r"(?P<source>[^|]+)\|\s*\[?`(?P<dir>[^`]+)`", re.M)
 
 # A filled file declares itself; --force refreshes only auto skeletons.
 _FILLED_MARK = "Status: filled"
@@ -71,19 +68,24 @@ _SECTIONS = [
 
 
 def _rows() -> dict[str, dict[str, str]]:
-    """``kernels/README.md`` table rows keyed by their directory path."""
+    """``kernels/README.md`` table rows keyed the same way ``_kernels()`` spells
+    a kernel directory (``kernels/<family>/<op>/<gpu>``) — the two must meet,
+    or every skeleton would fall back to bare names."""
     out: dict[str, dict[str, str]] = {}
     if not README.is_file():
         return out
     for m in _ROW_RE.finditer(README.read_text(encoding="utf-8")):
         d = m.group("dir").strip().rstrip("/")
-        out[d] = {k: m.group(k).strip() for k in
-                  ("op", "gpu", "vs", "speedup", "source")}
+        out[f"kernels/{d}"] = {k: m.group(k).strip() for k in
+                               ("op", "gpu", "vs", "speedup", "source")}
     return out
 
 
 def _kernels() -> list[str]:
-    """Published kernel directories (relative to the repo root)."""
+    """Published kernel directories (relative to the repo root): leaves holding
+    kernel.py. The CUDA-era kernel ships kernel.py alongside its .cu sources,
+    so kernel.py is the marker — a .cu-only leaf would be missed, but there is
+    none in the tree."""
     out = []
     for f in sorted(KERNELS.rglob("kernel.py")):
         out.append(str(f.parent.relative_to(REPO)))
@@ -99,8 +101,12 @@ def _priors_rel(kernel_dir: str) -> str:
 def _skeleton(kernel_dir: str, meta: dict[str, str]) -> str:
     d = REPO / kernel_dir
     lang = ("CUDA C++" if any(d.glob("*.cu")) else "CuTe DSL (nvidia-cutlass-dsl)")
+    parts = Path(kernel_dir).parts          # ("kernels", family, operator, gpu[, gen])
+    # the README row's operator name when it has one; else the OPERATOR directory
+    # segment — never the leaf (a GPU codename like "b200" names no kernel)
+    title = meta.get("op") or (parts[2] if len(parts) > 2 else parts[-1])
     lines = [
-        f"# prior: {meta.get('op') or Path(kernel_dir).name}",
+        f"# prior: {title}",
         "",
         f"- Kernel: `{kernel_dir}/` ({lang})",
         f"- Published: {meta.get('speedup', '?')} vs {meta.get('vs', '?')} "

@@ -1,7 +1,7 @@
-# prior: h100
+# prior: GQA paged decode
 
 - Kernel: `kernels/attention/gqa_paged_decode/h100/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +24.5% vs K-Search (Figure 4)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

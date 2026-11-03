@@ -237,6 +237,19 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def _default_carry_dir(op: str) -> str:
+    """carry/ the driver reads when the card names none (WP8): a run snapshot's
+    own copy first (``<run>/task/carry`` — self_evolve writes carry/ into the
+    generation's task directory, the snapshot is that directory, and the op's
+    ``task.name`` does NOT change across generations while the directory does,
+    so a repo-level tasks/<op>/carry would always point at gen0); outside a
+    run, the repo tree next to the task."""
+    snap = operators_dir().parent / "task" / "carry"
+    if snap.is_dir():
+        return str(snap)
+    return str(_repo_root() / "tasks" / op / "carry")
+
+
 
 def _forge(op: str, *args: str, timeout: float = 600.0,
            env: dict | None = None) -> subprocess.CompletedProcess:
@@ -2852,9 +2865,10 @@ def _main(argv: list[str] | None = None) -> int:
         #   [agent.teacher] prior_art spelling is joined with the task dir).
         teacher_prior_art=str(cfg.get("loop", {}).get("teacher_prior_art", "") or ""),
         # carry_dir: the parent generation's closing record (self_evolve writes
-        #   tasks/<op>/carry/ at repo level); the card layer may point elsewhere.
+        #   tasks/<op>-g<k>/carry/; the card carries the snapshot path — the
+        #   default below prefers the run snapshot, then the repo tree).
         carry_dir=(str(cfg.get("loop", {}).get("carry_dir", "") or "")
-                   or str(_repo_root() / "tasks" / args.op / "carry")),
+                   or _default_carry_dir(args.op)),
         # [loop] m0_probe_candidates: the ARCH_PROBE bracket width (WP8; default
         #   2 = the WP6 behavior), clamped to m0_probe_rounds at run time.
         m0_probe_candidates=int(cfg.get("loop", {}).get("m0_probe_candidates", 2)),

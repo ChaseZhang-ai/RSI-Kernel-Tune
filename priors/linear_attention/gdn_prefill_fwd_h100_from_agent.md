@@ -1,7 +1,7 @@
-# prior: from_agent
+# prior: Gated DeltaNet prefill forward
 
 - Kernel: `kernels/linear_attention/gdn_prefill_fwd/h100/from_agent/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +9.5% (+100% vs FlashInfer) vs /goal agent kernel (sealed) (Table 1)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

@@ -1,7 +1,7 @@
-# prior: b200
+# prior: DeepSeek-V4.1 fused prefill: Q RoPE + sparse MQA attention with sink + O RoPE + FP8 cast
 
 - Kernel: `kernels/sparse_attention/dsv41_fused_attn_rope_cast/b200/` (CUDA C++)
-- Published: ? vs ? (kernels/README.md)
+- Published: 1.104–1.105× vs FlashMLA (After the paper)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

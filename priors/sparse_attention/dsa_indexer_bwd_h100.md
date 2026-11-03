@@ -1,7 +1,7 @@
-# prior: h100
+# prior: DSA indexer backward
 
 - Kernel: `kernels/sparse_attention/dsa_indexer_bwd/h100/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +2.5% vs cuDNN-frontend (Figure 3)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

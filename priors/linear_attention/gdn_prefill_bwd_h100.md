@@ -1,7 +1,7 @@
-# prior: h100
+# prior: Gated DeltaNet prefill backward
 
 - Kernel: `kernels/linear_attention/gdn_prefill_bwd/h100/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +1.1% vs FlashQLA (Figure 3)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

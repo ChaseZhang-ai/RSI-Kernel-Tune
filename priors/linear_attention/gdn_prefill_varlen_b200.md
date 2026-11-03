@@ -1,7 +1,7 @@
-# prior: b200
+# prior: Gated DeltaNet prefill, varlen
 
 - Kernel: `kernels/linear_attention/gdn_prefill_varlen/b200/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +5.8% vs Kernel Design Agents (KDA-v0.5) (Figure 4)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

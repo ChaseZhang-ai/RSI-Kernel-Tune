@@ -1,7 +1,7 @@
-# prior: h100
+# prior: MLA paged prefill
 
 - Kernel: `kernels/attention/mla_paged_prefill/h100/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: +146.1% vs K-Search (Figure 4)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

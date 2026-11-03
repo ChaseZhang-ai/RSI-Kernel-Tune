@@ -1,7 +1,7 @@
 # CHANGES-WP8 — 先验供给线（SOTA survey → ARCH_PROBE）
 
 分支 `feat/wp8-prior-supply`（自集成 main @ c1971f1 开出，独立工作区 `/home/zcz/forgeKernelOptimize/wk2-wp8`，未合并未推送）。
-基线与验收：干净 main 全量 `pytest tests/ -q` = **2222 passed**；本包完成后全量 = **2247 passed**（见文末"测试证据"）。
+基线与验收：干净 main 全量 `pytest tests/ -q` = **2222 passed**；本包完成后全量 = **2252 passed**（含复审接缝补齐的 5 项新测试）（见文末"测试证据"）。
 
 **前置门偏差记录（重要）**：`/home/zcz/forgeKernelOptimize/kernel-ZXtune` 尚不存在；集成仓库以 `zxtune-integration` 的形式就位（main = `c1971f1 kernel-ZXtune: ForgeKernel @5030503 + WP1-WP6 integrated`，`handoff/02-集成报告.md` 已落盘——总览 §四前置门的实质条件满足，只差目录名）。姊妹 Wave-2 包（wk2-wp9、wk2-wp10）同一批拿到任务，其工作区 origin 均指向 `zxtune-integration`，本包沿用同一先例 clone 开工，未触碰旧 ForgeKernel 仓库。若总工程师期望 kernel-ZXtune 由集成步另行落位，本分支 `git remote set-url` 即可，工作不受影响。
 
@@ -41,7 +41,7 @@
 - 应用点 = 蒸馏入口 `run_distill_step` 与 `_recon_prompt`（其全部调用方统一生效）：`_apply_prior_input(render, ctx)`——lane 开着时原样放行（token 已填充），关着时 `_PRIOR_INPUT_RE` 剥除整段（含前后换行，**剥后与 pre-WP8 模板逐字节一致**——六个提示词文件的字节一致性有专项验证，两个控制组测试照此更新）。
 - **学生侧零改动**：student_prompt.md 一字未动（测试 pin 其无任何 prior token）；注入只经 `_bindings`（学生模板无该 token，渲染不受影响）。
 
-**cli 接线**（`src/forgekernel/loop/cli.py`，LoopContext(...) 内 `# --- WP8 ---` 注释块，WP1/WP6 同址先例）：四键从卡片层 loop.toml 读（`teacher_prior_survey`/`teacher_prior_art`/`carry_dir`/`m0_probe_candidates`），carry_dir 默认 `<repo>/tasks/<op>/carry`。task.toml 拼写（`[agent.teacher]`）在 AgentSpec 上随快照携带，launch→loop 的传值（两行）留给集成步，与 WP6 的 `m0_probe_rounds` 接线"added at the integration step"完全同例。
+**cli 接线**（`src/forgekernel/loop/cli.py`，LoopContext(...) 内 `# --- WP8 ---` 注释块，WP1/WP6 同址先例）：四键从卡片层 loop.toml 读（`teacher_prior_survey`/`teacher_prior_art`/`carry_dir`/`m0_probe_candidates`）；carry_dir 缺省时快照优先（`_default_carry_dir`：run 快照 → `<repo>/tasks/<op>/carry` 回退）。task.toml 拼写（`[agent.teacher]`）在 AgentSpec 上随快照携带，`forge run` 经卡片发射进真实链（见文末"接缝补齐"——本包内闭环，不留集成步）。
 
 **`docs/prior-art/`**（新）：README（"只写决策不写实现体"的格式说明）+ `template-op.md` 空模板。
 
@@ -85,7 +85,7 @@
 ## 围栏注记（超出字面清单的三处，均为功能必需，请集成步复核）
 
 1. **`meta/cuda/{recon,distill,distill_blackbox}_prompt.md`**：CUDA 模式经 `lang_mode.prompt_path` 读 overlay 全文（非增量），只改 base 三个文件 = cuda 模式静默无此功能。三份 overlay 各加同一先验段（与 base 措辞一致）。
-2. **`cli.py`**：LoopContext(...) 构造内四行接线 + 注释——任务文本"新键按 WP1 先例走 LoopContext 默认区"的必然落点（WP1/WP6 键同址接线）。
+2. **`cli.py`**：LoopContext(...) 构造内键接线 + 注释，及其 carry_dir 默认表达式的小 helper `_default_carry_dir`（快照优先；放在表达式旁边的唯一理由是可读性，不碰 cli 其余任何逻辑）——任务文本"新键按 WP1 先例走 LoopContext 默认区"的必然落点（WP1/WP6 键同址接线）。
 3. **既有测试更新**（三处，均系 WP8 被授权改动的契约所系）：`test_loop_driver.py` 两个 recon/distill 控制组测试改比"剥除先验段后的模板渲染"（= pre-WP8 字节）；`test_self_evolve.py` fixture 适配 `next_generation(…, run=)` 签名；`test_kb_candidates.py` 队列行数 7→13（任务 4 的合法增量）。
 
 ## 契约遵守
@@ -108,7 +108,7 @@
 ## 测试证据
 
 - 基线：干净 main @ c1971f1，`pytest tests/ -q` → **2222 passed**（306.91s）。
-- 完成后全量：**2247 passed**（含新增 `tests/test_wp8_prior_supply.py` 25 项：键 schema 正/负例、prompt 两态与字节还原、bracket 扩容四态、carry 四件套/缺席记录/无 run 不写、build_priors hermetic 写与 filled 保护、priors 无代码体、CANDIDATES.md kb_lint 专项扫描）。
+- 完成后全量：**2252 passed**（新增 `tests/test_wp8_prior_supply.py` 30 项 = 25 项主体验收【键 schema 正/负例、prompt 两态与字节还原、bracket 扩容四态、carry 四件套/缺席记录/无 run 不写、build_priors hermetic 写与 filled 保护、priors 无代码体、CANDIDATES.md kb_lint 专项扫描】+ 5 项接缝补齐【卡片发射正/反态、board 卡发射、foo-g2 代形 carry 指向快照、cli 默认快照优先/回退】）。
 - kb_lint：`lint_kb_dir(hw_kb)` = 0 findings（含 CANDIDATES.md 新 6 行）；`lint_exam_surfaces`（meta/ + skills/ + 模板 + 循环内提示词字符串常量）= 0 findings。
 - dry-run 证据（验收 2）：fixture task 带 `[agent.teacher] prior_survey=true` + `prior-art/op.md` 过 `load_task`；蒸馏/recon 提示词组装注入段全文见下方附录（PRIOR_ART 卷宗内容、CARRY=(none)、PRIORS 指针、纪律句齐备）；关掉键后整段消失（"section present: False, marker present: False"）；负例 `[teacher]` 误拼表被拒且报 "unknown table [teacher]"（单测 pin 同文案）。
 - 花括号密度抽查（验收 3）：`grep -c '[{}]' priors/*.md` 全 0（25 文件）；`python3 scripts/build_priors.py --help` 可运行。
@@ -144,6 +144,23 @@ a gate number, the M0 freeze or any stopping judgment** — unmeasured claims st
 <!-- PRIOR-INPUT:END (WP8) -->
 ```
 
-### 集成缝（WP13 待办，2 行）
+### 接缝补齐（复审 P0/P1，已在本包完成——不存在"集成步替我接线"，本包交付即终态）
 
-launch 侧把 `task.teacher.prior_survey / task.teacher.prior_art`（快照内已随 task.toml 携带）传入 `loop_cli.main`（新 argv 旗标或卡片 loop.toml 两行），与 WP6 `m0_probe_rounds` 当年的接线同例；本包卡片层拼写（`[loop] teacher_prior_survey / teacher_prior_art / carry_dir / m0_probe_candidates`）已可用，不阻塞。
+**任务级 opt-in 在真实启动链上断线**（P0）：`load_task` 校验并挂上 AgentSpec 的两键，但 `write_loop_toml`/`write_board_loop_toml` 不发射，而 loop cli 只读卡片 loop.toml 的 `[loop]`——`forge run` 真实路径上先验线永远暗着，全局 models.toml opt-in 同样死在链上。补齐：
+
+1. **发射**（`src/forgekernel/taskcard.py`，`write_loop_toml` 与 `write_board_loop_toml` 各加一块 `# --- WP8 ---`）：
+   - `task.teacher.prior_survey` 为 True → 发射 `teacher_prior_survey = true`；
+   - `task.teacher.prior_art` 非空 → 发射 `teacher_prior_art = "<快照绝对路径>"`，用现成 `_snapshot_path(run, task, task.dir / task.teacher.prior_art)` 解析（`run.task_dir / 相对路径`；driver 的 `_resolve_prior_art_path` 对绝对路径直接使用，链路即通）；
+   - `(task.dir / "carry").is_dir()` → 发射 `carry_dir = str(run.task_dir / "carry")`（`Run.task_dir` 即快照；快照是整个 task 目录的 copytree，`_SNAPSHOT_IGNORE` 只排 `.git/__pycache__/*.pyc/.DS_Store`，carry 一定随行）。**无键 task 产出的文件与现状逐字节一致**（三行只在对应条件成立时出现，发射点在固定键序区内，测试 pin 正/反两态）。
+2. **cli 默认快照优先**（`src/forgekernel/loop/cli.py`，仅 carry_dir 默认表达式 + 其 helper `_default_carry_dir`）：卡片键 → run 快照 `operators_dir().parent / "task" / "carry"`（存在才用）→ 回退 `<repo>/tasks/<op>/carry`。resume / `--harvest-only` / 手动裸跑 loop 无卡片写入也正确。
+3. **carry 默认的稳健性强化**（上一轮复审判为 P1 故障修复，经本轮复核更正为防御性改进）：`task.name` 来自目录名（`load_task`：`name = name or d.name`），换代目录改名 `<base>-g<k>` 后 `run_loop` 传 `--op` 随之指向新代——因此修改前的 repo 回退默认 `<repo>/tasks/<args.op>/carry` 在标准自进化链上**本就指向正确的 carry 目录**，不存在"永指 gen0"的故障（该错误根因出自上一轮复审提示词，本轮复核纠正）。本次快照优先默认 + 卡片发射的真实价值是对 resume / 换机 / 仓库树搬迁等场景的强化：快照 carry 随 `runs/<id>/` 走、不依赖 repo 树的 `tasks/` 布局仍在原地，卡片发射让显式路径总能压过任何默认推断——双保险，任一在位都指对本代 carry。
+4. **测试**（`tests/test_wp8_prior_supply.py` 新增 5 项，共 30）：带两键 fixture → 产物含三键且 `teacher_prior_art` 指向快照内存在文件；foo-g2 代形（目录改名、carry 在 task 内）→ `carry_dir` 指向 `exists()` 的快照目录、绝不落 `tasks/<name>/carry`，且发射文本走 cli 同款 `cfg.get("loop",{})` 读取三键可读回；board 卡同发射；无键 task（含 board）三键全无；`_default_carry_dir` 快照优先/回退两态（monkeypatch `operators_dir`）。
+
+### 顺手清理（P3）
+
+- `scripts/build_priors.py`：删死常量 `_KERNEL_FILES`，`_kernels()` docstring 改准（现仓库唯一 .cu kernel 目录同时有 kernel.py，kernel.py 即标志，无实际漏）。
+- 骨架标题/元数据修复：复审只点了标题 fallback 落 GPU 代号（dsv41 骨架标题曾是 "# prior: b200"），排查发现更深一层——`_rows()` 以 README 相对路径为键而查找用 `kernels/` 前缀路径，**元数据从未匹配上**，且目录列正则漏了 markdown 链接的 `[`（`` [`dir`](dir/) ``），`_rows()` 恒为空。三处一并修：键对齐 + 正则补 `\[?` + 标题 fallback 改算子目录段（`kernels/<family>/<op>/<gpu>` 第二段，永不落到 "b200"）。`--write --force` 刷新全部 22 份自动骨架（现全部带 README 算子名与 Published 行；3 份 `Status: filled` 未动，脚本保护在案）。
+
+### 集成缝（已清——无遗留）
+
+原"WP13 待办两行"已由上节接缝补齐取代：卡片层拼写与发射、cli 快照优先默认、无键字节一致，全部在本包内交付并有测试。集成步只剩常规检查（分支合并 + 全量回归），无 WP8 专属接线要做。

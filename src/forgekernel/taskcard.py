@@ -308,6 +308,17 @@ def write_board_loop_toml(run, task, op_dir: Path, *, deny: list[str], ncu: bool
         [str(p) for p in lc.get("ref_source_paths", [])] + list(deny)))
     lc.setdefault("ref_source_urls", [])
     lc.setdefault("ref_from_goal", "off")
+    # --- WP8: teacher-side prior supply (absent keys -> no line, the file then
+    # reads exactly as before). prior_art resolves to the run snapshot's copy
+    # (the driver uses absolute values as given); carry travels inside the
+    # snapshot, so the card points the loop at the snapshot's carry/ directly.
+    if task.teacher.prior_survey:
+        lc["teacher_prior_survey"] = True
+    if task.teacher.prior_art:
+        lc["teacher_prior_art"] = str(
+            _snapshot_path(run, task, task.dir / task.teacher.prior_art))
+    if (task.dir / "carry").is_dir():
+        lc["carry_dir"] = str(run.task_dir / "carry")
     if not ncu:
         lc.update(ncu_available=False, job_env_preflight="warn", timeline_probe="off",
                   stall_pricing=False, orch_census=False)
@@ -369,6 +380,18 @@ def write_loop_toml(run, task, op_dir: Path, *, deny: list[str], ncu: bool = Tru
         f"ref_source_paths = {json.dumps(sorted(dict.fromkeys(deny)))}",
         f"ref_source_urls  = {json.dumps(list(task.reference.deny_urls) if task.reference else [])}",
     ]
+    # --- WP8: teacher-side prior supply. Absent keys -> no extra lines (the
+    # generated file stays byte-identical to the pre-WP8 shape). prior_art is
+    # emitted as the run snapshot's absolute path (the driver uses absolute
+    # values as given); carry/ rides the snapshot, so the card points the loop
+    # at it directly — the generation's own carry, not gen0's.
+    if task.teacher.prior_survey:
+        lines.append("teacher_prior_survey = true")
+    if task.teacher.prior_art:
+        lines.append("teacher_prior_art = "
+                     f"{json.dumps(str(_snapshot_path(run, task, task.dir / task.teacher.prior_art)))}")
+    if (task.dir / "carry").is_dir():
+        lines.append(f"carry_dir = {json.dumps(str(run.task_dir / 'carry'))}")
     shapes = ", ".join(f"{s.name} {json.dumps(s.axes)}" for s in task.shapes)
     if task.mode == MODE_GENERATE:
         lines += [

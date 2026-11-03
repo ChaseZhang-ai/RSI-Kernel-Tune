@@ -1,7 +1,7 @@
-# prior: gen0
+# prior: Gated DeltaNet prefill forward, gen 0
 
 - Kernel: `kernels/linear_attention/gdn_prefill_fwd/h100/gen0/` (CuTe DSL (nvidia-cutlass-dsl))
-- Published: ? vs ? (kernels/README.md)
+- Published: −0.2% vs FlashInfer (Figure 3)
 - Status: skeleton (auto-generated; fill the sections below — decisions and values in prose, never an implementation body)
 
 ## Persistent scheduling

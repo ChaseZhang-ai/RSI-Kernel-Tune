@@ -2853,6 +2853,13 @@ def _main(argv: list[str] | None = None) -> int:
         # [loop] m0_probe_rounds: ARCH_PROBE's GPU-job budget (WP6; default 2 —
         # one job per of the two candidate skeletons, 0 disables, <2 skips).
         m0_probe_rounds=int(cfg.get("loop", {}).get("m0_probe_rounds", 2)),
+        # [loop] stagnation_k / multi_candidate_max (WP10; the forwarding lines
+        # its CHANGES reserved for the integration step, the m0_probe_rounds
+        # precedent): the architecture-escape trigger's K (0 disables) and the
+        # MC-DELIVERY cap. Card-layer [loop] is the override surface; these
+        # defaults govern launches that don't set the keys.
+        stagnation_k=int(cfg.get("loop", {}).get("stagnation_k", 3)),
+        multi_candidate_max=int(cfg.get("loop", {}).get("multi_candidate_max", 3)),
         # --- WP9: measurement anchoring — [target] floor_margin (a weak/absent-ref
         # run's stop derives from the analytic floor) and [loop] floor_stop /
         # floor_stop_margin (stop at floor x (1 + margin) once a verified-BLOCKED

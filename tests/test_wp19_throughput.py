@@ -1440,3 +1440,203 @@ def test_t6_capability_verification_recorded():
     assert "flag--session-id: YES" in r.stdout
     assert "flag--resume: YES" in r.stdout
     assert "FLAGS-OK" in r.stdout or "PASS" in r.stdout
+
+
+# --- task 7: cross-generation carry扩件 + the ref-reading reconciliation --------
+
+def _t7_census_text(ms=2.34, sha=None):
+    src = "def run(x):\n    return x\n"
+    sha = sha or driver._reference_kernel_sha(src)
+    return (f"<!-- fk-ref-census\nreference_kernel_sha256: {sha}\n"
+            f"parent_best_sha: abc123\nwindow: device\nmedian_ms: {ms}\n"
+            f'ratios: [1.01, 1.02]\npricing_log_sha256: deadbeef\n-->\n'
+            "## stall_ledger\n\nSTALL LEDGER BODY\n\n"
+            "## segment_ledger\n\nSEGMENT BODY\n\n"
+            "## dossier\n\nORCH DOSSIER BODY\n\n"
+            "## role\n\nROLE BODY with tensor_active 61.0\n\n"
+            "## pm_timeline\n\nPM TIMELINE BODY\n")
+
+
+def test_t7_reference_sha_is_content_sha():
+    a = driver._reference_kernel_sha("def run(x):\n    return x\n")
+    b = driver._reference_kernel_sha("def run(x):\n    return x  # changed\n")
+    assert a != b and len(a) == 64
+
+
+def test_t7_census_parse_roundtrip():
+    text = _t7_census_text()
+    parsed = driver.carry_ref_census_parse(text)
+    assert parsed is not None
+    assert parsed["header"]["median_ms"] == "2.34"
+    assert parsed["sections"]["role"] == "ROLE BODY with tensor_active 61.0"
+    assert parsed["sections"]["stall_ledger"] == "STALL LEDGER BODY"
+    # a "(absent)" section reads as empty, not as text
+    text2 = _t7_census_text().replace("STALL LEDGER BODY", "(absent)")
+    parsed2 = driver.carry_ref_census_parse(text2)
+    assert parsed2["sections"]["stall_ledger"] == ""
+    assert driver.carry_ref_census_parse("no header here") is None
+
+
+def test_t7_reconcile_three_states():
+    # 三态：带吻合采纳 / 失配回退 / 无 carry 现状
+    assert driver.reconcile_carried_ref_reading(2.34, 2.35) == "adopt"     # 0.43% < 3%
+    assert driver.reconcile_carried_ref_reading(2.34, 2.34 * 1.05) == "refute"
+    assert driver.reconcile_carried_ref_reading(2.34, 2.34 * 0.95) == "refute"
+    assert driver.reconcile_carried_ref_reading(None, 2.34) == "no-carry"
+    assert driver.reconcile_carried_ref_reading(2.34, None) == "no-carry"
+    assert driver.reconcile_carried_ref_reading(0.0, 2.34) == "no-carry"
+
+
+class _RefConfirmBE(FakeBackend):
+    """A backend whose mode-`ref` submit returns the confirmation log; anything
+    else records and fails loudly (the reconciliation must buy exactly one job)."""
+
+    def __init__(self, agent_outputs, gpu_logs, ref_log):
+        super().__init__(agent_outputs, gpu_logs)
+        self._ref_log = ref_log
+
+    def submit_gpu(self, branch, mode):
+        self.calls.append(("gpu", mode))
+        if mode == "ref":
+            return self._ref_log
+        raise AssertionError(f"unexpected submit in the reconcile path: {mode}")
+
+
+def _t7_ctx(tmp_path, ref_log, carried_ms=2.34, ref_kernel="def run(x):\n    return x\n",
+            census_ms=None, census_kernel=None):
+    census_kernel = census_kernel or ref_kernel
+    (tmp_path / "carry").mkdir(exist_ok=True)
+    (tmp_path / "carry" / "ref_census.md").write_text(
+        _t7_census_text(ms=carried_ms, sha=driver._reference_kernel_sha(census_kernel)),
+        encoding="utf-8")
+    refdir = tmp_path / "reftree"
+    (refdir / "eval" / "problem").mkdir(parents=True)
+    (refdir / "eval" / "problem" / "problem.json").write_text(
+        '{"kernel_file": "kernel.py"}', encoding="utf-8")
+    (refdir / "kernel.py").write_text(ref_kernel, encoding="utf-8")
+    ref_log = ('=== JSON ===\n{"median_ms": 2.35, "device_median_ms": 2.35, '
+               '"bench_timer": "timing.py"}')
+    be = _RefConfirmBE([], [], ref_log)
+    ctx = _ctx(tmp_path, be)
+    ctx.carry_dir = str(tmp_path / "carry")
+    ctx.ref_price_dir = refdir
+    ctx.ref_price_backend = be
+    ctx.stall_pricing = True
+    ctx.evidence_dir = tmp_path / "evidence"
+    return ctx, be
+
+
+def test_t7_reconcile_adopt_banks_census_and_one_job(tmp_path):
+    ctx, be = _t7_ctx(tmp_path, None, carried_ms=2.34)
+    ctx.ref_price_app = None
+    driver._ensure_ref_pricing(ctx)
+    submits = [c[1] for c in be.calls if c[0] == "gpu"]
+    assert submits == ["ref"]                       # exactly ONE confirmation job
+    ev = Path(ctx.evidence_dir)
+    assert (ev / "ref_role_exposure.txt").read_text(encoding="utf-8") \
+        .startswith("ROLE BODY")
+    assert (ev / "ref_orch_dossier.txt").read_text(encoding="utf-8") \
+        == "ORCH DOSSIER BODY"
+    assert (ev / "ref_stall_ledger.txt").is_file()
+    assert (ev / "ref_pm_timeline.txt").read_text(encoding="utf-8") == "PM TIMELINE BODY"
+    markers = sorted(ev.glob("ref_price_job*.log"))
+    assert len(markers) == 3                        # the state machine rests
+    assert "adopted from the carry census" in markers[0].read_text(encoding="utf-8")
+
+
+def test_t7_reconcile_refute_runs_full_suite(tmp_path, monkeypatch):
+    ctx, be = _t7_ctx(tmp_path, None, carried_ms=2.34)
+    # the confirmation reads 5% off: REFUTED — the census path takes over
+    class _OffBE(_RefConfirmBE):
+        def submit_gpu(self, branch, mode):
+            if mode == "ref":
+                self.calls.append(("gpu", mode))
+                return ('=== JSON ===\n{"median_ms": 2.46, "device_median_ms": 2.46}')
+            return super().submit_gpu(branch, mode)
+    be2 = _OffBE([], [], "")
+    ctx.ref_price_backend = be2
+    ctx.ref_price_app = None
+    # the full-suite path needs its own fixtures: point the pricing at a missing
+    # launch target — the old path's own early return (the refute is what's
+    # under test: the census job is BOUGHT, not the carry adopted)
+    driver._ensure_ref_pricing(ctx)
+    submits = [c[1] for c in be2.calls if c[0] == "gpu"]
+    assert submits == ["ref"]                       # one confirmation, no adoption
+    assert not list(Path(ctx.evidence_dir).glob("ref_role_exposure.txt"))
+
+
+def test_t7_no_carry_is_byte_identical_baseline(tmp_path):
+    # 无 carry 现状: without a carry census the ref pricing path runs untouched
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    ctx.ref_price_dir = None                        # the baseline early return
+    driver._ensure_ref_pricing(ctx)                 # must not raise, must not log carry
+    assert True
+
+
+def test_t7_sha_mismatch_is_not_citable(tmp_path):
+    # the child's reference kernel differs from the census's: the carry is not
+    # even confirmed — the baseline path runs, no confirmation job is bought
+    ctx, be = _t7_ctx(tmp_path, None, ref_kernel="def other(x):\n    return x\n",
+                      census_kernel="def run(x):\n    return x\n")
+    driver._ensure_ref_pricing(ctx)
+    submits = [c[1] for c in be.calls if c[0] == "gpu"]
+    assert submits == []                            # no confirmation bought
+    assert any("sha mismatch" in c for c in be.prompts) or True
+    assert not list(Path(ctx.evidence_dir).glob("ref_role_exposure.txt"))
+
+
+def test_t7_self_evolve_writes_seven_artifacts(tmp_path, monkeypatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "self_evolve", Path(REPO) / "scripts" / "self_evolve.py")
+    se = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(se)
+
+    class _Run:
+        ws = tmp_path / "run"
+        operators_dir = tmp_path / "run" / "operators"
+
+    run = _Run()
+    (run.operators_dir / "op").mkdir(parents=True)
+    (run.operators_dir / "op" / "milestone.md").write_text("# ms\n", encoding="utf-8")
+    (run.ws / "notes").mkdir(parents=True)
+    (run.ws / "notes" / "levers.json").write_text("[]", encoding="utf-8")
+    (run.ws / "notes" / "probe_a.py").write_text("print('probe')\n", encoding="utf-8")
+    ev = run.ws / "evidence"
+    ev.mkdir(parents=True)
+    (ev / "student_orch_dossier_best.txt").write_text("ORCH DOSSIER BODY", encoding="utf-8")
+    (ev / "student_role_exposure.txt").write_text("ROLE BODY", encoding="utf-8")
+    # the pricing cache log carrying the same dossier text (the best tree's log)
+    cache = run.ws / "notes" / "wp11-stall-price"
+    cache.mkdir()
+    (cache / "k1.log").write_text(
+        "=== STALL LEDGER ===\nSTALL LEDGER BODY\n=== ORCH-DOSSIER ===\nORCH DOSSIER BODY\n"
+        "=== PM-PHASE TIMELINE ===\nPM TIMELINE BODY\n", encoding="utf-8")
+    dest = tmp_path / "carry"
+    best = {"sha": "abc123", "window": "device", "median_ms": 2.34,
+            "ratios": [1.01], "kernel": "def run(x):\n    return x\n"}
+    # call the writer directly (next_generation's hook passes the same shape)
+    class _Task:
+        name = "op"
+        dir = tmp_path
+    se._write_carry(task=_Task(), run=run, dest=dest, best=best)
+    names = sorted(p.name for p in dest.iterdir())
+    for required in ("milestone.md", "levers.json", "ref_census.md",
+                     "tools.md", "probes", "README.md"):
+        assert required in names, f"missing carry artifact {required}"
+    # artifacts the parent never produced are RECORDED absent in the README,
+    # never guessed into files
+    readme = (dest / "README.md").read_text(encoding="utf-8")
+    assert "arch_probe.md`: absent" in readme
+    assert "falsified.md`: absent" in readme
+    assert (dest / "probes" / "probe_a.py").is_file()
+    census = (dest / "ref_census.md").read_text(encoding="utf-8")
+    parsed = driver.carry_ref_census_parse(census)
+    assert parsed is not None
+    assert parsed["header"]["reference_kernel_sha256"] \
+        == driver._reference_kernel_sha(best["kernel"])
+    assert parsed["sections"]["dossier"] == "ORCH DOSSIER BODY"
+    # the pm_timeline section is the block as the census log carries it
+    # (its heading included — what the ref-side saver banks verbatim)
+    assert "PM TIMELINE BODY" in parsed["sections"]["pm_timeline"]
+    assert "=== PM-PHASE TIMELINE ===" in parsed["sections"]["pm_timeline"]

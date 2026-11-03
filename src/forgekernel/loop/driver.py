@@ -13652,6 +13652,28 @@ def _ensure_ref_pricing(ctx: LoopContext, label: str = "meta") -> None:
     missing = _ref_price_missing(ctx)
     if not missing:
         return
+    # WP19 (task 7): the cross-generation reconciliation — a sha-matched carry
+    # census confirmed by ONE cheap job within the band adopts the carried
+    # ref-side readings; a refutation (or anything that fails) falls through
+    # to the full suite below; no carry is the byte-identical baseline.
+    if (census := _carry_ref_census(ctx)) is not None:
+        if _ref_tree_kernel_sha(ctx) == census["header"].get("reference_kernel_sha256"):
+            try:
+                carried = float(census["header"].get("median_ms") or 0) or None
+            except (TypeError, ValueError):
+                carried = None
+            be0 = ctx.ref_price_backend
+            branch = getattr(be0, "current_branch", lambda: "main")()
+            confirmed = _ref_confirm_reading_ms(ctx, be0, branch)
+            verdict = reconcile_carried_ref_reading(carried, confirmed)
+            _log(f"{label}/ref-price: carry census reconciliation -> {verdict} "
+                 f"(carried {carried}, confirmed {confirmed}, "
+                 f"band {_REF_RECONCILE_BAND:.0%})")
+            if verdict == "adopt" and _adopt_carry_ref_census(ctx, census):
+                return
+        else:
+            _log(f"{label}/ref-price: carry census sha mismatch — not citable, "
+                 f"running the full census suite")
     if _report_waives(ctx, *[_ROLE_WAIVED if m == "ROLE" else _PMTL_WAIVED for m in missing]):
         return  # the teacher owned the absence; no job behind its back
     if ctx.now() > ctx.deadline_epoch - 1800:
@@ -13949,6 +13971,154 @@ def _stall_price_cache_store(ctx: LoopContext, key: tuple[str, str, str],
 
 _REF_PRICE_MAX_SUBMIT_FAILURES = 3
 _REF_PRICE_MARKER_NAMES = ("ref_price_job.log", "ref_price_job.2.log", "ref_price_job.3.log")
+
+
+# --- WP19 (task 7): the cross-generation reference-reading reconciliation -----
+#
+# The parent generation's best tree IS the child's reference (verbatim copy),
+# so its sha-stamped census (carry/ref_census.md) is a byte-identity prior for
+# the child's ref-side readings. The rule (红线追加②: 读数复用是加速不是省
+# 测量): the prior is adopted only after ONE cheap confirmation job re-times
+# the reference and lands within _REF_RECONCILE_BAND of the carried reading;
+# a mismatch REFUTES the carry and the full census suite runs as always; no
+# carry (or a sha mismatch — the byte-identity failed) is the baseline path,
+# byte-identical to a run without carry.
+_REF_RECONCILE_BAND = 0.03
+_REF_CENSUS_HEADER_RE = re.compile(
+    r"<!-- fk-ref-census\n(.*?)-->", re.S)
+_CARRY_REF_CENSUS_SECTIONS = ("stall_ledger", "segment_ledger", "dossier",
+                              "role", "pm_timeline")
+
+
+def _reference_kernel_sha(kernel_src: str) -> str:
+    import hashlib
+    return hashlib.sha256(kernel_src.encode("utf-8")).hexdigest()
+
+
+def carry_ref_census_parse(text: str) -> "dict | None":
+    """The carry census: its machine header (sha/window/median/ratios) plus the
+    five sections; None when the header is missing or unparseable."""
+    m = _REF_CENSUS_HEADER_RE.search(text)
+    if m is None:
+        return None
+    header: dict = {}
+    for line in m.group(1).splitlines():
+        if ":" not in line:
+            continue
+        k, v = line.split(":", 1)
+        header[k.strip()] = v.strip()
+    if not header.get("reference_kernel_sha256"):
+        return None
+    sections = {}
+    for key in _CARRY_REF_CENSUS_SECTIONS:
+        sm = re.search(rf"(?ms)^## {re.escape(key)}\n\n(.*?)(?=^## |\Z)", text)
+        val = sm.group(1).strip() if sm else ""
+        sections[key] = "" if val == "(absent)" else val
+    return {"header": header, "sections": sections}
+
+
+def _carry_ref_census(ctx: LoopContext) -> "dict | None":
+    """The child's carried census, when the run's carry dir has one."""
+    carry_dir = ctx.carry_dir
+    if not carry_dir:
+        return None
+    p = Path(carry_dir) / "ref_census.md"
+    try:
+        return carry_ref_census_parse(p.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return None
+
+
+def _ref_tree_kernel_sha(ctx: LoopContext) -> "str | None":
+    """sha256 of the reference tree's kernel source — the byte-identity the
+    citation requires (the ref tree's own problem.json names the kernel)."""
+    d = ctx.ref_price_dir
+    if d is None:
+        return None
+    try:
+        prob = json.loads((Path(d) / "eval/problem/problem.json")
+                          .read_text(encoding="utf-8"))
+        kf = prob.get("kernel_file", "kernel.py")
+        return _reference_kernel_sha((Path(d) / kf).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def reconcile_carried_ref_reading(carried_ms: "float | None", confirmed_ms: "float | None",
+                                  band: float = _REF_RECONCILE_BAND) -> str:
+    """The three states, pure: 'no-carry' (nothing to reconcile against),
+    'adopt' (the confirmation lands within the band of the carried reading),
+    'refute' (it does not — the full suite runs)."""
+    if carried_ms is None or confirmed_ms is None or carried_ms <= 0 or confirmed_ms <= 0:
+        return "no-carry"
+    if abs(confirmed_ms - carried_ms) / carried_ms <= band:
+        return "adopt"
+    return "refute"
+
+
+def _adopt_carry_ref_census(ctx: LoopContext, census: dict) -> bool:
+    """Bank the carried census as the child's ref-side reading. Adopting is
+    all-or-nothing: the carry must settle BOTH halves of the ref account (the
+    role table with its tensor term and the PM timeline) — anything less runs
+    the full suite, which banks everything itself."""
+    ev = _evidence_dir(ctx, create=True)
+    if ev is None:
+        return False
+    sections = census["sections"]
+    if not sections.get("role") or not sections.get("pm_timeline"):
+        _log("ref-price/carry: the carry census lacks the role or timeline section "
+             "— adopting nothing, running the full suite")
+        return False
+    pairs = (("role", _REF_ROLE_EXPOSURE_NAME),
+             ("dossier", _REF_ORCH_DOSSIER_NAME),
+             ("stall_ledger", _REF_STALL_LEDGER_NAME),
+             ("segment_ledger", _REF_SEGMENT_LEDGER_NAME),
+             ("pm_timeline", _REF_PM_TIMELINE_NAME))
+    try:
+        for key, name in pairs:
+            text = sections.get(key, "")
+            if text:
+                (ev / name).write_text(text, encoding="utf-8")
+        key = _ref_pricing_key(ctx)
+        for marker_name in _REF_PRICE_MARKER_NAMES:
+            (ev / marker_name).write_text(
+                f"[ref-price] key={key} app={ctx.ref_price_app!r} "
+                f"pm_interval={_pm_interval(ctx)}\n"
+                f"[ref-price] adopted from the carry census (reconciled within band)\n",
+                encoding="utf-8")
+    except OSError as e:
+        _log(f"ref-price/carry: adoption failed ({e}) — running the full suite")
+        return False
+    _bank_evidence(ctx, "carry-adopted ref census")
+    _log("ref-price/carry: the carried census is banked — one confirmation job "
+         "replaced the census suite (读数复用是加速不是省测量: the confirmation "
+         "re-measured the ref; the census rides the byte-identity)")
+    return True
+
+
+def _ref_confirm_reading_ms(ctx: LoopContext, be, branch: str) -> "float | None":
+    """One cheap confirmation job of the reference tree (mode ``ref``: the
+    in-job reference alone, the bench's own JSON). None when it fails — the
+    caller falls back to the full suite, never to the carry alone."""
+    try:
+        log = be.submit_gpu(branch, "ref")
+    except BackendError as e:
+        _log(f"ref-price/carry: the confirmation job failed ({e}) — "
+             f"running the full census suite")
+        return None
+    m = re.search(r"\{[^{}]*\}", log, re.S)
+    if m is None:
+        return None
+    try:
+        obj = json.loads(m.group(0))
+    except ValueError:
+        return None
+    ms = obj.get("device_median_ms") if ctx.gate_window == "device" \
+        else obj.get("median_ms")
+    try:
+        return float(ms) if ms is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,

@@ -289,20 +289,25 @@ class DirectRunner:
 
     def _deadline_for(self, mode: str) -> float:
         """The runner's kill deadline for one job. A merged eval+NCU job's budget
-        is the SUM of its two segments (WP11 task 1): the eval task's full
-        timeout (the job's TASK_TIMEOUT) plus the NCU segment's own NCU_TIMEOUT
-        (gpu_entry.sh's default here) — the single-segment timeout is never
-        stretched over two segments, and the runner never kills a merged job
-        mid-NCU for time it legitimately asked for."""
+        is the SUM of its two segments (WP11 task 1), each segment keeping the
+        budget its two-job path had: the eval task's full timeout (the job's
+        TASK_TIMEOUT) plus — for a plain merged job — the NCU segment's own
+        NCU_TIMEOUT (gpu_entry.sh's default here), or — for the census variant
+        (``allncu:<cmd>``) — the census command's own TASK_TIMEOUT, the old cmd
+        task's budget. The single-segment timeout is never stretched over two
+        segments, and the runner never kills a merged job mid-profile for time
+        it legitimately asked for."""
         base = float(self.cfg.timeout) + RUN_HEADROOM_S
         if not _merged_mode(mode):
             return base
+        if mode.startswith(f"{MERGED_EVAL_NCU_PREFIX}:"):
+            return base + float(self.cfg.timeout)   # census segment: TASK_TIMEOUT
         raw = str(_job_env(self.cfg).get("NCU_TIMEOUT", "") or MERGED_NCU_TIMEOUT_DEFAULT)
         try:
             ncu = float(raw)
         except ValueError:
             ncu = MERGED_NCU_TIMEOUT_DEFAULT
-        return base + max(0.0, ncu)
+        return base + max(0.0, ncu)                 # NCU segment: NCU_TIMEOUT
 
     def run_mode(self, branch: str, mode: str, log_file) -> str:
         with locked(Path(self.cfg.op_dir)):

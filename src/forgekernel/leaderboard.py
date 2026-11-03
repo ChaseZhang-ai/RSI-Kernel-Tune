@@ -1043,24 +1043,31 @@ echo "[gpu_entry.sh] task=$TASK finished"
 # --- WP11 (task 1): the merged eval+NCU task -----------------------------------
 #
 # One GPU job runs the timing protocol FIRST, exactly as the `all` task runs it
-# (same bench process, same windows), then the NCU segment in its own process —
-# its own command when the caller passes one (the vendored orchestration census
-# runner, mirroring the cmd task's argv), else the plain `ncu` task's invocation
-# (same metrics filter, same flags — WP9 owns the flags, not this package).
-# Budgets stay per segment: TASK_TIMEOUT bounds the eval, NCU_TIMEOUT the NCU
-# segment; the runner (submit/direct.py) sizes its deadline to the SUM of the
-# two, so the single-segment timeout is never stretched over both.
+# (same bench process, same windows), then the profile segment in its own
+# process — its own command when the caller passes one (the vendored
+# orchestration census runner, mirroring the cmd task's argv AND its budget),
+# else the plain `ncu` task's invocation (same metrics filter, same flags, same
+# budget — WP9 owns the flags, not this package). Every segment keeps the
+# budget its two-job path had: the eval under TASK_TIMEOUT, the NCU segment
+# under NCU_TIMEOUT, the census segment under TASK_TIMEOUT; the runner
+# (submit/direct.py) sizes its deadline to the SUM of the two segment budgets
+# of the variant at hand, so the single-segment timeout is never stretched
+# over both.
 _WP11_ALLNCU_CASE = """    allncu)
         # WP11 (task 1): the merged eval+NCU job — the timing protocol first,
-        # exactly as the `all` task runs it, then the NCU segment in its own
+        # exactly as the `all` task runs it, then the profile segment in its own
         # process (its own command when the caller passes one — the vendored
         # orchestration census runner — else the plain `ncu` task's invocation).
-        # Budgets stay per segment: TASK_TIMEOUT for the eval, NCU_TIMEOUT for
-        # the NCU segment; the runner sizes its deadline to the sum of the two.
+        # Segment budgets mirror the two-job path exactly: the eval segment runs
+        # under TASK_TIMEOUT, a real NCU segment under NCU_TIMEOUT (ncu_bounded,
+        # the old ncu task's own budget) and a census segment under TASK_TIMEOUT
+        # (run_with_timeout, the old cmd task's own budget). The wall-clock echo
+        # lines let the driver split the merged job's telemetry per segment.
         run_with_timeout python3 eval/bench.py --mode all
-        echo "[gpu_entry.sh] allncu: eval segment done — starting the NCU segment"
+        echo "[gpu_entry.sh] allncu: eval segment done (wall ${SECONDS}s since entry)"
+        profile_seg_start="${SECONDS}"
         if [ "$#" -gt 0 ]; then
-            ncu_bounded bash -c "$*"
+            run_with_timeout bash -c "$*"
         else
             NCU_METRICS_DESIRED="$NCU_METRICS"
             NCU_METRICS="$(ncu_filter_metrics "$NCU_METRICS_DESIRED")" || NCU_METRICS="$NCU_METRICS_DESIRED"
@@ -1070,6 +1077,7 @@ _WP11_ALLNCU_CASE = """    allncu)
             ncu_bounded ncu --csv --target-processes all --profile-from-start off \\
                 --launch-count 24 --kill yes --metrics "$NCU_METRICS" python3 eval/ncu_run.py
         fi
+        echo "[gpu_entry.sh] allncu: profile segment done (wall $((SECONDS - profile_seg_start))s)"
         ;;
 """
 

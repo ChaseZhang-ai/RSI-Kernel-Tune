@@ -3,7 +3,7 @@
 分支 `feat/wp11-throughput`（基线 kernel-ZXtune main @ c1971f1 = ForgeKernel @5030503 + WP1–WP6 集成）。
 目标：零行为变化地砍掉重复支付的固定成本——eval+NCU 两次冷启动、每 job 全量传输输入张量、固定采样无早停、eval 失败零细节、墙钟不可见。
 
-**验收基线：`pytest tests/ -q` → 2222 passed（merge-base），交付时 2257 passed（+35 例全绿，零回归）。** 新增单测集中在 `tests/test_wp11_throughput.py`（35 例，六任务各一组）+ `scripts/backtest_early_stop.py`（统计门）+ 本机 3060 真跑冒烟（任务 1，日志证据见文末）。
+**验收基线：`pytest tests/ -q` → 2222 passed（merge-base）；首交付 2257 passed（+35 例）；返工后 2260 passed（+3 例新测：env 守卫、段墙钟解析/回退、回显行不扰解析——零回归）。** 新增单测集中在 `tests/test_wp11_throughput.py`（38 例，六任务各一组）+ `scripts/backtest_early_stop.py`（统计门）+ 本机 3060 真跑冒烟（任务 1，日志证据见文末）。
 
 **零行为变化证据（硬验收 §4.2）**：`test_switches_off_matches_baseline_records` —— merge_eval_ncu=false + build_cache 不启用（默认）+ sprt_early_stop=false 时，同一脚本化场景（一 KEEP 一 REVERT）跑主循环，对 merge-base 语义手写的逐字段 golden 断言（verdict/读数/mfu/profiler/kernels/error 前缀/metric_before/telemetry 缺省全部钉死），且合并路径（开关开、卡支持）产出**除 error 的 log-tail 后缀外逐字段相同**的记录——合并是传输层变更，不是语义变更。此外 `test_loop_driver.py` 等全部既有用例（2222 例）原样通过即为逐字节回归。任务 5 的失败路径 error 附加 tail 与任务 4 的五个遥测字段是规格内的**记录性增量**（无开关、与 WP1/WP2 字段追加同一先例：load_records 丢弃旧文件未知键），golden 测试对前者按前缀断言、对后者显式剥离。
 
@@ -18,13 +18,17 @@
 ## 任务 1（P0）— eval+NCU 合并单 job
 
 - **范围**：只合并主迭代 eval 路径（`run_inner_iteration` 的 eval submit + `_ncu_profiler` 调用点）；`_confirm_suspicious_watermark` 的确认/tie-break job、board/blackbox 专用路径、probe 循环（契约 C4）一律不动。
-- **新 gpu_entry 任务 `allncu`**（模板 `_WP11_ALLNCU_CASE`，经 format kwarg 注入，避免 shell 花括号转义地狱）：先跑 `run_with_timeout python3 eval/bench.py --mode all`（与 `all` 任务逐字节相同的计时协议），随后同 job 以独立进程跑 NCU 段——无参时与 `ncu` 任务同一条命令（同一 metrics 过滤、同一 flags——**WP9 领地未碰**，`--launch-count 24` 字面量保留供 taskcard 替换）；带参时跑调用方命令（`ncu_bounded bash -c "$*"`——orch_census 变体，镜像 cmd 任务）。mode 串：`allncu`，census 变体 `allncu:python3 notes/orch_census_run.py ...`（direct.py `_entry_argv` 按 cmd: 同款 shlex 拆分）。
+- **新 gpu_entry 任务 `allncu`**（模板 `_WP11_ALLNCU_CASE`，经 format kwarg 注入，避免 shell 花括号转义地狱）：先跑 `run_with_timeout python3 eval/bench.py --mode all`（与 `all` 任务逐字节相同的计时协议），随后同 job 以独立进程跑 profile 段，**两变体各自沿用旧路径该段自己的预算**：
+  - 无参（真 NCU）：与 `ncu` 任务同一条命令（同一 metrics 过滤、同一 flags——**WP9 领地未碰**，`--launch-count 24` 字面量保留供 taskcard 替换），预算 `ncu_bounded`（**NCU_TIMEOUT**）；
+  - 带参（census 变体，orch_census runner）：`run_with_timeout bash -c "$*"`——**TASK_TIMEOUT**，即旧路径 cmd 任务自己的预算（返工修正：首版误用 `ncu_bounded`，census 段预算从 TASK_TIMEOUT 漂移成 NCU_TIMEOUT=600s，是未声明的行为变化，已恢复）。
+  mode 串：`allncu`，census 变体 `allncu:python3 notes/orch_census_run.py ...`（direct.py `_entry_argv` 按 cmd: 同款 shlex 拆分）。
+- **段预算来源汇总**：eval 段 = TASK_TIMEOUT；NCU 段 = NCU_TIMEOUT（默认 600）；census 段 = TASK_TIMEOUT。runner（`_deadline_for`）按变体求和：纯 `allncu` 加 NCU_TIMEOUT；`allncu:<cmd>` 加 `cfg.timeout`。
 - **卡支持检测**：driver 读 workspace 的 `gpu_entry.sh` 找 `^\s*allncu\)` 标记——旧卡自动回退两 job 路径（`_card_supports_merged_job`，读不到 = 不合并）。
-- **超时纪律（规格红线）**：合并 job 预算 = **两段之和，绝不沿用单段 timeout 装两段活**。gpu_entry 内 eval 段仍受 `TASK_TIMEOUT` 全额约束、NCU 段仍受 `NCU_TIMEOUT` 约束（ncu_bounded）；runner 侧 `_deadline_for(mode)` 对合并 mode 取 `cfg.timeout + RUN_HEADROOM_S + NCU_TIMEOUT`（NCU_TIMEOUT 从 job env 读，缺省 600 = gpu_entry 自身默认，坏值回退默认）。选择"按现有超时键放大（两段预算求和）"，未新建 `[loop] merged_job_timeout_s`——driver 无法改写 job env，按段求和是围栏内唯一能真正落实的形态，CHANGES 特此说明。
+- **超时纪律（规格红线）**：合并 job 预算 = **两段之和，绝不沿用单段 timeout 装两段活**，且每段预算 = 旧路径同款（见上"段预算来源汇总"）。gpu_entry 内 eval 段受 `TASK_TIMEOUT` 全额约束、真 NCU 段受 `NCU_TIMEOUT` 约束（ncu_bounded）、census 段受 `TASK_TIMEOUT` 约束（run_with_timeout）；runner 侧 `_deadline_for(mode)` 按变体取 `cfg.timeout + RUN_HEADROOM_S + (NCU_TIMEOUT 或 cfg.timeout)`（NCU_TIMEOUT 从 job env 读，缺省 600 = gpu_entry 自身默认，坏值回退默认）。选择"按现有超时键放大（两段预算求和）"，未新建 `[loop] merged_job_timeout_s`——driver 无法改写 job env，按段求和是围栏内唯一能真正落实的形态，CHANGES 特此说明。
 - **解析**：合并日志整体喂给两套既有解析器——`parse_eval`（eval JSON 是全 log 唯一带 correctness/performance 键的对象）与 `_profiler_from_log`（从 `_ncu_profiler` 原样抽取的折叠体：key metrics + kernel 表 + dominant-kernel resusage + census 字段 + orch summary + SASS precision；纯解析无 submit 无 retry，`_ncu_profiler` 改为调用同一函数，行为不变）。NCU 段输出协议、census 行剥离、RES-USAGE 行全按现有协议拼装。
-- **失败语义**：合并 job 的 NCU 段在 **PASSING kernel 上空手而归**（旧路径的 retry 条件）→ **自动回退旧两 job 路径一次**（`_ncu_profiler` 原函数保留、内部 empty-retry 纪律原样）；correctness-FAIL 的空 NCU 不回退（旧纪律：kernel 坏了 NCU 空手是合法读数，不浪费 GPU）。`ncu_on_revert=false` + correctness FAIL 时：合并 job 天然已跑 NCU 段，driver **丢弃**其输出使记录与旧路径逐字段一致（该段 GPU 时间是此配置形状下合并的文档化代价；规格"NCU 仍每迭代必跑、ncu_on_revert 语义不变"逐条保持——KEEP/REVERT 都跑、correctness 联动参数平移为回退条件）。
+- **失败语义**：合并 job 的 NCU 段在 **PASSING kernel 上空手而归**（旧路径的 retry 条件）→ **自动回退旧两 job 路径一次**（`_ncu_profiler` 原函数保留、内部 empty-retry 纪律原样）；**环境性失败（`env_failure(log)` 非空，如 ncu 装不上）不回退、不多买注定失败的 job，只经 `_ncu_env_note` 记账一次**——与旧路径 `_ncu_profiler` 的 `env_failure(out) is None` 守卫逐点对齐（返工补上：首版守卫漏了这条，环境坏时合并路径会比旧路径多买一个 job）；correctness-FAIL 的空 NCU 不回退（旧纪律：kernel 坏了 NCU 空手是合法读数，不浪费 GPU）。`ncu_on_revert=false` + correctness FAIL 时：合并 job 天然已跑 NCU 段，driver **丢弃**其输出使记录与旧路径逐字段一致（该段 GPU 时间是此配置形状下合并的文档化代价；规格"NCU 仍每迭代必跑、ncu_on_revert 语义不变"逐条保持——KEEP/REVERT 都跑、correctness 联动参数平移为回退条件）。
 - **纪律不变清单（逐条自查）**：NCU 每迭代必跑（KEEP/REVERT 都跑，合并≠跳过）☑；`ncu_on_revert` 语义不变 ☑；NCU correctness 联动（retry 只在 passing kernel）平移为回退条件 ☑；REVERT 迭代同样合并 ☑；probe 循环与 SWEEP 未碰 ☑；NCU flags 未碰（WP9 领地）☑；job 超时 = 两段之和 ☑；其他 eval 调用点未动 ☑。
-- **单测**：合并模式 submit 次数 2→1 且解析结果与两 job 等价（`test_merged_job_runs_one_submit_and_parses_both_segments`）；census 变体 mode 拼装（driver + direct 两侧）；NCU 段失败回退一次（`test_merged_ncu_failure_on_a_passing_kernel_falls_back_once`）；kill switch/旧卡两 job 路径（`test_merge_off_or_old_card_runs_the_two_job_path`）；ncu_on_revert=false 时合并记录无 NCU 且无回退（`test_merged_revert_with_ncu_on_revert_false_keeps_the_record_ncu_free`）；deadline 求和（`test_merged_deadline_is_the_sum_of_the_segment_budgets`）。
+- **单测**：合并模式 submit 次数 2→1 且解析结果与两 job 等价（`test_merged_job_runs_one_submit_and_parses_both_segments`）；census 变体 mode 拼装（driver + direct 两侧）；NCU 段失败回退一次（`test_merged_ncu_failure_on_a_passing_kernel_falls_back_once`）；**环境性失败不回退、记账一次、不多买 job**（`test_merged_env_failure_books_once_and_buys_no_doomed_fallback`）；kill switch/旧卡两 job 路径（`test_merge_off_or_old_card_runs_the_two_job_path`）；ncu_on_revert=false 时合并记录无 NCU 且无回退（`test_merged_revert_with_ncu_on_revert_false_keeps_the_record_ncu_free`）；deadline 按变体求和（`test_merged_deadline_is_the_sum_of_the_segment_budgets`：纯 allncu 加 NCU_TIMEOUT、census 变体加 cfg.timeout）；profile 段墙钟解析与回退口径（`test_merged_profile_segment_wall_parses_and_falls_back`）及回显行不扰两解析器（`test_merged_mode_wall_suffix_is_pure_addition`）；模板断言（census 段 run_with_timeout、无 ncu_bounded bash、段回显行存在，`test_rendered_template_is_valid_bash_and_carries_both_blocks`）。
 - **3060 真跑冒烟**（规格要求，非 mock）：见文末证据。
 
 ## 任务 2 — 内容寻址构建缓存（默认关）
@@ -46,7 +50,8 @@
 ## 任务 4 — 墙钟构成遥测（先测量后优化）
 
 - `inner/trajectory.py::IterationRecord` 追加五个可选字段：`agent_turn_s` / `eval_job_s` / `ncu_job_s` / `teacher_s` / `queue_wait_s`（全 None 缺省；与 WP9/WP10 字段追加共存，load_records 丢弃旧文件未知键）。**纯测量**：无任何判定/预算/停止读它们；run 末构成表是唯一消费者。
-- driver 填数边界：agent 轮 = `run_inner_iteration` 内全部学生 agent turn 累计；eval/NCU job = submit→terminal 墙钟（合并路径的 NCU 段先记解析墙钟，回退时记回退 job 墙钟；不要求 NCU 的迭代为 None）；teacher 轮 = run_meta_step 的 diagnose/patch turn（`_wp11_teacher_timed`），累计到下一条 appended 记录上（`_wp11_wallclock_fields` 读断式）；queue wait = runner 在 GPU 锁上的等待（direct.py `gpu_lock` 现在 yield 等待秒数并在日志写 `[direct] GPU <g> acquired after <n>s wait`，30s 轮询粒度；driver `_queue_wait_from_log` 解析；ssh 不报 → None）。
+- driver 填数边界：agent 轮 = `run_inner_iteration` 内全部学生 agent turn 累计；eval/NCU job = submit→terminal 墙钟（见下方**合并模式口径**；回退时 ncu_job_s 记回退 job 墙钟；不要求 NCU 的迭代为 None）；teacher 轮 = run_meta_step 的 diagnose/patch turn（`_wp11_teacher_timed`），累计到下一条 appended 记录上（`_wp11_wallclock_fields` 读断式）；queue wait = runner 在 GPU 锁上的等待（direct.py `gpu_lock` 现在 yield 等待秒数并在日志写 `[direct] GPU <g> acquired after <n>s wait`，30s 轮询粒度；driver `_queue_wait_from_log` 解析；ssh 不报 → None）。
+- **合并模式口径（显眼段落，返工后实现）**：合并开关默认开，若不处理，`eval_job_s` 会背整个合并 job、`ncu_job_s` 只剩 ≈0 的解析墙钟——构成表在默认路径上失真，架空"先测量再优化"。处理：gpu_entry 模板 `allncu` 任务在段边界用 bash `$SECONDS` 回显两行（`allncu: eval segment done (wall Ns since entry)`、`allncu: profile segment done (wall Ms)`——纯增量输出行，不影响既有解析，有专门测试钉住）；driver `_merged_profile_segment_s` 解析 profile 段行回填 **ncu_job_s = profile 段自身墙钟**（1s 粒度；解析不到回退旧口径即解析墙钟）；**eval_job_s 保持整 job 墙钟**（eval+profile 两段共享一次解包/构建，按段拆它是虚构），两处字段注释与 trajectory.py 口径注记均写明：合并路径上两桶**不**相加为整 job（eval_job_s 已含 profile 段），构成表从 ncu_job_s 读 profile 份额、其余读 eval_job_s。
 - run 结束打印构成表：`_wp11_wallclock_summary` 在 run_two_layer 全部 9 个 stop 出口打印（纯 stdout/`_log`，占比按五桶实测合计；没量到就不打印）。
 - 单测：字段缺省/读写回环、teacher 桶读断语义、queue-wait 正则、汇总表输出与空运行静默、真实时钟下 KEEP 行三桶非 None。
 
@@ -126,3 +131,12 @@ GATE: PASS
 - **两段分隔按协议**：`[gpu_entry.sh] allncu: eval segment done — starting the NCU segment` 之后 NCU 段独立进程启动，**真实采到 CSV**（`==PROF== Connected to process`、Kernel Name 表头 + `vectorized_elementwise_kernel`(rmsnorm 逐元素核) 的 regs/smem/waves 等指标行，`ncu_filter_metrics` 在 sm_86 上正常过滤）；
 - **收尾协议**：`[gpu_entry.sh] task=allncu finished`，runner 判 Succeeded——driver 侧 `parse_eval` 与 `_profiler_from_log` 对这份合并 log 各取所需（eval JSON 是全 log 唯一 correctness/performance 对象；CSV 表头前的 bench 输出被 NCU 解析器按既有规则忽略）；
 - **失败语义旁证**（第一次冒烟，bench 核验 NaN → rc=1）：`set -e` 使 job 在 NCU 段前终止，log 以 `[direct] gpu_entry allncu exited rc=1` 收尾——driver 将读得 correctness FAIL + 空 NCU，不回退不重试（与两 job 路径的 FAIL 语义一致，即"correctness 坏的 kernel 无 NCU 是合法读数"）。
+
+## 返工记录（复审 3 必修 + 1 选修，同分支追加提交）
+
+1. **必修 1（公式漂移形态）**：`timing.py` 里 `sprt_stop_verdict` 残留首版死定义（判据 `med + band < 1.0 - band`，被第二版静默覆盖）——整段删除，仅存生效版（判据 `ratio + band < 1.0`，verdict 自估量）。`grep -n "def sprt_stop_verdict"` 唯一；`test_sprt_*` + timing 单测全绿。
+2. **必修 2（env 守卫）**：driver 合并分支的回退条件补 `env_failure(eval_log) is None`——环境性 NCU 失败落入 else 走 `_ncu_env_note` 记账一次，不回退、不多买 job，与旧路径 `_ncu_profiler` 的 retry 守卫逐点对齐。新增 `test_merged_env_failure_books_once_and_buys_no_doomed_fallback`（submit 次数不增、`env_broken["ncu"] == 1`）。
+3. **必修 3（census 段预算）**：`_WP11_ALLNCU_CASE` 带参分支 `ncu_bounded bash -c "$*"` → `run_with_timeout bash -c "$*"`（TASK_TIMEOUT，旧 cmd 任务同款）；`direct._deadline_for` 按变体区分——纯 `allncu` 加 NCU_TIMEOUT、`allncu:<cmd>` 加 `cfg.timeout`；`test_merged_deadline_is_the_sum_of_the_segment_budgets` 增加变体断言；模板断言补 `run_with_timeout bash -c` / 无 `ncu_bounded bash`；任务 1 小节的预算表述按两变体改写。
+4. **选修 4（合并口径不失真）**：gpu_entry 模板 `allncu` 在段边界回显 `$SECONDS`（eval 段完成 + profile 段完成两行）；driver `_merged_profile_segment_s` 解析 profile 段行回填 `ncu_job_s`（解析不到回退旧口径），`eval_job_s` 保持整 job 墙钟——口径写入 driver 注释、`IterationRecord` 字段注记与本文件任务 4 的显眼段落。新增 `test_merged_profile_segment_wall_parses_and_falls_back`、`test_merged_mode_wall_suffix_is_pure_addition`，主合并测试断言 `ncu_job_s == 43.0`（fixture 段回显）。
+
+修复后：`pytest tests/ -q` → **2260 passed**（2257 + 3 新测，零回归），分支 `feat/wp11-throughput` 追加提交。

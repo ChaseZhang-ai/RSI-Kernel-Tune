@@ -59,9 +59,20 @@ def _merged_gpu_entry(tmp_path: Path) -> None:
 
 
 def _merged_log(ms: float = 2.6, ok: bool = True, ncu: str = NCU_CSV,
-                fail: bool = False) -> str:
+                fail: bool = False, seg_echo: bool = True) -> str:
+    """A merged job's log. A PASSING job echoes its segment walls at the
+    boundaries (the entry script's `$SECONDS` lines); a failing bench aborts
+    the task under `set -e` before any segment line, exactly as the template
+    would."""
     head = FAIL_EVAL if fail else EVAL(ms, ok)
-    return "\n".join([head, ncu, "", "[gpu_entry.sh] task=allncu finished"])
+    lines = [head]
+    if seg_echo and not fail:
+        lines.append("[gpu_entry.sh] allncu: eval segment done (wall 57s since entry)")
+    lines += [ncu, ""]
+    if seg_echo and not fail:
+        lines.append("[gpu_entry.sh] allncu: profile segment done (wall 43s)")
+    lines.append("[gpu_entry.sh] task=allncu finished")
+    return "\n".join(lines)
 
 
 # --- task 5: eval failure error bandwidth -------------------------------------
@@ -207,6 +218,7 @@ def test_merged_job_runs_one_submit_and_parses_both_segments(tmp_path):
     assert rec.verdict == "KEEP" and rec.bwd_median_ms == 2.6
     assert rec.profiler.get("time_ns") == 1000   # the NCU segment parsed
     assert rec.kernels and rec.kernels[0]["name"] == "k_object"
+    assert rec.ncu_job_s == 43.0   # the segment's own wall, from the entry echo
 
 
 def test_merged_mode_names_the_census_runner(tmp_path):
@@ -218,6 +230,31 @@ def test_merged_mode_names_the_census_runner(tmp_path):
     assert driver._merged_mode(ctx) == "allncu:python3 notes/orch_census_run.py"
     (tmp_path / "notes" / "orch_census_run.py").unlink()
     assert driver._merged_mode(ctx) == "allncu"
+
+
+def test_merged_profile_segment_wall_parses_and_falls_back(tmp_path):
+    _merged_gpu_entry(tmp_path)
+    # no echo lines (an older card's job, or a failed segment): the driver
+    # keeps the documented fallback口径 — under the fake clock that reads None
+    be = FakeBackend([REC("D2.3", 2.6)],
+                     [_merged_log(seg_echo=False)])
+    ctx = _ctx(tmp_path, be)
+    rec = driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    assert rec.verdict == "KEEP" and rec.ncu_job_s is None
+    # the regex reads the entry script's own words, nothing else
+    assert driver._merged_profile_segment_s(
+        "[gpu_entry.sh] allncu: profile segment done (wall 43s)") == 43.0
+    assert driver._merged_profile_segment_s(EVAL(2.6)) is None
+
+
+def test_merged_mode_wall_suffix_is_pure_addition(tmp_path):
+    # the segment echo line rides the log as an ordinary entry line: it must
+    # not disturb either parser (eval JSON survives, NCU digest survives)
+    _merged_gpu_entry(tmp_path)
+    be = FakeBackend([REC("D2.3", 2.6)], [_merged_log()])
+    ctx = _ctx(tmp_path, be)
+    rec = driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    assert rec.profiler.get("time_ns") == 1000 and rec.bwd_median_ms == 2.6
 
 
 def test_direct_parses_the_merged_census_mode():
@@ -240,6 +277,26 @@ def test_merged_ncu_failure_on_a_passing_kernel_falls_back_once(tmp_path):
     assert modes == ["allncu", "ncu"]               # the old path bought once
     assert rec.verdict == "KEEP"
     assert rec.profiler == {} or "gpu__time_active.sum" not in rec.profiler
+
+
+def test_merged_env_failure_books_once_and_buys_no_doomed_fallback(tmp_path):
+    # a harness-environment failure (the tool cannot start on the image) is not
+    # a kernel reading: the old path neither retried nor re-bought it, and the
+    # merged path must hold the same guard — book the env failure once, buy no
+    # second job a doomed retry would only pay for again.
+    _merged_gpu_entry(tmp_path)
+    env_log = "\n".join([
+        EVAL(2.6),
+        "Traceback (most recent call last): ModuleNotFoundError: No module named 'cuda'",
+        "", "[gpu_entry.sh] task=allncu finished",
+    ])
+    be = FakeBackend([REC("D2.3", 2.6)], [env_log])
+    ctx = _ctx(tmp_path, be)
+    rec = driver.run_inner_iteration(ctx, 0, metric_before=2.6)
+    modes = [c[1] for c in be.calls if c[0] == "gpu"]
+    assert modes == ["allncu"]                       # no doomed second job
+    assert ctx.env_broken.get("ncu") == 1            # the env failure is booked
+    assert rec.verdict == "KEEP" and rec.profiler == {}
 
 
 def test_merge_off_or_old_card_runs_the_two_job_path(tmp_path):
@@ -294,6 +351,10 @@ def test_merged_deadline_is_the_sum_of_the_segment_budgets(tmp_path):
     runner = direct.DirectRunner(cfg)
     assert runner._deadline_for("all") == 3600 + RUN_HEADROOM_S
     assert runner._deadline_for("allncu") == 3600 + RUN_HEADROOM_S + 600.0
+    # the census variant's profile segment runs under TASK_TIMEOUT (the old cmd
+    # task's budget), so its deadline adds the job timeout, not NCU_TIMEOUT
+    assert runner._deadline_for("allncu:python3 notes/orch_census_run.py") \
+        == 3600 + RUN_HEADROOM_S + 3600
     cfg2 = SubmitConfig(branch="main", op_dir="/tmp/x", base_dir="/tmp", timeout=3600,
                         env={"NCU_TIMEOUT": "900"})
     assert direct.DirectRunner(cfg2)._deadline_for("allncu") == 3600 + RUN_HEADROOM_S + 900.0
@@ -433,6 +494,13 @@ def test_rendered_template_is_valid_bash_and_carries_both_blocks(tmp_path):
     subprocess.run(["bash", "-n", str(p)], check=True)
     assert "    allncu)" in text            # the merged task (the driver's marker)
     assert "fk_build_cache_setup" in text   # the build cache (dormant without env)
+    # segment budgets mirror the two-job path: the census segment under
+    # TASK_TIMEOUT (run_with_timeout), the NCU segment under NCU_TIMEOUT
+    assert 'run_with_timeout bash -c "$*"' in text
+    assert "ncu_bounded bash -c" not in text
+    # the wall-clock echo lines the driver's telemetry parses
+    assert "allncu: profile segment done (wall" in text
+    assert "profile_seg_start" in text
 
 
 # --- task 3: content-addressed input-tensor transport --------------------------

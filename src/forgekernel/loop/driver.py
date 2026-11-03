@@ -2073,6 +2073,19 @@ def _queue_wait_from_log(log: str) -> float | None:
     return float(m.group(1)) if m else None
 
 
+_MERGED_PROFILE_SEG_RE = re.compile(
+    r"\[gpu_entry\.sh\] allncu: profile segment done \(wall ([0-9]+)s\)")
+
+
+def _merged_profile_segment_s(log: str) -> float | None:
+    """The merged job's profile-segment wall clock, as the entry script echoed
+    it at the segment boundary (WP11 task 4; `$SECONDS` resolution = 1 s).
+    Absent line -> None: an older card, a failed segment, or a log that never
+    reached the boundary — the caller falls back to its previous口径."""
+    m = _MERGED_PROFILE_SEG_RE.search(log)
+    return float(m.group(1)) if m else None
+
+
 def _wp11_wallclock_fields(ctx: LoopContext, *, agent_s: float, eval_s: float | None,
                            ncu_s: float | None, queue_s: float | None) -> dict:
     """The IterationRecord's wall-clock composition fields (WP11 task 4).
@@ -2741,7 +2754,11 @@ def run_inner_iteration(
     # kill switch is off; otherwise the two-job path, byte-for-byte as before.
     # Wall-clock telemetry (task 4) times BOTH paths at the same boundaries:
     # the eval job's submit->terminal wall, the NCU job's, and the GPU-queue
-    # wait the job's own log reports.
+    # wait the job's own log reports. eval_job_s口径: the EVAL job's wall on
+    # the two-job path, the WHOLE merged job's wall (eval + profile segments)
+    # on the merged path — the profile segment's own share is recovered from
+    # the entry script's segment echo into ncu_job_s, so the two buckets do
+    # not double-count and neither segment vanishes from the composition.
     merged_mode = _merged_mode(ctx) if _use_merged_eval_ncu(ctx) else None
     eval_t0 = ctx.now()
     if merged_mode is not None:
@@ -2781,11 +2798,20 @@ def run_inner_iteration(
             # The merged job already carried the NCU segment: parse it out of the
             # same log. When the segment came back empty on a PASSING kernel (the
             # old path's retry condition), fall back to the old two-job path ONCE
-            # — _ncu_profiler keeps its own empty-retry discipline inside.
+            # — _ncu_profiler keeps its own empty-retry discipline inside. An
+            # ENVIRONMENTAL failure (loop/job_env.py: the tool cannot start on
+            # the image) is not a kernel reading and the old path neither retried
+            # nor re-bought it — the merged path holds the same guard, so the env
+            # failure is booked once and no doomed second job is bought.
             ncu_t0 = ctx.now()
             profiler = _profiler_from_log(eval_log)
-            ncu_job_s = ctx.now() - ncu_t0   # parse wall only; the job already ran
-            if not profiler and ev.correctness:
+            # the entry script echoes the profile segment's own wall at the
+            # boundary; that (not the ≈0 parse wall) is the honest NCU bucket.
+            # Absent echo -> the previous口径 (parse wall), documented as such.
+            ncu_job_s = _merged_profile_segment_s(eval_log)
+            if ncu_job_s is None:
+                ncu_job_s = ctx.now() - ncu_t0   # parse wall only; the job already ran
+            if not profiler and ev.correctness and env_failure(eval_log) is None:
                 _log(f"iter {iter_no}: merged job carried no NCU digest on a passing "
                      f"kernel — falling back to the separate NCU job once")
                 ncu_t0 = ctx.now()

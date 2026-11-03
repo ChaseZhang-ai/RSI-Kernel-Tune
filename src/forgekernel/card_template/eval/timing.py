@@ -169,25 +169,6 @@ SPRT_BAND_FLOOR = 0.005    # == loop/parse.py RESOLVABLE_DIFF_FLOOR (drift pair)
 SPRT_BAND_CAP = 0.015      # == loop/parse.py RESOLVABLE_DIFF_CAP (drift pair)
 
 
-def sprt_stop_verdict(ratios, *, floor: float = SPRT_BAND_FLOOR,
-                      cap: float = SPRT_BAND_CAP) -> bool:
-    """One boundary decision from the accumulated same-job paired ratios.
-
-    ``ratios``: ref/kernel per window index (the mirrored halves' index-aligned
-    pairs, >1 = the kernel is faster). Returns True when the interval
-    median +/- band sits entirely BELOW 1 - band — a CLEAR LOSS (the only
-    direction this rule may stop on: see the block comment above; a win or a
-    straddle keeps sampling). False = keep sampling."""
-    ratios = [float(r) for r in (ratios or ()) if isinstance(r, (int, float))
-              and not isinstance(r, bool) and float(r) > 0.0]
-    if len(ratios) < SPRT_MIN_PAIRED:
-        return False
-    med = statistics.median(ratios)
-    mad = statistics.median(abs(r - med) for r in ratios)
-    band = min(max(3.0 * 1.4826 * mad, floor), cap)
-    return med + band < 1.0 - band
-
-
 def sprt_stop_verdict(ratio, ratios, *, floor: float = SPRT_BAND_FLOOR,
                       cap: float = SPRT_BAND_CAP) -> bool:
     """Whether the candidate measurement reads a CLEAR LOSS under the verdict's

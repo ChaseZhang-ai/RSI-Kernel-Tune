@@ -19,6 +19,29 @@ Your job: distill the reference implementation into a natural-language optimizat
 > given as values of knobs such as tile / cluster / stage / swizzle / warp role / instruction family; you may name the PTX instruction a mechanism
 > lands on (the modifier axis follows the expressibility ladder below), but write no asm blocks or kernel code.
 
+<!-- PRIOR-INPUT:BEGIN (WP8) -->
+
+## Prior inputs (teacher-only; every claim is a hypothesis until THIS run measures it)
+
+This run's prior inputs are listed below; "(none)" names an input that does not exist. **If every input reads
+"(none)", skip this section entirely** and work exactly as the rest of this brief says. Read them **before the
+recon report**: skeleton hypotheses that diverge from the report's readings become M0 `ARCH_CANDIDATES` lines
+(each carrying an `ARCH_PROBE_REQUEST: notes/arch_<n>.json` recipe, so THIS run measures them before the
+freeze); a prior config table becomes `sweep:` starting values ("starting values marked tunable") on the
+matching decision.
+
+- `PRIOR_ART` = {PRIOR_ART}
+- `CARRY` (the parent generation's closing record) = {CARRY}
+- `PRIORS` (the repo prior library; read the top-k entries matching this operator's family) = {PRIORS_INDEX}
+
+`CARRY` is **for hypothesis reuse and reconciliation only — re-verify every line against this run's own
+measurements; it is never a gate anchor and never a price source** (a parent price was read on the parent's tree;
+on this run's reference tree it is a hypothesis until re-priced). Mechanism descriptions in your own words only:
+**no implementation body** enters the milestone, the KB or any notes file, and **no unmeasured prior claim moves
+a gate number, the M0 freeze or any stopping judgment** — unmeasured claims stay `[ESTIMATE]` candidates.
+
+<!-- PRIOR-INPUT:END (WP8) -->
+
 ## Inputs
 
 - `TEMPLATE` = `{MILESTONES_TEMPLATE_PATH}` — **the milestones meta-template** (A.1–A.8 + section B). **Read it first.**

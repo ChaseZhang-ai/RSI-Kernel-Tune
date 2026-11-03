@@ -33,10 +33,11 @@ def _rows():
 
 def test_queue_table_shape_and_initial_statuses():
     rows = _rows()
-    assert len(rows) == 7                      # the seven verified initial gaps
-    for cells in rows:
-        assert cells[4] == "TODO"              # nothing is certified by queueing
-        assert cells[2] in ("High", "Medium", "Low")
+    assert len(rows) == 13                     # the seven initial gaps + WP8's six
+    for cells in rows:                         # supply-gap rows (raster/swizzle, TMA
+        assert cells[4] == "TODO"              # store reduce, im2col TMA, DSMEM
+        assert cells[2] in ("High", "Medium", "Low")  # exchange, bulk prefetch, load
+                                              # modifiers) — none certified by queueing
 
 
 def test_queue_rows_name_valid_trees():

@@ -20,3 +20,14 @@ reference_hours = 8         # writing a reference when the task has none
 # this global file's table vocabulary is closed (forgekernel.task._KEYS) and
 # WP12 does not grow it. kb_menu = false on a card runs the loop without the
 # menu; an absent key leaves it on.
+
+# --- WP8: prior supply (teacher-side) ----------------------------------------
+# This file's tables are closed-vocabulary ([loop] keys live on the card layer,
+# operators/<op>/loop.toml — the WP1 precedent). The WP8 keys are read there:
+#   [loop] teacher_prior_survey   = true    # teacher SOTA survey before recon/distill
+#   [loop] teacher_prior_art      = "path"  # offline dossier (task.toml spells it
+#                                           # [agent.teacher] prior_art, joined with
+#                                           # the task dir)
+#   [loop] carry_dir              = "path"  # default tasks/<op>/carry/ (self_evolve)
+#   [loop] m0_probe_candidates    = 2       # ARCH_PROBE bracket width (budget stays
+#                                           # [loop] m0_probe_rounds)

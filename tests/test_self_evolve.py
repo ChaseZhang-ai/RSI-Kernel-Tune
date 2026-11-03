@@ -42,7 +42,12 @@ def chain(tmp_path, monkeypatch):
     gains: list = []
     monkeypatch.setattr(se.launch, "cmd_new", lambda argv: ran.append(Path(argv[0])) or 0)
     monkeypatch.setattr(se.launch, "cmd_run", lambda argv: 0)
-    monkeypatch.setattr(se, "latest_run", lambda name: SimpleNamespace(dir=tmp_path / "run"))
+    monkeypatch.setattr(se, "latest_run", lambda name: SimpleNamespace(
+        dir=tmp_path / "run", operators_dir=tmp_path / "run" / "operators",
+        ws=tmp_path / "run" / "ws"))
+    # the carry ledger lookup stays hermetic: no repo hw_kb in a chain test
+    monkeypatch.setattr(se, "REPO_ROOT", tmp_path)
+
     def best_of(run, task):
         g = gains[len(ran) - 1]
         if g is None:
@@ -51,8 +56,9 @@ def chain(tmp_path, monkeypatch):
         return {"sha": "abc123def456", "speedup": speedup, "ratios": ratios, "kernel": KERNEL}
     monkeypatch.setattr(se.launch, "best_of", best_of)
     orig = se.next_generation
-    monkeypatch.setattr(se, "next_generation", lambda task, best, dest, step: orig(
-        task, best, dest, step) and dest)
+    monkeypatch.setattr(se, "next_generation",
+                        lambda task, best, dest, step, **kw: orig(
+                            task, best, dest, step, **kw) and dest)
     return tmp_path, ran, gains, kb
 
 

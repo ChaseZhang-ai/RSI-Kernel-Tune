@@ -24,12 +24,14 @@ from __future__ import annotations
 
 import argparse
 import itertools
+import json
 import re
 import shutil
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from forgekernel import launch  # noqa: E402
 from forgekernel.runs import list_runs  # noqa: E402
@@ -61,7 +63,7 @@ def noise_floor(best: dict) -> float:
     return max(NOISE_FLOOR_MIN, spread)
 
 
-def next_generation(task, best: dict, dest: Path, step: float) -> Path:
+def next_generation(task, best: dict, dest: Path, step: float, run=None) -> Path:
     """tasks/<op>-g<k>/: the task with ``best`` as its reference and target ``step``x."""
     if dest.exists():
         raise FileExistsError(f"{dest} exists; remove it or start the chain elsewhere")
@@ -80,8 +82,82 @@ def next_generation(task, best: dict, dest: Path, step: float) -> Path:
     cfg["target"] = {**cfg.get("target", {}), "ratio": float(step)}
     cfg["target"].pop("ms", None)
     (dest / "task.toml").write_text(dump_task_toml(cfg), encoding="utf-8")
+    if run is not None:
+        _write_carry(task, run, dest / "carry")
     load_task(dest)                       # the new generation must be a valid task
     return dest
+
+
+# --- WP8: cross-generation carry ------------------------------------------------
+# The parent run's closing record used to die with the run: the measured lever
+# prices, the ARCH_PROBE readings, the dead-lever verdicts and the final
+# milestone's decision graph were all re-bought from zero by the next
+# generation on what is (for the reference tree) the same machine. carry/ hands
+# them to the next generation's teacher through the distill/recon briefs'
+# PRIOR-INPUT section — hypothesis-reuse material, re-verified line by line,
+# never a gate anchor, never a price source (the driver-side injection carries
+# that rule verbatim into the prompt).
+
+_CARRY_MILESTONE = "milestone.md"
+_CARRY_LEVERS = "levers.json"
+_CARRY_ARCH_PROBE = "arch_probe.md"
+_CARRY_FALSIFIED = "falsified.md"
+_ARCH_PROBE_STAMP_RE = re.compile(r"<!-- ARCH_PROBE .*?-->", re.S)
+
+
+def _write_carry(task, run, dest: Path) -> None:
+    """Four artifacts from the parent run into ``tasks/<op>-g<k>/carry/``:
+    the final milestone (decisions + contracts + rationale, its head note
+    carrying the ARCH_PROBE stamp), the lever price table, the ARCH_PROBE
+    readings, and this operator's falsified-lever rows. Best-effort by design:
+    an artifact the run never produced (no plateau pricing, no probes) is
+    recorded as absent, never guessed."""
+    dest.mkdir(parents=True, exist_ok=True)
+    notes = []
+
+    def _put(name: str, text: str, what: str) -> None:
+        if text.strip():
+            (dest / name).write_text(text, encoding="utf-8")
+            notes.append(f"- `{name}`: {what}")
+        else:
+            notes.append(f"- `{name}`: absent (the parent run produced none)")
+
+    ms_path = run.operators_dir / task.name / "milestone.md"
+    ms_text = ""
+    if ms_path.is_file():
+        ms_text = ms_path.read_text(encoding="utf-8", errors="replace")
+    _put(_CARRY_MILESTONE, ms_text,
+         "the parent's final milestone: decisions, contracts, rationale notes "
+         "(its head note carries the parent's ARCH_PROBE stamp)")
+    levers = ""
+    levers_path = run.ws / "notes" / "levers.json"
+    if levers_path.is_file():
+        levers = levers_path.read_text(encoding="utf-8", errors="replace")
+    _put(_CARRY_LEVERS, levers, "the parent's last lever price table")
+    stamp = ""
+    if ms_text:
+        stamp = "\n\n".join(m.group(0) for m in
+                            _ARCH_PROBE_STAMP_RE.finditer(ms_text))
+    _put(_CARRY_ARCH_PROBE, stamp,
+         "the parent's ARCH_PROBE readings (the stamp block(s) of the milestone head)")
+    ledger = REPO_ROOT / "hw_kb" / "falsified_ledger.jsonl"
+    rows = []
+    if ledger.is_file():
+        for line in ledger.read_text(encoding="utf-8").splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if rec.get("op_family") == task.name:
+                rows.append(line)
+    _put(_CARRY_FALSIFIED, "\n".join(rows) + ("\n" if rows else ""),
+         "the parent's dead-lever ledger rows (class, price, why)")
+    (dest / "README.md").write_text(
+        "# carry: the parent generation's closing record\n\n"
+        "Consumed by the next generation's teacher through the distill/recon briefs' "
+        "PRIOR-INPUT section: for hypothesis reuse and reconciliation only — re-verify "
+        "every line against the new run's own measurements; never a gate anchor, never "
+        "a price source.\n\n" + "\n".join(notes) + "\n", encoding="utf-8")
 
 
 def main(argv=None) -> int:
@@ -122,7 +198,8 @@ def main(argv=None) -> int:
         if args.max_gen is not None and gen >= args.max_gen:
             print(f"[self-evolve] reached --max-gen {args.max_gen}", flush=True)
             return 0
-        task_dir = next_generation(task, best, task_dir.parent / f"{base}-g{gen + 1}", args.step)
+        task_dir = next_generation(task, best, task_dir.parent / f"{base}-g{gen + 1}",
+                                   args.step, run=run)
         print(f"[self-evolve] next generation: {task_dir}", flush=True)
     return 0
 

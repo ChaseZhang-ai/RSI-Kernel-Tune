@@ -23,3 +23,14 @@ The full format (`in_stack`, `variants`, `ablations`) is in the script's docstri
 
 An ablation can be requested the same way with `PROBE_REQUEST: notes/<name>.json`
 (`ablations` only). Not a student tool.
+
+## WP17: in-process bench switching (default on, `FK_SCREENING_INPROC=0` to kill)
+
+Every timed reading this tool takes (the pricing pass, the ablation bench, and the sweep /
+prescreen jobs that import this file) routes through one long-lived bench worker process:
+torch and the card's eval modules import once, and each call re-executes `eval/bench.py`
+in that process — the subprocess's protocol per call, minus the per-call cold start. A hung
+or crashed call is killed as a process group and reads exactly as the subprocess timeout
+always read (NODE-DIRTY, one driver re-buy). The cubin-dump calls (`keep_cubin=True`) stay
+per-call subprocesses. Set `FK_SCREENING_INPROC=0` in the job env for the historical
+behavior, byte for byte.

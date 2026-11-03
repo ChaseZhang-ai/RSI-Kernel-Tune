@@ -665,6 +665,18 @@ def make_scorer(order, ok, dev, ratio):
 
 def noise_floor(order, ok, dev):
     return 1.0
+
+
+def clamp_pass_budget(cap_s, left_s, margin_s):
+    # WP17: the prescreen reads the timing kernel's shared job-clock clamp
+    if left_s is None:
+        return float(cap_s)
+    return max(0.0, min(float(cap_s), float(left_s) - float(margin_s)))
+
+
+def paired_order(variants):
+    # WP17: the prescreen reads the timing kernel's shared interleaved order
+    return ["base", *variants]
 ''', encoding="utf-8")
     (tmp_path / "flash_attn_dsl").mkdir()
     base = "BASE KERNEL\n"

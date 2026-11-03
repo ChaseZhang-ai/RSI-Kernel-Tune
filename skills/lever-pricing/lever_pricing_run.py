@@ -662,7 +662,11 @@ def run_bench(variant, keep_cubin, timeout=2400):
         shutil.rmtree(dump, ignore_errors=True)
         os.makedirs(dump, exist_ok=True)
         env.update({"CUTE_DSL_KEEP_CUBIN": "1", "CUTE_DSL_DUMP_DIR": dump})
-    rc, out, err = sh("python3 eval/bench.py --mode all", env=env, timeout=timeout)
+        rc, out, err = sh("python3 eval/bench.py --mode all", env=env, timeout=timeout)
+    elif (j := _run_bench_inproc(variant, timeout)) is not _INPROC_FALLBACK:
+        return j
+    else:
+        rc, out, err = sh("python3 eval/bench.py --mode all", env=env, timeout=timeout)
     m = re.search(r"=== JSON ===\s*(\{.*)", out, re.S)
     if not m:
         print("[bench:%s] rc=%d no JSON; stderr tail:\n%s" % (variant, rc, err[-2500:]),
@@ -672,9 +676,263 @@ def run_bench(variant, keep_cubin, timeout=2400):
         j = json.loads(m.group(1))
     except json.JSONDecodeError:
         j = json.loads(m.group(1)[:m.group(1).rindex("}") + 1])
+    return _bench_post(j)
+
+
+def _bench_post(j):
+    """The one post-parse step every bench reading takes (the workload-scope
+    memo) plus the opt-in clock guard. WP17: the guard consumes the bench's own
+    gpu_state telemetry — a reading whose node sits outside the pass's first
+    reading's band is marked NODE-DIRTY and produces no verdict (the pass stops;
+    the driver re-runs once on a fresh node). Off unless
+    FK_SCREENING_CLOCK_GUARD=1: the historical behavior never read gpu_state
+    here, and this module keeps to it byte for byte by default."""
     if isinstance(j, dict) and isinstance(j.get("workload_scope"), dict) and not _SCOPE_SEEN:
         _SCOPE_SEEN.update(j["workload_scope"])
+    if os.environ.get(CLOCK_GUARD_ENV, "") == "1" and isinstance(j, dict):
+        gs = j.get("gpu_state")
+        if isinstance(gs, dict) and gs:
+            if not _CLOCK_GUARD_ANCHOR:
+                _CLOCK_GUARD_ANCHOR.update(gs)
+            else:
+                why = _clock_guard_reason(gs)
+                if why:
+                    _node_dirty.append(f"clock-guard: {why}")
+                    print(f"{NODE_DIRTY_MARKER}: {why}", flush=True)
+                    return None
     return j
+
+
+CLOCK_GUARD_ENV = "FK_SCREENING_CLOCK_GUARD"
+_CLOCK_GUARD_ANCHOR: dict = {}
+
+
+def _clock_guard_reason(gs: dict) -> str | None:
+    """Why this reading's gpu_state is out of band vs the pass's first reading,
+    or None. The job-side twin of loop/screening.py ``reading_dirty`` (this file
+    must stay importable without the harness, so the band check is spelled here;
+    the driver-side primitive owns the rule)."""
+    a, b = _CLOCK_GUARD_ANCHOR.get("sm_clock_mhz"), gs.get("sm_clock_mhz")
+    ok = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0  # noqa: E731
+    if ok(a) and ok(b) and abs(a - b) / min(a, b) > 0.02:
+        return f"sm clock {abs(a - b) / min(a, b):.1%} off the pass's first reading (band 2%)"
+    ta, tb = _CLOCK_GUARD_ANCHOR.get("temperature_c"), gs.get("temperature_c")
+    if ok(ta) and ok(tb) and abs(ta - tb) > 5.0:
+        return (f"temperature {tb:.0f}°C vs {ta:.0f}°C first reading (band ±5°C)")
+    return None
+
+
+def clamp_pass_budget(cap_s: float, left_s, margin_s: float) -> float:
+    """The job-side budget clamp every screening pass applies (WP17): the pass's
+    own cap, never more than the job clock still leaves minus the margin kept
+    for the closing lines. ``left_s`` None (no TASK_TIMEOUT: a hand run) → the
+    cap stands. One place — the sweep, the prescreen and the ablation pass all
+    spelled this same ``max(0, min(cap, left - margin))`` inline."""
+    if left_s is None:
+        return float(cap_s)
+    return max(0.0, min(float(cap_s), float(left_s) - float(margin_s)))
+
+
+def paired_order(variants) -> list:
+    """The interleaved pass order (WP17, one place): base first, then the
+    variants as listed — every reading shares the job's one node draw (the
+    sweep's and the prescreen's identical ``order = ["base"] + variants``;
+    the pricing pass's base-first construction is this same discipline)."""
+    return ["base", *variants]
+
+
+# --- WP17: the in-process bench worker ------------------------------------------
+# Every timed reading used to be a fresh `eval/bench.py --mode all` SUBPROCESS:
+# one torch import, one CUDA context and one reference import per (variant,
+# round) — on a sweep that is rounds x (variants+1) cold starts, ~30-50% of the
+# job's clock. The worker runs those calls in ONE long-lived process instead:
+# torch and the card's eval modules import once, and each call re-executes
+# eval/bench.py (runpy, fresh module namespace — the bench's own protocol:
+# correctness, fresh inputs and the paired windows all run per call, exactly as
+# in the subprocess). The card's kernel loader re-executes the kernel file per
+# call, so switching variants is writing the file — the same move the tools
+# always made. Isolation is unchanged: the call timeout is the CLIENT's, and a
+# hung or crashed call kills the worker process group and takes the same
+# NODE-DIRTY path the subprocess timeout always took. Kill switch
+# FK_SCREENING_INPROC=0 (and any worker startup / protocol failure) falls back
+# to the per-call subprocess for the rest of the run — the historical behavior,
+# byte for byte.
+BENCH_INPROC_ENV = "FK_SCREENING_INPROC"
+_BENCH_DONE = "BENCH-DONE"
+_BENCH_ERR_BEGIN = "BENCH-STDERR-BEGIN"
+_BENCH_ERR_END = "BENCH-STDERR-END"
+_INPROC_FALLBACK = object()      # "take the subprocess path" sentinel
+_INPROC: dict = {"p": None, "reader": None, "q": None, "ok": None}
+
+
+def _inproc_enabled() -> bool:
+    return os.environ.get(BENCH_INPROC_ENV, "1") != "0" \
+        and os.path.isfile(os.path.join(ROOT, "eval", "bench.py"))
+
+
+def _bench_worker_spawn():
+    """One long-lived bench host: torch + the card's eval modules import once."""
+    import subprocess as sp
+    here = os.path.dirname(os.path.abspath(__file__))
+    code = (f"import sys; sys.path.insert(0, {here!r}); "
+            "import lever_pricing_run as lpr; lpr._bench_worker_main()")
+    e = dict(os.environ)
+    e.update(_scope_env())
+    p = sp.Popen([sys.executable, "-c", code], cwd=ROOT, stdin=sp.PIPE,
+                 stdout=sp.PIPE, stderr=sp.DEVNULL, text=True, bufsize=1,
+                 start_new_session=True, env=e)
+    import queue as _q
+    import threading
+    qu: "queue.Queue" = _q.Queue()
+
+    def _reader(fh, sink):
+        for ln in fh:
+            sink.put(ln.rstrip("\n"))
+        sink.put(None)
+
+    th = threading.Thread(target=_reader, args=(p.stdout, qu), daemon=True)
+    th.start()
+    _INPROC.update({"p": p, "reader": th, "q": qu})
+    return p
+
+
+def _bench_worker_main():
+    """The worker loop: `RUN <id> <timeout>` per call — re-executes
+    eval/bench.py in this process (fresh module namespace, warm interpreter),
+    prints the captured stdout, then the captured stderr between markers, then
+    `BENCH-DONE <id> rc=<rc>`. Never exits on a call's failure: the client owns
+    the timeouts and the kill."""
+    import contextlib
+    import io
+    import queue as _q
+    import runpy
+    sys.path.insert(0, os.path.join(ROOT, "eval"))
+    bench_path = os.path.join(ROOT, "eval", "bench.py")
+    for line in sys.stdin:
+        if not line.startswith("RUN "):
+            continue
+        _, call_id, _timeout = line.split()
+        out_buf, err_buf = io.StringIO(), io.StringIO()
+        rc = 0
+        try:
+            argv = list(sys.argv)
+            sys.argv = [bench_path, "--mode", "all"]
+            try:
+                with contextlib.redirect_stdout(out_buf), \
+                        contextlib.redirect_stderr(err_buf):
+                    runpy.run_path(bench_path, run_name="__main__")
+            except SystemExit as e:      # bench.py may exit with its rc
+                rc = e.code if isinstance(e.code, int) else 0 if e.code is None else 1
+            finally:
+                sys.argv = argv
+        except BaseException as e:       # noqa: BLE001 — the call failed; report it
+            rc = 1
+            print(f"[bench-worker] call raised {type(e).__name__}: {e}",
+                  file=err_buf, flush=True)
+        sys.stdout.write(out_buf.getvalue())
+        if not out_buf.getvalue().endswith("\n"):
+            sys.stdout.write("\n")
+        sys.stdout.write(f"{_BENCH_ERR_BEGIN}\n{err_buf.getvalue()}{_BENCH_ERR_END}\n")
+        sys.stdout.write(f"{_BENCH_DONE} {call_id} rc={rc}\n")
+        sys.stdout.flush()
+
+
+def _inproc_reset(reason: str):
+    """Kill the worker and mark the run subprocess-only (a protocol failure,
+    a dead worker, or a completed call that emitted no JSON — the bench's real
+    failures die mid-process, so a completed no-JSON call reads as incompatibility)."""
+    p = _INPROC.get("p")
+    if p is not None:
+        kill_process_group(p)
+    _INPROC.update({"p": None, "reader": None, "q": None, "ok": False})
+    if reason:
+        print(f"[bench-worker] falling back to per-call subprocess ({reason})", flush=True)
+
+
+def _run_bench_inproc(variant, timeout):
+    """One bench call through the worker. Returns the parsed bench JSON, None
+    (the call is CONSUMED — a hung or crashed call, the subprocess path's
+    semantics), or ``_INPROC_FALLBACK`` (take the subprocess path for this
+    call). The call's timeout, the orphan sweep and the NODE-DIRTY verdict on a
+    hung call are the subprocess path's, unchanged."""
+    from queue import Empty
+    if _INPROC.get("ok") is False or not _inproc_enabled():
+        return _INPROC_FALLBACK
+    call_id = f"{os.getpid()}-{time.monotonic_ns()}"
+    try:
+        p = _INPROC.get("p")
+        if p is None or p.poll() is not None:
+            p = _bench_worker_spawn()
+    except (OSError, ValueError) as e:
+        _inproc_reset(f"worker spawn failed: {e}")
+        return _INPROC_FALLBACK
+    q = _INPROC["q"]
+    t0 = time.monotonic()
+    try:
+        p.stdin.write(f"RUN {call_id} {int(timeout)}\n")
+        p.stdin.flush()
+    except (OSError, ValueError, BrokenPipeError):
+        _inproc_reset("worker stdin closed")
+        return _INPROC_FALLBACK
+    lines: list = []
+    while True:
+        left = timeout - (time.monotonic() - t0)
+        if left <= 0:
+            # the subprocess path's timeout, unchanged: group kill, orphan sweep
+            # (it records + prints NODE-DIRTY itself when the GPU stays held),
+            # and the same no-JSON print
+            kill_process_group(p)
+            sweep_gpu_orphans(f"after the in-process bench timed out ({timeout}s)")
+            _inproc_reset("")
+            print(f"[bench:{variant}] rc=124 no JSON; stderr tail:\n"
+                  f"TIMEOUT after {timeout}s", flush=True)
+            return None
+        try:
+            ln = q.get(timeout=left)
+        except Empty:
+            continue
+        lines.append(ln)
+        if ln is None:                       # worker died mid-call
+            kill_process_group(p)
+            dirty = sweep_gpu_orphans("after the in-process bench worker died")
+            _inproc_reset("")
+            if dirty:
+                # a held GPU: the subprocess path's crash-with-orphans verdict
+                print(f"[bench:{variant}] rc=1 no JSON; stderr tail:\n"
+                      f"the in-process bench worker died; {node_dirty()}", flush=True)
+                return None
+            # a clean death is a crashed call: the same no-JSON verdict, and the
+            # worker restarts (cold, like the per-call subprocess) on the next call
+            print(f"[bench:{variant}] rc=1 no JSON; stderr tail:\n"
+                  "the in-process bench worker died", flush=True)
+            return None
+        if ln.startswith(_BENCH_DONE) and len(ln.split()) >= 3 \
+                and ln.split()[1] == call_id:
+            break
+    out_lines, err_lines, in_err = [], [], False
+    for ln in lines[:-1]:
+        if ln.startswith(_BENCH_ERR_BEGIN):
+            in_err = True
+        elif ln.startswith(_BENCH_ERR_END):
+            in_err = False
+        elif in_err:
+            err_lines.append(ln)
+        else:
+            out_lines.append(ln)
+    out, err = "\n".join(out_lines), "\n".join(err_lines)
+    m = re.search(r"=== JSON ===\s*(\{.*)", out, re.S)
+    if not m:
+        # a COMPLETED call without JSON reads as incompatibility, not as the
+        # bench's verdict (real failures die mid-process): permanent subprocess
+        # fallback, and this one call is re-read there
+        _inproc_reset("completed call carried no JSON")
+        return _INPROC_FALLBACK
+    try:
+        j = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        j = json.loads(m.group(1)[:m.group(1).rindex("}") + 1])
+    print(f"[bench:{variant}] in-process rc=0", flush=True)
+    return _bench_post(j)
 
 
 def scope_line():
@@ -920,7 +1178,7 @@ def main(argv=None) -> int:
         # table to build, the base is timed inside the ablation pass
         left = job_seconds_left(t_job0)
         if left is not None:
-            abl_budget = max(0.0, min(abl_budget, left - ROLE_PASS_MARGIN_S))
+            abl_budget = clamp_pass_budget(abl_budget, left, ROLE_PASS_MARGIN_S)
         try:
             time_ablations(ablations, abl_variants, abl_rounds, kpath, base_src, abl_budget)
         finally:
@@ -1072,7 +1330,7 @@ def main(argv=None) -> int:
             # (the ABLATE-OK copy must land before gpu_entry's kill)
             left = job_seconds_left(t_job0)
             if left is not None:
-                abl_budget = max(0.0, min(abl_budget, left - ROLE_PASS_MARGIN_S))
+                abl_budget = clamp_pass_budget(abl_budget, left, ROLE_PASS_MARGIN_S)
             time_ablations(ablations, abl_variants, abl_rounds, kpath, base_src, abl_budget)
     finally:
         open(kpath, "w").write(base_src)      # leave the tree as we found it

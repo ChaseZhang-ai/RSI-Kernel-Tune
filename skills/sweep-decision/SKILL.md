@@ -64,3 +64,14 @@ jump before re-sweeping). Whitelist members worth the same treatment: `--ftz`,
 `--fmad`, `--prec-div` / `--prec-sqrt`, `--extra-device-vectorization`;
 `--use_fast_math` may be swept too, but its numerics are arbitrated by the
 precision gate.
+
+## WP17: in-process bench switching (default on, `FK_SCREENING_INPROC=0` to kill)
+
+The sweep's timed readings run through one long-lived bench worker process (the pricing
+tool's `lever_pricing_run`): torch and the card's eval modules import once, and every
+(variant, round) call re-executes `eval/bench.py` in that process — fresh inputs, correctness
+and the paired windows per call, exactly the subprocess's protocol, minus the per-call cold
+start (~30-50% of the job's clock on a full grid). A hung or crashed call is killed as a
+process group and takes the same NODE-DIRTY path as before; the driver's re-buy-once policy is
+untouched. Set `FK_SCREENING_INPROC=0` in the job env to put every bench call back on the
+per-call subprocess (the historical behavior, byte for byte).

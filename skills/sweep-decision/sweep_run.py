@@ -123,7 +123,8 @@ def main(argv=None) -> int:
     except ValueError as e:
         print(f"SWEEP-FAIL reason=sweep-edit ({e})", flush=True)
         return 0
-    order = list(sources)           # base, then the recipe's variants in order
+    order = lpr.paired_order([v for v in sources if v != "base"])
+    # base, then the recipe's variants in order (the screening primitive's order)
     print(f"SWEEP kernel_file={kernel} criterion={criterion} variants: {' '.join(order)}",
           flush=True)
     dev = {v: [] for v in order}
@@ -135,7 +136,7 @@ def main(argv=None) -> int:
     budget = float(SWEEP_BUDGET_S)
     left = lpr.job_seconds_left(t_job0)
     if left is not None:
-        budget = max(0.0, min(budget, left - lpr.ROLE_PASS_MARGIN_S))
+        budget = lpr.clamp_pass_budget(budget, left, lpr.ROLE_PASS_MARGIN_S)
     t0 = time.monotonic()
     try:
         rnd = 0

@@ -286,7 +286,11 @@ def test_forge_run_drives_every_stage(repo, monkeypatch):
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", teacher.method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
         "match": True, "tolerance": {"y": 2e-6}, "problems": []})
-    monkeypatch.setattr(loop_cli, "main", _loop_ends(lambda argv: calls.setdefault("loop", argv)))
+    # stop="target" plus a clean confirmation at the target: DONE needs both now
+    # (BUG-SEED-13 -- the loop's own stop reason may not vouch for the target)
+    monkeypatch.setattr(loop_cli, "main",
+                        _loop_ends(lambda argv: calls.setdefault("loop", argv),
+                                   confirm=_confirmed(8.0)))
     rc = _start(task_dir)
     assert rc == 0
     run = list_runs()[0]
@@ -310,7 +314,7 @@ def test_a_calibration_mismatch_sends_the_judge_back(repo, monkeypatch):
                      {"match": True, "tolerance": {"y": 1e-6}, "problems": []}])
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", teacher.method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: next(outcomes))
-    monkeypatch.setattr(loop_cli, "main", _loop_ends())
+    monkeypatch.setattr(loop_cli, "main", _loop_ends(confirm=_confirmed(8.0)))
     assert _start(task_dir) == 0
     assert len(teacher.prompts) == 2
     assert "normalized error 0.9" in teacher.prompts[1]
@@ -322,7 +326,9 @@ def test_a_task_without_a_reference_gets_the_floor_and_the_goal_session(repo, mo
     calls = {}
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda *a: pytest.fail("nothing to calibrate"))
-    monkeypatch.setattr(loop_cli, "main", _loop_ends(lambda argv: calls.setdefault("loop", argv)))
+    monkeypatch.setattr(loop_cli, "main",
+                        _loop_ends(lambda argv: calls.setdefault("loop", argv),
+                                   confirm=_confirmed(8.0)))
     assert _start(task_dir) == 0
     run = list_runs()[0]
     op_dir = run.operators_dir / "rmsnorm"
@@ -341,7 +347,7 @@ def test_resume_skips_what_is_done(repo, monkeypatch):
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", teacher.method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
         "match": True, "tolerance": {"y": 2e-6}, "problems": []})
-    monkeypatch.setattr(loop_cli, "main", _loop_ends(seen.append))
+    monkeypatch.setattr(loop_cli, "main", _loop_ends(seen.append, confirm=_confirmed(8.0)))
     _start(task_dir)
     run = list_runs()[0]
     assert launch.cmd_run([str(run.dir)]) == 0
@@ -441,7 +447,7 @@ def test_without_ncu_the_loop_runs_on_timings(repo, monkeypatch):
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
         "match": True, "tolerance": {"y": 2e-6}, "problems": []})
     monkeypatch.setattr(launch, "probe_ncu", lambda task, op_dir: False)
-    monkeypatch.setattr(loop_cli, "main", _loop_ends())
+    monkeypatch.setattr(loop_cli, "main", _loop_ends(confirm=_confirmed(8.0)))
     assert _start(task_dir) == 0
     run = list_runs()[0]
     cfg = tomllib.loads((run.operators_dir / "rmsnorm" / "loop.toml").read_text())["loop"]

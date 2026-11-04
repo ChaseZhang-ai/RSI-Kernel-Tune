@@ -431,8 +431,13 @@ def drive(run, machine, *, resuming: bool = False, harvest_only: bool = False) -
             raise
         stop = loop_stop(run, task) if rc == 0 else None
         met = rc == 0 and confirmed_at_target(run, task)
-        final = (runs_mod.STATUS_DONE if stop == STOP_TARGET or met
-                 else runs_mod.STATUS_STOPPED)
+        # The exit-code contract (__main__.py): DONE only when the FINAL CONFIRMATION
+        # meets the target with no correctness alarm on that kernel. The loop's own
+        # stop reason ("target") may not vouch for it -- a finish-monitor alarm or a
+        # missing best_confirmation.json must keep the run stopped (exit 2), the same
+        # way a budget that ran out after the target was met still completes (met
+        # holds there too).
+        final = (runs_mod.STATUS_DONE if met else runs_mod.STATUS_STOPPED)
         run.update(status=final, loop_rc=rc, stop=stop, target_met=met)
         write_report(run, task, rc)
         return 0 if final == runs_mod.STATUS_DONE else 2
@@ -696,7 +701,9 @@ def write_report(run, task, rc: int) -> Path:
                 "with STRICT numbers" if lane == "memo" else ""),
              f"- status: {rec.get('status')} (stop: {rec.get('stop') or 'unknown'}, "
              f"loop exit {rc})"]
-    if rec.get("target_met") and rec.get("stop") != STOP_TARGET:
+    if rec.get("target_met"):
+        # target_met is set only from confirmed_at_target(): a clean final
+        # confirmation at the target, whatever stopped the loop.
         lines.append("- the final confirmation meets the target")
     best = best_of(run, task)
     if best is not None:

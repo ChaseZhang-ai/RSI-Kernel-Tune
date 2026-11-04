@@ -13951,6 +13951,20 @@ _PKG_TRAIL_SLACK = 3
 _PKG_SENT_END = re.compile(r"(?<=[.!?。！？])\s")
 
 
+def _pkg_step_ok(k: int, n: int) -> bool:
+    """The one well-formedness bar for a declared ``part k of n`` package step,
+    shared by the scaffold path (_declared_construction) and the pricing path
+    (_open_package_tail): ``1 <= k < n <= _PKG_MAX_STEPS``.
+
+    The two paths once disagreed — the scaffold accepted ``part 0 of 3`` (and
+    any n) as an in-flight build and never evaluated the tree, while pricing
+    rejected the same delivery as malformed and priced over it, so one malformed
+    declaration was scaffolded-protected AND REVERT-eligible at once. k=0 /
+    k>=n / n over the cap are malformed declarations, not builds: both paths
+    treat them as an ordinary delivery."""
+    return 1 <= k < n <= _PKG_MAX_STEPS
+
+
 def _pkg_decl(change: str) -> re.Match | None:
     head = (change or "").split("\n", 1)[0]
     return _PKG_DECL.search(_PKG_SENT_END.split(head, 1)[0])
@@ -13958,13 +13972,14 @@ def _pkg_decl(change: str) -> re.Match | None:
 
 def _declared_construction(change: str) -> str | None:
     """What the delivery's opening declares about the tree being mid-build, or
-    None: an unfinished package step (``part k of n``, k < n, the prompt's
-    multi-step build package contract) or an opened placeholder (``[PLACEHOLDER: …]``). Read
+    None: an unfinished, well-formed package step (``part k of n``, judged by
+    _pkg_step_ok — the same bar the pricing path applies) or an opened
+    placeholder (``[PLACEHOLDER: …]``). Read
     by run_inner_iteration to scaffold such a row while the lineage's green state
     is still unknown, instead of buying a full eval that can only say
     "under construction"."""
     m = _pkg_decl(change)
-    if m and int(m.group(1)) < int(m.group(2)):
+    if m and _pkg_step_ok(int(m.group(1)), int(m.group(2))):
         return f"part {m.group(1)} of {m.group(2)}"
     head = (change or "").split("\n", 1)[0]
     p = _PLACEHOLDER_TAG.search(head)
@@ -14027,12 +14042,17 @@ def _resume_anchor(records, head: str) -> str | None:
 def _open_package_tail(segment) -> tuple[int, int] | None:
     """(k, n) when the segment's latest delivery is a declared, still-unfinished,
     within-budget multi-iter package step; None otherwise."""
-    # The budget counts every declared KEEP in the segment, package identity
-    # unexamined: a re-cut mid-segment (abandon pkg A, open pkg B with no plain
-    # KEEP between) burns A's rows against B. Deliberately conservative — the
-    # error direction is "pricing resumes early", never "plea extended".
-    pkg_keeps = sum(1 for r in segment
-                    if r.verdict == "KEEP" and _pkg_decl(r.change))
+    # The budget counts every well-formed declared KEEP in the segment, package
+    # identity unexamined: a re-cut mid-segment (abandon pkg A, open pkg B with
+    # no plain KEEP between) burns A's rows against B. Deliberately
+    # conservative — the error direction is "pricing resumes early", never
+    # "plea extended". A malformed declaration is an ordinary delivery: it
+    # neither extends the plea (_pkg_step_ok) nor spends its budget.
+    pkg_keeps = 0
+    for r in segment:
+        m = _pkg_decl(r.change) if r.verdict == "KEEP" else None
+        if m is not None and _pkg_step_ok(int(m.group(1)), int(m.group(2))):
+            pkg_keeps += 1
     for offset, r in enumerate(reversed(segment)):
         if r.verdict != "KEEP":
             continue
@@ -14040,7 +14060,7 @@ def _open_package_tail(segment) -> tuple[int, int] | None:
         if not m:
             return None        # the latest delivery moved on: no package in flight
         k, n = int(m.group(1)), int(m.group(2))
-        if not (1 <= k < n <= _PKG_MAX_STEPS):
+        if not _pkg_step_ok(k, n):
             return None        # finished (k >= n), malformed, or over the cap
         if pkg_keeps > n:
             return None        # declared budget spent: n rows of grace, no more

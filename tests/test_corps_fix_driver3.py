@@ -7,6 +7,7 @@ import json
 import statistics
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -178,3 +179,56 @@ def test_seeding_survives_a_non_utf8_locale(tmp_path):
     assert "SEEDED" in r.stdout
     assert (ws / "notes" / "orch_tools.py").is_file()
     assert (ws / "recon" / "notes" / "stall_tools.py").is_file()
+
+
+# --- BUG-SEED-34: the scaffold and the pricing paths judged a malformed -------
+# --- ``part k of n`` declaration with opposite semantics -----------------------
+
+
+def _pkg_tail_row(change, verdict="KEEP"):
+    return SimpleNamespace(verdict=verdict, change=change)
+
+
+@pytest.mark.parametrize("decl", ["part 0 of 3: scaffolding the tile loop",
+                                  "part 1 of 99: grand rebuild, uncut"])
+def test_malformed_package_declaration_is_rejected_on_both_paths(decl):
+    """Observed: _declared_construction accepted ``part 0 of 3`` (k < n, no
+    lower bound) and ``part 1 of 99`` (no cap) and scaffolded the tree — never
+    evaluated — while _open_package_tail rejected the SAME delivery as
+    malformed and priced over it: the row was construction-protected AND
+    REVERT-eligible at once. Both paths now share _pkg_step_ok's bar."""
+    from peregrine_kernel.loop.driver import (
+        _declared_construction,
+        _open_package_tail,
+    )
+
+    assert _declared_construction(decl) is None
+    assert _open_package_tail([_pkg_tail_row(decl)]) is None
+
+
+def test_wellformed_package_declaration_still_works_on_both_paths():
+    """The unification must not tighten away the real contract: a valid
+    ``part 1 of 3`` opening still scaffolds and still opens the tail."""
+    from peregrine_kernel.loop.driver import (
+        _declared_construction,
+        _open_package_tail,
+        _PKG_MAX_STEPS,
+    )
+
+    decl = "part 1 of 3: smem access atoms, write side"
+    assert _declared_construction(decl) == "part 1 of 3"
+    assert _open_package_tail([_pkg_tail_row(decl)]) == (1, 3)
+    assert _declared_construction(f"part 2 of {_PKG_MAX_STEPS} — second step") \
+        == f"part 2 of {_PKG_MAX_STEPS}"
+    assert _open_package_tail(
+        [_pkg_tail_row(f"part 2 of {_PKG_MAX_STEPS}")]) == (2, _PKG_MAX_STEPS)
+
+
+def test_malformed_declaration_does_not_spend_the_package_budget():
+    """An ordinary (malformed) KEEP is not a package row: it must not count
+    toward the n-rows-of-grace budget any more than it extends the plea."""
+    from peregrine_kernel.loop.driver import _open_package_tail
+
+    segment = [_pkg_tail_row("part 0 of 3 — malformed opener"),
+               _pkg_tail_row("part 1 of 2 — real package step")]
+    assert _open_package_tail(segment) == (1, 2)

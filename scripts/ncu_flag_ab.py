@@ -50,8 +50,10 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 _METRICS_RE = re.compile(r"^NCU_METRICS=\"(.+)\"$", re.M)
 _WARM_FLAGS = ["--cache-control", "none", "--clock-control", "none"]
 _FLUSH_FLAGS = ["--cache-control", "all", "--clock-control", "base"]
-# The comparisons the verdict reads. l2_hit_rate_pct is the directional one.
-_L2 = "lts__t_sector_hit_rate.pct"
+# The comparisons the verdict reads. l2_hit_rate_pct is the directional one --
+# the key profiler_from_ncu parses the raw lts__t_sector_hit_rate.pct metric
+# into (inner/ncu.py's rename table); the raw name is never a parsed key.
+_L2 = "l2_hit_rate_pct"
 
 
 def card_metrics(op_dir: Path) -> str:

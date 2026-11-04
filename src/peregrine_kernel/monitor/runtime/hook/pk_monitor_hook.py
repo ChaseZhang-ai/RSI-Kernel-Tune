@@ -228,8 +228,8 @@ def _record(name: str, pre, out) -> None:
         outs += [{**after[j], "slot": f"arg{j}"} for j in written
                  if not any(_same_storage(ins[j], r) for r in rets)]
         _state["calls"].append({
-            "fn": name, "i": idx, "n_inputs": len(ins), "in_sums": sums,
-            "in_nonfinite": nonfinite, "written": written,
+            "fn": name, "i": idx, "pid": os.getpid(), "n_inputs": len(ins),
+            "in_sums": sums, "in_nonfinite": nonfinite, "written": written,
             "inputs_nonfinite": sum(n for j, n in enumerate(nonfinite) if j not in written),
             "outputs": outs})
     except Exception as e:  # noqa: BLE001

@@ -130,7 +130,26 @@ def parse_log(text: str) -> dict | None:
 
 # --- classification ---------------------------------------------------------------
 def _calls(rec: dict) -> dict[tuple, dict]:
-    return {(c.get("fn"), c.get("i")): c for c in (rec.get("hook") or {}).get("calls") or []}
+    """Deduplicated call records of one profile run, keyed per process: the hook
+    counts ``i`` from zero in every process, so without the pid in the key the
+    merged multi-process record lets the processes overwrite each other. Records
+    written before calls carried a pid share the None key."""
+    return {(c.get("pid"), c.get("fn"), c.get("i")): c
+            for c in (rec.get("hook") or {}).get("calls") or []}
+
+
+def _call_key(c: dict) -> tuple:
+    """The pid-insensitive identity of a call: two runs of the bench are different
+    processes, so cross-run joins match on (fn, i) alone."""
+    return (c.get("fn"), c.get("i"))
+
+
+def _base_calls(base: dict | None) -> dict[tuple, dict]:
+    """The base run's calls indexed for cross-run joins (pid-insensitive)."""
+    out: dict[tuple, dict] = {}
+    for c in (base.get("hook") or {}).get("calls") or []:
+        out.setdefault(_call_key(c), c)
+    return out
 
 
 def _nonfinite(outputs: list[dict], key: str) -> int:
@@ -161,13 +180,15 @@ def _bad_inputs(c: dict, written: dict[str, set[int]]) -> int:
 
 
 def _in_sig(rec: dict, written: dict[str, set[int]] | None = None) -> list:
-    """What the kernel was handed, call by call — output buffers left out."""
+    """What the kernel was handed, call by call — output buffers left out. Keyed
+    pid-insensitively: two profiles run in different processes, and the signature
+    compares WHAT was handed, not who held it."""
     written = written or {}
     sig = []
     for k, c in sorted(_calls(rec).items(), key=str):
         w = written.get(c.get("fn"), set())
         sums = c.get("in_sums")
-        sig.append((k, None if sums is None else
+        sig.append((_call_key(c), None if sums is None else
                     [None if j in w else s for j, s in enumerate(sums)]))
     return sig
 
@@ -231,13 +252,14 @@ def classify(result: dict | None) -> dict:
                 add("info", "base", "no kernel call was observed (the bench does not import "
                                     "the kernel as a module) — output checks unavailable; the "
                                     "card's verdicts under each profile still count")
-        for (fn, i), c in _calls(base).items():
+        for c in _calls(base).values():
             nan = _nonfinite(c.get("outputs") or [], "nan")
             if nan and base.get("card_pass") is True:
+                fn, i = _call_key(c)
                 add("warn", "base", f"{fn}[{i}] produces {nan} NaN on the card's own inputs "
                                     f"and the card passes it")
 
-    base_calls = _calls(base) if base else {}
+    base_calls = _base_calls(base) if base else {}
     for prof, rec in recs.items():
         if prof == "base":
             ran.append(prof)
@@ -273,18 +295,19 @@ def classify(result: dict | None) -> dict:
                                   f"{desc} (the bench does not draw them from torch's RNG)")
                 continue
         bad_in = [c for c in _calls(rec).values() if _bad_inputs(c, written)
-                  and not _bad_inputs(base_calls.get((c.get("fn"), c.get("i"))) or {}, written)]
+                  and not _bad_inputs(base_calls.get(_call_key(c)) or {}, written)]
         if bad_in:
             n_a.append(prof)
             add("info", prof, f"not counted: {desc} made the kernel's inputs non-finite")
             continue
         ran.append(prof)
         # NaN the base run did not have, whatever the card's judge says
-        for key, c in _calls(rec).items():
+        for c in _calls(rec).values():
             nan = _nonfinite(c.get("outputs") or [], "nan")
-            nan0 = _nonfinite((base_calls.get(key) or {}).get("outputs") or [], "nan")
+            nan0 = _nonfinite((base_calls.get(_call_key(c)) or {}).get("outputs") or [], "nan")
             if nan and not nan0:
-                add("alarm", prof, f"{key[0]}[{key[1]}] produces {nan} NaN under {desc} "
+                fn, i = _call_key(c)
+                add("alarm", prof, f"{fn}[{i}] produces {nan} NaN under {desc} "
                                    f"(none on the card's own inputs); card verdict: "
                                    f"{'PASS' if verdict else 'FAIL'}")
         if prof == "repeat":
@@ -296,8 +319,8 @@ def classify(result: dict | None) -> dict:
                                   "output reproducibility not checked")
                 continue
             worst = 0.0
-            for key, c in _calls(rec).items():
-                b = base_calls.get(key)
+            for c in _calls(rec).values():
+                b = base_calls.get(_call_key(c))
                 if not b:
                     continue
                 mine, theirs = _by_slot(c.get("outputs") or []), _by_slot(b.get("outputs") or [])

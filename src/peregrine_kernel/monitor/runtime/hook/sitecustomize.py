@@ -23,19 +23,53 @@ finally:
         pass
 
 
+def _chain_target() -> str | None:
+    """The next ``sitecustomize.py`` along sys.path (ours removed) — skipping any
+    that lives inside the judged tree (``PK_MON_ROOT``) or the current directory:
+    a student workspace can plant one at its root, and the old plain
+    ``importlib.import_module("sitecustomize")`` happily executed it. The image's
+    own copy (the harness's, a site-packages one) sits outside those roots and
+    still chains. Decided by file path alone — no name lists."""
+    roots = []
+    for r in (os.environ.get("PK_MON_ROOT"), os.getcwd()):
+        if not r:
+            continue
+        try:
+            roots.append(os.path.realpath(r))
+        except OSError:
+            continue
+    for p in sys.path:
+        cand = os.path.join(os.path.abspath(p or os.curdir), "sitecustomize.py")
+        if not os.path.isfile(cand):
+            continue
+        try:
+            real = os.path.realpath(cand)
+        except OSError:
+            continue
+        if any(real == r or real.startswith(r + os.sep) for r in roots):
+            continue
+        return cand
+    return None
+
+
 def _chain() -> None:
-    import importlib
+    import importlib.util
 
     saved = list(sys.path)
     ours = sys.modules.pop("sitecustomize", None)
     try:
         sys.path[:] = [p for p in sys.path
                        if os.path.abspath(p or os.curdir) != _HERE]
-        try:
-            importlib.import_module("sitecustomize")
-        except ImportError:
-            if ours is not None:
-                sys.modules["sitecustomize"] = ours
+        path = _chain_target()
+        if path is None:
+            raise ImportError("no other sitecustomize on sys.path")
+        spec = importlib.util.spec_from_file_location("sitecustomize", path)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["sitecustomize"] = mod
+        spec.loader.exec_module(mod)
+    except ImportError:
+        if ours is not None:
+            sys.modules["sitecustomize"] = ours
     finally:
         sys.path[:] = saved
 

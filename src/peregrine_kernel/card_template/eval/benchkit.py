@@ -1496,6 +1496,18 @@ def _replay_probe_ratio() -> float:
         return REPLAY_PROBE_RATIO_DEFAULT
 
 
+def _replay_probe_timeout_s() -> int:
+    """The probe child's wall-clock ceiling: ``PK_REPLAY_PROBE_TIMEOUT_S``
+    overrides; an unreadable value keeps the default. A junk knob must not
+    crash the bench here — this read fires after every timing window has
+    closed, so a bare ``int()`` would waste the whole eval before the JSON
+    is emitted."""
+    try:
+        return int(os.environ.get(REPLAY_PROBE_TIMEOUT_ENV) or REPLAY_PROBE_TIMEOUT_S)
+    except ValueError:
+        return REPLAY_PROBE_TIMEOUT_S
+
+
 def _probe_draw_seed(group: dict, group_index: int, offset: int) -> int:
     """One probe draw's seed: the group's own seed plus the probe shift and a
     per-group stride — disjoint from the judged draw (+0), the recheck's
@@ -1665,8 +1677,7 @@ def _probe_child(problem: dict) -> dict:
         proc = subprocess.run(
             [sys.executable, str(bench), "--mode", "correctness", "--replay-probe"],
             cwd=str(root), env=env, capture_output=True, text=True,
-            timeout=int(os.environ.get(REPLAY_PROBE_TIMEOUT_ENV,
-                                       REPLAY_PROBE_TIMEOUT_S)))
+            timeout=_replay_probe_timeout_s())
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"status": "unavailable",
                 "detail": f"probe child did not run: {type(exc).__name__}: {exc}"}

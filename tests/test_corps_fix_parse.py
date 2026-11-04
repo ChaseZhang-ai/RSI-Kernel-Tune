@@ -177,3 +177,46 @@ def test_json_scan_still_finds_the_plain_block():
                                 "performance") == {"performance": {"x": 1}}
     assert _first_json_with_key("no json at all", "performance") is None
     assert _first_json_with_key('{"other": {"a": 1}}', "performance") is None
+
+
+# --- BUG-SEED-43: one torn line (a run killed mid-append) made load_records -----
+# raise JSONDecodeError, so the whole trajectory — and every resume of it — was
+# unreadable. Unparseable lines are now dropped with one stderr warning.
+
+def _keep_rec(it):
+    return IterationRecord(iter=it, decision_id=f"d{it}", change=f"c{it}",
+                           correctness=True, verdict="KEEP")
+
+
+def test_load_records_tolerates_a_torn_final_line(tmp_path, capsys):
+    from peregrine_kernel.inner.trajectory import append_record, load_records
+    p = tmp_path / "status.jsonl"
+    append_record(p, _keep_rec(1))
+    with open(p, "a") as fh:
+        fh.write('{"iter": 2, "decision_id": "d2", "change"')
+    recs = load_records(p)
+    assert [r.iter for r in recs] == [1]          # the history stays readable
+    err = capsys.readouterr().err
+    assert "status.jsonl" in err and "unparseable line(s) (2)" in err
+
+
+def test_load_records_drops_a_bad_middle_line_and_keeps_the_rest(tmp_path, capsys):
+    from peregrine_kernel.inner.trajectory import append_record, load_records
+    p = tmp_path / "status.jsonl"
+    append_record(p, _keep_rec(1))
+    with open(p, "a") as fh:
+        fh.write("not json at all\n")
+    append_record(p, _keep_rec(2))
+    recs = load_records(p)
+    assert [r.iter for r in recs] == [1, 2]
+    err = capsys.readouterr().err
+    assert "unparseable line(s) (2)" in err
+
+
+def test_load_records_clean_file_warns_nothing(tmp_path, capsys):
+    from peregrine_kernel.inner.trajectory import append_record, load_records
+    p = tmp_path / "status.jsonl"
+    append_record(p, _keep_rec(1))
+    append_record(p, _keep_rec(2))
+    assert [r.iter for r in load_records(p)] == [1, 2]
+    assert capsys.readouterr().err == ""

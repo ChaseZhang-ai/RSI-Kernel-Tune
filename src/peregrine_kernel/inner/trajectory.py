@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -413,14 +414,35 @@ def per_shape_best_readings(records: list,
 
 
 def load_records(path: str | Path) -> list[IterationRecord]:
-    """Load records, dropping any unknown keys (tolerates pre-refactor status files)."""
-    out = []
-    for line in Path(path).read_text().splitlines():
+    """Load records, dropping any unknown keys (tolerates pre-refactor status files).
+
+    Torn-line tolerant: the file is append-only, and a run killed mid-write leaves
+    a half-written final line. One bare ``json.loads`` used to make that half line
+    sink the WHOLE trajectory — every consumer, including the resume entry that
+    counts the rows to continue from, raised JSONDecodeError and the run's history
+    was unreadable. Any line that does not parse is now dropped with one stderr
+    warning naming the file and the line numbers, wherever it sits; the good rows
+    around it stay readable."""
+    out: list[IterationRecord] = []
+    bad: list[int] = []
+    for n, line in enumerate(Path(path).read_text().splitlines(), 1):
         line = line.strip()
-        if line:
+        if not line:
+            continue
+        try:
             d = json.loads(line)
-            d = {_LEGACY_KEYS.get(k, k): v for k, v in d.items()}
-            out.append(IterationRecord(**{k: v for k, v in d.items() if k in _FIELDS}))
+        except json.JSONDecodeError:
+            bad.append(n)
+            continue
+        d = {_LEGACY_KEYS.get(k, k): v for k, v in d.items()}
+        out.append(IterationRecord(**{k: v for k, v in d.items() if k in _FIELDS}))
+    if bad:
+        shown = ", ".join(str(n) for n in bad[:5])
+        more = f" (+{len(bad) - 5} more)" if len(bad) > 5 else ""
+        print(f"[peregrine_kernel.inner.trajectory] {path}: skipped {len(bad)} "
+              f"unparseable line(s) ({shown}{more}) — a torn or corrupt line must "
+              f"not sink the whole trajectory",
+              file=sys.stderr)
     return out
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 import peregrine_kernel.loop.driver as drv
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
 
 from test_loop_driver import FakeBackend, _ctx
 
@@ -57,3 +57,34 @@ def test_paired_reanchor_still_quotes_the_absolute_gap_when_it_has_one(tmp_path,
     monkeypatch.setattr(drv, "run_best_confirmation", lambda *a, **k: dict(_CONFIRM))
     assert drv._paired_reanchor(ctx, 1.0, 0.066) is None
     assert "absolute account said +6.6%" in capsys.readouterr().out
+
+
+# --- BUG-SEED-02: the unmeasured REVERT rows carry no verdict on green ---------
+
+def test_unparseable_revert_row_is_neutral_on_green(tmp_path):
+    # The record-is-None branches (budget exhausted, nothing evaluated: gate
+    # refusal / probe undelivered / probe blocked / unparseable) used to file
+    # correctness=False: run_inner_loop read that as "not green" and dropped the
+    # lineage into scaffold mode, and _green_on_resume kept the False across
+    # restarts. Nothing was measured, so the row must move nothing (the same
+    # neutrality _harness_edit_revert already documents for its un-evaluated
+    # REVERTs).
+    be = FakeBackend(["garbage"] * 4, [])
+    ctx = _ctx(tmp_path, be)
+    ctx.max_probe_rounds = 4
+    rec = drv.run_inner_iteration(ctx, 0, metric_before=2.6, last_good_ref="sha-prev")
+    assert rec.verdict == "REVERT" and rec.decision_id == "unparseable"
+    assert rec.correctness is None
+    # a lineage whose only row is unmeasured does not resume as under construction
+    assert drv._green_on_resume(load_records(ctx.status_path), "sha0") is None
+
+
+def test_probe_blocked_revert_row_is_neutral_on_green(tmp_path):
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "p.py").write_text("print('rig')\n", encoding="utf-8")
+    be = FakeBackend(["PROBE_REQUEST: notes/p.py"] * 2, ["PROBE FAIL max_diff=9"] * 2)
+    ctx = _ctx(tmp_path, be)
+    ctx.max_probe_rounds = 2
+    rec = drv.run_inner_iteration(ctx, 0, metric_before=3.0, last_good_ref="sha-prev")
+    assert rec.verdict == "REVERT" and rec.decision_id == "probe-blocked"
+    assert rec.correctness is None

@@ -3787,9 +3787,15 @@ def run_inner_iteration(
         else:
             did, change = "unparseable", "(no parseable decision emitted)"
             err = f"no parseable decision from the student in {ctx.max_probe_rounds} rounds"
+        # correctness None: nothing was evaluated on this path (gate refusal,
+        # undelivered/blocked probe, unparseable output), so the lineage's green
+        # state is not moved — a False here dropped a never-evaluated workspace
+        # into scaffold mode (run_inner_iteration's read side) and kept it there
+        # across restarts (_green_on_resume), the same hole
+        # _harness_edit_revert's None documents for its un-evaluated REVERTs.
         rec = IterationRecord(
             iter=iter_no, decision_id=did, change=change,
-            correctness=False, verdict="REVERT", metric_before=metric_before,
+            correctness=None, verdict="REVERT", metric_before=metric_before,
             error=err, profiler={}, cluster=_active_cluster(ctx),
             memo_lane=ctx.memo_lane,   # M3: every row carries its lane
         )

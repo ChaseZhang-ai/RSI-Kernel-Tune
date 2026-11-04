@@ -108,3 +108,23 @@ def test_bad_bytes_in_a_kept_probe_do_not_stop_the_run(tmp_path):
     assert "notes/p.py" in ctx.kept_probes         # and the keep survived the reset
     drv._restore_kept_probes(ctx)                  # the next iteration's restore
     assert (tmp_path / "notes" / "p.py").read_bytes().startswith(b"print('rig ")
+
+
+# --- BUG-SEED-29: the clean-stop safety net carries the traceback ---------------
+
+def test_unexpected_error_log_carries_the_traceback(tmp_path, monkeypatch, capsys):
+    # The unattended-run safety net logged {e!r} only: for a bug reached through
+    # a few call frames (a None riding into a formatter) the repr is one line
+    # with no location, so the 2am operator had nothing to debug from and the
+    # lost run could not be triaged. The exception's traceback rides the log now.
+    def _boom(ctx, iter_no, **k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(drv, "run_inner_iteration", _boom)
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be, target_ms=0.1)
+    ctx.max_iters = 1
+    assert drv.run_inner_loop(ctx, start_iter=0, initial_green=True) == "error"
+    out = capsys.readouterr().out
+    assert "unexpected error, stopping cleanly: RuntimeError('boom')" in out
+    assert "Traceback (most recent call last)" in out
+    assert "_boom" in out   # the frames under the loop, not just the message

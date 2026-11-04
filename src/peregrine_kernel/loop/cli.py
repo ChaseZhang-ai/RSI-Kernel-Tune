@@ -998,9 +998,15 @@ class RealBackend:
             if changes:
                 sha = self._commit_overlay(ref, changes)
         except (OSError, BackendError) as e:
-            print(f"[loop] job-env: could not overlay the card's files ({e}) — this job "
-                  f"runs the tree's own copies", flush=True)
-            sha, changes = ref, []
+            # Fail closed (BUG-SEED-19): the overlay is the card's judge, gpu_entry
+            # and eval reaching every job -- the one channel that keeps a student
+            # edit to them out of the verdict. A job that cannot be overlaid would
+            # silently run the tree's own copies (whatever judge the tree carries),
+            # so it does not start instead.
+            raise BackendError(
+                f"could not overlay the card's files onto {ref[:10]} ({e}) — refusing "
+                f"to start the job fail-closed: it would run the tree's own judge, "
+                f"not the card's")
         changed = [p for p, _, _ in changes]
         key = ",".join(changed)
         if self._job_env_announced.get("last") != key:

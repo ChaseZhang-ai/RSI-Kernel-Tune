@@ -575,10 +575,14 @@ def reference_callables(problem: dict):
 
 def load_entry(path: Path, entry: str):
     """``entry`` from the python file at ``path``, imported as a module with its own
-    directory on sys.path (a solution may import its sibling files, at call time too)."""
+    directory on sys.path (a solution may import its sibling files, at call time too).
+    The directory is APPENDED, never prepended: the reference loads first and its lazy
+    imports must keep resolving to the stdlib / site-packages -- a kernel-directory
+    module named like a real one (json.py) would otherwise shadow them for every later
+    import in this process, judging the reference by the kernel's code."""
     path = Path(path).resolve()
     if str(path.parent) not in sys.path:
-        sys.path.insert(0, str(path.parent))
+        sys.path.append(str(path.parent))
     spec = importlib.util.spec_from_file_location(
         f"lb_{path.parent.name}_{path.stem}", path)
     mod = importlib.util.module_from_spec(spec)

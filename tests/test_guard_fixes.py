@@ -241,3 +241,76 @@ def test_load_entry_appends_so_the_stdlib_and_the_reference_are_not_shadowed(tmp
             sys.modules.pop(name, None)
         if saved_csv is not None:
             sys.modules["csv"] = saved_csv
+
+
+# --- BUG-C5-02: a Python kernel that dies at import is a structured verdict -----------
+
+_TASK_JUDGE = """import torch
+
+def run(hidden_states, weight):
+    return hidden_states
+
+def make_inputs(axes, group='plain', seed=0, device='cpu'):
+    b = axes['batch_size']
+    g = torch.Generator().manual_seed(seed)
+    return {'hidden_states': torch.randn(b, 64, generator=g),
+            'weight': torch.ones(64)}
+"""
+
+
+def _task_card(tmp_path: Path, kernel_src: str, kernel_file: str = "kernel.py",
+               input_groups=None) -> Path:
+    """A minimal task card: eval/problem/problem.json + the kernel file. Returns the
+    problem.json path (what run_bench / ncu_window read)."""
+    card = tmp_path / "card"
+    (card / "eval" / "problem").mkdir(parents=True)
+    (card / kernel_file).write_text(kernel_src)
+    workload = {"uuid": "w0", "axes": {"batch_size": 5},
+                "input_groups": ([{"name": "plain", "kind": "generated", "seed": 1}]
+                                 if input_groups is None else input_groups)}
+    defn = {"name": "rmsnorm_h64", "op_type": "rmsnorm",
+            "axes": {"batch_size": {"type": "var"}, "hidden_size": {"type": "const", "value": 64}},
+            "inputs": {"hidden_states": {"shape": ["batch_size", "hidden_size"], "dtype": "float32"},
+                       "weight": {"shape": ["hidden_size"], "dtype": "float32"}},
+            "outputs": {"output": {"shape": ["batch_size", "hidden_size"], "dtype": "float32"}},
+            "reference": _TASK_JUDGE, "custom_inputs_entrypoint": "make_inputs"}
+    problem = {"definition": defn, "workload": workload, "dps": True,
+               "kernel_file": kernel_file}
+    path = card / "eval" / "problem" / "problem.json"
+    path.write_text(json.dumps(problem))
+    return path
+
+
+def _emit_json(capsys) -> dict:
+    text = capsys.readouterr().out
+    return json.loads(text.split("=== JSON ===")[1])
+
+
+def test_a_python_kernel_that_dies_at_import_is_a_structured_verdict(tmp_path, capsys):
+    """A module-level exception used to escape run_bench as a bare raise: the job
+    burned with no eval JSON at all (BUG-C5-02). Non-CUDA kernels now report their
+    load failure like a CUDA build failure reports its own."""
+    path = _task_card(tmp_path, "import os\nraise RuntimeError('boom at import')\n")
+    assert lb.run_bench(["--mode", "correctness"], problem_path=path) == 0
+    out = _emit_json(capsys)
+    assert out["correctness"]["pass"] is False
+    assert out["correctness"]["status"] == "IMPORT_ERROR"
+    assert "boom at import" in out["correctness"]["error"]
+    assert out["performance"] is None
+
+
+def test_a_cuda_kernel_build_failure_still_reports_compile_error(tmp_path, monkeypatch,
+                                                                 capsys):
+    real_impl = lb._impl
+
+    def boom(problem, which):
+        if which == "kernel":
+            raise ValueError("nvcc exploded")
+        return real_impl(problem, which)      # the reference side loads as usual
+
+    monkeypatch.setattr(lb, "_impl", boom)
+    path = _task_card(tmp_path, "// not built in tests\n", kernel_file="kernel.cu")
+    assert lb.run_bench(["--mode", "correctness"], problem_path=path) == 0
+    out = _emit_json(capsys)
+    assert out["correctness"]["status"] == "COMPILE_ERROR"
+    assert "nvcc exploded" in out["correctness"]["error"]

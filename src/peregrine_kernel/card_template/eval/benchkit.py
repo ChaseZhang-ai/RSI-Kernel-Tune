@@ -2456,12 +2456,19 @@ def run_bench(argv=None, problem_path=None) -> int:
         warm_reference(problem, ref_fn, ref_dps, device)
     try:
         impl, dps = (ref_fn, ref_dps) if args.impl == "ref" else _impl(problem, "kernel")
-    except Exception as e:  # noqa: BLE001
-        if Path(problem.get("kernel_file", "kernel.py")).suffix not in CUDA_KERNEL_SUFFIXES:
-            raise
+    except Exception as e:  # noqa: BLE001 — foreign code: reported, never a bare crash
+        # A CUDA kernel reports a failed build (COMPILE_ERROR); a Python kernel's
+        # module-level failure (an import the judge's env lacks, a raise at import
+        # time) is the same kind of card defect and used to escape as a bare raise,
+        # burning the job with no eval JSON at all (BUG-C5-02). Same channel, named
+        # for what failed (BUG-C5-02: this widens the structured-failure channel only;
+        # the gate's verdict semantics are untouched).
+        status = ("COMPILE_ERROR"
+                  if Path(problem.get("kernel_file", "kernel.py")).suffix in CUDA_KERNEL_SUFFIXES
+                  else "IMPORT_ERROR")
         why = f"{type(e).__name__}: {e}"
-        print(f"[bench] correctness: COMPILE_ERROR — {why[-6000:]}")
-        _emit({"correctness": {"pass": False, "status": "COMPILE_ERROR", "error": why[-6000:]},
+        print(f"[bench] correctness: {status} — {why[-6000:]}")
+        _emit({"correctness": {"pass": False, "status": status, "error": why[-6000:]},
                "performance": None})
         return 0
     return _run_task(problem, args, impl, dps, ref_fn, ref_dps, timed_ref, device)

@@ -51,3 +51,19 @@ def test_a_config_systemexit_marks_the_run_failed(repo, monkeypatch):
     rec = list_runs()[0].record()
     assert rec["status"] == "failed"
     assert "SystemExit" in (rec.get("error") or "") and "reuse_unchanged_reading" in rec["error"]
+
+
+# -- P3-14: `peregrine status` survives a torn status.jsonl line ---------------------
+
+
+def test_status_skips_a_half_written_line(tmp_path):
+    # P3-14: a torn status.jsonl line must not crash `peregrine status`
+    op_dir = tmp_path / "ops" / "op"
+    (op_dir / "student").mkdir(parents=True)
+    (op_dir / "student" / "status.jsonl").write_text(
+        '{"verdict": "KEEP"}\n{"verdict": "DROP"\nnot json at all\n{"verdict": "KEEP"}\n')
+    from types import SimpleNamespace
+    run = SimpleNamespace(name="op", operators_dir=tmp_path / "ops", task_name="op",
+                          record=lambda: {}, log=tmp_path / "no.log")
+    text = launch.status_text(run)
+    assert "iterations: 2 (2 kept)" in text

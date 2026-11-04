@@ -171,3 +171,18 @@ def test_best_keep_gpu_state_reads_same_cluster_rows_only(tmp_path, monkeypatch)
                                       1.9, profiler={})
     assert seen and any(getattr(r, "cluster", "") != "box-b" and r.sha == "s1"
                         for r in seen[0])
+
+
+# --- BUG-SEED-34: "part 0 of n" is malformed, not a free scaffold pass ----------
+
+def test_part_zero_of_n_is_not_a_construction_declaration():
+    # The two "part k of n" readers disagreed on k=0: _declared_construction
+    # scaffolded any k<n (a full eval skipped for free on a malformed step),
+    # while _open_package_tail refuses k outside 1<=k<n (pricing rollback at
+    # once). The package contract's steps count from 1, so a k=0 declaration is
+    # malformed input, not a declared build step: it must not defer the eval.
+    assert drv._declared_construction("part 0 of 3: open the ledger") is None
+    assert drv._declared_construction("part 1 of 3: open the ledger") == "part 1 of 3"
+    # unchanged shapes: finished and over-cap declarations never scaffolded
+    assert drv._declared_construction("part 3 of 3: done") is None
+    assert drv._declared_construction("[PLACEHOLDER: D0.9 -> register split]") is not None

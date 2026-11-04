@@ -13903,7 +13903,10 @@ def _declared_construction(change: str) -> str | None:
     is still unknown, instead of buying a full eval that can only say
     "under construction"."""
     m = _pkg_decl(change)
-    if m and int(m.group(1)) < int(m.group(2)):
+    # 1 <= k < n, the same window _open_package_tail prices a package in: the
+    # contract's steps count from 1, so k=0 is malformed input — it must not
+    # defer a delivery's eval for free (the two readers once disagreed there).
+    if m and 1 <= int(m.group(1)) < int(m.group(2)):
         return f"part {m.group(1)} of {m.group(2)}"
     head = (change or "").split("\n", 1)[0]
     p = _PLACEHOLDER_TAG.search(head)

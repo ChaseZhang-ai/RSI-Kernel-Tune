@@ -31,7 +31,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from peregrine_kernel import launch, taskcard
+from peregrine_kernel import baseline_cli, launch, taskcard
 from peregrine_kernel.milestone import validate_milestone
 from peregrine_kernel.resume import Decision, ReopenPlan, compute_reopen
 from peregrine_kernel.runs import list_runs
@@ -213,3 +213,24 @@ def test_kb_changes_warn_instead_of_staying_silent(tmp_path, monkeypatch, capsys
     assert launch.kb_changes() == []
     out = capsys.readouterr().out
     assert "[peregrine]" in out and "knowledge-base" in out
+
+
+# -- BUG-SEED-40: the baseline CLI degrades narrowly and says so -----------------------------
+
+
+def test_submit_cluster_degrades_with_a_note_on_config_errors(capsys):
+    # no submit.toml anywhere for this op: degrade to "" and say so
+    assert baseline_cli._submit_cluster("no_such_operator_here") == ""
+    out = capsys.readouterr().out
+    assert "[baseline] note:" in out and "no_such_operator_here" in out
+
+
+def test_submit_cluster_lets_unexpected_errors_propagate(monkeypatch):
+    from peregrine_kernel.submit import config as submit_config
+
+    def boom(op):
+        raise AttributeError("load_config changed shape")
+
+    monkeypatch.setattr(submit_config, "load_config", boom)
+    with pytest.raises(AttributeError):
+        baseline_cli._submit_cluster("op")

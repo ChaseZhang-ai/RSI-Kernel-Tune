@@ -456,3 +456,29 @@ def test_the_hook_blocks_when_the_event_cannot_be_parsed(tmp_path):
     # the normal shapes keep working: a legal event on a legal policy passes
     ok = _run_hook(good, json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}))
     assert ok.returncode == 0 and ok.stderr == ""
+
+
+# --- BUG-T6C-01: legal JSON of the wrong shape blocks instead of AttributeError -------
+
+
+@pytest.mark.parametrize("stdin", ["[]", '"x"', "null", "3"])
+def test_a_non_object_event_blocks_instead_of_erroring_out(tmp_path, stdin):
+    """An event that parses but is not an object used to AttributeError inside decide()
+    and exit 1 — which Claude Code reads as a NON-blocking pass. It blocks instead."""
+    good = tmp_path / "p.json"
+    good.write_text(json.dumps({"role": "student", "offline": True}))
+    p = _run_hook(good, stdin)
+    assert p.returncode == 2
+    assert "BLOCKED" in p.stderr and "not a JSON object" in p.stderr
+
+
+@pytest.mark.parametrize("text", ['["student"]', '"student"', "null"])
+def test_a_non_object_policy_blocks_instead_of_erroring_out(tmp_path, text):
+    """The same shape check on the policy file: legal JSON that is not an object would
+    die the same AttributeError one line later — it fails closed like an unreadable
+    policy."""
+    bad = tmp_path / "p.json"
+    bad.write_text(text)
+    p = _run_hook(bad, json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}))
+    assert p.returncode == 2
+    assert "BLOCKED" in p.stderr and "not a JSON object" in p.stderr

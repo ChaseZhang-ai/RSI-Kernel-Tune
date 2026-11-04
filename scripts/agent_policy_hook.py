@@ -158,6 +158,12 @@ def main(argv: list[str]) -> int:
         # A policy that cannot be read must not silently allow everything.
         sys.stderr.write(f"BLOCKED: Peregrine-Kernel agent policy unreadable ({e})\n")
         return 2
+    if not isinstance(policy, dict):
+        # Legal JSON of the wrong shape would AttributeError inside decide() and exit
+        # 1 — which Claude Code reads as a NON-blocking error, i.e. the call goes
+        # through. Anything unreadable as a policy fails closed, like the above.
+        sys.stderr.write("BLOCKED: Peregrine-Kernel agent policy is not a JSON object\n")
+        return 2
     try:
         event = json.loads(sys.stdin.read() or "{}")
     except ValueError as e:
@@ -166,6 +172,12 @@ def main(argv: list[str]) -> int:
         # stderr to the agent; exit 1 would be a NON-blocking pass.
         sys.stderr.write(f"BLOCKED: Peregrine-Kernel agent policy could not read the "
                          f"tool-call event ({e})\n")
+        return 2
+    if not isinstance(event, dict):
+        # An event that parses but is not an object (an array, a string, null) would
+        # AttributeError inside decide() and exit 1 — the same non-blocking pass.
+        sys.stderr.write("BLOCKED: Peregrine-Kernel agent policy could not read the "
+                         "tool-call event (not a JSON object)\n")
         return 2
     msg = decide(policy, event)
     if msg:

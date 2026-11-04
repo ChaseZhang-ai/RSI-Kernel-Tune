@@ -340,7 +340,17 @@ def status_text(run) -> str:
             lines.append(f"  {key}: {rec[key]}")
     status = run.operators_dir / run.task_name / "student" / "status.jsonl"
     if status.is_file():
-        rows = [json.loads(x) for x in status.read_text().splitlines() if x.strip()]
+        # a torn final line (the loop was killed mid-write) is skipped, not fatal:
+        # this line answers "where is the run", and a status read is no place to
+        # crash on the loop's own wreckage
+        rows = []
+        for x in status.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not x.strip():
+                continue
+            try:
+                rows.append(json.loads(x))
+            except ValueError:
+                continue
         keeps = [r for r in rows if r.get("verdict") == "KEEP"]
         lines.append(f"  iterations: {len(rows)} ({len(keeps)} kept)")
     if run.log.is_file():

@@ -82,3 +82,17 @@ def test_entered_closes_the_run_log_handles(tmp_path):
     assert all(t._file.closed for t in tees)     # no leaked run.log handle per drive
     assert "hello" in log.read_text()
     print("after the run")        # the restored stdout still takes writes
+
+
+# -- fix: the run status survives a torn status line -----------------------------------------
+
+
+def test_status_skips_a_half_written_line(tmp_path):
+    from peregrine_kernel import launch as _launch
+    op_dir = tmp_path / "ops" / "op"
+    (op_dir / "student").mkdir(parents=True)
+    (op_dir / "student" / "status.jsonl").write_text(
+        '{"verdict": "KEEP"}\n{"verdict": "DROP"\nnot json at all\n{"verdict": "KEEP"}\n')
+    run = SimpleNamespace(name="op", operators_dir=tmp_path / "ops", task_name="op",
+                          record=lambda: {}, log=tmp_path / "no.log")
+    assert "iterations: 2 (2 kept)" in _launch.status_text(run)

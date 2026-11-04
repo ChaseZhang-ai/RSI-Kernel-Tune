@@ -93,6 +93,7 @@ the mechanism from a CHANGES default-flip proposal):
   `variant_timings`, `build_digest`) are currently in the baseline list — before flipping the
   corresponding mechanism, confirm its readers landed with WP15/WP19/WP16 (the audit test
   automatically demands the baseline entries be deleted).
-- Mechanisms found silently-not-triggering during the smoke (the defect list in
-  CHANGES-WP21.md's smoke section) are dispatched to their owning packages; after the fix,
+- Mechanisms found silently-not-triggering during the smoke (the defect list in the
+  WP21 record's smoke section — the original CHANGES-WP21.md lives in git history,
+  its English digest in CHANGELOG.md) are dispatched to their owning packages; after the fix,
   this protocol's corresponding A/B item re-verifies.

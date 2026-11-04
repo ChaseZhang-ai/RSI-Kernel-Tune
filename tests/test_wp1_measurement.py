@@ -1,6 +1,8 @@
 """WP1 — measurement statistics: raw readings, resolvable diff, confirm band, telemetry.
 
-Each test names the task it covers (CHANGES-WP1.md maps them one to one). The data
+Each test names the task it covers (the WP1 delivery record maps them one to one:
+the original CHANGES-WP1.md lives in git history, its English digest in
+CHANGELOG.md). The data
 premise: the trajectory kept medians and threw the raw readings away, so every
 noise-adaptive judgment downstream had to run on a constant.
 """

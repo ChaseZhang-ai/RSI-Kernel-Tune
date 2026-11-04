@@ -372,3 +372,67 @@ def test_a_limit_after_the_deliverable_is_complete_delivers(env):
              STUB_REPLY="EXHAUSTED: already done\n")
     assert r.returncode == 0, r.stdout + r.stderr
     assert r.stdout == "EXHAUSTED: already done\n"
+
+
+# -- BUG-SEED-44: a hung deliverable check ends the leg, it does not kill it -------
+
+_goal_mod = None
+
+
+def _goal():
+    global _goal_mod
+    if _goal_mod is None:
+        spec = importlib.util.spec_from_file_location(
+            "claude_goal_unit", _ROOT / "scripts" / "claude-goal.py")
+        _goal_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_goal_mod)
+    return _goal_mod
+
+
+def _bare_leg(tmp_path):
+    """A GoalLeg without its environment: just enough for watch()'s deadline branch
+    and run()'s post-watch bookkeeping."""
+    import time as _time
+    cg = _goal()
+    leg = cg.GoalLeg.__new__(cg.GoalLeg)
+    leg.cfg = tmp_path / "cfg"
+    leg.sid = "unitsid"
+    leg.resumed = False
+    leg.resume_offset = 0
+    leg.turn_dir = tmp_path
+    leg.rundir = None
+    leg.session = ""
+    leg.keep_session = True
+    leg.claude_pid = None
+    leg.nudges = 0
+    leg.events = []
+    leg.started = _time.time()
+    return leg
+
+
+def _hung_check(*a, **k):
+    raise subprocess.TimeoutExpired(cmd="check.py", timeout=300)
+
+
+def test_a_hung_deliverable_check_ends_the_watch_not_the_leg(tmp_path):
+    import time as _time
+
+    leg = _bare_leg(tmp_path)
+    leg.deadline = _time.time() - 1.0          # the wall clock is already spent
+    leg.deliverable = _hung_check
+    outcome, detail = leg.watch(_goal().Transcript(leg.cfg, leg.sid))
+    assert outcome == "timeout"                       # the deadline ends the leg, not
+    assert not isinstance(detail, Exception)          # an escaped check-command error
+
+
+def test_a_hung_deliverable_check_still_saves_a_resumable_session(tmp_path, monkeypatch):
+    leg = _bare_leg(tmp_path)
+    leg.setup_turn = lambda: None
+    leg.launch = lambda: None
+    cleaned = []
+    leg.cleanup = lambda: cleaned.append(1)
+    monkeypatch.setattr(leg, "watch", lambda tr: _hung_check(tr))
+    rc = leg.run()
+    assert rc == 124 and cleaned == [1]
+    sess = json.loads((tmp_path / "session.json").read_text())
+    assert sess["resumable"] is True and sess["why"] == "check-hung"

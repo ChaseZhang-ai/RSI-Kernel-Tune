@@ -694,6 +694,16 @@ class GoalLeg:
         out = (r.stdout + r.stderr).strip()
         return (r.returncode == 0 and OK_LINE in out), out
 
+    def deliverable_or_note(self) -> tuple[bool, str]:
+        """deliverable(), with the check's own timeout handled: a hung check command
+        is no verdict either way, so it reads as "not confirmed" plus a note, and
+        watch()'s branches carry on (BUG-SEED-44: the TimeoutExpired used to escape
+        watch() and skip save_session)."""
+        try:
+            return self.deliverable()
+        except subprocess.TimeoutExpired as e:
+            return False, f"the deliverable check hung past its {e.timeout:.0f}s budget"
+
     def resend_goal(self, why: str) -> None:
         self.nudges += 1
         self.events.append(why)
@@ -712,7 +722,7 @@ class GoalLeg:
         while True:
             now = time.time()
             if self.deadline is not None and now >= self.deadline:
-                ok, out = self.deliverable()
+                ok, out = self.deliverable_or_note()
                 if ok:          # finished, the judge just had not said so yet
                     return "met", out
                 return "timeout", f"wall-clock deadline reached after {now - self.started:.0f}s"
@@ -734,7 +744,7 @@ class GoalLeg:
                 met_seen_at = met_seen_at or now
                 # the turn that the judge closed finishes its bookkeeping first
                 if tr.last_kind == "turn_end" or quiet > self.settle_s or dead:
-                    ok, out = self.deliverable()
+                    ok, out = self.deliverable_or_note()
                     if ok:
                         return "met", out
                     false_met += 1
@@ -747,17 +757,17 @@ class GoalLeg:
                     acted_at_size, acted_at = tr.size, now
                     continue
             if tr.failed is not None and (tr.last_kind == "turn_end" or quiet > self.settle_s or dead):
-                ok, out = self.deliverable()
+                ok, out = self.deliverable_or_note()
                 if ok:
                     return "met", out
                 return "fail", f"goal judged impossible: {tr.failed.get('reason', '')[:600]}"
             if dead:
-                ok, out = self.deliverable()
+                ok, out = self.deliverable_or_note()
                 if ok:
                     return "met", out
                 return "fail", f"claude exited (status {status or '?'}) before the deliverable"
             if not alive:
-                ok, out = self.deliverable()
+                ok, out = self.deliverable_or_note()
                 if ok:
                     return "met", out
                 return "fail", "the tmux session disappeared before the deliverable"
@@ -796,7 +806,7 @@ class GoalLeg:
                 # the check is the authority, the judge only keeps the agent going
                 if checked_at_size != tr.size:
                     checked_at_size = tr.size
-                    ok, out = self.deliverable()
+                    ok, out = self.deliverable_or_note()
                     if ok:
                         return "met", out
             if state == "paused" and settled:
@@ -880,10 +890,20 @@ class GoalLeg:
         except Interrupted:
             outcome, detail = "interrupted", "leg interrupted by a signal"
             rc = 143
+        except subprocess.TimeoutExpired as e:
+            # Belt for BUG-SEED-44 (watch() guards every deliverable call): the
+            # exception must never escape past save_session -- that left
+            # session.json frozen on a stale state the next leg could not resume
+            # from. A hung check is not the agent's verdict; end the leg as
+            # "check-hung" and keep the session resumable (the turn itself likely
+            # finished -- only its deliverable check wedged).
+            outcome = "check-hung"
+            detail = f"the deliverable check hung past its budget ({e})"
+            rc = 124
         finally:
             tr.poll()
             self.cleanup()
-        resumable = outcome in ("limit", "paused")
+        resumable = outcome in ("limit", "paused", "check-hung")
         self.save_session(resumable, outcome)
         if outcome == "met":
             reply = self.reply.read_text(encoding="utf-8", errors="replace")

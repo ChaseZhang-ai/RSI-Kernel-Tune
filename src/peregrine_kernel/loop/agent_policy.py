@@ -450,8 +450,16 @@ _CD_SUBST = re.compile(r"\$\(\s*(?:builtin\s+)?(?:cd|pushd)\s[^\n]*claude", re.M
 
 
 def command_findings(cmds: list[str | None], env: dict[str, str],
-                     cwd: str | os.PathLike | None = None) -> list[str]:
+                     cwd: str | os.PathLike | None = None, *,
+                     labels: "list[str] | None" = None) -> list[str]:
     """Why some agent command would run the agent without loading the project settings.
+
+    EVERY command is examined: the caller passes one command per headless leg (the
+    student's, then the teacher's), and ``labels`` names them in the findings so the
+    two legs are tellable apart. Dedup is per (source, text) pair -- the same script
+    named twice is reported once, but the second leg's findings are never dropped
+    with the first leg's (BUG-SEED-17: a fixed source string plus `source in seen`
+    used to swallow the teacher's findings wholesale).
 
     Reads what the context-window gate reads (agentctx): the command text and the shell
     scripts it names (one level). Static, so it cannot see
@@ -473,18 +481,19 @@ def command_findings(cmds: list[str | None], env: dict[str, str],
                     pass
         return out
 
+    labels = list(labels) if labels else ["agent command"] * len(cmds)
     texts: list[tuple[str, str]] = []
-    for cmd in cmds:
+    for cmd, label in zip(cmds, labels):
         if not cmd:
             continue
-        texts.append(("agent command", cmd))
+        texts.append((label, cmd))
         texts += scripts_in(cmd)
 
     findings, seen = [], set()
     for source, text in texts:
-        if source in seen:
+        if (source, text) in seen:
             continue
-        seen.add(source)
+        seen.add((source, text))
         body = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
         for m in _SOURCES_FLAG.finditer(body):
             if "project" not in m.group(2).split(","):

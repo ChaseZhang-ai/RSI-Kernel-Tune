@@ -2463,9 +2463,13 @@ def _main(argv: list[str] | None = None) -> int:
     # the merge.
     window_problems = []
     window_cmds = [args.agent_cmd]
+    # who each command serves, for the policy gate's findings (the legs are named
+    # in the refusal: "teacher agent command: --settings ...")
+    window_labels = ["student agent command"]
     teacher_cmd = getattr(args, "teacher_agent_cmd", None)
     if teacher_cmd and teacher_cmd not in window_cmds:
         window_cmds.append(teacher_cmd)
+        window_labels.append("teacher agent command")
     if not args.allow_200k_window:
         # The agent inherits the launcher's environment, which unsets every
         # ANTHROPIC_* variable (the run scripts do `unset ANTHROPIC_* ...` so the
@@ -2572,7 +2576,8 @@ def _main(argv: list[str] | None = None) -> int:
     # The policy is delivered as project settings in the agent's working directory; a
     # leg that skips project settings or leaves the directory would run unrestricted.
     policy_problems += agent_policy_mod.command_findings(
-        window_cmds, dict(os.environ), args.workspace)
+        window_cmds, dict(os.environ), args.workspace,
+        labels=window_labels)
     if policy_problems:
         for f in policy_problems:
             sys.stderr.write(f"[loop]   {f}\n")

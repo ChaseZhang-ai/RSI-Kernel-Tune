@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import threading
@@ -223,7 +224,8 @@ def test_ssh_run_syncs_the_tree_then_runs_under_the_host_gpu_lock(tmp_path):
     fake = _FakeSsh([(0, True)])
     status, log = _ssh_run(cfg, fake)
     assert status == ds.STATUS_SUCCEEDED
-    tree = f"/data/fk/{tmp_path.name}/op"
+    digest = hashlib.sha256(str(Path(cfg.op_dir).resolve()).encode()).hexdigest()[:8]
+    tree = f"/data/fk/{tmp_path.name}/op-{digest}"
     (argv, payload), = fake.runs
     assert argv[0] == "ssh" and "box" in argv and f"tar xJ -C {tree}" in argv[-1]
     assert payload[:6] == b"\xfd7zXZ\x00"              # xz-compressed git archive

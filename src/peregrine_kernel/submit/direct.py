@@ -303,11 +303,22 @@ def gpu_lock(gpu: str, log_file=None, poll_s: float = 30.0):
 
 
 def remote_tree(cfg: SubmitConfig) -> str:
-    """``<workdir>/<run>/<op>``: one tree per op and run, so concurrent runs on one host
-    never share a directory."""
-    op_dir = Path(cfg.op_dir)
+    """``<workdir>/<run>/<op>-<identity>``: one tree per op and run, so concurrent runs
+    on one host never share a directory.
+
+    The run segment is the op tree's grandparent's name — in run mode a snapshot
+    directory stamped with time and token (the run id), in repo mode just the local
+    repository's basename. A basename alone is not an identity: two same-named clones
+    of one repository produced the SAME tree, and one job's extract (`rm -rf`) would
+    clear the directory another clone's job was running. The op segment therefore
+    carries a digest of the op tree's absolute path — deterministic (a resubmission
+    finds the same tree it extracted before), and different for every checkout that
+    is not this one.
+    """
+    op_dir = Path(cfg.op_dir).resolve()
     run = op_dir.parents[1].name if len(op_dir.parents) > 1 else "repo"
-    return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}"
+    identity = hashlib.sha256(str(op_dir).encode()).hexdigest()[:8]
+    return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}-{identity}"
 
 
 def _entry_argv(cfg: SubmitConfig, mode: str) -> list[str]:

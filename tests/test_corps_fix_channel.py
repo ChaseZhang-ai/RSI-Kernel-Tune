@@ -356,3 +356,44 @@ def test_label_only_run_preflights_as_na(tmp_path):
     state, contract, problems = _window_preflight(
         tmp_path, {"loop": {"ref_name": "cuDNN", "ref_shape": "B=1"}}, resuming=False)
     assert state == "n/a" and problems == []
+
+
+# --- BUG-SEED-20: the remote job tree carries the op tree's identity ------------------
+
+def _clone_op_tree(tmp_path, name="repo"):
+    """Two checkouts of one operator tree, in same-named directories on one host."""
+    trees = []
+    for i in (0, 1):
+        d = tmp_path / f"host{i}" / name / "operators" / "op"
+        d.mkdir(parents=True)
+        (d / "gpu_entry.sh").write_text("#!/bin/bash\n")
+        (d / "submit.toml").write_text('[repo]\ndelivery = "ssh"\nbranch = "main"\n'
+                                       '[exec]\nhost = "box"\nworkdir = "/data/fk"\n')
+        trees.append(d)
+    return trees
+
+
+def test_same_named_clones_get_different_remote_trees(tmp_path):
+    """Two clones of one repository share the local basename, so the old run/op tree
+    name collided and one job's extract rm -rf'd the tree another clone's job ran."""
+    (a, b), cfgs = _clone_op_tree(tmp_path), []
+    for d in (a, b):
+        cfg = direct.SubmitConfig(branch="main", op_dir=str(d), exec_host="box",
+                                  exec_workdir="/data/fk")
+        cfgs.append(cfg)
+        tree = direct.remote_tree(cfg)
+        assert tree.startswith("/data/fk/repo/op-")
+        assert tree == direct.remote_tree(cfg)      # deterministic: resubmits find it
+    assert direct.remote_tree(cfgs[0]) != direct.remote_tree(cfgs[1])
+
+
+def test_the_run_segment_still_carries_the_run_id(tmp_path):
+    """In run mode the snapshot directory (task + time + token) stays the run segment;
+    only the op segment gains the identity digest."""
+    d = tmp_path / "runs" / "demo_260105-101112-abcd" / "operators" / "op"
+    d.mkdir(parents=True)
+    cfg = direct.SubmitConfig(branch="main", op_dir=str(d), exec_host="box",
+                              exec_workdir="/data/fk")
+    tree = direct.remote_tree(cfg)
+    assert Path(tree).parts[3] == "demo_260105-101112-abcd"
+    assert tree.endswith(f"op-{hashlib.sha256(str(d.resolve()).encode()).hexdigest()[:8]}")

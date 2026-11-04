@@ -17,10 +17,12 @@ One run:
    (two runs on one GPU would time each other), shared by every op and every run.
 3. Map the exit honestly: rc 0 -> Succeeded; the task ran and failed -> Failed; a
    deadline that expired before the begin marker means the job QUEUED on the host GPU
-   lock the whole time and nothing ran -> Lost (the loop resubmits it, nothing is
-   charged); ssh could not deliver it (no begin marker) -> retried, then Failed with
-   TRANSPORT_ERROR_MARKER, which the loop reports as a transport problem rather than
-   charging the kernel.
+   lock the whole time and nothing ran -> Lost; the ssh client dying (rc 255) leaves
+   the job's outcome unknowable -> the session is ended best-effort and Lost is
+   recorded. Lost is resubmitted by the loop and nothing is charged. Ssh could not
+   deliver it at all (no begin marker, no transport-level rc) -> retried, then Failed
+   with TRANSPORT_ERROR_MARKER, which the loop reports as a transport problem rather
+   than charging the kernel.
 
 Nothing here kills processes it did not start: on a user's machine a GPU held by someone
 else is theirs. The lock is what keeps peregrine_kernel's own runs apart.
@@ -50,10 +52,17 @@ from peregrine_kernel.submit.jobs import (BEGIN_MARKER, RUN_HEADROOM_S, STATUS_F
 
 LOCAL_TREE = ".exec/tree"
 CMD_PREFIX = "cmd:"
-# On the ssh host a job runs in a session of its own, and its session id is written here
-# (in the job's tree): stopping the job ends its whole session. A process group is not
-# enough -- gpu_entry's `timeout` moves itself and the task into a group of their own.
-SESSION_FILE = ".pk_job.sid"
+# On the ssh host a job runs in a session of its own; stopping the job ends its whole
+# session. A process group is not enough -- gpu_entry's `timeout` moves itself and the
+# task into a group of their own. The session id is written BESIDE the job's tree, one
+# file per op per run (<workdir>/<run>/.pk_jobs/<op>.sid): never inside the tree,
+# which the next sync rm -rf's -- a session whose sid died with the tree (its ssh
+# client dead, the job still running under the GPU lock) could never be stopped again.
+SESSION_DIR = ".pk_jobs"
+# The ssh client's own exit code for a dropped or failed connection -- never a code
+# the remote chain relayed (setsid --wait passes the job's own rc through): whatever
+# the job log shows, the job's outcome on the host is unknowable.
+SSH_TRANSPORT_RC = 255
 STOP_GRACE_S = 5
 LOCK_DIR_ENV = "PEREGRINE_LOCK_DIR"
 TRANSPORT_ATTEMPTS = 3
@@ -448,6 +457,15 @@ class DirectRunner:
         d = shlex.quote(remote_tree(self.cfg))
         return f"rm -rf {d} && mkdir -p {d} && tar xJ -C {d}"
 
+    def _session_file(self) -> str:
+        """The host-side session-id file for this op:
+        ``<workdir>/<run>/.pk_jobs/<op>.sid`` -- a sibling of the job's tree, outside
+        the tree the next sync's ``rm -rf`` wipes, so an orphaned session (its ssh
+        client dead) can always still be stopped."""
+        tree = remote_tree(self.cfg)
+        parent, _, op = tree.rpartition("/")
+        return f"{parent}/{SESSION_DIR}/{op}.sid"
+
     def _session_script(self) -> str:
         """The remote session (``setsid --wait sh -c`` runs this): write the session's
         id, then hold the GPU lock for the entry command ("$0" is the lock, "$@" the
@@ -460,10 +478,11 @@ class DirectRunner:
         is logged in the driver's telemetry format, measured on the host -- the ssh
         mirror of the local delivery's queue telemetry."""
         gpu = shlex.quote(str(self.cfg.exec_gpu))
+        sid = shlex.quote(self._session_file())
         held = (f'echo "[direct] GPU {gpu} acquired after '
                 f'$(( $(date +%s) - $PK_QUEUE_T0 ))s wait"; echo {BEGIN_MARKER}; '
                 f'exec "$@"')
-        return ('echo $$ > ' + SESSION_FILE + ' && export PK_QUEUE_T0=$(date +%s) '
+        return ('echo $$ > ' + sid + ' && export PK_QUEUE_T0=$(date +%s) '
                 '&& exec flock "$0" sh -c ' + shlex.quote(held) + ' sh "$@"')
 
     def _exec_cmd(self, mode: str) -> str:
@@ -483,7 +502,7 @@ class DirectRunner:
         return " && ".join(parts)
 
     def _stop_cmd(self) -> str:
-        f = shlex.quote(f"{remote_tree(self.cfg)}/{SESSION_FILE}")
+        f = shlex.quote(self._session_file())
         return (f"[ -f {f} ] || exit 0; s=$(cat {f}); pkill -TERM -s \"$s\"; "
                 f"sleep {STOP_GRACE_S}; pkill -KILL -s \"$s\"; rm -f {f}; exit 0")
 
@@ -555,6 +574,20 @@ class DirectRunner:
                     raise
                 if rc == 0:
                     return STATUS_SUCCEEDED
+                if rc == SSH_TRANSPORT_RC:
+                    # The ssh client itself died (a dropped connection exits 255; the
+                    # remote chain can only relay its own rc through setsid --wait).
+                    # Whether the log shows the marker or not, the job's outcome on
+                    # the host is unknowable -- and its session may well still be
+                    # running under the GPU lock: end it best-effort (the sid file
+                    # lives outside the tree, so the orphan stays reachable), record
+                    # Lost, and let the loop resubmit. Lost is never charged.
+                    self._stop_remote(log_file)
+                    log_file.write(f"[direct] ssh to {self.cfg.exec_host} dropped (rc="
+                                   f"{SSH_TRANSPORT_RC}): the job's outcome on the host "
+                                   f"is unknown -- recorded as {STATUS_LOST}\n")
+                    log_file.flush()
+                    return STATUS_LOST
                 if _began(log_file, start, BEGIN_MARKER):
                     log_file.write(f"[direct] gpu_entry {mode} exited rc={rc}\n")
                     log_file.flush()

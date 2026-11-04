@@ -235,8 +235,12 @@ def test_ssh_run_syncs_the_tree_then_runs_under_the_host_gpu_lock(tmp_path):
 
 
 def test_ssh_that_never_delivers_is_a_transport_error_after_retries(tmp_path):
+    """A transport-level failure before the begin marker retries, then reports a
+    transport error. rc 255 is not one of these: it is the ssh client's own exit
+    code for a dropped connection, and it records Lost outright (see
+    test_cli_submit_fixes.py)."""
     cfg = _ssh_cfg(tmp_path)
-    fake = _FakeSsh([(255, False)] * direct.TRANSPORT_ATTEMPTS)
+    fake = _FakeSsh([(1, False)] * direct.TRANSPORT_ATTEMPTS)
     status, log = _ssh_run(cfg, fake)
     assert status == ds.STATUS_FAILED
     assert ds.TRANSPORT_ERROR_MARKER in log
@@ -245,7 +249,7 @@ def test_ssh_that_never_delivers_is_a_transport_error_after_retries(tmp_path):
 
 def test_ssh_transport_blip_then_success(tmp_path):
     cfg = _ssh_cfg(tmp_path)
-    status, log = _ssh_run(cfg, _FakeSsh([(255, False), (0, True)]))
+    status, log = _ssh_run(cfg, _FakeSsh([(1, False), (0, True)]))
     assert status == ds.STATUS_SUCCEEDED and "retrying" in log
 
 

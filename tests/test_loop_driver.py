@@ -5430,7 +5430,10 @@ def test_a_span_basis_round_is_not_audited_as_host_bound(tmp_path, capsys):
     assert "HOST-BOUND STUDENT" not in out
     assert "inflated" not in out
     note = next(l for l in out.splitlines() if "NOTE HOST PATH:" in l)
-    assert "NOT affected" in note and "3.4x thinner" in note
+    # 0.06463 vs the reference's 0.01911: the student's enqueue path is the THICK
+    # one, and the note says so (SEED-23 -- the direction word used to be hardcoded
+    # "thinner" no matter which side was bigger)
+    assert "NOT affected" in note and "3.4x thicker" in note
     assert rec.host_bound_ratio is None
     assert rec.device_window_basis == "cupti_kernel_span"
     assert load_records(ctx.status_path)[0].device_window_basis == "cupti_kernel_span"

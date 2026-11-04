@@ -2327,8 +2327,10 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
         why = (f"beats best {metric_before} by more than {margin:.0%}")
     elif ms < metric_before * (1 - rd):
         # WP1 band: past what this run's own paired ratios resolve, inside the
-        # margin. A run without enough ratio history keeps the old free pass
-        # (resolvable_diff falls back to the cap, here >= any sub-margin gain).
+        # margin. A data-poor run has no free pass here: resolvable_diff falling
+        # back to the cap only fixes the band threshold at that historical
+        # constant — a sub-margin gain past it still buys its confirmation
+        # job(s), and the A1 routine below confirms every new best regardless.
         why = (f"beats best {metric_before} by {gain_pct:.1%} — inside the "
                f"{margin:.0%} margin but past what this run's ratios resolve "
                f"({rd:.1%})")

@@ -58,13 +58,15 @@ def test_a_delivery_adding_root_shadows_is_caught_and_dropped_from_jobs(tmp_path
     (ws / "sitecustomize.py").write_text("import os; os.environ['STUDENT'] = '1'\n")
     (ws / "json.py").write_text("STUDENT SHADOW\n")
     (ws / "utils.py").write_text("# the student's own root sibling\n")
+    (ws / "kern").mkdir()
+    (ws / "kern" / "inner.py").write_text("# the student's own nested module\n")
     (ws / "kernel.py").write_text("def run(): return 1\n")
     head = _commit(ws, "shadow")
     assert be.harness_changes(base, head) == ["json.py", "sitecustomize.py"]
     job = be._with_job_env(head)
     tree = _tree(ws, job)
     assert "json.py" not in tree and "sitecustomize.py" not in tree
-    assert "kernel.py" in tree and "utils.py" in tree
+    assert "kernel.py" in tree and "utils.py" in tree and "kern/inner.py" in tree
     assert _git(ws, "rev-parse", "HEAD") == head        # the lineage itself is untouched
 
 

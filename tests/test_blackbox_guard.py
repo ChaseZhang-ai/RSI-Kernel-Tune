@@ -94,8 +94,10 @@ def test_stdlib_tempfile_does_not_trip_it(tmp_path):
 
 
 def test_sass_stays_open(tmp_path):
-    """SASS is what black-box reconnaissance IS; only line-resolved source is out."""
-    res = run_guard(tmp_path, "ncu --print-source sass --set full python3 ref.py")
+    """SASS is what black-box reconnaissance IS; only line-resolved source is out.
+    (--set full is NOT open any more: it is NCU's own path to line-resolved source,
+    see test_the_other_line_resolved_source_doors_are_refused.)"""
+    res = run_guard(tmp_path, "ncu --print-source sass --set cache python3 ref.py")
     assert res.returncode == 0, res.stdout
 
 
@@ -103,6 +105,32 @@ def test_line_resolved_source_is_refused(tmp_path):
     res = run_guard(tmp_path, "ncu --print-source cuda python3 ref.py")
     assert res.returncode == 3
     assert "BLACKBOX-GUARD REFUSED" in res.stdout
+
+
+def test_the_other_line_resolved_source_doors_are_refused(tmp_path):
+    """`--set full` is NCU's own path to line-resolved source (source sections ride in
+    the full set), `--section SourceCounters` and `--page source(s)` are the same door
+    spelled other ways. A probe command naming any of them is refused."""
+    for cmd in ("ncu --set full python3 ref.py",
+                "ncu --set=full --target-processes all python3 ref.py",
+                "ncu --section SourceCounters python3 ref.py",
+                "ncu --page source --import ref.ncu-rep",
+                "ncu --import ref.ncu-rep --page sources"):
+        res = run_guard(tmp_path, cmd)
+        assert res.returncode == 3, (cmd, res.returncode, res.stdout)
+        assert "BLACKBOX-GUARD REFUSED" in res.stdout
+        assert "GUARD-PASSED" not in res.stdout
+
+
+def test_the_source_door_flags_stay_open_in_a_notes_file_text(tmp_path):
+    """The cmd-only door list must not creep into the notes/ scan: the seeded pricing
+    recipes legitimately carry `--set full` in their frozen text (their own collection
+    command), and banning it there refuses every job a run starts."""
+    res = run_guard(tmp_path, "python3 notes/pricing.py",
+                    notes={"pricing.py": "# the frozen recipe: ncu --set full --launch-count 8\n"
+                                         "# reads the report back with --page source\n"})
+    assert res.returncode == 0, (res.returncode, res.stdout, res.stderr)
+    assert "GUARD-PASSED" in res.stdout
 
 
 def test_run_specific_names_via_extra(tmp_path):

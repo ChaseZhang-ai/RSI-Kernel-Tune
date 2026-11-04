@@ -60,6 +60,17 @@
 # the source-introspection helpers, all still listed here.
 BLACKBOX_FORBID_BASE='closed/|\.enc\b|_REF_KEY|keystream|unseal|decrypt|fkref|closed_ref|ref_payload|_REF_DIR|_REF_PATH|_SRC_PATH|_module\(\)|linecache|getsource|getsourcefile|inspect\.getfile|inspect\.getmodule|sys\.modules\[|_COMPILE_CACHE|py_compile|\bdis\.|print-source[= ]+(cuda|all|sass,cuda|cuda,sass)|import-source|--source-folders|find / .*-name|find /tmp|ls .*/tmp|mit-han-lab|kernel-design-agents|NVlabs|mlsys2026|contest-solution|benchmark-solution|\bstrings\b|xxd|hexdump|base64 -d'
 
+# Refused only in the probe COMMAND string, never in the notes/ file scan. `--set full`
+# and `--page source` are the same door `--print-source cuda` is — NCU's own path to
+# line-resolved source of everything the job profiles, the reference included — and a
+# probe that names them is refused outright. They cannot ride the notes/ scan: the
+# driver-seeded pricing recipes (stall_tools.py's frozen `--set full` collection,
+# struct_tools.py's `--page source` report reader) legitimately carry these strings in
+# their text, so listing them there would refuse every job a run starts. The cost, said
+# plainly: a probe FILE that builds such a flag at runtime is not caught by the file
+# scan — the command that launches it is.
+BLACKBOX_FORBID_CMD='--set[= ]+full|--section[= ]+SourceCounters|--page[= ]+(source|sources)'
+
 # This file, as it is being sourced. The driver seeds it into notes/, and notes/ is
 # what blackbox_guard scans — while this file's own comments and forbid list carry
 # every forbidden token, so scanning it would refuse EVERY `cmd` before a single probe
@@ -100,8 +111,13 @@ blackbox_forbid_pattern() {
 # cannot tell from its own probe crashing. Hence: the file list is built by testing each
 # candidate, and every aggregation pipeline ends in `|| true`.
 blackbox_guard() {
-    local cmd="${1:-}" why="" hit hits f
+    local cmd="${1:-}" why="" hit hits f hits_cmd="" hits_files=""
     local pattern; pattern="$(blackbox_forbid_pattern)"
+    # the command string alone also carries the cmd-only door list (BLACKBOX_FORBID_CMD)
+    local cmd_pattern="$pattern"
+    if [ -n "${BLACKBOX_FORBID_CMD:-}" ]; then
+        cmd_pattern="$pattern|$BLACKBOX_FORBID_CMD"
+    fi
     local dir="${BLACKBOX_NOTES_DIR:-${W:-$PWD}/notes}"
 
     local files=()
@@ -115,7 +131,7 @@ blackbox_guard() {
         files+=("$f")
     done
 
-    if printf '%s' "$cmd" | grep -qE "$pattern"; then why="cmd string"; fi
+    if printf '%s' "$cmd" | grep -qE "$cmd_pattern"; then why="cmd string"; fi
     if [ "${#files[@]}" -gt 0 ]; then
         # grep that cannot run at all (a file it cannot read) exits 2 — which reads
         # exactly like "no match". The source-time compile check below keeps a broken
@@ -135,8 +151,14 @@ blackbox_guard() {
     fi
     [ -n "$why" ] || return 0
 
-    hits=$({ printf '%s\n' "$cmd"; [ "${#files[@]}" -gt 0 ] && cat "${files[@]}"; } 2>/dev/null \
-           | grep -oE "$pattern" | sort | uniq -c | sort -rn | head -6 | tr '\n' ' ' || true)
+    # the command's matched tokens (cmd-only list included) and the notes' matched
+    # tokens are aggregated separately: one pattern cannot cover both contents
+    hits_cmd="$(printf '%s\n' "$cmd" | grep -oE "$cmd_pattern" | sort -u | tr '\n' ' ')" || true
+    if [ "${#files[@]}" -gt 0 ]; then
+        hits_files="$(cat "${files[@]}" 2>/dev/null | grep -oE "$pattern" \
+                      | sort | uniq -c | sort -rn | head -6 | tr '\n' ' ')" || true
+    fi
+    hits="$hits_cmd $hits_files"
     # A reference-specific token that also occurs in the reference's kernel symbol refuses
     # every probe that filters on that kernel (see the header). Say so when the hit
     # came from BLACKBOX_EXTRA, so the task author fixes the list rather than the probe.
@@ -148,7 +170,7 @@ blackbox_guard() {
             extra_hint="${extra_hint} [BLACKBOX_EXTRA also matches this tree's own wrapper module(s): ${collide} — importing it is the sanctioned way to drive the reference, so this refusal is a run configuration error, not a probe error: report it, do not work around it]"
         fi
     fi
-    echo "BLACKBOX-GUARD REFUSED ($why; matched: $hits): this run treats the reference as a closed binary — do not read, locate or unseal the reference kernel source (closed/, the key, the temp tree it is compiled from, the unsealed module object, its module names, getsource / linecache / sys.modules on it), do not fetch its upstream repository, and do not ask NCU for line-resolved source (--print-source sass only; cuobjdump -sass on the JIT cubin is fine). Drive the reference only through the tree's ref runner (make_inputs / ref_runner / bench / ncu). Introspecting the CuTe DSL package itself (cutlass.__file__, importlib.metadata, its .py sources) is fine. Rewrite the probe without the matched tokens and resend.${extra_hint}"
+    echo "BLACKBOX-GUARD REFUSED ($why; matched: $hits): this run treats the reference as a closed binary — do not read, locate or unseal the reference kernel source (closed/, the key, the temp tree it is compiled from, the unsealed module object, its module names, getsource / linecache / sys.modules on it), do not fetch its upstream repository, and do not ask NCU for line-resolved source (--print-source sass only; --set full and --page source are the same door; cuobjdump -sass on the JIT cubin is fine). Drive the reference only through the tree's ref runner (make_inputs / ref_runner / bench / ncu). Introspecting the CuTe DSL package itself (cutlass.__file__, importlib.metadata, its .py sources) is fine. Rewrite the probe without the matched tokens and resend.${extra_hint}"
     exit 3
 }
 

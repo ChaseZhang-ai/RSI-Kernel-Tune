@@ -379,7 +379,7 @@ followed by the imax0 clamps and then that slice's four whole-row copies. The
 dI cp.async.ca and its 64-bit address arithmetic sit between slices 0 and 1.
 The one-group-ahead index register that D1.3 had left in place is gone: with
 16 rows per lane per group the index has to be read inside the group, which is
-what the patched D0.8 asks for ("逐片 LDS 装载、与 LDGSTS 交织"), and it keeps
+what the patched D0.8 asks for ("per-slice LDS loads, interleaved with LDGSTS"), and it keeps
 the address-source loads interleaved with the copies rather than clustered at
 the top. P1 (depth 1: commit_group -> wait_group(0) -> fence -> arrive) and
 P3's disposition (the empty-arrive stays at the tail of chunk ch) are

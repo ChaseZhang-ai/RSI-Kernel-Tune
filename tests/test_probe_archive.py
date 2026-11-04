@@ -8,8 +8,8 @@ copy (or says explicitly "probe not archived").
 """
 import json
 
-from forgekernel.loop.driver import _archive_probe_recipes, run_kb_harvest
-from forgekernel.loop.kb_lint import lint_kb_dir
+from peregrine_kernel.loop.driver import _archive_probe_recipes, run_kb_harvest
+from peregrine_kernel.loop.kb_lint import lint_kb_dir
 from test_loop_driver import FakeBackend, REPO, _ctx
 
 HARVEST_RECIPE_REPLY = ("wrote a recipe.\n"
@@ -83,7 +83,7 @@ def test_archive_overwrites_a_previous_copy_of_the_same_run(tmp_path):
 def test_harvest_archives_and_hands_the_paths_to_the_teacher(tmp_path):
     be = FakeBackend([HARVEST_RECIPE_REPLY], [])
     ctx = _harvest_ctx(tmp_path, be)
-    from forgekernel.loop.driver import ProbeBattle
+    from peregrine_kernel.loop.driver import ProbeBattle
     ctx.probe_battles["notes/hard.py"] = ProbeBattle(
         path="notes/hard.py", rounds=10, passed=True, pass_iter=17,
         verdict_line="PROBE PASS (max_diff=0.0)", log_tail="note: rung passed")
@@ -118,7 +118,7 @@ def test_both_templates_require_an_explicit_probe_archive_line():
 
 
 def test_harvest_prompts_demand_the_archive_line_and_render_clean():
-    from forgekernel.loop.driver import _bindings, _meta_prompt, render_prompt
+    from peregrine_kernel.loop.driver import _bindings, _meta_prompt, render_prompt
     for lang in ("cutedsl", "cuda"):
         ctx = _ctx(tmp_lang_path(lang), FakeBackend([], []))
         prompt_file = _meta_prompt(ctx, "kb_harvest_prompt.md")

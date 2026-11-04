@@ -1,4 +1,4 @@
-"""The precision gate's measure (src/forgekernel/card_template/eval/precision.py) and a
+"""The precision gate's measure (src/peregrine_kernel/card_template/eval/precision.py) and a
 generated card's record of it (eval/benchkit.py). Needs torch (skipped without it)."""
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-TEMPLATE_EVAL = REPO / "src" / "forgekernel" / "card_template" / "eval"
+TEMPLATE_EVAL = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
 
 torch = pytest.importorskip("torch")
 
@@ -23,8 +23,8 @@ def _load(name, path):
     return mod
 
 
-P = _load("fk_template_precision", TEMPLATE_EVAL / "precision.py")
-lb = _load("fk_template_benchkit_prec", TEMPLATE_EVAL / "benchkit.py")
+P = _load("pk_template_precision", TEMPLATE_EVAL / "precision.py")
+lb = _load("pk_template_benchkit_prec", TEMPLATE_EVAL / "benchkit.py")
 
 
 def _rms_ref(x, w):
@@ -203,7 +203,7 @@ def test_the_json_carries_it_at_the_top_level():
 
 def test_a_card_without_the_helper_says_so(tmp_path):
     shutil.copy2(TEMPLATE_EVAL / "benchkit.py", tmp_path / "benchkit.py")
-    old = _load("fk_bk_no_helper", tmp_path / "benchkit.py")
+    old = _load("pk_bk_no_helper", tmp_path / "benchkit.py")
     verdict, _ = old._correctness(_problem(), _rms_fp32, True, "cpu")
     assert verdict["pass"] and verdict["precision"]["status"] == "unavailable"
     assert "precision.py is missing" in verdict["precision"]["why"]
@@ -247,7 +247,7 @@ def test_precision_off_keeps_the_verdict_clean(monkeypatch):
 
 
 def test_the_kernel_cannot_switch_the_measure_off_from_its_own_process(monkeypatch):
-    """FK_PRECISION counts as read when the bench was imported. The kernel module is
+    """PK_PRECISION counts as read when the bench was imported. The kernel module is
     imported later, in the same process: setting it then (here, before _correctness, as
     an import-time side effect would) changes nothing."""
     monkeypatch.setattr(lb, "PRECISION_ENV_OFF", False)

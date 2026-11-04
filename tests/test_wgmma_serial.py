@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.skills import sass_census as C
-from forgekernel.inner.ncu import summarize_metrics
-from forgekernel.loop.driver import _parse_serial_census, _sass_serial_status
-from forgekernel.skills import orch_census_run as R
-from forgekernel.skills import timeline_probe as T
+from peregrine_kernel.skills import sass_census as C
+from peregrine_kernel.inner.ncu import summarize_metrics
+from peregrine_kernel.loop.driver import _parse_serial_census, _sass_serial_status
+from peregrine_kernel.skills import orch_census_run as R
+from peregrine_kernel.skills import timeline_probe as T
 
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx  # noqa: E402
@@ -100,7 +100,7 @@ def test_driver_folds_the_ratio_into_the_digest_and_the_student_note(tmp_path):
     serial_log = ("WGMMA-SERIAL kernel=k wgmma=28 depbar0=28 tight=28 ratio=1.0\n")
     be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU + "\n" + serial_log])
     ctx = _ctx(tmp_path, be)
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.loop.driver import run_inner_iteration
     rec = run_inner_iteration(ctx, 0, metric_before=3.0)
     assert rec.verdict == "KEEP"
     # NCU parse yields {} for the "(no csv)" fixture, so the digest stays empty

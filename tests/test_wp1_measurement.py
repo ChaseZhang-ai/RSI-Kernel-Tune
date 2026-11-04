@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.inner.trajectory import IterationRecord, append_record, build_digest, load_records
-from forgekernel.loop.parse import parse_eval
+from peregrine_kernel.inner.trajectory import IterationRecord, append_record, build_digest, load_records
+from peregrine_kernel.loop.parse import parse_eval
 
 
 # --- task 1: the raw readings survive the parse and the record -----------------
@@ -117,7 +117,7 @@ def test_digest_shows_spread_but_never_the_raw_arrays():
 
 # --- task 2: resolvable_diff — the resolution the run's own ratios resolve ------
 
-from forgekernel.loop.parse import (RESOLVABLE_DIFF_CAP, RESOLVABLE_DIFF_FLOOR,
+from peregrine_kernel.loop.parse import (RESOLVABLE_DIFF_CAP, RESOLVABLE_DIFF_FLOOR,
                                     detect_plateau, resolvable_diff)
 
 
@@ -226,7 +226,7 @@ def test_detect_plateau_old_behavior_without_ratios_is_bit_for_bit():
 
 # --- task 2: driver consumers --------------------------------------------------
 
-import forgekernel.loop.driver as drv
+import peregrine_kernel.loop.driver as drv
 
 
 def test_gate_regression_noise_uses_the_run_ratios(tmp_path):
@@ -268,7 +268,7 @@ def test_resolvable_keys_are_context_config_with_historical_defaults():
     # run behaves exactly as before wherever the data cannot speak.
     import dataclasses
     import inspect
-    import forgekernel.loop.cli as cli
+    import peregrine_kernel.loop.cli as cli
     src = inspect.getsource(cli)
     for key in ("resolvable_floor", "resolvable_cap", "confirm_budget_per_iter"):
         assert f'get("{key}"' in src, key
@@ -278,8 +278,8 @@ def test_resolvable_keys_are_context_config_with_historical_defaults():
 
 # --- task 3: the suspicious-watermark confirmation band ------------------------
 
-from forgekernel.loop.driver import _confirm_suspicious_watermark
-from forgekernel.loop.parse import parse_eval
+from peregrine_kernel.loop.driver import _confirm_suspicious_watermark
+from peregrine_kernel.loop.parse import parse_eval
 
 
 class _GpuLogBackend:
@@ -295,7 +295,7 @@ class _GpuLogBackend:
 
 
 def _wm_ctx(tmp_path, be, *, margin=0.03):
-    from forgekernel.loop.driver import LoopContext
+    from peregrine_kernel.loop.driver import LoopContext
     ctx = LoopContext(
         op="demo", workspace=tmp_path, milestone=tmp_path / "m.md", kb_dir=tmp_path,
         status_path=tmp_path / "status.jsonl", meta_dir=tmp_path / "meta",
@@ -410,7 +410,7 @@ import sys
 import types
 
 TIMING_PY = (Path(__file__).resolve().parents[1]
-             / "src" / "forgekernel" / "card_template" / "eval" / "timing.py")
+             / "src" / "peregrine_kernel" / "card_template" / "eval" / "timing.py")
 
 
 def _load_timing():

@@ -1,9 +1,12 @@
 # ForgeKernel V1 launch design
 
-> **历史设计存档（WP24 注记，2026-11-03）**：本文是 V1 上游设计的历史记录。其中的榜单
-> （leaderboard）相关章节与链接已随 WP24 去榜单化过时——框架定位收敛为"纯粹的 AI 优化算子
-> 框架"，榜单面向机器（`forge init --leaderboard`、board 卡、SOL 分数、`leaderboard.py` →
-> `cardkit.py`/`benchkit.py` 更名）已删除或更名；正文按存档原样保留，不随代码更新。
+> **Historical design archive (WP24 note, 2026-11-03; translated from the original Chinese
+> archive note, WP25)**: this document is the historical record of the V1 upstream design. Its
+> leaderboard-related sections and links were made obsolete by WP24's deboarding — the framework's
+> positioning converged on "a pure AI kernel-optimization framework", and the leaderboard-facing
+> machinery (`forge init --leaderboard`, board cards, SOL scores, `leaderboard.py` renamed to
+> `cardkit.py`/`benchkit.py`) was deleted or renamed; the body is preserved as archived and does
+> not follow the code.
 
 
 > This is the design record of V1's launch surface: what the user writes, what the harness generates,

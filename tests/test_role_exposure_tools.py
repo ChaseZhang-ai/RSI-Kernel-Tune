@@ -3,9 +3,9 @@ the tensor plateau, joined per role — on the synthetic two-role kernel
 test_orch_tools builds (a copy-producer loop feeding an mma-consumer loop)."""
 import re
 
-from forgekernel.skills import orch_tools as OT
-from forgekernel.skills import role_exposure_tools as RE
-from forgekernel.skills.sass_tools import parse_sass
+from peregrine_kernel.skills import orch_tools as OT
+from peregrine_kernel.skills import role_exposure_tools as RE
+from peregrine_kernel.skills.sass_tools import parse_sass
 from test_orch_tools import SASS_SMALL  # tests/ is on sys.path under pytest
 
 LS = "smsp__pcsamp_warps_issue_stalled_long_scoreboard"
@@ -147,7 +147,7 @@ def test_tensor_active_prefers_the_pm_plateau_then_the_aggregate(monkeypatch):
 
 
 def test_pm_timeline_tensor_plateau_reads_the_steady_state():
-    from forgekernel.skills import pm_timeline_tools as PT
+    from peregrine_kernel.skills import pm_timeline_tools as PT
     name = "pmsampling:sm__pipe_tensor_cycles_active_realtime.avg.pct_of_peak_sustained_elapsed"
     vals = [0.0] * 5 + [90.0] * 40 + [0.0] * 5
     assert PT.tensor_active_plateau({name: vals}) == 90.0

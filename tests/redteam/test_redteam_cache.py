@@ -9,7 +9,7 @@ recheck, which re-runs the correctness protocol AFTER all timing windows close
     content-keyed replay misses too.
 
 The rehearsal runs the production bench child (eval/bench.py --mode correctness
---fresh-recheck) on CPU (FK_FRESH_RECHECK_DEVICE=cpu); torch required. The
+--fresh-recheck) on CPU (PK_FRESH_RECHECK_DEVICE=cpu); torch required. The
 driver-side consumption (REVERT + suspicious) is asserted in
 test_redteam_accounting.py / test_fresh_recheck.py.
 """

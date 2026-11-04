@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.skills import sweep_run
+from peregrine_kernel.skills import sweep_run
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "wp4"
 RECIPE = json.loads((FIXTURES / "sweep_recipe.json").read_text(encoding="utf-8"))
@@ -126,7 +126,7 @@ def test_main_refuses_an_unreadable_spec_without_touching_anything(kernel_tree, 
 
 
 def test_the_banked_fixture_output_parses_end_to_end():
-    from forgekernel.loop.driver import parse_sweep_results
+    from peregrine_kernel.loop.driver import parse_sweep_results
     rows, winner, fail = parse_sweep_results(SWEEP_LOG)
     assert fail is None and winner == "tile64"
     assert [r["name"] for r in rows] == ["base", "tile64", "tile128"]

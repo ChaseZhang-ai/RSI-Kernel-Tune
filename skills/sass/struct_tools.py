@@ -64,7 +64,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 try:  # vendored alongside this file in a job tree ("import sass_tools" via sys.path)
     import sass_tools  # type: ignore
 except ImportError:  # harness-side import path
-    from forgekernel.skills import sass_tools
+    from peregrine_kernel.skills import sass_tools
 
 MIN_INSTRUCTIONS = sass_tools.MIN_INSTRUCTIONS
 MIN_SEGMENTS = 2            # a "region" with one barrier has no inside to describe

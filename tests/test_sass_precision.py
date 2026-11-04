@@ -10,10 +10,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import NCU, REC, FakeBackend, _ctx  # noqa: E402
 
-from forgekernel.loop import precision_gate as pg  # noqa: E402
-from forgekernel.loop import driver  # noqa: E402
-from forgekernel.loop.driver import run_inner_iteration  # noqa: E402
-from forgekernel.skills import orch_tools  # noqa: E402
+from peregrine_kernel.loop import precision_gate as pg  # noqa: E402
+from peregrine_kernel.loop import driver  # noqa: E402
+from peregrine_kernel.loop.driver import run_inner_iteration  # noqa: E402
+from peregrine_kernel.skills import orch_tools  # noqa: E402
 
 
 @pytest.mark.parametrize("opcode, want", [
@@ -91,7 +91,7 @@ def test_contract_off_reports_no_sass_check(tmp_path, monkeypatch, capsys):
 
 
 def test_the_census_prints_mma_precision_even_off_a_tiny_kernel(tmp_path, monkeypatch):
-    from forgekernel.skills import orch_census_run
+    from peregrine_kernel.skills import orch_census_run
     sass = "\n".join(f"        /*{16 * i:04x}*/  {op} ;"
                      for i, op in enumerate(["HMMA.16816.F16 R0, R4, R8, R0", "FFMA R1, R2, R3, R4",
                                              "EXIT"]))

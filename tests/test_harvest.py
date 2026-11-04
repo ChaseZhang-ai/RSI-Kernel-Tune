@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from forgekernel.loop.harvest import (
+from peregrine_kernel.loop.harvest import (
     Change,
     format_report,
     git_status,

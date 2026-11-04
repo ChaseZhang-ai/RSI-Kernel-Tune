@@ -20,7 +20,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 REPO = Path(__file__).resolve().parents[2]
-EVAL_SRC = REPO / "src" / "forgekernel" / "card_template" / "eval"
+EVAL_SRC = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
 
 from test_fresh_recheck import HONEST_KERNEL  # noqa: E402  (conftest path)
 from test_loop_driver import NCU, REC, FakeBackend, _ctx  # noqa: E402
@@ -143,16 +143,16 @@ def test_gate_degraded_ratio_env_overrides(tmp_path, monkeypatch):
     lb = _bench_module(_card_with(tmp_path=tmp_path))
     rows = {"rows": [{"status": "unavailable"}, {"status": "pass"}]}
     assert lb.gate_degraded(rows) is False          # 1/2 <= 0.5 default is not >
-    monkeypatch.setenv("FK_GATE_DEGRADED_RATIO", "0.4")
+    monkeypatch.setenv("PK_GATE_DEGRADED_RATIO", "0.4")
     assert lb.gate_degraded(rows) is True           # 1/2 > 0.4
-    monkeypatch.setenv("FK_GATE_DEGRADED_RATIO", "bogus")
+    monkeypatch.setenv("PK_GATE_DEGRADED_RATIO", "bogus")
     assert lb.gate_degraded(rows) is False          # bad value: the default stands
 
 
 # --- corr_margin_ratio: parsed once, carried by the REVERT row --------------------
 
 def test_corr_margin_ratio_parsed_from_the_checks():
-    from forgekernel.loop.parse import corr_margin_ratio, parse_eval
+    from peregrine_kernel.loop.parse import corr_margin_ratio, parse_eval
     ev = parse_eval(_eval({"pass": False, "checks": [
         {"output": "o", "error": 0.5, "tolerance": 1.0},
         {"output": "o", "error": 0.95, "tolerance": 1.0}]}))
@@ -162,8 +162,8 @@ def test_corr_margin_ratio_parsed_from_the_checks():
 
 
 def test_revert_row_carries_the_judge_edge_it_sat_on(tmp_path):
-    from forgekernel.inner.trajectory import load_records
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.inner.trajectory import load_records
+    from peregrine_kernel.loop.driver import run_inner_iteration
     be = FakeBackend([REC("D1", 1.0)], [_edge_fail(5.0), NCU])  # far outside the band
     ctx = _ctx(tmp_path, be)
     rec = run_inner_iteration(ctx, 0, metric_before=3.0)
@@ -179,8 +179,8 @@ def test_edge_band_first_offender_buys_one_recheck_and_keeps(tmp_path):
     """0.9 < margin < 1.1 on the first offender: one fresh-draw re-eval; the
     fresh draw clears the judge — the KEEP row carries judge_edge_recheck=pass
     and the FRESH reading (the failed draw never becomes a row)."""
-    from forgekernel.inner.trajectory import load_records
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.inner.trajectory import load_records
+    from peregrine_kernel.loop.driver import run_inner_iteration
     be = FakeBackend([REC("D1", 1.0)], [_edge_fail(0.95), NCU, _eval(), NCU])
     ctx = _ctx(tmp_path, be)
     rec = run_inner_iteration(ctx, 0, metric_before=3.0)
@@ -190,8 +190,8 @@ def test_edge_band_first_offender_buys_one_recheck_and_keeps(tmp_path):
 
 
 def test_edge_recheck_that_fails_again_reverts_as_measured(tmp_path):
-    from forgekernel.inner.trajectory import load_records
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.inner.trajectory import load_records
+    from peregrine_kernel.loop.driver import run_inner_iteration
     be = FakeBackend([REC("D1", 1.0)], [_edge_fail(0.95), NCU, _edge_fail(1.02), NCU])
     ctx = _ctx(tmp_path, be)
     rec = run_inner_iteration(ctx, 0, metric_before=3.0)
@@ -201,8 +201,8 @@ def test_edge_recheck_that_fails_again_reverts_as_measured(tmp_path):
 
 
 def test_edge_recheck_fires_once_per_run(tmp_path):
-    from forgekernel.inner.trajectory import load_records
-    from forgekernel.loop.driver import run_inner_loop
+    from peregrine_kernel.inner.trajectory import load_records
+    from peregrine_kernel.loop.driver import run_inner_loop
     be = FakeBackend([REC("D1", 1.0), REC("D2", 1.0)],
                      [_edge_fail(0.95), NCU, _edge_fail(0.97),          # iter 1: eval, profile, recheck
                       _edge_fail(0.93), NCU])                           # iter 2: judged as measured
@@ -218,8 +218,8 @@ def test_edge_recheck_fires_once_per_run(tmp_path):
 def test_edge_recheck_off_or_out_of_band_judges_immediately(tmp_path):
     """The kill switch and the band's edges: an explicit false (the zero-verdict
     control) and a margin outside (0.9, 1.1) both keep the bare judgment."""
-    from forgekernel.inner.trajectory import load_records
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.inner.trajectory import load_records
+    from peregrine_kernel.loop.driver import run_inner_iteration
     for ctx_flag, margin in ((False, 0.95), (None, 0.5), (None, 0.9), (None, 1.1)):
         be = FakeBackend([REC("D1", 1.0)], [_edge_fail(margin), NCU])
         d = tmp_path / f"c{ctx_flag}-{margin}"; d.mkdir(); ctx = _ctx(d, be)
@@ -238,8 +238,8 @@ def test_nondeterministic_form_is_recorded_not_reweighted(tmp_path):
     a DIFFERENT fail form than a cache replay. Both REVERT (a nondeterministic
     kernel is not deliverable); the row says which — suspicious still True (the
     WP9 marker stays; the form is a reading on the row)."""
-    from forgekernel.inner.trajectory import load_records
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.inner.trajectory import load_records
+    from peregrine_kernel.loop.driver import run_inner_iteration
     fr = {"mode": "regen", "pass": False, "form": "nondeterministic",
           "nondeterminism": {"status": "ran", "max_diff": 0.5, "n_pairs": 6},
           "layers": [{"status": "INCORRECT_NUMERICAL"}]}
@@ -269,8 +269,8 @@ _WL_JSON = {
 
 
 def test_board_span_unstable_reported_never_judged(tmp_path, capsys):
-    from forgekernel.inner.trajectory import load_records
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.inner.trajectory import load_records
+    from peregrine_kernel.loop.driver import run_inner_iteration
     be = FakeBackend([REC("D1", 1.0)], [_eval(performance=_WL_JSON), NCU])
     ctx = _ctx(tmp_path, be)
     rec = run_inner_iteration(ctx, 0, metric_before=3.0)
@@ -281,15 +281,15 @@ def test_board_span_unstable_reported_never_judged(tmp_path, capsys):
 
 
 def test_board_span_guard_off_or_quiet_is_silent(tmp_path):
-    from forgekernel.inner.trajectory import load_records
-    from forgekernel.loop.driver import _board_span_unstable, run_inner_iteration
+    from peregrine_kernel.inner.trajectory import load_records
+    from peregrine_kernel.loop.driver import _board_span_unstable, run_inner_iteration
     be = FakeBackend([REC("D1", 1.0)], [_eval(performance=_WL_JSON), NCU])
     ctx = _ctx(tmp_path, be)
     ctx.board_span_guard = False
     rec = run_inner_iteration(ctx, 0, metric_before=3.0)
     assert rec.board_span_unstable is False
     # and a quiet pair (the reference as quiet as the kernel) raises nothing
-    from forgekernel.loop.parse import parse_eval
+    from peregrine_kernel.loop.parse import parse_eval
     ev = parse_eval(_eval(performance=_WL_JSON))
     ev.workloads[0]["ref_device_readings_ms"] = [1.0, 1.001]
     d2 = tmp_path / "quiet"; d2.mkdir(); ctx2 = _ctx(d2, FakeBackend([], []))
@@ -302,8 +302,8 @@ def test_zero_verdict_control_all_rows_quiet_on_a_baseline_eval(tmp_path):
     """With the WP20 switches off (or untriggered), a plain eval's row carries
     none of the new readings and the loop buys the baseline two jobs — the
     judgment path is byte-identical to pre-WP20."""
-    from forgekernel.inner.trajectory import load_records
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.inner.trajectory import load_records
+    from peregrine_kernel.loop.driver import run_inner_iteration
     be = FakeBackend([REC("D1", 1.0)], [_eval(), NCU])
     ctx = _ctx(tmp_path, be)
     ctx.judge_edge_recheck = False
@@ -324,7 +324,7 @@ def test_zero_verdict_control_all_rows_quiet_on_a_baseline_eval(tmp_path):
 # --- config plumbing ---------------------------------------------------------------
 
 def test_wp20_apply_cfg_resolves_and_protects(monkeypatch, tmp_path):
-    from forgekernel.loop import driver
+    from peregrine_kernel.loop import driver
     ctx = _ctx(tmp_path, FakeBackend([], []))
     monkeypatch.setattr(driver, "_wp5_cfg_sections", lambda c: {"loop": {
         "gate_degraded_ratio": 0.7, "judge_edge_recheck": False,
@@ -360,7 +360,7 @@ def test_tag_wipe_warns_and_still_accepts(tmp_path):
     """The accepted residual hole stays accepted — the validator does not reject
     the wiped text; the WARN is the only trace (never a violation, never a
     re-prompt)."""
-    from forgekernel.milestone import tag_wipe_warnings, validate_milestone
+    from peregrine_kernel.milestone import tag_wipe_warnings, validate_milestone
     assert "[SYNC:" in _TAGGED, "the baseline must be new-era (tags present)"
     assert tag_wipe_warnings(_TAGGED, _WIPED) != []
     assert validate_milestone(_WIPED) == [], "the accepted ruling stands"
@@ -369,7 +369,7 @@ def test_tag_wipe_warns_and_still_accepts(tmp_path):
 
 
 def test_driver_logs_the_tag_wipe(tmp_path, capsys):
-    from forgekernel.loop.driver import _milestone_tagwipe_warnings
+    from peregrine_kernel.loop.driver import _milestone_tagwipe_warnings
     p = tmp_path / "m.md"
     p.write_text(_WIPED, encoding="utf-8")
     warns = _milestone_tagwipe_warnings(p, baseline=_TAGGED)

@@ -4,7 +4,7 @@
     python3 claude-goal.py <expected-model> <model-flag> [extra claude args...]
       prompt on stdin, reply on stdout — the contract of scripts/agent-claude.sh,
       which dispatches here when its caller asks for a goal session
-      (FK_AGENT_DRIVER=goal; today the ref_from_goal session, loop/goal_ref.py).
+      (PK_AGENT_DRIVER=goal; today the ref_from_goal session, loop/goal_ref.py).
 
 What changes against `claude -p`: the turn is an interactive session in its own tmux
 session, started with `/goal <condition>` as its first prompt. After every model turn
@@ -14,20 +14,20 @@ asks the agent to write the reply its prompt asks for into the turn directory's 
 and to run the caller's check; this script runs that check again itself before it hands
 reply.md back, so a judge that was talked into "met" cannot deliver a reply the caller
 would reject. The prompt itself goes in as an appended system prompt
-(--append-system-prompt-file): a 30-110 kB FK prompt would not fit the 4000-character
+(--append-system-prompt-file): a 30-110 kB PK prompt would not fit the 4000-character
 condition, and the system prompt is also the one part of the context auto-compaction
 never summarises away.
 
 Exit codes: 0 with the reply on stdout; 75 MODEL MISMATCH, 76 MODEL UNVERIFIED, 77
 SAFEGUARD REFUSAL (all with the reply on stdout); 124 when the wall-clock deadline
-(FK_GOAL_DEADLINE, set by the caller) passes; 1 for everything else, with the CLI's own
+(PK_GOAL_DEADLINE, set by the caller) passes; 1 for everything else, with the CLI's own
 error text (e.g. "You've hit your session limit · resets 7pm") on stdout AND stderr, so
 the loop's outage patterns classify it exactly as they classify a `-p` failure.
 
-Limits: a usage limit, or a rate limit that outlasts FK_GOAL_PAUSE_RETRIES nudges, ends
+Limits: a usage limit, or a rate limit that outlasts PK_GOAL_PAUSE_RETRIES nudges, ends
 the turn with the limit text — the caller decides whether to wait or stop, as it does
 for `-p`. The session id is kept in the turn directory, and the next
-attempt OF THE SAME TURN (same FK_GOAL_TURN_DIR, same CLAUDE_CONFIG_DIR) resumes that
+attempt OF THE SAME TURN (same PK_GOAL_TURN_DIR, same CLAUDE_CONFIG_DIR) resumes that
 session instead of starting over, so a turn held through a 5-hour limit keeps its work.
 Any other failure starts the next attempt fresh, as `-p` does.
 
@@ -38,22 +38,22 @@ server nor any process found by pattern is ever touched. If this process dies by
 a watcher inside the tmux session ends claude within seconds.
 
 Env knobs (all optional):
-  FK_GOAL_TURN_DIR        the turn directory the caller prepared (spec.json); without
+  PK_GOAL_TURN_DIR        the turn directory the caller prepared (spec.json); without
                           it a generic turn directory is created under $TMPDIR
-  FK_GOAL_DEADLINE        absolute epoch seconds; FK_GOAL_TIMEOUT relative seconds
-  FK_GOAL_POLL_S          poll interval (default 2)
-  FK_GOAL_PAUSE_RETRIES   nudges for a paused goal before failing (default 4)
-  FK_GOAL_RATE_WAIT_S     first wait before nudging a rate-limited pause (60, doubling)
-  FK_GOAL_IDLE_S          a session idle this long with the goal unmet gets the goal
+  PK_GOAL_DEADLINE        absolute epoch seconds; PK_GOAL_TIMEOUT relative seconds
+  PK_GOAL_POLL_S          poll interval (default 2)
+  PK_GOAL_PAUSE_RETRIES   nudges for a paused goal before failing (default 4)
+  PK_GOAL_RATE_WAIT_S     first wait before nudging a rate-limited pause (60, doubling)
+  PK_GOAL_IDLE_S          a session idle this long with the goal unmet gets the goal
                           re-sent (default 2400 — beyond Claude Code's 30-min check-in)
-  FK_GOAL_STARTUP_S       no goal sentinel in the transcript by then = failed start (180)
-  FK_GOAL_SETTLE_S        transcript quiet time before a paused / cleared screen is acted
+  PK_GOAL_STARTUP_S       no goal sentinel in the transcript by then = failed start (180)
+  PK_GOAL_SETTLE_S        transcript quiet time before a paused / cleared screen is acted
                           on (default 15)
-  FK_GOAL_TMUX_SOCKET     tmux -L socket name (default: the default server)
-  FK_GOAL_SESSION_PREFIX  tmux session name prefix (default fkturn)
-  FK_GOAL_KEEP_SESSION    1 = leave the tmux session alive at the end (debugging only)
-  FK_CLAUDE_BIN           the claude executable (default ~/.local/bin/claude)
-  FK_FALLBACK_LOG         one line per notable event
+  PK_GOAL_TMUX_SOCKET     tmux -L socket name (default: the default server)
+  PK_GOAL_SESSION_PREFIX  tmux session name prefix (default fkturn)
+  PK_GOAL_KEEP_SESSION    1 = leave the tmux session alive at the end (debugging only)
+  PK_CLAUDE_BIN           the claude executable (default ~/.local/bin/claude)
+  PK_FALLBACK_LOG         one line per notable event
 """
 from __future__ import annotations
 
@@ -333,7 +333,7 @@ class Tmux:
 
 def say(msg: str, turn_dir: Path | None = None) -> None:
     line = f"{time.strftime('%F %T')} role={os.environ.get('ROLE', '?')} goal: {msg}"
-    for p in filter(None, (os.environ.get("FK_FALLBACK_LOG"),
+    for p in filter(None, (os.environ.get("PK_FALLBACK_LOG"),
                            str(turn_dir / "leg.log") if turn_dir else None)):
         if p == "/dev/null":
             continue
@@ -458,7 +458,7 @@ def generic_spec(turn_dir: Path, script: Path) -> dict:
     spec = {"kind": "", "role": os.environ.get("ROLE", ""), "started": started,
             "since": started, "artifacts": [], "reply": str(reply), "check": check}
     spec["condition"] = (
-        "FORGEKERNEL TURN. Your task is the FORGEKERNEL TURN TASK in your system prompt: "
+        "PEREGRINE TURN. Your task is the PEREGRINE TURN TASK in your system prompt: "
         "carry it out fully. The task says how to end your turn; deliver that ending as a "
         f"file instead: write the complete final reply it asks for to `{reply}` (that "
         f"reply only), then run `{check}`. The goal is met only when the most recent run "
@@ -501,20 +501,20 @@ class GoalLeg:
         self.extra, self.dropped = interactive_args(extra)
         self.prompt = prompt
         self.cwd = Path.cwd()
-        self.claude = self.env.get("FK_CLAUDE_BIN") or str(Path.home() / ".local/bin/claude")
+        self.claude = self.env.get("PK_CLAUDE_BIN") or str(Path.home() / ".local/bin/claude")
         self.cfg_env = self.env.get("CLAUDE_CONFIG_DIR") or None
         self.cfg = Path(self.cfg_env) if self.cfg_env else Path.home() / ".claude"
-        self.poll_s = float(self.env.get("FK_GOAL_POLL_S") or 2)
-        self.pause_retries = int(self.env.get("FK_GOAL_PAUSE_RETRIES") or 4)
-        self.idle_s = float(self.env.get("FK_GOAL_IDLE_S") or 2400)
-        self.startup_s = float(self.env.get("FK_GOAL_STARTUP_S") or 180)
+        self.poll_s = float(self.env.get("PK_GOAL_POLL_S") or 2)
+        self.pause_retries = int(self.env.get("PK_GOAL_PAUSE_RETRIES") or 4)
+        self.idle_s = float(self.env.get("PK_GOAL_IDLE_S") or 2400)
+        self.startup_s = float(self.env.get("PK_GOAL_STARTUP_S") or 180)
         # how long the transcript must stay still before a screen state counts as the
         # session's settled state (not a line it is about to scroll past)
-        self.settle_s = float(self.env.get("FK_GOAL_SETTLE_S") or 15)
+        self.settle_s = float(self.env.get("PK_GOAL_SETTLE_S") or 15)
         # first wait before nudging a goal paused on a rate limit (doubles per nudge)
-        self.rate_wait_s = float(self.env.get("FK_GOAL_RATE_WAIT_S") or 60)
-        self.tmux = Tmux(self.env.get("FK_GOAL_TMUX_SOCKET", ""))
-        self.keep_session = self.env.get("FK_GOAL_KEEP_SESSION") == "1"
+        self.rate_wait_s = float(self.env.get("PK_GOAL_RATE_WAIT_S") or 60)
+        self.tmux = Tmux(self.env.get("PK_GOAL_TMUX_SOCKET", ""))
+        self.keep_session = self.env.get("PK_GOAL_KEEP_SESSION") == "1"
         self.started = time.time()
         self.deadline = self._deadline()
         self.session = ""
@@ -530,22 +530,22 @@ class GoalLeg:
 
     def _deadline(self) -> float | None:
         cands = []
-        if self.env.get("FK_GOAL_DEADLINE"):
-            cands.append(float(self.env["FK_GOAL_DEADLINE"]) - 15)
-        if self.env.get("FK_GOAL_TIMEOUT"):
-            cands.append(self.started + float(self.env["FK_GOAL_TIMEOUT"]))
+        if self.env.get("PK_GOAL_DEADLINE"):
+            cands.append(float(self.env["PK_GOAL_DEADLINE"]) - 15)
+        if self.env.get("PK_GOAL_TIMEOUT"):
+            cands.append(self.started + float(self.env["PK_GOAL_TIMEOUT"]))
         return min(cands) if cands else None
 
     # -- turn directory ------------------------------------------------------------------
 
     def setup_turn(self) -> None:
         script = Path(__file__).resolve()
-        td = self.env.get("FK_GOAL_TURN_DIR")
+        td = self.env.get("PK_GOAL_TURN_DIR")
         if td:
             self.turn_dir = Path(td)
             self.spec = json.loads((self.turn_dir / "spec.json").read_text(encoding="utf-8"))
         else:
-            self.turn_dir = Path(tempfile.mkdtemp(prefix="fk-goal-turn-"))
+            self.turn_dir = Path(tempfile.mkdtemp(prefix="pk-goal-turn-"))
             self.spec = generic_spec(self.turn_dir, script)
             (self.turn_dir / "spec.json").write_text(json.dumps(self.spec, indent=1) + "\n",
                                                      encoding="utf-8")
@@ -554,7 +554,7 @@ class GoalLeg:
             raise SystemExit(f"claude-goal: condition is {len(cond)} chars (> {CONDITION_MAX})")
         self.reply = Path(self.spec.get("reply") or self.turn_dir / "reply.md")
         (self.turn_dir / "prompt.md").write_text(
-            "# FORGEKERNEL TURN TASK\n\n" + self.prompt, encoding="utf-8")
+            "# PEREGRINE TURN TASK\n\n" + self.prompt, encoding="utf-8")
 
     def resumable_session(self) -> str | None:
         """The session a previous attempt of THIS turn left resumable, if its transcript is
@@ -612,7 +612,7 @@ class GoalLeg:
         argv += ["--resume", self.sid] if resume else ["--session-id", self.sid]
         argv += ["--append-system-prompt-file", str(self.turn_dir / "prompt.md"),
                  "/goal " + self.spec["condition"]]
-        self.rundir = Path(tempfile.mkdtemp(prefix="fk-goal-run-"))
+        self.rundir = Path(tempfile.mkdtemp(prefix="pk-goal-run-"))
         os.chmod(self.rundir, 0o700)
         envf = self.rundir / "env.sh"
         env = {k: v for k, v in self.env.items() if k not in NESTED_ENV}
@@ -622,7 +622,7 @@ class GoalLeg:
         launcher = self.rundir / "launch.sh"
         me = os.getpid()
         role = re.sub(r"[^A-Za-z0-9]", "", self.env.get("ROLE", "") or self.spec.get("role", ""))
-        prefix = self.env.get("FK_GOAL_SESSION_PREFIX", "fkturn")
+        prefix = self.env.get("PK_GOAL_SESSION_PREFIX", "fkturn")
         self.session = f"{prefix}-{role or 'agent'}-{self.sid[:8]}-{os.getpid()}"
         kill_session = " ".join(shlex.quote(a) for a in (
             *self.tmux.base, "kill-session", "-t", f"={self.session}"))
@@ -630,7 +630,7 @@ class GoalLeg:
             "#!/bin/bash\n"
             "# Started under `env -i`: nothing from the tmux server's environment leaks in.\n"
             f". {shlex.quote(str(envf))}\nrm -f {shlex.quote(str(envf))}\n"
-            f"export TERM={shlex.quote(self.env.get('FK_GOAL_TERM', 'xterm-256color'))}\n"
+            f"export TERM={shlex.quote(self.env.get('PK_GOAL_TERM', 'xterm-256color'))}\n"
             f"cd {shlex.quote(str(self.cwd))} || exit 97\n"
             f"echo $$ > {shlex.quote(str(pidf))}\n"
             "# Orphan guard: when the leg that owns this session dies (even by SIGKILL),\n"

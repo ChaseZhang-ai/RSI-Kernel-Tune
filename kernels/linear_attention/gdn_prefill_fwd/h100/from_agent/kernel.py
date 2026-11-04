@@ -69,7 +69,7 @@ NREC = NCHUNK * HV                  # 4096 (chunk, v-head) records
 GATE_ROWS = 5                       # fp32 scalars recorded per token
 
 P1_THREADS = 128                    # 4 warps
-P1_CTAS_PER_SM = 2                  # D2.2 cost clause ("4 CTA/SM 可能降为 2-3"):
+P1_CTAS_PER_SM = 2                  # D2.2 cost clause ("4 CTAs/SM may drop to 2-3"):
                                     # the launch bound is also the register cap
                                     # — min_blocks_per_mp=4 caps ptxas at
                                     # 65536/(128*4) = 128 regs/thread, and the

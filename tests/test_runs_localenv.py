@@ -1,4 +1,4 @@
-"""forgekernel.runs (run directories) and forgekernel.localenv (the machine)."""
+"""peregrine_kernel.runs (run directories) and peregrine_kernel.localenv (the machine)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import json
 
 import pytest
 
-from forgekernel import paths
-from forgekernel.localenv import MachineError, load_machine, read_env_file
-from forgekernel.runs import RunError, list_runs, new_run, open_run
-from forgekernel.task import load_task
+from peregrine_kernel import paths
+from peregrine_kernel.localenv import MachineError, load_machine, read_env_file
+from peregrine_kernel.runs import RunError, list_runs, new_run, open_run
+from peregrine_kernel.task import load_task
 
 from test_task import MINIMAL, _kb, _task
 
@@ -25,7 +25,7 @@ def test_no_local_env_means_this_machine_gpu_0(tmp_path):
 
 def test_local_env_parses_comments_exports_and_quotes(tmp_path):
     (tmp_path / "local.env").write_text(
-        "# machine\nFK_DELIVERY=ssh\nexport REMOTE_HOST=gpu-box\n"
+        "# machine\nPK_DELIVERY=ssh\nexport REMOTE_HOST=gpu-box\n"
         "REMOTE_WORKDIR='/data/fk'\nANTHROPIC_API_KEY=\"sk-test x\"\n\n")
     m = load_machine(tmp_path, environ={})
     assert (m.delivery, m.remote_host, m.remote_workdir) == ("ssh", "gpu-box", "/data/fk")
@@ -33,14 +33,14 @@ def test_local_env_parses_comments_exports_and_quotes(tmp_path):
 
 
 def test_the_environment_wins_over_the_file(tmp_path):
-    (tmp_path / "local.env").write_text("FK_DELIVERY=ssh\nREMOTE_HOST=a\nREMOTE_WORKDIR=/d/fk\n")
-    m = load_machine(tmp_path, environ={"FK_DELIVERY": "local", "FK_GPU": "3"})
+    (tmp_path / "local.env").write_text("PK_DELIVERY=ssh\nREMOTE_HOST=a\nREMOTE_WORKDIR=/d/fk\n")
+    m = load_machine(tmp_path, environ={"PK_DELIVERY": "local", "PK_GPU": "3"})
     assert (m.delivery, m.gpu) == ("local", "3")
 
 
 def test_ssh_needs_a_host_and_a_dedicated_workdir(tmp_path):
     with pytest.raises(MachineError) as e:
-        load_machine(tmp_path, environ={"FK_DELIVERY": "ssh", "REMOTE_WORKDIR": "/tmp"})
+        load_machine(tmp_path, environ={"PK_DELIVERY": "ssh", "REMOTE_WORKDIR": "/tmp"})
     text = "\n".join(e.value.problems)
     assert "needs REMOTE_HOST" in text and "needs REMOTE_WORKDIR" in text
 
@@ -52,8 +52,8 @@ def test_a_malformed_line_is_refused_not_dropped(tmp_path):
 
 
 def test_unknown_delivery_is_refused(tmp_path):
-    with pytest.raises(MachineError, match="FK_DELIVERY must be one of"):
-        load_machine(tmp_path, environ={"FK_DELIVERY": "carrier-pigeon"})
+    with pytest.raises(MachineError, match="PK_DELIVERY must be one of"):
+        load_machine(tmp_path, environ={"PK_DELIVERY": "carrier-pigeon"})
 
 
 # -- runs -----------------------------------------------------------------------------------

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from forgekernel.task import dump_task_toml, load_task, read_task_toml
+from peregrine_kernel.task import dump_task_toml, load_task, read_task_toml
 
 from test_task import _kb
 

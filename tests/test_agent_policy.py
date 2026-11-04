@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.loop import agent_policy as ap
-from forgekernel.loop import cli
+from peregrine_kernel.loop import agent_policy as ap
+from peregrine_kernel.loop import cli
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -85,7 +85,7 @@ def test_a_blackbox_teacher_keeps_the_network_but_not_the_reference(tmp_path):
     denied_read = s["sandbox"]["filesystem"]["denyRead"]
     assert str(ref) in denied_read and str(tree) not in denied_read  # its own trees stay readable
     cmd = s["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    assert "agent_policy_hook.py" in cmd and "forgekernel-agent-policy.json" in cmd
+    assert "agent_policy_hook.py" in cmd and "peregrine_kernel-agent-policy.json" in cmd
     assert re.search("WebFetch", s["hooks"]["PreToolUse"][0]["matcher"])
 
 
@@ -178,7 +178,7 @@ def test_install_writes_both_files_and_keeps_them_out_of_git(tmp_path):
     pol.install("student", ws)
     settings = json.loads((ws / ".claude" / "settings.json").read_text())
     assert "WebFetch" in settings["permissions"]["deny"]  # the last installed role wins
-    policy = json.loads((ws / ".claude" / "forgekernel-agent-policy.json").read_text())
+    policy = json.loads((ws / ".claude" / "peregrine_kernel-agent-policy.json").read_text())
     assert policy["role"] == "student" and policy["offline"] is True
     exclude = (ws / ".git" / "info" / "exclude").read_text().splitlines()
     assert exclude.count(".claude/") == 1
@@ -220,7 +220,7 @@ def test_every_agent_turn_runs_under_its_roles_policy(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     probe = ("python3 -c 'import json,sys; "
-             "print(\"ROLE=\" + json.load(open(\".claude/forgekernel-agent-policy.json\"))[\"role\"]); "
+             "print(\"ROLE=\" + json.load(open(\".claude/peregrine_kernel-agent-policy.json\"))[\"role\"]); "
              "sys.stdout.write(sys.stdin.read())'")
     be = cli.RealBackend("demo", ws, probe, "n", "e", teacher_agent_cmd=probe,
                          agent_retries=1, agent_retry_sleep=0.0, agent_policy=pol)
@@ -329,7 +329,7 @@ def test_the_gpu_machine_is_denied_by_name_for_an_offline_role(tmp_path):
     pol, _, _ = _policy(tmp_path)
     ws = tmp_path / "run" / "operators" / "op-ws"
     deny = pol.settings("student", ws)["permissions"]["deny"]
-    assert "Bash(ssh:*)" in deny and "Bash(python -m forgekernel.submit:*)" in deny
+    assert "Bash(ssh:*)" in deny and "Bash(python -m peregrine_kernel.submit:*)" in deny
 
 
 def test_an_online_student_keeps_its_deny_list_but_not_the_gpu_machine(tmp_path):
@@ -343,7 +343,7 @@ def test_an_online_student_keeps_its_deny_list_but_not_the_gpu_machine(tmp_path)
     deny = s["permissions"]["deny"]
     assert "WebFetch" not in deny and "Bash(curl:*)" not in deny
     assert "network" not in s["sandbox"]
-    assert "Bash(ssh:*)" in deny and "Bash(python3 -m forgekernel.submit:*)" in deny
+    assert "Bash(ssh:*)" in deny and "Bash(python3 -m peregrine_kernel.submit:*)" in deny
     assert online.deny_read("student") == pol.deny_read("student")
     assert {str(ref), str(tree)} <= set(s["sandbox"]["filesystem"]["denyRead"])
     assert online.allow_write("student") == pol.allow_write("student")
@@ -391,7 +391,7 @@ ONLINE_STUDENT = {"role": "student", "oracle_mode": "source", "offline": False,
 @pytest.mark.parametrize("event", [
     {"tool_name": "Bash", "tool_input": {"command": "ssh gpu-box nvidia-smi"}},
     {"tool_name": "Bash", "tool_input": {"command": "/usr/bin/ssh gpu-box ls"}},
-    {"tool_name": "Bash", "tool_input": {"command": "python3 -m forgekernel.submit op submit"}},
+    {"tool_name": "Bash", "tool_input": {"command": "python3 -m peregrine_kernel.submit op submit"}},
     {"tool_name": "Bash", "tool_input": {"command": "tmux new -d 'scp k.py gpu-box:/tmp/'"}},
 ])
 def test_an_online_student_may_not_drive_the_gpu_machine_either(event):

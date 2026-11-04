@@ -14,10 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.inner.trajectory import IterationRecord, append_record, load_records
-from forgekernel.loop import driver as drv
-from forgekernel.loop import lever_pool
-from forgekernel.skills import sweep_run
+from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
+from peregrine_kernel.loop import driver as drv
+from peregrine_kernel.loop import lever_pool
+from peregrine_kernel.skills import sweep_run
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -51,7 +51,7 @@ def _rec(ms, verdict="KEEP", iter_=1, did="D1.1", sha="s1", **kw):
                            device_median_ms=ms, sha=sha, **kw)
 
 
-# --- task 1: the shrink grid (乙A3) ---------------------------------------------
+# --- task 1: the shrink grid (B-A3) ---------------------------------------------
 
 def test_ps_next_points_contract_and_purity():
     assert drv.ps_next_points([16, 32, 64, 128], 32) == [24, 48]
@@ -118,7 +118,7 @@ def test_ps_recipe_refused():
                                              "values": [1, "x"]}]}) is not None
 
 
-# --- task 3: the MC near-tie detector (乙A6) ------------------------------------
+# --- task 3: the MC near-tie detector (B-A6) ------------------------------------
 
 def _mcrow(name, ms, smoke=True):
     return {"name": name, "smoke": smoke, "ms": ms, "ratio": None, "delta_pct": None}
@@ -133,7 +133,7 @@ def test_mc_top2_gap_pct():
     assert drv._mc_top2_gap_pct([_mcrow("v0", None), _mcrow("v1", 2.0)]) is None
 
 
-# --- task 6: the climb streak (甲G12) -------------------------------------------
+# --- task 6: the climb streak (A-G12) -------------------------------------------
 
 def test_climb_streak_counts_consecutive_small_keeps():
     # the streak walks NEWEST-first: the newest two keeps each gained 1-3%,
@@ -147,7 +147,7 @@ def test_climb_streak_counts_consecutive_small_keeps():
     assert drv._climb_streak([], "device") == 0
 
 
-# --- task 5: the runner-up pool, restart target, revival (甲G16) -----------------
+# --- task 5: the runner-up pool, restart target, revival (A-G16) -----------------
 
 def test_runner_up_pool_ranks_and_dedupes(ctx):
     recs = [_rec(2.0, iter_=1, sha="best", did="D1"),
@@ -183,7 +183,7 @@ def test_revival_note_three_states(ctx):
     assert drv._revival_note(ctx, "", recs) == ""
 
 
-# --- task 7: floor_progress (丙) -------------------------------------------------
+# --- task 7: floor_progress (C) -------------------------------------------------
 
 def test_floor_progress_line(ctx):
     ctx.floor_ms, ctx.floor_checked = 1.0, True
@@ -196,7 +196,7 @@ def test_floor_progress_line(ctx):
     assert drv._floor_progress_line(ctx, []) == ""
 
 
-# --- task 2: the halving recipe expansion + ceilings (乙A4) ----------------------
+# --- task 2: the halving recipe expansion + ceilings (B-A4) ----------------------
 
 def test_expand_sweep_axes_values_and_range():
     recipe = {"halving": True, "axes": [
@@ -279,7 +279,7 @@ def test_halving_cut_gates():
     assert "b" not in cut and "c" not in cut and cut == {"d", "e"}
 
 
-# --- task 6: EXPIRED revisions (甲G12) -------------------------------------------
+# --- task 6: EXPIRED revisions (A-G12) -------------------------------------------
 
 def _bank_table(ctx, rows, best_ref, job="job1"):
     rec = {"ts": 0.0, "best_ref": best_ref, "job": job, "table": rows}

@@ -41,7 +41,7 @@ Bundle reading (this step): all-on 0.2, noise 0.5% — null: the pool's combinat
 # --- WP16 --- restart target (driver-read: an optional route, never a machine switch)
 - runner-up #2: `D2.3` tree `bbbbbbbbbb` gate 2.03 ms (+1.50% vs the best — its eval and NCU are already paid).
 - Re-basing the run on that tree is a legal structural answer here: point the milestone patch at it and the student delivers on top of it.
-- 复活必重验 (red line ③-②): the revived node re-passes the full suite with its next gated delivery — watermark / clock-drift / fresh-recheck apply as to any delivery — before any of its readings re-enter best, plateau or pricing.
+- Revival always re-verifies (red line ③-②): the revived node re-passes the full suite with its next gated delivery — watermark / clock-drift / fresh-recheck apply as to any delivery — before any of its readings re-enter best, plateau or pricing.
 
 ### (no #2 -> nothing; pool empty -> nothing)
 
@@ -55,7 +55,7 @@ These levers' price tags were written into the milestone (`lever:<name>` citatio
 ### 5. Lever coupling graph (rendered inside the existing price block)
 
 ## Pricing table (measured by the driver on the best tree: add-one / remove-one / all-on, same-job paired ratios)
-LANDABLE: all-pos levers=tilenh8,kvstage2 expected=+2.10% (floor=0.50%) priced_on= —— teacher 可用一个 milestone patch 把这些 lever 合并为单一决策行落地；学生按 rung 一次交付（普通 bundle 交付，标准 eval gate 判定）。
+LANDABLE: all-pos levers=tilenh8,kvstage2 expected=+2.10% (floor=0.50%) priced_on= — the teacher can land these levers as one merged decision line with a single milestone patch; the student delivers once per rung (ordinary bundle delivery, judged by the standard eval gate).
 | lever | add-one | remove-one | class | Δspin(ns, +L) | Δspin(ns, all−L) | decisions |
 |---|---|---|---|---|---|---|
 | `tilenh8` | +1.20% | -0.40% | **independent** | 5.0 | 1.0 | D1.1 |

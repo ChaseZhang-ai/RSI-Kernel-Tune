@@ -14,8 +14,8 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import EVAL, REC, FakeBackend, _ctx  # noqa: E402
 
-from forgekernel.inner.trajectory import IterationRecord, append_record, load_records  # noqa: E402
-from forgekernel.loop.driver import (  # noqa: E402
+from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records  # noqa: E402
+from peregrine_kernel.loop.driver import (  # noqa: E402
     _ORCH_CENSUS_CMD, _ncu_mode, _ncu_profiler, _pop_orch_summary, kb_axis_debt,
     run_inner_iteration, run_kb_harvest,
 )
@@ -144,7 +144,7 @@ def test_axis_debt_ignores_counting_axes_and_l2_hints_but_names_them(tmp_path):
     assert b.axes["cache_ops"] == {"before": ["LDGSTS.E.LTC256B.128"],
                                    "after": ["LDGSTS.E.BYPASS.LTC256B.128"]}
     assert b.noise_axes == ["mbar_objs"]
-    from forgekernel.loop.driver import _axis_battle_block
+    from peregrine_kernel.loop.driver import _axis_battle_block
     block = _axis_battle_block(b)
     assert "Counting axes that moved at the same time" in block and "mbar_objs" in block
 
@@ -193,7 +193,7 @@ def test_census_lines_after_the_csv_are_stripped_before_the_parse():
     """The runner prints the census AFTER the NCU CSV (a job's archived log may
     keep only the tail); the JSON line has enough commas to read as a CSV row."""
     import json
-    from forgekernel.loop.driver import _without_census_lines
+    from peregrine_kernel.loop.driver import _without_census_lines
     log = (_CSV + "\n[orch-census] 3 cubin(s) dumped\n"
            "ORCH-CENSUS cubin=k.cubin kernel=k instrs=900\n"
            "ORCH-SUMMARY-JSON: " + json.dumps(dict(_BASE, edges=[["a", "b"], ["c", "d"]]),

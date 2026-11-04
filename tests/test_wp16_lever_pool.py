@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from forgekernel.loop import lever_pool
+from peregrine_kernel.loop import lever_pool
 
 
 def _row(name="tilenh8", cls="null", edits=None, spec=True, **kw):
@@ -144,7 +144,7 @@ def test_block_snapshot_is_deterministic_and_capped():
 
 @pytest.fixture()
 def pool_ctx(tmp_path):
-    from forgekernel.loop.driver import LoopContext
+    from peregrine_kernel.loop.driver import LoopContext
 
     class _Be:
         def head(self):
@@ -161,7 +161,7 @@ def pool_ctx(tmp_path):
 
 
 def test_pool_admit_table_writes_and_dedupes(pool_ctx, capsys):
-    from forgekernel.loop import driver as drv
+    from peregrine_kernel.loop import driver as drv
     table = [_row(), _row(name="harm", cls="harmful"),
              dict(_row(name="norecipe"), spec=None)]
     specs = [{"name": "tilenh8", "edits": [{"old": "a", "new": "b"}]},
@@ -177,7 +177,7 @@ def test_pool_admit_table_writes_and_dedupes(pool_ctx, capsys):
 
 
 def test_pool_admit_table_without_specs_is_a_no_op(pool_ctx):
-    from forgekernel.loop import driver as drv
+    from peregrine_kernel.loop import driver as drv
     drv._pool_admit_table(pool_ctx, [_row()], None, "shaABC", "job1")
     assert drv._pool_load(pool_ctx) == []
     assert not (pool_ctx.workspace / "notes" / "lever_pool.jsonl").exists()

@@ -1,8 +1,11 @@
-# wp21mini -- WP21 mini 冒烟 task（测试专用，非正式算子集成员）。
-# 目的：在本机 3060 上把机器机制链路通电（eval/NCU job、轨迹落行、kbmenu、
-# floor 回测、墙钟构成表），只产链路与数据流证据，不产性能结论（红线 11）。
-# 选型：CUDA C++ elementwise add（float32, n=1M）= 最小可评测面。
-# 用法见同目录 run_smoke.sh（stub agent 替身 + loop CLI 直启）。
+# wp21mini -- the WP21 mini smoke task (test-only; not a member of the formal
+# operator set).
+# Purpose: energize the machine-mechanism chain on this machine's 3060 (eval/NCU
+# jobs, trajectory rows, kbmenu, floor backtest, the wall-clock composition table)
+# and produce chain-and-dataflow evidence only, never performance conclusions
+# (red line 11).
+# Choice: a CUDA C++ elementwise add (float32, n=1M) = the minimal evaluable surface.
+# Usage: run_smoke.sh in this directory (a stub-agent stand-in + the loop CLI directly).
 
 [task]
 language = "cuda"

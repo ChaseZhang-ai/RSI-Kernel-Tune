@@ -11,7 +11,7 @@ behavior itself opt back in with an explicit zero-sleep tuple.
 """
 import pytest
 
-import forgekernel.loop.driver as _driver
+import peregrine_kernel.loop.driver as _driver
 
 
 @pytest.fixture(autouse=True)
@@ -19,9 +19,9 @@ def _no_truncation_retries(monkeypatch):
     monkeypatch.setattr(_driver, "TRUNCATION_BACKOFF_S", ())
 
 
-# --- WP15: FK_SPRT_* env hygiene ---------------------------------------------
+# --- WP15: PK_SPRT_* env hygiene ---------------------------------------------
 #
-# _wp11_apply_cfg's local-delivery default flip writes FK_SPRT_EARLY_STOP into
+# _wp11_apply_cfg's local-delivery default flip writes PK_SPRT_EARLY_STOP into
 # THIS process's environment for every loop run (production behavior), and test
 # fakes read as a local delivery — without a cleanup, one loop test leaks the
 # flag into every later test that imports timing.py fresh (SPRT then arms inside
@@ -34,5 +34,5 @@ import os as _os
 @pytest.fixture(autouse=True)
 def _wp15_sprt_env_hygiene():
     yield
-    for _k in ("FK_SPRT_EARLY_STOP", "FK_SPRT_WIN_STOP", "FK_SPRT_WIN_MARGIN"):
+    for _k in ("PK_SPRT_EARLY_STOP", "PK_SPRT_WIN_STOP", "PK_SPRT_WIN_MARGIN"):
         _os.environ.pop(_k, None)

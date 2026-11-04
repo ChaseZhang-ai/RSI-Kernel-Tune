@@ -18,7 +18,7 @@ from test_loop_driver import (  # noqa: E402
     _MILESTONE, FakeBackend, _ctx, _patching,
 )
 
-from forgekernel.loop.driver import (  # noqa: E402
+from peregrine_kernel.loop.driver import (  # noqa: E402
     _is_r2_structural, _verify_r2_structural_price, run_meta_step,
 )
 
@@ -47,7 +47,7 @@ def test_priced_r2_structural_passes_and_lands_as_an_ordinary_patch(tmp_path):
     """The channel open for business: unpriced -> bounced once -> probe measured in
     this run -> the priced proposal lands as a normal structural milestone patch
     (outcome PENDING, standard transaction; the student prompt is untouched)."""
-    from forgekernel.meta_trajectory import load_meta_records
+    from peregrine_kernel.meta_trajectory import load_meta_records
     (tmp_path / "notes").mkdir(exist_ok=True)
     (tmp_path / "notes" / "skel.py").write_text("# probe\n", encoding="utf-8")
     priced = _R2S + "reopen_price: +6.1% via probe:notes/skel.py#1\n"
@@ -67,7 +67,7 @@ def test_priced_r2_structural_passes_and_lands_as_an_ordinary_patch(tmp_path):
 def test_unpriced_r2_structural_is_bounced_once_then_refused(tmp_path):
     """A tagged proposal without a price: one bounce naming the probe route, then
     refusal — the landed patch is withdrawn, the step recorded UNPRICED_REOPEN."""
-    from forgekernel.meta_trajectory import load_meta_records
+    from peregrine_kernel.meta_trajectory import load_meta_records
     be = FakeBackend([_R2S, _R2S,
                       _patching(tmp_path, "\n### D2.3 unpriced skeleton\nx\n", _PATCH)], [])
     ctx = _tagged_ctx(tmp_path, be)
@@ -138,7 +138,7 @@ def test_additive_landing_of_a_tagged_proposal_still_needs_the_price(tmp_path):
     ORACLE-external skeleton landing as an additive rung extension (no reopen) is
     refused without its in-run measured price all the same (red line: acceptance
     requires the price; the standard gate catching failure later is not a price)."""
-    from forgekernel.meta_trajectory import load_meta_records
+    from peregrine_kernel.meta_trajectory import load_meta_records
     additive = "patch_class: additive\nchanged_entries: [D2.4]\n"
     be = FakeBackend([_R2S, _R2S,
                       _patching(tmp_path, "\n### D2.4 new rung\nx\n", additive)], [])
@@ -155,7 +155,7 @@ def test_tag_under_a_misfiled_cause_class_is_still_bounced_first(tmp_path):
     (here G2, additive, so neither the R1 gate nor the structural three-source
     gate is in play) must still be told HOW to price it once — only the insisted
     second attempt hits the patch point's outright refusal."""
-    from forgekernel.meta_trajectory import load_meta_records
+    from peregrine_kernel.meta_trajectory import load_meta_records
     g2 = ("cause_class: G2\ndeficient_locus: D2.3\n"
           "r2_structural: R2-structural\n"
           "patch_direction: split and extend with a two-pass skeleton\n")
@@ -178,7 +178,7 @@ def test_untagged_r2_with_a_structural_patch_keeps_the_old_rule(tmp_path):
     """Regression: an ordinary R2 (decision present in ORACLE) landing structural
     is governed by the existing three-source gate — a KB-cited price lands it
     exactly as before this channel existed; no tag, no strict rule."""
-    from forgekernel.meta_trajectory import load_meta_records
+    from peregrine_kernel.meta_trajectory import load_meta_records
     (tmp_path / "sm90").mkdir(exist_ok=True)
     (tmp_path / "sm90" / "skel_recipe.md").write_text(
         "# kb\n- ✅ Verified: job 870533 `PROBE PASS`\n", encoding="utf-8")

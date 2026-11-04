@@ -5,9 +5,9 @@ hand-off by store/load offset overlap; fails closed on what it cannot read."""
 import csv
 import io
 
-from forgekernel.loop.driver import _STRUCT_OK
-from forgekernel.skills import struct_tools as S
-from forgekernel.skills.sass_tools import parse_sass
+from peregrine_kernel.loop.driver import _STRUCT_OK
+from peregrine_kernel.skills import struct_tools as S
+from peregrine_kernel.skills.sass_tools import parse_sass
 
 BAR = 100          # the region barrier: 25 trips x 4 cooperating warps (one CTA)
 FILL = 520         # prologue length: past sass_tools' instruction floor

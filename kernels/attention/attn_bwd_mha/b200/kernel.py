@@ -219,7 +219,7 @@ _PARK = -1.0e30                              # masked score park value, FINITE
 # --- D0.11: the softmax segment's split of the accumulator --------------------
 # The 8 softmax warps are two warpgroups; each covers all 128 TMEM lanes (a warp
 # reaches lanes [32*(warp%4), +32)) and owns 64 of the accumulator's 128 columns,
-# which is D0.7's "每 lane 64 列". A packed bf16 column pair is one 32-bit column,
+# which is D0.7's "64 columns per lane". A packed bf16 column pair is one 32-bit column,
 # so a warpgroup's 64 f32 columns become 32 32-bit columns.
 _WG_COLS = 64
 _HALF_COLS = _WG_COLS // 2    # D0.14: the transient operands are read in two
@@ -241,7 +241,7 @@ _PAIR_MASK = 0b11             # both CTAs of the cluster-2 pair
 # at rank*32 KB + c*4 KB of the run, and the staging slot the bulk reduce reads
 # is those same 4 KB byte for byte.
 # The slot is written by ALL 128 threads, two 16 B stores each (lane t lands at
-# quad*0x800 + t*16), which is D0.12's "每槽 128 线程全员各写 32 B" — the 16
+# quad*0x800 + t*16), which is D0.12's "all 128 threads of each slot each write 32 B" — the 16
 # lanes x 256 B row-major form is §4's forbidden zone (16-way bank conflict,
 # 112 idle lanes).
 _WRITER_THREADS = 128         # warps 8-11 — also the TMEM lane count
@@ -490,7 +490,7 @@ _FACE_ORDER = (0, 1)          # d-tiles outer for K-major; the canonical fit
 # --- D1.4: the dS exchange face's swizzle mode --------------------------------
 # The lever is the MODE only, at a FIXED atom on both sides of the face: the
 # write side stays the softmax segment's 128 B row store and the read side stays
-# chain3's MN-major UMMA descriptor, because "只钉 swizzle 不钉 atom 无效" — a
+# chain3's MN-major UMMA descriptor, because "pinning the swizzle without pinning the atom is void" — a
 # scalarised path costs multiples of the wavefronts a mode ever moves. Candidates
 # {SW128, SW64, SW32}; the mode rides the SAME `_face_layout` the descriptor and
 # the allocation are both built from, so descriptor swizzle bits, arena offsets
@@ -601,7 +601,7 @@ def _chain3_layouts(tiled, want):
     """DEVICE side (trace time): chain3's A / B operand layouts and how many
     passes one trip takes over its K = 256.
 
-    D0.6 reads the reference's dQ chain as "每迭代 2 趟 × 8 步" — two K=128
+    D0.6 reads the reference's dQ chain as "2 trips per iteration x 8 steps" — two K=128
     passes — but flags it as an inference. Both readings are the same product
     over the same 32 KB faces, and which one CUTLASS's layout builder agrees
     with is a property of the installed library, so it is settled by asking:
@@ -862,8 +862,8 @@ def _resolve_vec_copy():
     a dS face (8 x `STS.128`), and one writer lane's 64 f32 are the 256
     contiguous bytes of a ring row (16 x `STS.128`).
 
-    There is no scalar fallback on purpose — D0.8's atom line ("atom 是断崖不是
-    旋钮"): a scalar `STS` path multiplies `smem_wavefronts_st` and would be a
+    There is no scalar fallback on purpose — D0.8's atom line ("the atom is a cliff, not a
+    knob"): a scalar `STS` path multiplies `smem_wavefronts_st` and would be a
     silent downgrade of the buffer list's own contract rather than a knob.
     """
     f = getattr(cute, "autovec_copy", None)
@@ -970,7 +970,7 @@ def _ring_store_chunk(sRing, slot, lane, line, views, staging, c):
     Two 16 B stores at `slot + quad*0x800 + lane*16`, one per quad of the
     chunk — all 128 threads live, a warp's 32 lanes covering 512 contiguous
     bytes, so the store is bank-conflict free and the slot is filled by exactly
-    two instructions per thread (D0.12's `4 warp x 2 条 x 8 槽 = 64 STS.128`).
+    two instructions per thread (D0.12's `4 warps x 2 each x 8 slots = 64 STS.128`).
     `views[q]` is the 4-register window of the accumulator line at quad `q` when
     this DSL build will offset register storage, and `staging` is the fallback
     copy for when it will not.
@@ -1078,7 +1078,7 @@ def _bulk_red_add_f32(dst_gmem, src_smem, nbytes, *, loc=None, ip=None):
 
     D0.12's `[EXPR:]` ladder settles on this tier-B escape: the DSL's cpasync
     surface carries only the TENSOR reduce (`CopyReduceBulkTensorTileS2GOp`,
-    which lowers to `UTMAREDG` — the备胎, not this), and D0.3's blocked
+    which lowers to `UTMAREDG` — the fallback, not this), and D0.3's blocked
     workspace is addressed as flat bytes rather than as a tile of a tensor.
     Per-thread instruction with no internal election (hw_kb `elect_one`), so the
     caller elects exactly one thread of the writer warpgroup; the source must be
@@ -1382,8 +1382,8 @@ def _pack_pairs(dst_i32, ix, src_f32, n_pair):
     source stays live until the store retires. In D0.14's segment D that is
     P's 64 fp32 plus the 32 packed registers coexisting at the segment's peak,
     which is exactly the margin the budget does not have (kb
-    `cvt_f32x2_bf16x2_pack_into_r2t_fragment`, gotcha "整行 TensorSSA ... 活跃区
-    不对"). Pairwise, each pair dies at its own convert and the writes
+    `cvt_f32x2_bf16x2_pack_into_r2t_fragment`, gotcha "the whole-row TensorSSA ... live range
+    is wrong"). Pairwise, each pair dies at its own convert and the writes
     interleave with the reads.
 
     Slot k is source elements (2k, 2k+1) — the two bf16 of the 32-bit column
@@ -1879,7 +1879,7 @@ def _main_kernel(
             # TMEM lanes, so a leader-only arrive hangs the follower); the
             # EMPTY rows take all 16 softmax warps of the pair, pre-arrived in
             # the prologue so the MMA warp's single acquire passes straight
-            # through (D0.11: "首次 acquire 直接通过").
+            # through (D0.11: "the first acquire passes directly").
             cute.arch.mbarrier_init(mbar + _BAR_DV_FINAL, 1)
             cute.arch.mbarrier_init(mbar + _BAR_DK_FINAL, 1)
             cute.arch.mbarrier_init(mbar + _BAR_DV_EMPTY, 16)
@@ -2079,7 +2079,7 @@ def _main_kernel(
             # EMPTY wait in front of each re-arm. Q_row / dO are consumed by
             # S(i+1) / dP(i+1) / dV(i+1) in THIS trip, so their producer runs two
             # tiles ahead (tile i+2); Q_col / lse / dpsum keep the one-tile lead.
-            # D0.10 形态 A, 统计量段首发: FIVE serial segments, each waiting
+            # D0.10 shape A, statistics-segment first: FIVE serial segments, each waiting
             # exactly ONE empty, in the order `lse -> dpsum -> Q_col -> Q_row ->
             # dO_col + dO_row`. The order is a contract, not a formatting choice.
             # What it pins is a RELATION, not a spelling: neither statistic's
@@ -2161,8 +2161,8 @@ def _main_kernel(
     if warp == _WARP_MMA:
         # ---- D0.6 chains 0 and 2: operands, fragments, accumulators -------------
         # D0.14's MMA row, read the way the decision spells it: the 67 descriptor
-        # mirrors are LOOP-INVARIANT state of this warp — "若 student 的 MMA warp
-        # 超 104，先查描述符是否在循环内重建". Every face this warp reads is single
+        # mirrors are LOOP-INVARIANT state of this warp — "if the student's MMA warp
+        # exceeds 104, first check whether the descriptors are rebuilt inside the loop". Every face this warp reads is single
         # stage (D0.8 has no ring), so the ten fragments below carry the same
         # addresses on every trip and are built ONCE, outside the trip loop and
         # outside every predicate; the prologue's three chains read the same ten,
@@ -2731,7 +2731,7 @@ def _main_kernel(
             # `t - 32`, the shift's clamping absorbing which word the threshold
             # falls in, so there is no branch and no second comparison (hw_kb
             # `threshold_bitmap_predicate_select` gotcha 2). D0.14 segment A's
-            # "mask 谓词位图，不展开成寄存器" is these two registers: the
+            # "the mask predicate bitmap, not expanded into registers" is these two registers: the
             # per-column predicate is never materialised, only tested.
             t_msk = kv_abs - (q_row0 + col0)
             w_msk = (_ones_from(t_msk), _ones_from(t_msk - _HALF_COLS))

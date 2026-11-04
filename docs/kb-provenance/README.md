@@ -41,7 +41,7 @@ symbols may be cited; what must be kept out are the symbols of the **reference s
 
 - **Recipe certification**: when the teacher certifies a recipe, it writes the narrated provenance
   into the file here with the entry's name (see `meta/kb_recipe_prompt.md`).
-- **The end-of-run knowledge-base write-up** (at the end of a run, or `forge harvest`): likewise.
+- **The end-of-run knowledge-base write-up** (at the end of a run, or `peregrine harvest`): likewise.
 - **The gap queue** `gaps/<op>.md`: generated mechanically by the driver from the candidate table when
   reconnaissance completes and at the finish -- rows marked `VERIFY none`, and rows that say "may not
   be expressible" but carry no `[EXPR:]` verdict. They are reconnaissance's reading of the reference's
@@ -73,7 +73,7 @@ A person reviews the files here and commits them together with the matching know
 - Inside an entry, a source **may be pointed to but not paraphrased**; the reference solution's symbol
   names / file names / line numbers all belong in this directory.
 - A file written here has the same name as the entry it backs.
-- Mechanical gate: `src/forgekernel/loop/kb_lint.py` scans the knowledge base for banned tokens at two
+- Mechanical gate: `src/peregrine_kernel/loop/kb_lint.py` scans the knowledge base for banned tokens at two
   points, loop start and recipe certification. A hit at certification goes back to the teacher to fix
   first; if it still fails, the entry is moved out of the student-readable tree (into `kb_quarantine/`
   at the repository root). A hit at start refuses the start (`tests/test_kb_lint.py` guards this too).

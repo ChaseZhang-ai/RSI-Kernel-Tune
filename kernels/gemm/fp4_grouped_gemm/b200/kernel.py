@@ -724,8 +724,7 @@ def _unwrap_candidates(fn, depth=3):
     optional one nobody passes silently takes its default -- and
     `cta_layout_vmnk` defaulting to None turns a cta_group::2 pipeline into a
     cta_group::1 pipeline that arms the pair's byte count and then waits
-    forever (KB: cta_pair_bulk_load_cta_group2, "现成流水缺 cta_layout_vmnk 时
-    静默退化成 ONE").
+    forever (KB: cta_pair_bulk_load_cta_group2, "the off-the-shelf pipeline silently degrades to ONE when cta_layout_vmnk is missing").
     """
     out, seen, queue = [], set(), [(fn, 0)]
     while queue:

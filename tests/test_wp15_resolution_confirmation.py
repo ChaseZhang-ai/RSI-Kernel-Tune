@@ -25,9 +25,9 @@ import random
 
 import pytest
 
-from forgekernel.inner.trajectory import IterationRecord, append_record, load_records
-from forgekernel.inner.trajectory import build_digest
-from forgekernel.loop.parse import (combined_workload_test, detect_plateau,
+from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
+from peregrine_kernel.inner.trajectory import build_digest
+from peregrine_kernel.loop.parse import (combined_workload_test, detect_plateau,
                                     best_standard_error, parse_eval,
                                     resolvable_diff, _resolvable_diff_v1,
                                     RESOLVABLE_DIFF_CAP, RESOLVABLE_DIFF_FLOOR,
@@ -146,7 +146,7 @@ def test_lucky_best_is_corrected_to_the_confirmation_median(tmp_path):
     # THE fixture: a lucky single draw (1.976 vs true ~2.0) used to PIN the best
     # (max-of-noise ratchet, docstring's own words). Under WP15 the reading
     # confirms with one independent job and the row banks the median.
-    from forgekernel.loop.driver import LoopContext, _confirm_suspicious_watermark
+    from peregrine_kernel.loop.driver import LoopContext, _confirm_suspicious_watermark
 
     class _Be:
         def __init__(self, logs):
@@ -191,7 +191,7 @@ def test_confirmation_accounting_rides_the_record(tmp_path):
     ctx.gate_window = "device"
     ctx.watermark_margin = 0.03   # _ctx zeroes it; the A1 routine needs the band
     append_record(ctx.status_path, _rec(0, 1.2, ms=2.0, sha="shabest"))
-    rec = __import__("forgekernel.loop.driver", fromlist=["run_inner_iteration"]) \
+    rec = __import__("peregrine_kernel.loop.driver", fromlist=["run_inner_iteration"]) \
         .run_inner_iteration(ctx, 1, metric_before=2.0)
     assert rec.confirm_jobs == 1
     assert rec.confirm_readings == [1.994, 2.0]
@@ -277,7 +277,7 @@ def test_drift_rows_drop_from_best_plateau_and_sigma():
     clean = [_rec(i, 1.0, ms=2.0) for i in range(5)]
     drifted_fast = [_rec(9, 1.03, ms=1.94, drift=True)]
     # best: the drifted lucky draw must not become the bar while clean rows speak
-    from forgekernel.loop.driver import _best_ms
+    from peregrine_kernel.loop.driver import _best_ms
     assert _best_ms(clean + drifted_fast, "device") == 2.0
     assert _best_ms(drifted_fast * 6, "device") == 1.94   # all-drift: measure as before
     # sigma: the drifted 3% excursion must not widen the band
@@ -326,7 +326,7 @@ def test_run_inner_loop_plateau_reads_the_confirmation_memo_g82(tmp_path):
     # passthrough reads the 0.5% raw-less band, calls the rows progress and
     # climbs to "max_iters" instead.
     from test_loop_driver import NCU, REC, FakeBackend, _ctx
-    from forgekernel.loop.driver import run_inner_loop
+    from peregrine_kernel.loop.driver import run_inner_loop
 
     def eval_ref(ms):
         return ('=== JSON ===\n{"correctness": {"pass": true}, "performance": '
@@ -380,7 +380,7 @@ def test_numeric_fail_feedback_element_seam():
 # --- gate-only confirmation mode: the submit assertion ------------------------
 
 def test_confirm_job_mode_reaches_the_submit_payload(tmp_path):
-    from forgekernel.loop.driver import LoopContext, _confirm_suspicious_watermark
+    from peregrine_kernel.loop.driver import LoopContext, _confirm_suspicious_watermark
 
     class _Be:
         def __init__(self):
@@ -411,7 +411,7 @@ def test_confirm_job_mode_reaches_the_submit_payload(tmp_path):
 # --- SPRT win-direction coupling (C14) ----------------------------------------
 
 def test_win_stopped_reading_confirms_before_the_watermark(tmp_path):
-    from forgekernel.loop.driver import LoopContext, _confirm_suspicious_watermark
+    from peregrine_kernel.loop.driver import LoopContext, _confirm_suspicious_watermark
 
     class _Be:
         def __init__(self):
@@ -441,7 +441,7 @@ def test_win_stopped_reading_confirms_before_the_watermark(tmp_path):
 
 
 def test_loss_stopped_workload_vetoes_the_card_watermark(tmp_path):
-    from forgekernel.loop.driver import LoopContext, _confirm_suspicious_watermark
+    from peregrine_kernel.loop.driver import LoopContext, _confirm_suspicious_watermark
 
     class _Be:
         def __init__(self):

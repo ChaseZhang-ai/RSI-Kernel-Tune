@@ -1,9 +1,9 @@
-"""Tests for forge loop CLI oracle resolution + bounded GPU poll."""
+"""Tests for peregrine loop CLI oracle resolution + bounded GPU poll."""
 
 import pytest
 
-from forgekernel.baseline import RefBaseline
-from forgekernel.loop.cli import (
+from peregrine_kernel.baseline import RefBaseline
+from peregrine_kernel.loop.cli import (
     ORACLE_BLACKBOX,
     ORACLE_NONE,
     ORACLE_SOURCE,
@@ -13,7 +13,7 @@ from forgekernel.loop.cli import (
     _will_distill,
     poll_until_terminal,
 )
-from forgekernel.loop.driver import BackendError
+from peregrine_kernel.loop.driver import BackendError
 
 
 class _Clock:
@@ -108,22 +108,22 @@ def test_oracle_mode_resolution_and_conflicts():
 
 
 def test_language_defaults_to_cutedsl():
-    from forgekernel.loop.cli import _resolve_language
+    from peregrine_kernel.loop.cli import _resolve_language
     assert _resolve_language(None, {}) == "cutedsl"
 
 
 def test_language_from_loop_toml():
-    from forgekernel.loop.cli import _resolve_language
+    from peregrine_kernel.loop.cli import _resolve_language
     assert _resolve_language(None, {"loop": {"language": "inline-ptx"}}) == "inline-ptx"
 
 
 def test_language_cli_flag_overrides_config():
-    from forgekernel.loop.cli import _resolve_language
+    from peregrine_kernel.loop.cli import _resolve_language
     assert _resolve_language("triton", {"loop": {"language": "cutedsl"}}) == "triton"
 
 
 def test_gate_window_defaults_config_flag_and_validation():
-    from forgekernel.loop.cli import _resolve_gate_window
+    from peregrine_kernel.loop.cli import _resolve_gate_window
     assert _resolve_gate_window(None, {}) == "device"
     assert _resolve_gate_window(None, {"loop": {"gate_window": "e2e"}}) == "e2e"
     assert _resolve_gate_window("device", {"loop": {"gate_window": "e2e"}}) == "device"
@@ -220,7 +220,7 @@ def test_target_prefers_the_architecture_reference_over_the_library_baseline():
     the stop threshold from the library one gave target_ms=2.4933 against an oracle that
     runs at 1.978 — the loop would have reported success at ~three quarters of the
     performance it was asked to reproduce."""
-    from forgekernel.baseline import ROLE_ARCHITECTURE
+    from peregrine_kernel.baseline import ROLE_ARCHITECTURE
 
     arch = RefBaseline(op="demo", ms=1.978, ms_device=1.978, role=ROLE_ARCHITECTURE)
     library = RefBaseline(op="demo", ms=2.3686, ms_device=2.3686, job="655416")
@@ -243,7 +243,7 @@ def _submitting_backend(monkeypatch, tmp_path, statuses, log="log body", **kw):
     reads walk ``statuses``, and whose log is ``log``."""
     from types import SimpleNamespace
 
-    from forgekernel.loop import cli
+    from peregrine_kernel.loop import cli
     n = {"submits": 0}
 
     def fake_forge(op, verb, *a, **k):
@@ -280,8 +280,8 @@ def test_a_job_that_lost_its_runner_is_resubmitted_not_failed(monkeypatch, tmp_p
 
 
 def test_repeatedly_lost_jobs_eventually_give_up_without_a_verdict(monkeypatch, tmp_path):
-    from forgekernel.loop import cli
-    from forgekernel.loop.driver import NoRunError
+    from peregrine_kernel.loop import cli
+    from peregrine_kernel.loop.driver import NoRunError
     be, _ = _submitting_backend(monkeypatch, tmp_path, ["Lost"] * 3, lost_retries=2)
     with pytest.raises(cli.RunnerLostError, match="lost its runner 3 times") as e:
         be.submit_gpu("br", "all")
@@ -289,8 +289,8 @@ def test_repeatedly_lost_jobs_eventually_give_up_without_a_verdict(monkeypatch, 
 
 
 def test_a_job_that_never_reached_the_gpu_machine_is_a_transport_error(monkeypatch, tmp_path):
-    from forgekernel.loop import cli
-    from forgekernel.submit.jobs import TRANSPORT_ERROR_MARKER
+    from peregrine_kernel.loop import cli
+    from peregrine_kernel.submit.jobs import TRANSPORT_ERROR_MARKER
     be, _ = _submitting_backend(monkeypatch, tmp_path, ["Failed"],
                                 log=f"{TRANSPORT_ERROR_MARKER} 3 transport failure(s) on h\n")
     with pytest.raises(cli.JobTransportError, match="could not be delivered"):
@@ -301,7 +301,7 @@ def _job_tree(tmp_path, monkeypatch, *, log: str | None, status: str):
     """operators/demo with one finished job 77, the way its runner leaves it."""
     import json as _json
 
-    monkeypatch.setenv("FORGEKERNEL_OPERATORS_DIR", str(tmp_path / "operators"))
+    monkeypatch.setenv("PEREGRINE_OPERATORS_DIR", str(tmp_path / "operators"))
     op = tmp_path / "operators" / "demo"
     jd = op / ".jobs" / "77"
     jd.mkdir(parents=True)
@@ -312,7 +312,7 @@ def _job_tree(tmp_path, monkeypatch, *, log: str | None, status: str):
 
 
 def test_a_jobs_status_and_log_are_read_from_its_files(monkeypatch, tmp_path):
-    from forgekernel.loop import cli
+    from peregrine_kernel.loop import cli
     _job_tree(tmp_path, monkeypatch, log="PRICE-OK\n=== gpu_entry.sh done (task=cmd) ===\n",
               status="Succeeded")
     monkeypatch.setattr(cli, "_forge", lambda *a, **k: pytest.fail("no subprocess needed"))
@@ -324,7 +324,7 @@ def test_a_jobs_status_and_log_are_read_from_its_files(monkeypatch, tmp_path):
 
 
 def test_succeeded_job_with_no_log_raises_instead_of_blaming_the_agent(monkeypatch, tmp_path):
-    from forgekernel.loop import cli
+    from peregrine_kernel.loop import cli
     _job_tree(tmp_path, monkeypatch, log=None, status="Succeeded")
     be = cli.RealBackend("demo", tmp_path, None, "n", "e", poll_s=0.0)
     with pytest.raises(cli.BackendError, match="left no log"):
@@ -346,7 +346,7 @@ _REF_SPEC = {"loop": {"ref_cmd": "python3 eval/measure_target.py",
 
 
 def test_ref_spec_read_from_loop_toml():
-    from forgekernel.loop.cli import _resolve_ref_spec
+    from peregrine_kernel.loop.cli import _resolve_ref_spec
     assert _resolve_ref_spec(_REF_SPEC)["ref_cmd"] == "python3 eval/measure_target.py"
     assert _resolve_ref_spec({}) == {}
 
@@ -354,12 +354,12 @@ def test_ref_spec_read_from_loop_toml():
 def test_an_archived_baseline_is_reused_not_remeasured(tmp_path, monkeypatch):
     """One measurement per operator, reused across runs — that is the whole
     reason the baseline is an archive rather than a step of the loop."""
-    from forgekernel.baseline import RefBaseline, save_baseline
-    from forgekernel.loop.cli import _ensure_ref_baseline
+    from peregrine_kernel.baseline import RefBaseline, save_baseline
+    from peregrine_kernel.loop.cli import _ensure_ref_baseline
 
     save_baseline(tmp_path, RefBaseline(op="demo", ms=2.0, job="1"))
     called = []
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive",
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive",
                         lambda *a, **k: called.append(1))
     got = _ensure_ref_baseline("demo", tmp_path, tmp_path / "m.md", "oracle.cu",
                                _REF_SPEC, 3)
@@ -368,15 +368,15 @@ def test_an_archived_baseline_is_reused_not_remeasured(tmp_path, monkeypatch):
 
 
 def test_missing_baseline_is_measured_when_the_operator_declares_its_ref(tmp_path, monkeypatch):
-    from forgekernel.baseline import RefBaseline
-    from forgekernel.loop.cli import _ensure_ref_baseline
+    from peregrine_kernel.baseline import RefBaseline
+    from peregrine_kernel.loop.cli import _ensure_ref_baseline
 
     seen = {}
     def _fake(op, op_dir, spec, *, repeat):
         seen.update(spec=spec, repeat=repeat)
         return RefBaseline(op=op, ms=2.36, job="9")
 
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive", _fake)
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive", _fake)
     got = _ensure_ref_baseline("demo", tmp_path, tmp_path / "absent.md", "oracle.cu",
                                _REF_SPEC, 3)
     assert got.ms == 2.36
@@ -386,10 +386,10 @@ def test_missing_baseline_is_measured_when_the_operator_declares_its_ref(tmp_pat
 
 def test_a_task_reference_measured_as_the_architecture_one_is_not_measured_twice(
         tmp_path, monkeypatch):
-    from forgekernel.baseline import ROLE_ARCHITECTURE, ROLE_LIBRARY, RefBaseline, load_baseline
-    from forgekernel.loop.cli import _ensure_ref_baseline
+    from peregrine_kernel.baseline import ROLE_ARCHITECTURE, ROLE_LIBRARY, RefBaseline, load_baseline
+    from peregrine_kernel.loop.cli import _ensure_ref_baseline
 
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive",
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive",
                         lambda *a, **k: pytest.fail("the same reference measured twice"))
     cfg = {"loop": {"ref_mode": "sealref", "ref_submit_op": "_demoref", "ref_name": "ref",
                     "arch_ref_mode": "sealref", "arch_ref_submit_op": "_demoref"}}
@@ -402,7 +402,7 @@ def test_a_task_reference_measured_as_the_architecture_one_is_not_measured_twice
 
     # a different reference (another tree) is still measured
     seen = []
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive",
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive",
                         lambda op, op_dir, spec, *, repeat: seen.append(spec) or
                         RefBaseline(op=op, ms=0.2, job="8"))
     other = {"loop": dict(cfg["loop"], ref_submit_op="_libref")}
@@ -414,15 +414,15 @@ def test_a_task_reference_measured_as_the_architecture_one_is_not_measured_twice
 def test_no_ref_declared_leaves_the_driver_to_refuse(tmp_path):
     """Without ref_cmd the loop cannot measure; the driver reports it rather than
     the CLI guessing a command."""
-    from forgekernel.loop.cli import _ensure_ref_baseline
+    from peregrine_kernel.loop.cli import _ensure_ref_baseline
     assert _ensure_ref_baseline("demo", tmp_path, tmp_path / "absent.md",
                                 "oracle.cu", {}, 3) is None
 
 
 def test_a_run_with_nothing_to_distill_does_not_measure(tmp_path, monkeypatch):
     """Resuming against an existing milestone must not spend GPU on a re-measure."""
-    from forgekernel.loop.cli import _ensure_ref_baseline
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive",
+    from peregrine_kernel.loop.cli import _ensure_ref_baseline
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive",
                         lambda *a, **k: pytest.fail("must not measure"))
     ms = tmp_path / "m.md"
     ms.write_text(_conformant_milestone(), encoding="utf-8")
@@ -430,8 +430,8 @@ def test_a_run_with_nothing_to_distill_does_not_measure(tmp_path, monkeypatch):
 
 
 def test_no_oracle_means_no_distillation_hence_no_measurement(tmp_path, monkeypatch):
-    from forgekernel.loop.cli import _ensure_ref_baseline
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive",
+    from peregrine_kernel.loop.cli import _ensure_ref_baseline
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive",
                         lambda *a, **k: pytest.fail("must not measure"))
     assert _ensure_ref_baseline("demo", tmp_path, tmp_path / "absent.md", None,
                                 _REF_SPEC, 3) is None
@@ -439,8 +439,8 @@ def test_no_oracle_means_no_distillation_hence_no_measurement(tmp_path, monkeypa
 
 def test_dry_run_reports_the_measurement_without_making_it(tmp_path, monkeypatch):
     """--dry-run validates config; a plan that spends GPU is not a plan."""
-    from forgekernel.loop.cli import _ensure_ref_baseline
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive",
+    from peregrine_kernel.loop.cli import _ensure_ref_baseline
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive",
                         lambda *a, **k: pytest.fail("dry-run must not submit a job"))
     assert _ensure_ref_baseline("demo", tmp_path, tmp_path / "absent.md", "oracle.cu",
                                 _REF_SPEC, 3, measure=False) is None
@@ -451,7 +451,7 @@ def test_workspace_without_a_remote_is_detected(tmp_path):
     already spent an agent call — worth catching before the run starts."""
     import subprocess
 
-    from forgekernel.loop.cli import _workspace_can_push
+    from peregrine_kernel.loop.cli import _workspace_can_push
     ws = tmp_path / "ws"
     ws.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=ws, check=True)
@@ -461,7 +461,7 @@ def test_workspace_without_a_remote_is_detected(tmp_path):
 
 
 def test_missing_workspace_is_not_pushable(tmp_path):
-    from forgekernel.loop.cli import _workspace_can_push
+    from peregrine_kernel.loop.cli import _workspace_can_push
     assert not _workspace_can_push(tmp_path / "does-not-exist")
 
 
@@ -486,8 +486,8 @@ _ARCH_CFG = {
 
 
 def test_arch_baseline_is_built_from_the_declared_reference(tmp_path):
-    from forgekernel.baseline import ROLE_ARCHITECTURE
-    from forgekernel.loop.cli import _ensure_arch_baseline
+    from peregrine_kernel.baseline import ROLE_ARCHITECTURE
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline
 
     b = _ensure_arch_baseline("flash_attn_bwd", tmp_path, _ARCH_CFG)
     assert b.role == ROLE_ARCHITECTURE
@@ -502,8 +502,8 @@ def test_a_stale_declared_arch_archive_refreshes_from_the_toml(tmp_path):
     the device default's ms_device refusal was told to fix loop.toml, did, and was
     refused again until they knew to hand-delete the archive. A declared-sourced
     archive is just the toml's saved image: when the toml moves, it follows."""
-    from forgekernel.baseline import load_baseline, ROLE_ARCHITECTURE
-    from forgekernel.loop.cli import _ensure_arch_baseline
+    from peregrine_kernel.baseline import load_baseline, ROLE_ARCHITECTURE
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline
 
     old = {"loop": {k: v for k, v in _ARCH_CFG["loop"].items()
                     if k != "arch_ref_device_ms"}}
@@ -517,8 +517,8 @@ def test_a_stale_declared_arch_archive_refreshes_from_the_toml(tmp_path):
 def test_a_measured_arch_archive_is_never_clobbered_by_declared_values(tmp_path):
     """samples_ms is the discriminator: measure_and_archive always records its runs,
     the declared path never does. A real measurement outranks a hand-typed constant."""
-    from forgekernel.baseline import RefBaseline, ROLE_ARCHITECTURE, save_baseline
-    from forgekernel.loop.cli import _ensure_arch_baseline
+    from peregrine_kernel.baseline import RefBaseline, ROLE_ARCHITECTURE, save_baseline
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline
 
     measured = RefBaseline(op="flash_attn_bwd", ms=2.05, role=ROLE_ARCHITECTURE,
                            job="660899", samples_ms=[2.05, 2.07, 2.06])
@@ -531,8 +531,8 @@ def test_arch_baseline_measures_best_of_three(tmp_path, monkeypatch):
     """The architecture measurement anchors target_ms, so it gets the same repeat=3
     the library baseline does. A repeat=1 sample once landed 5% into the node-
     contention band and the loop stopped a run at 0.897x while calling it 0.95x."""
-    from forgekernel import baseline_cli
-    from forgekernel.loop.cli import _ensure_arch_baseline
+    from peregrine_kernel import baseline_cli
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline
 
     seen = {}
 
@@ -549,7 +549,7 @@ def test_arch_baseline_measures_best_of_three(tmp_path, monkeypatch):
 
 def test_arch_baseline_absent_when_nothing_is_declared(tmp_path):
     """Operators with no architecture reference keep the library-only behaviour."""
-    from forgekernel.loop.cli import _ensure_arch_baseline
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline
     assert _ensure_arch_baseline("demo", tmp_path, {"loop": {}}) is None
 
 
@@ -557,7 +557,7 @@ def test_arch_baseline_carries_the_ncu_signature(tmp_path):
     """The mechanism gate lines anchor to the reference's NCU numbers. Without this
     they could only anchor to the library baseline — a different algorithm, so a
     number that says nothing about whether the taught machine was reproduced."""
-    from forgekernel.loop.cli import _ensure_arch_baseline
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline
 
     cfg = {"loop": {**_ARCH_CFG["loop"],
                     "arch_ref_ncu": {"registers_per_thread": 168, "smem_per_block": 114688}}}
@@ -569,8 +569,8 @@ def test_arch_baseline_carries_the_ncu_signature(tmp_path):
 def test_target_ms_prefers_the_architecture_reference(tmp_path):
     """The regression that motivated the split: with both present, the target must
     come from the machine being reproduced, not from the library it competes with."""
-    from forgekernel.baseline import ROLE_ARCHITECTURE
-    from forgekernel.loop.cli import _ensure_arch_baseline, _resolve_target_ms
+    from peregrine_kernel.baseline import ROLE_ARCHITECTURE
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline, _resolve_target_ms
 
     library = RefBaseline(op="flash_attn_bwd", ms=2.3686, ms_device=2.3686,
                           ref_name="cuDNN")
@@ -594,13 +594,13 @@ class _FakeProc:
 def _backend(monkeypatch, **kw):
     from pathlib import Path
 
-    from forgekernel.loop.cli import RealBackend
-    monkeypatch.setattr("forgekernel.loop.cli.time.sleep", lambda *_: None)
+    from peregrine_kernel.loop.cli import RealBackend
+    monkeypatch.setattr("peregrine_kernel.loop.cli.time.sleep", lambda *_: None)
     return RealBackend("op", Path("/ws"), None, "n", "e", **kw)
 
 
 def test_an_ordinary_failure_keeps_the_short_budget(monkeypatch):
-    from forgekernel.loop.driver import BackendError
+    from peregrine_kernel.loop.driver import BackendError
     b = _backend(monkeypatch, git_retries=3)
     calls = {"n": 0}
 
@@ -647,7 +647,7 @@ def test_a_529_overload_waits_instead_of_spending_the_hiccup_budget(monkeypatch)
 
 
 def test_a_persistent_outage_still_gives_up(monkeypatch):
-    from forgekernel.loop.driver import AgentError
+    from peregrine_kernel.loop.driver import AgentError
     overloaded = _FakeProc(1, stdout="API Error: 529 Overloaded")
     b = _agent_backend(monkeypatch, [overloaded] * 20,
                        agent_retries=3, api_outage_retries=4)
@@ -671,7 +671,7 @@ def test_a_stream_cut_waits_instead_of_spending_the_hiccup_budget(monkeypatch):
 
 
 def test_a_persistent_stream_cut_still_gives_up(monkeypatch):
-    from forgekernel.loop.driver import AgentError
+    from peregrine_kernel.loop.driver import AgentError
     cut = _FakeProc(1, stdout="API Error: upstream stream ended without a terminal "
                               "frame; received 1220 frames; reason=eof")
     b = _agent_backend(monkeypatch, [cut] * 20,
@@ -682,7 +682,7 @@ def test_a_persistent_stream_cut_still_gives_up(monkeypatch):
 
 
 def test_an_auth_failure_keeps_the_short_agent_budget(monkeypatch):
-    from forgekernel.loop.driver import AgentError
+    from peregrine_kernel.loop.driver import AgentError
     b = _backend(monkeypatch, agent_retries=3, api_outage_retries=8)
     b.agent_cmd = "fake-agent"
     calls = {"n": 0}
@@ -720,7 +720,7 @@ def _fake_forge(calls, *, submit_id="5", status="Succeeded", log="log body"):
 def test_an_interrupted_submit_is_adopted_not_resubmitted(monkeypatch, tmp_path):
     import json as _json
 
-    from forgekernel.loop import cli
+    from peregrine_kernel.loop import cli
 
     ws = _adoption_ws(tmp_path)
     calls = []
@@ -728,13 +728,13 @@ def test_an_interrupted_submit_is_adopted_not_resubmitted(monkeypatch, tmp_path)
     monkeypatch.setattr(cli.time, "sleep", lambda _: None)
     be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0)
     monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
-    (ws / ".git" / "fk-inflight.json").write_text(_json.dumps(
+    (ws / ".git" / "pk-inflight.json").write_text(_json.dumps(
         {"job": "9", "branch": "br", "mode": "all", "sha": "abc"}))
 
     assert be.submit_gpu("br", "all") == "log body"
     assert "submit" not in calls          # the recorded job was adopted
     assert be.last_job_id == "9"          # provenance still flows
-    assert not (ws / ".git" / "fk-inflight.json").exists()  # consumed on success
+    assert not (ws / ".git" / "pk-inflight.json").exists()  # consumed on success
 
 
 def test_a_stale_inflight_record_is_ignored_and_deleted(monkeypatch, tmp_path):
@@ -742,7 +742,7 @@ def test_a_stale_inflight_record_is_ignored_and_deleted(monkeypatch, tmp_path):
     question — adopting it would score stale code."""
     import json as _json
 
-    from forgekernel.loop import cli
+    from peregrine_kernel.loop import cli
 
     ws = _adoption_ws(tmp_path)
     calls = []
@@ -750,7 +750,7 @@ def test_a_stale_inflight_record_is_ignored_and_deleted(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.time, "sleep", lambda _: None)
     be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0)
     monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "new-sha")
-    (ws / ".git" / "fk-inflight.json").write_text(_json.dumps(
+    (ws / ".git" / "pk-inflight.json").write_text(_json.dumps(
         {"job": "9", "branch": "br", "mode": "all", "sha": "old-sha"}))
 
     assert be.submit_gpu("br", "all") == "log body"
@@ -761,7 +761,7 @@ def test_a_stale_inflight_record_is_ignored_and_deleted(monkeypatch, tmp_path):
 def test_an_aborted_poll_leaves_the_job_adoptable(monkeypatch, tmp_path):
     import json as _json
 
-    from forgekernel.loop import cli
+    from peregrine_kernel.loop import cli
 
     ws = _adoption_ws(tmp_path)
     monkeypatch.setattr(cli, "_forge", _fake_forge([], status="Running"))
@@ -769,7 +769,7 @@ def test_an_aborted_poll_leaves_the_job_adoptable(monkeypatch, tmp_path):
     be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0, poll_timeout_s=0.0)
     with pytest.raises(cli.BackendError, match="job 5"):
         be.submit_gpu("br", "all")
-    rec = _json.loads((ws / ".git" / "fk-inflight.json").read_text())
+    rec = _json.loads((ws / ".git" / "pk-inflight.json").read_text())
     assert rec["job"] == "5"              # the next run can pick it back up
 
 
@@ -785,8 +785,8 @@ _ARCH_MEASURED_CFG = {"loop": {**_ARCH_CFG["loop"],
 
 
 def test_a_declared_measurement_is_run_rather_than_transcribed(tmp_path, monkeypatch):
-    from forgekernel.baseline import ROLE_ARCHITECTURE, RefBaseline
-    from forgekernel.loop.cli import _ensure_arch_baseline
+    from peregrine_kernel.baseline import ROLE_ARCHITECTURE, RefBaseline
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline
 
     seen = {}
 
@@ -794,7 +794,7 @@ def test_a_declared_measurement_is_run_rather_than_transcribed(tmp_path, monkeyp
         seen.update(spec=spec, role=role)
         return RefBaseline(op=op, ms=2.0, role=role, ncu={"time_ns": 1})
 
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive", fake_measure)
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive", fake_measure)
     b = _ensure_arch_baseline("flash_attn_bwd", tmp_path, _ARCH_MEASURED_CFG)
     assert b.ms == 2.0                                  # measured, not the declared 1.978
     assert seen["role"] == ROLE_ARCHITECTURE
@@ -805,29 +805,29 @@ def test_a_declared_measurement_is_run_rather_than_transcribed(tmp_path, monkeyp
 def test_the_declared_values_are_the_fallback_when_measuring_fails(tmp_path, monkeypatch):
     """A hand-transcribed constant is second choice, not the plan: it cannot tell that
     the shape or the image moved under it. But it beats having no reference at all."""
-    from forgekernel.loop.cli import _ensure_arch_baseline
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline
 
     def boom(*a, **k):
         raise RuntimeError("cluster unreachable")
 
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive", boom)
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive", boom)
     b = _ensure_arch_baseline("flash_attn_bwd", tmp_path, _ARCH_MEASURED_CFG)
     assert b.ms == 1.978 and b.raw_stdout             # fell back, provenance intact
 
 
 def test_an_archived_reference_is_never_remeasured(tmp_path, monkeypatch):
     """Two runs of one operator must compare against identical numbers."""
-    from forgekernel.loop.cli import _ensure_arch_baseline
+    from peregrine_kernel.loop.cli import _ensure_arch_baseline
 
     first = _ensure_arch_baseline("flash_attn_bwd", tmp_path, _ARCH_CFG)
-    monkeypatch.setattr("forgekernel.baseline_cli.measure_and_archive",
+    monkeypatch.setattr("peregrine_kernel.baseline_cli.measure_and_archive",
                         lambda *a, **k: pytest.fail("must reuse the archive"))
     assert _ensure_arch_baseline("flash_attn_bwd", tmp_path, _ARCH_MEASURED_CFG).ms == first.ms
 
 
 def test_distillation_is_refused_without_an_ncu_signature():
-    from forgekernel.baseline import ROLE_ARCHITECTURE, RefBaseline
-    from forgekernel.loop.cli import check_arch_ref_ready
+    from peregrine_kernel.baseline import ROLE_ARCHITECTURE, RefBaseline
+    from peregrine_kernel.loop.cli import check_arch_ref_ready
 
     no_ncu = RefBaseline(op="o", ms=2.1, role=ROLE_ARCHITECTURE, ref_name="FA4")
     why = check_arch_ref_ready(_ARCH_MEASURED_CFG, no_ncu, will_distill=True)
@@ -837,8 +837,8 @@ def test_distillation_is_refused_without_an_ncu_signature():
 
 
 def test_a_reference_with_a_signature_lets_the_run_start():
-    from forgekernel.baseline import ROLE_ARCHITECTURE, RefBaseline
-    from forgekernel.loop.cli import check_arch_ref_ready
+    from peregrine_kernel.baseline import ROLE_ARCHITECTURE, RefBaseline
+    from peregrine_kernel.loop.cli import check_arch_ref_ready
 
     ok = RefBaseline(op="o", ms=2.1, role=ROLE_ARCHITECTURE, ncu={"time_ns": 2077216})
     assert check_arch_ref_ready(_ARCH_MEASURED_CFG, ok, will_distill=True) is None
@@ -847,13 +847,13 @@ def test_a_reference_with_a_signature_lets_the_run_start():
 def test_an_already_distilled_milestone_does_not_need_the_reference_reachable():
     """Re-running a run must not require the reference to be measurable again --
     its numbers are already baked into the milestone."""
-    from forgekernel.loop.cli import check_arch_ref_ready
+    from peregrine_kernel.loop.cli import check_arch_ref_ready
     assert check_arch_ref_ready(_ARCH_MEASURED_CFG, None, will_distill=False) is None
 
 
 def test_operators_without_an_architecture_reference_are_unaffected():
     """An operator whose reference *is* the library has nothing to reproduce."""
-    from forgekernel.loop.cli import check_arch_ref_ready
+    from peregrine_kernel.loop.cli import check_arch_ref_ready
     assert check_arch_ref_ready({"loop": {}}, None, will_distill=True) is None
 
 
@@ -861,7 +861,7 @@ def test_ref_rides_job_judgment():
     # Misjudging True is the sample-burn bug: the confirmation stage then expects a
     # same-job ratio the bench cannot produce. Only a plain ref_cmd (measured
     # through the operator's own tree, importable in student jobs) rides the job.
-    from forgekernel.loop.cli import _ref_rides_job
+    from peregrine_kernel.loop.cli import _ref_rides_job
     assert _ref_rides_job({"ref_cmd": "python eval/bench_ref.py"})
     assert not _ref_rides_job({})  # target-ms-only run: no ref declared
     assert not _ref_rides_job({"ref_mode": "faref", "submit_op": "_recon"})
@@ -873,7 +873,7 @@ def test_unrecognized_model_flake_is_transient():
     intermittently — including on auxiliary queries (a run died on the
     generate_session_title path). It must route into the outage budget, not burn
     the 3 hard attempts."""
-    from forgekernel.loop.cli import _TRANSIENT_AGENT_ERR
+    from peregrine_kernel.loop.cli import _TRANSIENT_AGENT_ERR
     observed = ('[claude-code:unrecognized_model] '
                 '{"model":"CLAUDE_ew682d","query_source":"generate_session_title"}')
     assert _TRANSIENT_AGENT_ERR.search(observed)
@@ -896,7 +896,7 @@ def _fresh_layout(tmp_path):
 
 
 def test_fresh_clean_tree_has_no_findings(tmp_path):
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     assert fresh_start_contamination(*_fresh_layout(tmp_path)) == []
 
 
@@ -904,7 +904,7 @@ def test_every_phase_product_is_named(tmp_path):
     """One finding per artifact, each naming the phase that would be skipped —
     the launch-script preflights this gate replaces printed exactly which file
     blocked the start, and losing that would make refusals slower to act on."""
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     op_dir, milestone, status, meta_status, recon = _fresh_layout(tmp_path)
     milestone.write_text("# v1\n", encoding="utf-8")
     (status.parent / "recon_complete.json").write_text("{}", encoding="utf-8")
@@ -929,7 +929,7 @@ def test_records_in_status_admit_everything(tmp_path):
     """Resume is the case the products exist FOR: any recorded iteration means the
     run already owns what is on disk, and re-litigating it would turn every guard
     restart into a fresh-start refusal."""
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     op_dir, milestone, status, meta_status, recon = _fresh_layout(tmp_path)
     milestone.write_text("# v1\n", encoding="utf-8")
     (op_dir / "arch_baseline.json").write_text("{}", encoding="utf-8")
@@ -940,7 +940,7 @@ def test_records_in_status_admit_everything(tmp_path):
 def test_blank_lines_are_not_records(tmp_path):
     """touch + stray newlines must still read as a fresh start, or a crashed
     launch that got as far as `touch status.jsonl` would slip past the gate."""
-    from forgekernel.loop.cli import _status_has_records
+    from peregrine_kernel.loop.cli import _status_has_records
     p = tmp_path / "status.jsonl"
     p.write_text("\n  \n", encoding="utf-8")
     assert not _status_has_records(p)
@@ -949,7 +949,7 @@ def test_blank_lines_are_not_records(tmp_path):
 
 def test_no_recon_dir_skips_recon_checks(tmp_path):
     """Source-mode runs have no recon tree; a report.md elsewhere is not theirs."""
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     op_dir, milestone, status, meta_status, recon = _fresh_layout(tmp_path)
     (recon / "report.md").write_text("x\n", encoding="utf-8")
     assert fresh_start_contamination(op_dir, milestone, status, meta_status, None) == []
@@ -958,7 +958,7 @@ def test_no_recon_dir_skips_recon_checks(tmp_path):
 def test_empty_notes_dir_is_clean(tmp_path):
     """The factory ships the recon tree with an empty notes/; its existence alone
     must not read as contamination."""
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     op_dir, milestone, status, meta_status, recon = _fresh_layout(tmp_path)
     (recon / "notes").mkdir()
     assert fresh_start_contamination(op_dir, milestone, status, meta_status, recon) == []
@@ -980,7 +980,7 @@ def test_admitted_launch_resumes_pre_iter0_products(tmp_path):
     and committed from round one — the guard's archive list does not cover it,
     so without admission every restart in that window would refuse (exit 9),
     be read as transient, restart, and refuse again until max_restarts."""
-    from forgekernel.loop.cli import _admit_launch, fresh_start_contamination
+    from peregrine_kernel.loop.cli import _admit_launch, fresh_start_contamination
     op_dir, milestone, status, meta_status, recon = _fresh_layout(tmp_path)
     _admit_launch(op_dir, status)  # what the first launch's gate pass wrote
     _pre_iter0_crash_residue(op_dir, milestone, status, meta_status, recon)
@@ -991,7 +991,7 @@ def test_foreign_sentinel_is_not_an_admission(tmp_path):
     """A hand-copied op dir carries its sentinel along; one naming a different
     path is a previous run's admission, not this one's."""
     import json
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     op_dir, milestone, status, meta_status, recon = _fresh_layout(tmp_path)
     (status.parent / "launch_admitted.json").write_text(json.dumps(
         {"op_dir": str(tmp_path / "operators" / "other"), "admitted_epoch": 1.0}),
@@ -1002,7 +1002,7 @@ def test_foreign_sentinel_is_not_an_admission(tmp_path):
 
 
 def test_corrupt_sentinel_is_ignored(tmp_path):
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     op_dir, milestone, status, meta_status, recon = _fresh_layout(tmp_path)
     (status.parent / "launch_admitted.json").write_text("not json", encoding="utf-8")
     (op_dir / "ref_baseline.json").write_text("{}", encoding="utf-8")
@@ -1014,7 +1014,7 @@ def test_banked_pricing_evidence_is_a_phase_product(tmp_path):
     """A source-mode run banks ref/student pricing evidence under operators/<op>/
     evidence/ (there is no recon tree to put it beside); a fresh run must not
     read a previous run's role table as its own."""
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     op_dir, milestone, status, meta_status, recon = _fresh_layout(tmp_path)
     ev = op_dir / "evidence"
     ev.mkdir()
@@ -1032,7 +1032,7 @@ def test_ref_pricing_defaults_to_the_recon_tree_on_a_blackbox_run(tmp_path, caps
     """The ref's overlap account is priced on the recon tree unless loop.toml
     opts out explicitly — a loop.toml that predated the knob once left a whole
     dsa_sparse run with a null ref exposure column."""
-    from forgekernel.loop.cli import _resolve_ref_pricing
+    from peregrine_kernel.loop.cli import _resolve_ref_pricing
     recon = tmp_path / "operators" / "_dsaref"
     (recon / ".git").mkdir(parents=True)
     made = []
@@ -1087,7 +1087,7 @@ def test_ref_pricing_defaults_to_the_recon_tree_on_a_blackbox_run(tmp_path, caps
 # --- source-mode runs may reconnoitre (opt-in via [loop] recon_op) -------------
 
 def test_recon_op_defaults_on_for_every_distilling_run():
-    from forgekernel.loop.cli import _recon_op
+    from peregrine_kernel.loop.cli import _recon_op
     assert _recon_op({}, ORACLE_BLACKBOX) == "_recon"
     assert _recon_op({"loop": {"recon_op": "_ref"}}, ORACLE_BLACKBOX) == "_ref"
     # a source-mode run reconnoitres by default, from the same default tree
@@ -1108,7 +1108,7 @@ def test_blackbox_recon_opt_out_is_refused_out_loud(capsys):
     """A blackbox card that wrote recon_op = "" still reconnoitres from the
     default tree — but the config said one thing and the run does another, so
     the rewrite is logged rather than silent."""
-    from forgekernel.loop.cli import _recon_op
+    from peregrine_kernel.loop.cli import _recon_op
     assert _recon_op({"loop": {"recon_op": ""}}, ORACLE_BLACKBOX) == "_recon"
     err = capsys.readouterr().err
     assert "cannot opt out" in err and "_recon" in err
@@ -1120,7 +1120,7 @@ def test_blackbox_recon_opt_out_is_refused_out_loud(capsys):
 # --- [loop] ref_in_job -------------------------------------------------------------
 
 def test_ref_in_job_is_meaningful_only_with_a_separately_measured_ref(capsys):
-    from forgekernel.loop.cli import _resolve_ref_in_job
+    from peregrine_kernel.loop.cli import _resolve_ref_in_job
     sep = {"ref_mode": "fp8gref", "submit_op": "_fp8gref"}
     assert _resolve_ref_in_job({"loop": {"ref_in_job": True}}, sep) is True
     assert _resolve_ref_in_job({"loop": {}}, sep) is False
@@ -1177,7 +1177,7 @@ def test_an_adopted_job_whose_log_never_arrives_is_not_adopted_again(monkeypatch
     futile."""
     import json as _json
 
-    from forgekernel.loop import cli
+    from peregrine_kernel.loop import cli
 
     ws = _adoption_ws(tmp_path)
     calls = []
@@ -1185,10 +1185,10 @@ def test_an_adopted_job_whose_log_never_arrives_is_not_adopted_again(monkeypatch
     monkeypatch.setattr(cli.time, "sleep", lambda _: None)
     be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0)
     monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
-    (ws / ".git" / "fk-inflight.json").write_text(_json.dumps(
+    (ws / ".git" / "pk-inflight.json").write_text(_json.dumps(
         {"job": "9", "branch": "br", "mode": "all", "sha": "abc"}))
 
-    rec_path = ws / ".git" / "fk-inflight.json"
+    rec_path = ws / ".git" / "pk-inflight.json"
     for attempt in range(1, cli._INFLIGHT_LOG_ATTEMPTS + 1):
         with pytest.raises(cli.BackendError, match="no log"):
             be.submit_gpu("br", "all")
@@ -1229,7 +1229,7 @@ def test_the_heartbeat_can_be_switched_off(monkeypatch, tmp_path, capsys):
 
 
 def test_a_failed_attempt_reaches_the_run_log(monkeypatch, capsys):
-    from forgekernel.loop.driver import AgentError
+    from peregrine_kernel.loop.driver import AgentError
     b = _agent_backend(monkeypatch, [_FakeProc(124, stderr="killed at 9000s")] * 3,
                        agent_retries=3)
     with pytest.raises(AgentError):
@@ -1246,7 +1246,7 @@ def test_an_interrupted_turn_kills_the_agent_process(monkeypatch, tmp_path):
     spending API usage."""
     import threading as _threading
     import types
-    from forgekernel.loop import cli as cli_mod
+    from peregrine_kernel.loop import cli as cli_mod
     b = _backend(monkeypatch)
     b.workspace = tmp_path
     b.agent_cmd = "fake-agent"
@@ -1288,7 +1288,7 @@ def test_harvest_only_runs_the_write_up_and_nothing_else(tmp_path, monkeypatch, 
     runs the one write-up turn — no loop, no confirmation job, no publish — and
     refuses without a teacher or without a trajectory to harvest."""
     import types
-    from forgekernel.loop import cli
+    from peregrine_kernel.loop import cli
     status = tmp_path / "status.jsonl"
     status.write_text('{"iter": 0}\n', encoding="utf-8")
     ctx = types.SimpleNamespace(status_path=status, kb_dir=tmp_path / "hw_kb",

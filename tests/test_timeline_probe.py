@@ -1,6 +1,6 @@
 """The timeline probe: markers -> stamps (source rewrite), slab -> per-role
 segment account (reduction), machine lines -> dict (parse)."""
-from forgekernel.skills.timeline_probe import (
+from peregrine_kernel.skills.timeline_probe import (
     NROW, NSITE, NSLOT, NWARP, SPAN_BAND, coverage_class, coverage_span, markers,
     parse_timeline, print_account, reduce_slab, split_runs, stamp_source, uneven_spans,
     verdict,
@@ -356,7 +356,7 @@ def _forbidden_op(kernel_src: str) -> str | None:
 
 
 def test_card_fence_is_read_from_the_bench_source_without_importing_it():
-    from forgekernel.skills.timeline_probe import card_fence, preamble_fence_hit, stamped_preamble
+    from peregrine_kernel.skills.timeline_probe import card_fence, preamble_fence_hit, stamped_preamble
     fence = card_fence(GDN_FENCE_BENCH)
     assert fence is not None
     # the pre-0318c147 preamble spelling tripped this fence; the current one does not
@@ -370,7 +370,7 @@ def test_card_fence_is_read_from_the_bench_source_without_importing_it():
 
 
 def test_a_fence_token_the_preamble_carries_is_named_before_any_job_is_bought():
-    from forgekernel.skills.timeline_probe import card_fence, preamble_fence_hit
+    from peregrine_kernel.skills.timeline_probe import card_fence, preamble_fence_hit
     # a card that fences `atexit` (the preamble registers its slab dump with it)
     bench = GDN_FENCE_BENCH.replace("|cublas|cudnn", "|cublas|cudnn|\\batexit\\b")
     assert preamble_fence_hit(bench) == "atexit"
@@ -388,7 +388,7 @@ def test_a_stamped_bench_refusal_is_reported_as_the_benchs_verdict_not_a_missing
     imported): the reason line carries the bench's own error text, and the
     driver reads it through parse_timeline. no-slab-dumped is reserved for a
     bench that RAN and left no slab."""
-    from forgekernel.skills import timeline_probe as tp
+    from peregrine_kernel.skills import timeline_probe as tp
     (tmp_path / "kernel.py").write_text(TOY, encoding="utf-8")
     monkeypatch.setattr(tp, "ROOT", str(tmp_path))
     monkeypatch.setattr(tp, "run_bench", lambda label, env=None: {
@@ -417,7 +417,7 @@ def test_a_stamped_bench_refusal_is_reported_as_the_benchs_verdict_not_a_missing
 
 
 def test_stamped_bench_detail_is_one_bounded_line():
-    from forgekernel.skills.timeline_probe import stamped_bench_detail
+    from peregrine_kernel.skills.timeline_probe import stamped_bench_detail
     assert stamped_bench_detail({"pass": False, "error": "forbidden op\nin kernel:   os.environ"}) \
         == "forbidden op in kernel: os.environ"
     assert stamped_bench_detail({"pass": False}) == "pass=False (no error text)"
@@ -447,7 +447,7 @@ DROPPED = ['_seg("state.D.ld%d.begin" % k, ci)', '_seg(NAMES[k], ci)', '_seg(f"s
 def test_a_non_literal_site_name_is_a_no_op_in_the_stamped_arm_and_is_named():
     import re
     import pytest
-    from forgekernel.skills.timeline_probe import unparsed_markers
+    from peregrine_kernel.skills.timeline_probe import unparsed_markers
     assert TOY_COMPUTED != TOY
     assert markers(TOY_COMPUTED) == markers(TOY)
     assert unparsed_markers(TOY_COMPUTED) == DROPPED
@@ -487,7 +487,7 @@ TOY_HELPERS = TOY.replace(
 
 
 def test_a_helper_whose_name_ends_in_seg_is_neither_a_marker_nor_a_residual():
-    from forgekernel.skills.timeline_probe import unparsed_markers
+    from peregrine_kernel.skills.timeline_probe import unparsed_markers
     assert TOY_HELPERS != TOY
     assert markers(TOY_HELPERS) == markers(TOY)
     assert unparsed_markers(TOY_HELPERS) == []
@@ -576,7 +576,7 @@ def test_the_dropped_calls_are_named_where_the_driver_reads_warnings(tmp_path, m
     the WARN naming the dropped calls lands AFTER the TIMELINE line — the only
     place parse_timeline reads warnings from — so the student and the teacher
     see it in the rendered table, not only in the job log."""
-    from forgekernel.skills import timeline_probe as tp
+    from peregrine_kernel.skills import timeline_probe as tp
     (tmp_path / "kernel.py").write_text(TOY_COMPUTED, encoding="utf-8")
     monkeypatch.setattr(tp, "ROOT", str(tmp_path))
     _mock_benches(tp, monkeypatch,
@@ -599,7 +599,7 @@ def test_an_all_zero_slab_is_the_benchs_failure_not_a_numeric_difference(tmp_pat
     that died at trace time leaves an all-zero slab. That is the bench's own
     verdict (its error text is the one line that says what to fix), not
     "numeric differs, no stamps read"."""
-    from forgekernel.skills import timeline_probe as tp
+    from peregrine_kernel.skills import timeline_probe as tp
     (tmp_path / "kernel.py").write_text(TOY, encoding="utf-8")
     monkeypatch.setattr(tp, "ROOT", str(tmp_path))
     died = {"correctness": {"pass": False, "max_diff": None,
@@ -626,7 +626,7 @@ def test_an_all_zero_slab_is_the_benchs_failure_not_a_numeric_difference(tmp_pat
 
 def test_slab_has_stamps_reads_missing_zero_and_stamped_files(tmp_path, monkeypatch):
     import sys
-    from forgekernel.skills.timeline_probe import slab_has_stamps
+    from peregrine_kernel.skills.timeline_probe import slab_has_stamps
     fake = _FakeNumpy()
     monkeypatch.setitem(sys.modules, "numpy", fake)
     assert slab_has_stamps(str(tmp_path / "absent.npy")) is False
@@ -642,7 +642,7 @@ def test_dry_run_checks_the_stamped_source_with_builtin_compile(tmp_path, monkey
     """--dry compiles the stamped source in-process. It used the stdlib byte-compile
     module, whose name is on the closed-source guard's forbid list — and this file is
     seeded into notes/, which the guard scans before every job."""
-    from forgekernel.skills import timeline_probe as tp
+    from peregrine_kernel.skills import timeline_probe as tp
     (tmp_path / "kernel.py").write_text(TOY, encoding="utf-8")
     monkeypatch.setattr(tp, "ROOT", str(tmp_path))
     assert tp.main(["--mode", "waits", "--dry"]) == 0
@@ -669,7 +669,7 @@ WAIT_SITES = ["state.C.wait_kk.begin", "state.C.wait_kk.end"]
 def _tag(tag, clock):
     """A stamp as the preamble writes it — launch tag << 48 | clock — as the int64
     bit pattern the slab holds (a tag with bit 15 set is a negative cell)."""
-    from forgekernel.skills.timeline_probe import TAG_SHIFT
+    from peregrine_kernel.skills.timeline_probe import TAG_SHIFT
     v = (tag << TAG_SHIFT) | clock
     return v - (1 << 64) if v >= (1 << 63) else v
 
@@ -696,13 +696,13 @@ def test_the_stamp_carries_its_launch_in_the_high_bits():
     stamped, _ = stamp_source(TOY)
     assert "%clock64" in stamped and "%gridid" in stamped
     assert "and.b64 ttl, ttl, 0xFFFFFFFFFFFF" in stamped and "shl.b64 tgl, tgl, 48" in stamped
-    from forgekernel.skills.timeline_probe import CLOCK_MASK, TAG_SHIFT
+    from peregrine_kernel.skills.timeline_probe import CLOCK_MASK, TAG_SHIFT
     assert TAG_SHIFT == 48 and CLOCK_MASK == 0xFFFFFFFFFFFF
     compile(stamped, "stamped.py", "exec")
 
 
 def test_last_launch_keeps_only_the_last_launch_and_the_table_reads_one_launch():
-    from forgekernel.skills.timeline_probe import last_launch
+    from peregrine_kernel.skills.timeline_probe import last_launch
     mixed = _two_launch_slab()
     # read as it was before the tag: rows 10..12 of the earlier launch sit under the
     # last one — a restart, and a slot span across the host gap
@@ -741,7 +741,7 @@ def _two_kernel_slab():
 
 
 def test_each_kernel_of_the_forward_keeps_its_own_last_launch():
-    from forgekernel.skills.timeline_probe import last_launch
+    from peregrine_kernel.skills.timeline_probe import last_launch
     clocks, launches, stale, kernels = last_launch(_two_kernel_slab(), TWO_KERNEL_SITES)
     assert launches == 3 and kernels == 2
     assert stale == 3 * 2 * 2                            # the earlier main's rows 10..12 only
@@ -767,7 +767,7 @@ def _conditional_site_slab():
 
 
 def test_a_site_only_an_earlier_launch_took_is_still_that_kernels_stale_stamp():
-    from forgekernel.skills.timeline_probe import last_launch
+    from peregrine_kernel.skills.timeline_probe import last_launch
     clocks, launches, stale, kernels = last_launch(_conditional_site_slab(), COND_SITES)
     assert (launches, stale, kernels) == (2, 10, 1)      # tied to the kernel by its role
     assert all(clocks[0][4][row][2] == 0 for row in range(10))
@@ -778,7 +778,7 @@ def test_last_launch_numpy_path_reads_the_same_as_the_nested_one():
     np = pytest.importorskip("numpy")
     if not hasattr(np, "asarray"):
         pytest.skip("numpy stand-in")
-    from forgekernel.skills.timeline_probe import last_launch
+    from peregrine_kernel.skills.timeline_probe import last_launch
     mixed = _two_launch_slab()
     nested, *n_counts = last_launch(mixed)
     arr, *a_counts = last_launch(np.array(mixed, dtype=np.int64))
@@ -832,7 +832,7 @@ def test_workload_flag_scopes_the_bench_and_the_launcher_to_one_workload(tmp_pat
     (`--workload <name>`): the benches and the campaign launcher (whose ncu_window
     follows the same variable) read that one workload, so the slab and the span
     denominator agree; without the flag, the representative as before."""
-    from forgekernel.skills import timeline_probe as tp
+    from peregrine_kernel.skills import timeline_probe as tp
     (tmp_path / "kernel.py").write_text(TOY, encoding="utf-8")
     (tmp_path / "eval").mkdir()
     (tmp_path / "eval" / "ncu_run.py").write_text("# the card's campaign launch target\n")
@@ -854,7 +854,7 @@ def test_workload_flag_scopes_the_bench_and_the_launcher_to_one_workload(tmp_pat
 
 
 def test_the_table_is_the_campaign_launchers_last_launch_held_to_its_device_time(tmp_path, monkeypatch, capsys):
-    from forgekernel.skills import timeline_probe as tp
+    from peregrine_kernel.skills import timeline_probe as tp
     (tmp_path / "kernel.py").write_text(TOY, encoding="utf-8")
     (tmp_path / "eval").mkdir()
     (tmp_path / "eval" / "ncu_run.py").write_text("# the card's campaign launch target\n")
@@ -876,7 +876,7 @@ def test_the_table_is_the_campaign_launchers_last_launch_held_to_its_device_time
 
 
 def test_without_a_launch_target_the_benchs_last_launch_is_read_against_its_workload(tmp_path, monkeypatch, capsys):
-    from forgekernel.skills import timeline_probe as tp
+    from peregrine_kernel.skills import timeline_probe as tp
     (tmp_path / "kernel.py").write_text(TOY, encoding="utf-8")
     monkeypatch.setattr(tp, "ROOT", str(tmp_path))
     seen = _mock_stamped_run(tp, monkeypatch, bench_slab=_two_launch_slab())
@@ -888,7 +888,7 @@ def test_without_a_launch_target_the_benchs_last_launch_is_read_against_its_work
 
 
 def test_a_launcher_that_leaves_no_stamps_falls_back_to_the_bench_by_name(tmp_path, monkeypatch, capsys):
-    from forgekernel.skills import timeline_probe as tp
+    from peregrine_kernel.skills import timeline_probe as tp
     (tmp_path / "kernel.py").write_text(TOY, encoding="utf-8")
     (tmp_path / "eval").mkdir()
     (tmp_path / "eval" / "ncu_run.py").write_text("# the card's campaign launch target\n")
@@ -912,7 +912,7 @@ def comb(x):
 
 
 def test_a_two_kernel_forward_reads_both_kernels_from_the_campaign_launch(tmp_path, monkeypatch, capsys):
-    from forgekernel.skills import timeline_probe as tp
+    from peregrine_kernel.skills import timeline_probe as tp
     _, sites = stamp_source(TOY_TWO_KERNELS, "waits")
     assert sites == TWO_KERNEL_SITES
     (tmp_path / "kernel.py").write_text(TOY_TWO_KERNELS, encoding="utf-8")

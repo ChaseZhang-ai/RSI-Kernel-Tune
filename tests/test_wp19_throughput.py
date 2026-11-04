@@ -1,18 +1,20 @@
-"""WP19 过程提速三代: build-cache key narrowing, probe batch manifest, the
+"""WP19 process speedup, third generation: build-cache key narrowing, probe batch manifest, the
 background measurement lane, student/teacher context bounding, the merged
 teacher-validation bounce, session resume, meta-collection merging and the
 cross-generation reading carry.
 
-零行为变化纪律的验收面在这里（契约 C11/C12/C13/C15 全部默认关或默认不变）：
-test_wp19_switches_off_matches_baseline_records 用对照基线（origin/main =
-19e885b，WP24 后布局）语义逐字段钉住主循环输出；所有 WP19 开关在默认态下
-本测试必须原样通过——这是回归，不是承诺。
+The zero-behavior-change acceptance surface lives here (contracts C11/C12/C13/C15
+all default OFF or default-unchanged): test_wp19_switches_off_matches_baseline_records
+pins the main loop's output field by field against baseline semantics (origin/main =
+19e885b, the post-WP24 layout); with every WP19 switch in its default state this file
+must pass exactly as before — that is a regression pin, not a promise.
 
-黄金记录的再生成方法（供独立审查者复核）：checkout origin/main，把本文件的
-_baseline_scenario / _meta_scenario 两个 helper（只调用基线就有的
-run_inner_iteration / run_meta_step / FakeBackend / _ctx）拷进任意测试运行，
-打印 json.dumps(rows, sort_keys=True, default=repr)，与下方 _GOLDEN_* 常量
-逐字节对比——一致即证明黄金取自基线。
+How to regenerate the golden records (for independent review): check out origin/main,
+copy this file's _baseline_scenario / _meta_scenario helpers (they only call
+run_inner_iteration / run_meta_step / FakeBackend / _ctx, which the baseline already
+has) into any test run, print json.dumps(rows, sort_keys=True, default=repr), and
+compare byte for byte with the _GOLDEN_* constants below — equality proves the golden
+was taken from the baseline.
 """
 
 from __future__ import annotations
@@ -23,9 +25,9 @@ import os
 import tempfile
 from pathlib import Path
 
-from forgekernel.inner.trajectory import load_records
-from forgekernel.loop import driver
-from forgekernel.submit import direct
+from peregrine_kernel.inner.trajectory import load_records
+from peregrine_kernel.loop import driver
+from peregrine_kernel.submit import direct
 
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx, _MILESTONE
 from test_wp11_throughput import _WP11_TELEMETRY
@@ -84,7 +86,7 @@ def _baseline_scenario(tmp_path: Path) -> list[dict]:
 def _meta_scenario(tmp_path: Path) -> list[dict]:
     """One meta step (diagnosis then milestone patch) with every switch at its
     default. Returns the meta-trajectory records as dicts."""
-    from forgekernel.meta_trajectory import load_meta_records
+    from peregrine_kernel.meta_trajectory import load_meta_records
     patch = _patching(tmp_path, _MILESTONE_PATCH, _PATCH_REPLY)
     be = FakeBackend([_DIAGNOSIS, patch], [])
     ctx = _ctx(tmp_path, be)
@@ -97,9 +99,10 @@ def _strip(record: dict) -> dict:
 
 
 def test_wp19_switches_off_matches_baseline_records(tmp_path):
-    # 默认态逐字段对照：内循环（KEEP+REVERT）与 meta 步（诊断+补丁）两条场景，
-    # 记录字段与黄金（基线 @19e885b 语义）一一对应。黄金的取材与再生成方法见
-    # 模块 docstring。
+    # Default-state field-by-field comparison: the inner-loop (KEEP+REVERT) and
+    # meta-step (diagnose+patch) scenarios, records matching the golden (baseline
+    # @19e885b semantics) one for one. See the module docstring for how the golden
+    # was taken and how to regenerate it.
     rows = [_strip(r) for r in _baseline_scenario(tmp_path)]
     assert len(rows) == 2
     keep, revert = rows
@@ -221,13 +224,13 @@ _GOLDEN_META = [{'best_after': None,
 
 # --- task 1: the narrowed build-cache key (shell contract) ----------------------
 
-from forgekernel.cardkit import (_WP11_ALLNCU_CASE, _WP11_CACHE_BLOCK,
+from peregrine_kernel.cardkit import (_WP11_ALLNCU_CASE, _WP11_CACHE_BLOCK,
                                  GPU_ENTRY_TEMPLATE)
 
 
 def _rendered_gpu_entry() -> str:
     return GPU_ENTRY_TEMPLATE.format(
-        name="t", suite="forgekernel", arch="sm_100a", clock="", mem_clock="",
+        name="t", suite="peregrine_kernel", arch="sm_100a", clock="", mem_clock="",
         require_lock="0", clock_note="n",
         wp11_cache_block=_WP11_CACHE_BLOCK, wp11_allncu_case=_WP11_ALLNCU_CASE)
 
@@ -267,8 +270,8 @@ _WP19_KEY_HARNESS = r"""
 set -uo pipefail
 harness_script="$1"
 source "$harness_script"
-export FK_BUILD_CACHE="${FK_BUILD_CACHE:-1}" FK_TREE_SHA256="${FK_TREE_SHA256:-shaX}"
-key="$(fk_build_cache_key)" && echo "KEY:$key"
+export PK_BUILD_CACHE="${PK_BUILD_CACHE:-1}" PK_TREE_SHA256="${PK_TREE_SHA256:-shaX}"
+key="$(pk_build_cache_key)" && echo "KEY:$key"
 """
 
 _BASH_ENV = None
@@ -296,10 +299,10 @@ def _key_of(tree: Path, script: Path, **env) -> str:
 
 
 def test_narrowed_key_comment_hit_and_header_miss(tmp_path):
-    # C11 硬验收：改注释必命中（key 不变），改头文件必 miss（key 变）
+    # C11 hard acceptance: a comment change must HIT (key unchanged), a header change must MISS (key changes)
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
-    narrow = {"FK_BUILD_CACHE_KEY_NARROW": 1}
+    narrow = {"PK_BUILD_CACHE_KEY_NARROW": 1}
     k0 = _key_of(tree, script, **narrow)
     # a kernel comment changes: same compiled content -> the SAME narrowed key
     (tree / "kernel.cu").write_text(
@@ -310,9 +313,9 @@ def test_narrowed_key_comment_hit_and_header_miss(tmp_path):
     # iteration): still the same key
     (tree / "notes" / "probe.sh").write_text("echo other\n", encoding="utf-8")
     assert _key_of(tree, script, **narrow) == k0
-    # a different FK_TREE_SHA256 (a fresh tree of the same content): same key —
+    # a different PK_TREE_SHA256 (a fresh tree of the same content): same key —
     # this is the cross-tree/probe-vs-eval reuse the narrowing exists for
-    assert _key_of(tree, script, FK_TREE_SHA256="shaY", **narrow) == k0
+    assert _key_of(tree, script, PK_TREE_SHA256="shaY", **narrow) == k0
     # the quoted include changes: a different compile -> a different key
     (tree / "util.cuh").write_text("#define TILE 64\n", encoding="utf-8")
     assert _key_of(tree, script, **narrow) != k0
@@ -325,31 +328,33 @@ def test_narrowed_key_comment_hit_and_header_miss(tmp_path):
 
 
 def test_narrowed_key_off_by_default_is_the_whole_tree_key(tmp_path):
-    # 默认态：FK_BUILD_CACHE_KEY_NARROW 未设时 key 与旧路径逐字节一致（整树 sha）。
-    # 整树 key 的输入是 FK_TREE_SHA256（runner 对每次 commit 重算）：注释改动
-    # 意味着新 commit、新 tree sha、新 key——旧语义必然 miss；窄化语义下注释
-    # 不进 key，同一编译内容跨 commit 命中。
+    # Default state: with PK_BUILD_CACHE_KEY_NARROW unset the key is byte-identical
+    # to the old path (whole-tree sha). The whole-tree key's input is PK_TREE_SHA256
+    # (recomputed by the runner on every commit): a comment change means a new commit,
+    # a new tree sha, a new key — the old semantics necessarily miss; under the
+    # narrowed semantics comments are not in the key, so the same compiled content
+    # hits across commits.
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
-    k0 = _key_of(tree, script, FK_BUILD_CACHE_KEY_NARROW=1)   # narrowed, original content
+    k0 = _key_of(tree, script, PK_BUILD_CACHE_KEY_NARROW=1)   # narrowed, original content
     k_off = _key_of(tree, script)                             # whole-tree, shaX
     assert k0 != k_off
     (tree / "kernel.cu").write_text(
         "// fk-cuda-cflags: -O3\n// comment changed\n#include \"util.cuh\"\n__global__ void k(){}\n",
         encoding="utf-8")
     # the runner re-addresses the tree after the commit (a fresh payload sha):
-    assert _key_of(tree, script, FK_TREE_SHA256="shaZ") != k_off
+    assert _key_of(tree, script, PK_TREE_SHA256="shaZ") != k_off
     # old semantics: the new commit is a fresh miss; narrowed: the same key
-    assert _key_of(tree, script, FK_BUILD_CACHE_KEY_NARROW=1) == k0
-    assert _key_of(tree, script, FK_TREE_SHA256="shaZ", FK_BUILD_CACHE_KEY_NARROW=1) == k0
+    assert _key_of(tree, script, PK_BUILD_CACHE_KEY_NARROW=1) == k0
+    assert _key_of(tree, script, PK_TREE_SHA256="shaZ", PK_BUILD_CACHE_KEY_NARROW=1) == k0
 
 
 def test_narrowed_key_walk_trouble_falls_back(tmp_path):
-    # C11：任何异常回退整树 key——不可解析 include / 非 .cu / 缺 builder 文件
+    # C11: any anomaly falls back to the whole-tree key — unparseable include / non-.cu / missing builder file
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
     k_off = _key_of(tree, script)
-    narrow = {"FK_BUILD_CACHE_KEY_NARROW": 1}
+    narrow = {"PK_BUILD_CACHE_KEY_NARROW": 1}
     (tree / "missing.cuh").write_text("#define X\n", encoding="utf-8")
     (tree / "kernel.cu").write_text(
         "// fk-cuda-cflags: -O3\n#include \"missing.cuh\"\n__global__ void k(){}\n",
@@ -370,7 +375,7 @@ def test_narrowed_key_walk_trouble_falls_back(tmp_path):
 
 
 def test_narrowed_key_cache_roundtrip_across_trees(tmp_path):
-    # 提纯价值本身：同一编译内容、不同树（不同 FK_TREE_SHA256）-> HIT 免构建
+    # The narrowing value itself: same compiled content, different tree (different PK_TREE_SHA256) -> HIT, no rebuild
     import subprocess
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
@@ -381,17 +386,17 @@ def test_narrowed_key_cache_roundtrip_across_trees(tmp_path):
 set -uo pipefail
 harness_script="$1"; home="$2"; treesha="$3"; store="$4"
 source "$harness_script"
-export FK_BUILD_CACHE=1 FK_BUILD_CACHE_KEY_NARROW=1 FK_TREE_SHA256="$treesha"
+export PK_BUILD_CACHE=1 PK_BUILD_CACHE_KEY_NARROW=1 PK_TREE_SHA256="$treesha"
 export HOME="$home"
 mkdir -p "$HOME"
-key="$(fk_build_cache_key)"
-if FK_CACHE_ENTRY="$(fk_build_cache_brain verify "$store" "$key" 2>/dev/null)" && [ -n "$FK_CACHE_ENTRY" ]; then
+key="$(pk_build_cache_key)"
+if PK_CACHE_ENTRY="$(pk_build_cache_brain verify "$store" "$key" 2>/dev/null)" && [ -n "$PK_CACHE_ENTRY" ]; then
   echo "HIT $key"
 else
   staging="$store/staging.t"
-  rm -rf "$staging"; mkdir -p "$staging/fk_kernel_abc"
-  echo fakeso > "$staging/fk_kernel_abc/fk_kernel_abc.so"
-  fk_build_cache_brain promote "$store" "$key" "$staging" && echo "BUILT $key"
+  rm -rf "$staging"; mkdir -p "$staging/pk_kernel_abc"
+  echo fakeso > "$staging/pk_kernel_abc/pk_kernel_abc.so"
+  pk_build_cache_brain promote "$store" "$key" "$staging" && echo "BUILT $key"
 fi
 """
     h = tmp_path / "roundtrip.sh"
@@ -410,7 +415,7 @@ fi
     assert "HIT" in r2.stdout, r2.stdout[-400:]
     assert r2.stdout.split("HIT ", 1)[1].split()[0] == key_a
     # the tampered artifact is still refused (the manifest recheck is intact)
-    so = store / key_a / "fk_kernel_abc" / "fk_kernel_abc.so"
+    so = store / key_a / "pk_kernel_abc" / "pk_kernel_abc.so"
     so.write_text("tampered\n", encoding="utf-8")
     r3 = subprocess.run(["bash", str(h), str(script), str(home), "shaB", str(store)],
                         capture_output=True, text=True, env=_bash_env(), cwd=tree,
@@ -418,7 +423,7 @@ fi
     assert "BUILT" in r3.stdout                  # a tampered entry is a fresh build
 
 
-# --- task 1 附 (甲G24/乙B7): the inputs manifest memo --------------------------
+# --- task 1 addendum (A-G24/B-B7): the inputs manifest memo --------------------------
 
 def _b7_op(tmp_path: Path, n: int = 2) -> tuple[Path, "direct.SubmitConfig"]:
     import subprocess as sp
@@ -440,7 +445,7 @@ def _b7_op(tmp_path: Path, n: int = 2) -> tuple[Path, "direct.SubmitConfig"]:
 
 
 def test_b7_manifest_memo_hit_and_mtime_miss(tmp_path):
-    # 命中：同一文件第二次同步不再全量读源（mtime/size 未变 → 用 memo 的 sha）
+    # Hit: the second sync of the same file no longer reads the whole source (mtime/size unchanged -> the memo's sha is used)
     d, cfg = _b7_op(tmp_path, n=4)
     store = tmp_path / "store"
     m1 = direct.sync_inputs_to_store(cfg, store)
@@ -464,7 +469,7 @@ def test_b7_manifest_memo_hit_and_mtime_miss(tmp_path):
     assert m2 == m1
     # the sampled recheck (idx 0) reads one store entry; the SOURCES are all memoized
     assert reads["n"] == 1, f"expected 1 sampled store read, got {reads['n']}"
-    # mtime 变更 → miss：重算源 sha 并刷新 memo
+    # mtime change -> miss: recompute the source sha and refresh the memo
     g = d / "eval" / "problem" / "inputs" / "s1" / "g1.safetensors"
     st = g.stat()
     import os as _os
@@ -481,7 +486,7 @@ def test_b7_manifest_memo_hit_and_mtime_miss(tmp_path):
 
 
 def test_b7_sampled_recheck_captures_corruption(tmp_path):
-    # 损坏注入 → 抽样复核捕获（idx 0 恒为抽样位）
+    # Corruption injected -> caught by the sampled recheck (idx 0 is always a sampled slot)
     d, cfg = _b7_op(tmp_path, n=4)
     store = tmp_path / "store"
     m1 = direct.sync_inputs_to_store(cfg, store)
@@ -490,8 +495,9 @@ def test_b7_sampled_recheck_captures_corruption(tmp_path):
     m2 = direct.sync_inputs_to_store(cfg, store)
     assert m2 == m1
     assert (store / sha0).read_text(encoding="utf-8") != "corrupted\n"   # re-copied
-    # restore 仍逐字节校验（安全网原样）：篡改一个非抽样位的 store 条目，
-    # 预检放行、restore 的哈希复核抓住并使整个 job 回退全量 archive
+    # restore still verifies byte for byte (safety net unchanged): tampering with a
+    # non-sampled store entry passes the precheck but restore's hash recheck catches
+    # it and makes the whole job fall back to the full archive
     sha3 = m1[3]["sha256"]
     (store / sha3).write_text("corrupted\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="input store hash mismatch"):
@@ -499,7 +505,7 @@ def test_b7_sampled_recheck_captures_corruption(tmp_path):
 
 
 def test_b7_manifest_corrupt_falls_back_to_full_hash(tmp_path):
-    # manifest 损坏 → 全量重算（memo 永不是正确性单点）
+    # Corrupt manifest -> full recompute (the memo is never a correctness single point)
     d, cfg = _b7_op(tmp_path, n=2)
     store = tmp_path / "store"
     m1 = direct.sync_inputs_to_store(cfg, store)
@@ -521,7 +527,7 @@ def test_b7_manifest_corrupt_falls_back_to_full_hash(tmp_path):
     assert reads["n"] == 3               # 2 sources re-hashed + 1 sampled store recheck
 
 
-# --- task 1 附 (乙B6): fail-fast ------------------------------------------------
+# --- task 1 addendum (B-B6): fail-fast ------------------------------------------------
 
 def test_b6_rendered_template_carries_preflight_and_valid_bash(tmp_path):
     import subprocess
@@ -530,7 +536,7 @@ def test_b6_rendered_template_carries_preflight_and_valid_bash(tmp_path):
     p.write_text(text, encoding="utf-8")
     subprocess.run(["bash", "-n", str(p)], check=True)
     assert "cuda_compile_preflight_maybe" in text
-    assert "FK_CUDA_PRECHECK:-0" in text          # default OFF
+    assert "PK_CUDA_PRECHECK:-0" in text          # default OFF
     # only the timing tasks run it; a probe's cmd task keeps the ordinary path
     assert "perf|all|cardref|allncu) cuda_compile_preflight" in text
 
@@ -576,7 +582,7 @@ def _run_precheck(tmp_path: Path, tree: Path, task: str, **env):
 
 
 def test_b6_preflight_off_by_default(tmp_path):
-    # FK_CUDA_PRECHECK unset: no preflight output at all (the baseline job shape)
+    # PK_CUDA_PRECHECK unset: no preflight output at all (the baseline job shape)
     tree = _precheck_tree(tmp_path, "BROKEN kernel")
     r = _run_precheck(tmp_path, tree, "all")
     assert r.returncode == 0 and "cuda preflight" not in r.stdout
@@ -584,7 +590,7 @@ def test_b6_preflight_off_by_default(tmp_path):
 
 def test_b6_preflight_fails_fast_on_broken_kernel(tmp_path):
     tree = _precheck_tree(tmp_path, "BROKEN kernel")
-    r = _run_precheck(tmp_path, tree, "all", FK_CUDA_PRECHECK=1)
+    r = _run_precheck(tmp_path, tree, "all", PK_CUDA_PRECHECK=1)
     assert r.returncode != 0, r.stdout
     assert "failing before the timing protocol" in r.stdout
     assert "fake error" in r.stderr or "fake error" in r.stdout
@@ -592,7 +598,7 @@ def test_b6_preflight_fails_fast_on_broken_kernel(tmp_path):
 
 def test_b6_preflight_passes_and_continues_on_good_kernel(tmp_path):
     tree = _precheck_tree(tmp_path, "__global__ void k(){}")
-    r = _run_precheck(tmp_path, tree, "all", FK_CUDA_PRECHECK=1)
+    r = _run_precheck(tmp_path, tree, "all", PK_CUDA_PRECHECK=1)
     assert r.returncode == 0, r.stderr
     assert "build OK" in r.stdout
 
@@ -608,8 +614,8 @@ def test_b6_preflight_timeout_is_not_a_failure(tmp_path):
     (tree / "eval" / "problem").joinpath("problem.json").write_text(
         '{"kernel_file": "kernel.cu", "entry": "run"}', encoding="utf-8")
     (tree / "kernel.cu").write_text("__global__ void k(){}\n", encoding="utf-8")
-    r = _run_precheck(tmp_path, tree, "perf", FK_CUDA_PRECHECK=1,
-                      FK_CUDA_PRECHECK_TIMEOUT=1)
+    r = _run_precheck(tmp_path, tree, "perf", PK_CUDA_PRECHECK=1,
+                      PK_CUDA_PRECHECK_TIMEOUT=1)
     assert r.returncode == 0, r.stderr
     assert "timed out" in r.stdout
 
@@ -617,7 +623,7 @@ def test_b6_preflight_timeout_is_not_a_failure(tmp_path):
 def test_b6_preflight_skips_non_timing_tasks_and_python_kernels(tmp_path):
     tree = _precheck_tree(tmp_path, "BROKEN kernel")
     for task in ("cmd", "ncu", "ref"):
-        r = _run_precheck(tmp_path, tree, task, FK_CUDA_PRECHECK=1)
+        r = _run_precheck(tmp_path, tree, task, PK_CUDA_PRECHECK=1)
         assert r.returncode == 0, (task, r.stdout)
         assert "cuda preflight" not in r.stdout
     # a python kernel: the pre-pass is a CUDA-build concept, never runs
@@ -629,7 +635,7 @@ def test_b6_preflight_skips_non_timing_tasks_and_python_kernels(tmp_path):
     (pytree / "eval" / "problem").joinpath("problem.json").write_text(
         '{"kernel_file": "kernel.py", "entry": "run"}', encoding="utf-8")
     (pytree / "kernel.py").write_text("x = 1\n", encoding="utf-8")
-    r = _run_precheck(tmp_path, pytree, "all", FK_CUDA_PRECHECK=1)
+    r = _run_precheck(tmp_path, pytree, "all", PK_CUDA_PRECHECK=1)
     assert r.returncode == 0 and "cuda preflight" not in r.stdout
 
 
@@ -667,7 +673,7 @@ def test_b6_driver_ast_preflight_silent_on_good_kernel_and_cuda_mode(tmp_path, c
 
 # --- task 2: the probe batch manifest -------------------------------------------
 
-from forgekernel.loop.parse import parse_student_turn, parse_probe_verdict
+from peregrine_kernel.loop.parse import parse_student_turn, parse_probe_verdict
 
 
 def test_t2_manifest_marker_parses_and_probe_request_wins():
@@ -682,8 +688,8 @@ def test_t2_manifest_marker_parses_and_probe_request_wins():
 def test_t2_batch_mode_markers_and_isolation():
     mode = driver._probe_batch_mode(["a.py", "b.py"])
     assert mode.startswith("cmd:")
-    assert 'echo "=== fk-probe-batch begin: a.py ==="' in mode
-    assert 'echo "=== fk-probe-batch end: b.py rc=$? ==="' in mode
+    assert 'echo "=== pk-probe-batch begin: a.py ==="' in mode
+    assert 'echo "=== pk-probe-batch end: b.py rc=$? ==="' in mode
     # the clock reset re-stated inline (the cmd task's child bash has no
     # gpu_entry functions) + a settle sleep between scripts
     assert mode.count("-rgc") == 2 and mode.count("-rmc") == 2
@@ -758,8 +764,8 @@ def test_t2_meta_batch_one_job_per_script_verdicts(tmp_path):
     driver.run_meta_step(ctx)
     submits = [m for c in be.calls if c[0] == "gpu" for m in [c[1]]]
     assert len(submits) == 1, f"4->1: one batch job, got {submits}"
-    assert submits[0].startswith("cmd:") and "fk-probe-batch" in submits[0]
-    from forgekernel.meta_trajectory import load_meta_records
+    assert submits[0].startswith("cmd:") and "pk-probe-batch" in submits[0]
+    from peregrine_kernel.meta_trajectory import load_meta_records
     recs = load_meta_records(ctx.meta_status_path)
     assert recs[0].probe_rounds == 1                       # one round = one job
     readings = recs[0].probe_readings
@@ -776,7 +782,7 @@ def test_t2_meta_batch_single_script_dnf_does_not_condemn(tmp_path):
         + driver._PROBE_BATCH_END.format(path="s1.py", rc="0") + "\n")
     ctx, be, scripts = _manifest_meta_ctx(tmp_path, batch_log)
     driver.run_meta_step(ctx)
-    from forgekernel.meta_trajectory import load_meta_records
+    from peregrine_kernel.meta_trajectory import load_meta_records
     recs = load_meta_records(ctx.meta_status_path)
     readings = recs[0].probe_readings
     # a no-verdict script is "ran, no reading" (the standing semantics — no
@@ -797,7 +803,7 @@ def test_t2_meta_batch_wholesale_failure_falls_back(tmp_path):
     driver.run_meta_step(ctx)
     submits = [c[1] for c in be.calls if c[0] == "gpu"]
     assert len(submits) == 3                    # 1 failed batch + 2 fallback jobs
-    assert submits[0].startswith("cmd:") and "fk-probe-batch" in submits[0]
+    assert submits[0].startswith("cmd:") and "pk-probe-batch" in submits[0]
     assert submits[1] == "cmd:python3 s0.py" and submits[2] == "cmd:python3 s1.py"
 
 
@@ -821,7 +827,7 @@ def test_t2_student_manifest_is_not_a_new_submit_surface(tmp_path, capsys):
 
 
 def test_t2_default_state_leaves_existing_probes_alone(tmp_path):
-    # 默认不强制回归钉：普通 PROBE_REQUEST 仍是单脚本单 job
+    # No forced regression pin by default: an ordinary PROBE_REQUEST is still one script, one job
     be = FakeBackend(
         ["PROBE_REQUEST: p.py\n", REC("D2.3", 2.6)],
         ["PROBE PASS max_diff=0.1\n", EVAL(2.6), NCU])
@@ -833,12 +839,12 @@ def test_t2_default_state_leaves_existing_probes_alone(tmp_path):
 
 
 def test_t2_wp19_apply_cfg_reads_probe_manifest(tmp_path, monkeypatch):
-    from forgekernel.loop.driver import _wp19_apply_cfg
+    from peregrine_kernel.loop.driver import _wp19_apply_cfg
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     _wp19_apply_cfg(ctx)
     assert ctx.probe_manifest is True                     # default: mechanism on
-    import forgekernel.paths as paths_mod
+    import peregrine_kernel.paths as paths_mod
     gcfg = tmp_path / "global_config"
     gcfg.mkdir(exist_ok=True)
     (gcfg / "loop.toml").write_text("[loop]\nprobe_manifest = false\n", encoding="utf-8")
@@ -851,7 +857,7 @@ def test_t2_wp19_apply_cfg_reads_probe_manifest(tmp_path, monkeypatch):
 
 
 def test_t2_kb_manifest_one_job_all_pass_certifies(tmp_path):
-    from forgekernel.meta_trajectory import load_meta_records
+    from peregrine_kernel.meta_trajectory import load_meta_records
     (tmp_path / "s0.py").write_text("print('probe')\n", encoding="utf-8")
     (tmp_path / "s1.py").write_text("print('probe')\n", encoding="utf-8")
     (tmp_path / "batch.txt").write_text("s0.py\ns1.py\n", encoding="utf-8")
@@ -866,7 +872,7 @@ def test_t2_kb_manifest_one_job_all_pass_certifies(tmp_path):
     probes = {}
     res = driver._kb_certify_rounds(ctx, "diagnosis text", probes)
     submits = [c[1] for c in be.calls if c[0] == "gpu"]
-    assert len(submits) == 1 and "fk-probe-batch" in submits[0]   # 4->1
+    assert len(submits) == 1 and "pk-probe-batch" in submits[0]   # 4->1
     assert res.certified is True and res.probe == "batch.txt"
     assert set(probes) == {"s0.py", "s1.py"}                      # per-script bookkeeping
 
@@ -908,7 +914,7 @@ def test_t2_kb_manifest_fail_feedback_and_fallback(tmp_path):
     (ws2 / "s1.py").write_text("print('probe')\n", encoding="utf-8")
     res2 = driver._kb_certify_rounds(ctx2, "diagnosis text", {})
     submits2 = [c[1] for c in be2.calls if c[0] == "gpu"]
-    assert submits2[0].startswith("cmd:") and "fk-probe-batch" in submits2[0]
+    assert submits2[0].startswith("cmd:") and "pk-probe-batch" in submits2[0]
     assert submits2[1] == "cmd:python3 s0.py"               # the old path, per script
 
 
@@ -959,7 +965,7 @@ def test_t5_gate_flags_bounce_once_then_accept(tmp_path):
 
 
 def test_t5_merged_blocks_are_the_same_text(tmp_path):
-    # 弹回文本只重组不新增：each block's wording is exactly the standing one
+    # The bounce text only recombines, never adds: each block's wording is exactly the standing one
     bad = "cause_class: R1\ndeficient_locus: D1.1\nreopen_price: none\n"
     good = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"
     ctx, be = _t5_ctx(tmp_path, [bad, good])
@@ -1007,7 +1013,7 @@ def test_t5_r1_gates_cofire_in_one_prompt(tmp_path):
 
 # --- task 4: student digest binding (C13) + teacher NCU bounding ----------------
 
-from forgekernel.inner.trajectory import IterationRecord, append_record
+from peregrine_kernel.inner.trajectory import IterationRecord, append_record
 
 
 def _t4_records(ctx, n=6):
@@ -1086,7 +1092,7 @@ def test_t4_student_prompt_binding_swap_is_render_local(tmp_path):
 
 
 def test_t4_teacher_ncu_bound_off_is_full_history(tmp_path, monkeypatch):
-    import forgekernel.inner.ncu as ncu_mod
+    import peregrine_kernel.inner.ncu as ncu_mod
     seen = {}
     monkeypatch.setattr(ncu_mod, "render_ncu_trace",
                         lambda recs: seen.setdefault("n", len(recs)) or "")
@@ -1098,7 +1104,7 @@ def test_t4_teacher_ncu_bound_off_is_full_history(tmp_path, monkeypatch):
 
 
 def test_t4_teacher_ncu_bound_best_plus_tail(tmp_path, monkeypatch):
-    import forgekernel.inner.ncu as ncu_mod
+    import peregrine_kernel.inner.ncu as ncu_mod
     seen = {}
     monkeypatch.setattr(ncu_mod, "render_ncu_trace",
                         lambda recs: seen.setdefault("iters", [r.iter for r in recs]) or "")
@@ -1115,7 +1121,7 @@ def test_t4_teacher_ncu_bound_best_plus_tail(tmp_path, monkeypatch):
 
 
 def test_t4_wp19_apply_cfg_reads_context_keys(tmp_path, monkeypatch):
-    import forgekernel.paths as paths_mod
+    import peregrine_kernel.paths as paths_mod
     gcfg = tmp_path / "global_config"
     gcfg.mkdir(exist_ok=True)
     (gcfg / "loop.toml").write_text(
@@ -1137,7 +1143,7 @@ def test_t4_wp19_apply_cfg_reads_context_keys(tmp_path, monkeypatch):
 
 # --- task 3: the background measurement lane (C15) ------------------------------
 
-from forgekernel.loop.driver import BackgroundLane, LaneTask, _lane_temperature_check
+from peregrine_kernel.loop.driver import BackgroundLane, LaneTask, _lane_temperature_check
 
 
 def _task(kind="confirm", log_box=None):
@@ -1332,25 +1338,25 @@ def test_t6_agent_claude_script_flags_gated_by_env(tmp_path):
     stub.chmod(0o755)
     r0 = subprocess.run(
         ["bash", str(script), "m", "", "10"], capture_output=True, text=True,
-        env={**_bash_env(), "FK_CLAUDE_BIN": f"bash {stub}", "FK_AGENT_PY": "echo"},
+        env={**_bash_env(), "PK_CLAUDE_BIN": f"bash {stub}", "PK_AGENT_PY": "echo"},
         timeout=30)
     assert "--session-id" not in r0.stdout and "--resume" not in r0.stdout
     r1 = subprocess.run(
         ["bash", str(script), "m", "", "10"], capture_output=True, text=True,
-        env={**_bash_env(), "FK_CLAUDE_BIN": f"bash {stub}", "FK_AGENT_PY": "echo",
-             "FK_AGENT_SESSION_ID": "s1", "FK_AGENT_SESSION_MODE": "create"},
+        env={**_bash_env(), "PK_CLAUDE_BIN": f"bash {stub}", "PK_AGENT_PY": "echo",
+             "PK_AGENT_SESSION_ID": "s1", "PK_AGENT_SESSION_MODE": "create"},
         timeout=30)
     assert "--session-id s1" in r1.stdout
     r2 = subprocess.run(
         ["bash", str(script), "m", "", "10"], capture_output=True, text=True,
-        env={**_bash_env(), "FK_CLAUDE_BIN": f"bash {stub}", "FK_AGENT_PY": "echo",
-             "FK_AGENT_SESSION_ID": "s1", "FK_AGENT_SESSION_MODE": "resume"},
+        env={**_bash_env(), "PK_CLAUDE_BIN": f"bash {stub}", "PK_AGENT_PY": "echo",
+             "PK_AGENT_SESSION_ID": "s1", "PK_AGENT_SESSION_MODE": "resume"},
         timeout=30)
     assert "--resume s1" in r2.stdout
 
 
 def _t6_backend(tmp_path, outputs):
-    from forgekernel.loop.cli import RealBackend
+    from peregrine_kernel.loop.cli import RealBackend
     be = RealBackend.__new__(RealBackend)
     be.op = "demo"
     be.workspace = tmp_path
@@ -1382,19 +1388,19 @@ def test_t6_session_file_lifecycle_create_then_resume(tmp_path):
     import uuid as _uuid
     be = _t6_backend(tmp_path, ["first", "second"])
     env1 = be._session_env("teacher")
-    assert env1["FK_AGENT_SESSION_MODE"] == "create"
-    sid = env1["FK_AGENT_SESSION_ID"]
+    assert env1["PK_AGENT_SESSION_MODE"] == "create"
+    sid = env1["PK_AGENT_SESSION_ID"]
     env2 = be._session_env("teacher")
-    assert env2 == {"FK_AGENT_SESSION_ID": sid, "FK_AGENT_SESSION_MODE": "resume"}
+    assert env2 == {"PK_AGENT_SESSION_ID": sid, "PK_AGENT_SESSION_MODE": "resume"}
     # a distinct scope gets its own session
     be.agent_session_scope = "meta1"
     env3 = be._session_env("teacher")
-    assert env3["FK_AGENT_SESSION_MODE"] == "create"
-    assert env3["FK_AGENT_SESSION_ID"] != sid
+    assert env3["PK_AGENT_SESSION_MODE"] == "create"
+    assert env3["PK_AGENT_SESSION_ID"] != sid
     # roles never share a session file
     be.agent_session_scope = "meta0"
     env4 = be._session_env("student")
-    assert env4["FK_AGENT_SESSION_MODE"] == "create"
+    assert env4["PK_AGENT_SESSION_MODE"] == "create"
 
 
 def test_t6_resume_off_is_env_free(tmp_path):
@@ -1413,8 +1419,8 @@ def test_t6_retry_reenters_session_with_error_tail(tmp_path):
     assert len(be._prompts) == 2
     cmd1, prompt1 = be._prompts[0]
     cmd2, prompt2 = be._prompts[1]
-    assert "FK_AGENT_SESSION_MODE=create" in cmd1
-    assert "FK_AGENT_SESSION_MODE=resume" in cmd2      # the retry re-enters
+    assert "PK_AGENT_SESSION_MODE=create" in cmd1
+    assert "PK_AGENT_SESSION_MODE=resume" in cmd2      # the retry re-enters
     assert "## Previous attempt failed" in prompt2 and "boom" in prompt2
     assert "## Previous attempt failed" not in prompt1
 
@@ -1425,14 +1431,14 @@ def test_t6_resume_off_retry_prompt_is_untouched(tmp_path):
     out = be.run_agent("do the thing", role="teacher")
     assert out == "recovered"
     cmd2, prompt2 = be._prompts[1]
-    assert "FK_AGENT_SESSION" not in cmd2
+    assert "PK_AGENT_SESSION" not in cmd2
     assert "## Previous attempt failed" not in prompt2   # byte-identical baseline retry
 
 
 def test_t6_offline_layers_ride_every_resumed_turn(tmp_path):
     # the four offline layers are rewritten per turn by agent_policy.install —
     # resume does not bypass it: the install+notice still run before the prompt
-    from forgekernel.loop.agent_policy import AgentPolicy
+    from peregrine_kernel.loop.agent_policy import AgentPolicy
     calls = []
     be = _t6_backend(tmp_path, ["ok"])
     class _P:
@@ -1460,12 +1466,12 @@ def test_t6_capability_verification_recorded():
     assert "FLAGS-OK" in r.stdout or "PASS" in r.stdout
 
 
-# --- task 7: cross-generation carry扩件 + the ref-reading reconciliation --------
+# --- task 7: cross-generation carry extension + the ref-reading reconciliation --------
 
 def _t7_census_text(ms=2.34, sha=None):
     src = "def run(x):\n    return x\n"
     sha = sha or driver._reference_kernel_sha(src)
-    return (f"<!-- fk-ref-census\nreference_kernel_sha256: {sha}\n"
+    return (f"<!-- pk-ref-census\nreference_kernel_sha256: {sha}\n"
             f"parent_best_sha: abc123\nwindow: device\nmedian_ms: {ms}\n"
             f'ratios: [1.01, 1.02]\npricing_log_sha256: deadbeef\n-->\n'
             "## stall_ledger\n\nSTALL LEDGER BODY\n\n"
@@ -1496,7 +1502,7 @@ def test_t7_census_parse_roundtrip():
 
 
 def test_t7_reconcile_three_states():
-    # 三态：带吻合采纳 / 失配回退 / 无 carry 现状
+    # Three states: adopt on agreement / fall back on mismatch / no-carry status quo
     assert driver.reconcile_carried_ref_reading(2.34, 2.35) == "adopt"     # 0.43% < 3%
     assert driver.reconcile_carried_ref_reading(2.34, 2.34 * 1.05) == "refute"
     assert driver.reconcile_carried_ref_reading(2.34, 2.34 * 0.95) == "refute"
@@ -1584,7 +1590,7 @@ def test_t7_reconcile_refute_runs_full_suite(tmp_path, monkeypatch):
 
 
 def test_t7_no_carry_is_byte_identical_baseline(tmp_path):
-    # 无 carry 现状: without a carry census the ref pricing path runs untouched
+    # No-carry status quo: without a carry census the ref pricing path runs untouched
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.ref_price_dir = None                        # the baseline early return
     driver._ensure_ref_pricing(ctx)                 # must not raise, must not log carry
@@ -1663,10 +1669,10 @@ def test_t7_self_evolve_writes_seven_artifacts(tmp_path, monkeypatch):
 # --- task 8: the small items bundle ---------------------------------------------
 
 def test_t8_floor_stop_exit_prints_the_composition(tmp_path, capsys, monkeypatch):
-    # 乙N-B15: the floor_stop door prints the same wall-clock table as the others
+    # B-N-B15: the floor_stop door prints the same wall-clock table as the others
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
-    from forgekernel.inner.trajectory import IterationRecord as IR, append_record as _ar
+    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record as _ar
     _ar(ctx.status_path, IR(iter=1, decision_id="D1", change="c", correctness=True,
                             verdict="KEEP", metric_before=2.0, bwd_median_ms=1.9,
                             device_median_ms=1.9, eval_job_s=100.0))
@@ -1679,11 +1685,11 @@ def test_t8_floor_stop_exit_prints_the_composition(tmp_path, capsys, monkeypatch
 
 
 def test_t8_run_level_buckets_print_and_calibrate(tmp_path, capsys):
-    # 乙B9: the recon/distill/lever + pricing/timeline/confirm buckets print;
+    # B-B9: the recon/distill/lever + pricing/timeline/confirm buckets print;
     # the calibration suggestion is output, never applied
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
-    from forgekernel.inner.trajectory import IterationRecord as IR, append_record as _ar
+    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record as _ar
     _ar(ctx.status_path, IR(iter=1, decision_id="D1", change="c", correctness=True,
                             verdict="KEEP", metric_before=2.0, bwd_median_ms=1.9,
                             device_median_ms=1.9, eval_job_s=10.0))
@@ -1713,7 +1719,7 @@ def test_t8_teacher_bucket_lands_outside_records(tmp_path):
 
 
 def test_t8_prewarm_runs_without_the_build_cache(tmp_path):
-    # 丙T6: the prewarm is decoupled — it runs with FK_BUILD_CACHE unset
+    # C-T6: the prewarm is decoupled — it runs with PK_BUILD_CACHE unset
     import subprocess
     tree = tmp_path / "tree"
     (tree / "eval" / "problem").mkdir(parents=True)
@@ -1727,8 +1733,8 @@ set -uo pipefail
 harness_script="$1"; workdir="$2"
 source "$harness_script"
 cd "$workdir"
-unset FK_BUILD_CACHE 2>/dev/null || true
-out="$(fk_build_cache_prewarm)"; rc=$?
+unset PK_BUILD_CACHE 2>/dev/null || true
+out="$(pk_build_cache_prewarm)"; rc=$?
 echo "RC=$rc OUT=[$out]"
 """
     h = tmp_path / "prewarm.sh"
@@ -1742,7 +1748,7 @@ echo "RC=$rc OUT=[$out]"
 
 
 def test_t8_ssh_lzma_preset_is_3():
-    # 乙B10: the ssh delivery compresses at preset 3 (transparent to the host)
+    # B-B10: the ssh delivery compresses at preset 3 (transparent to the host)
     import inspect
     src = inspect.getsource(direct)
     assert "lzma.compress(payload, preset=3)" in src

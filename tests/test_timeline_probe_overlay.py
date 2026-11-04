@@ -6,8 +6,8 @@ import subprocess
 
 import pytest
 
-from forgekernel.loop import cli
-from forgekernel.loop.driver import BackendError
+from peregrine_kernel.loop import cli
+from peregrine_kernel.loop.driver import BackendError
 
 
 def _git(ws, *args, inp=None):

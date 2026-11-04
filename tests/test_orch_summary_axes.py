@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from test_orch_tools import _big_page  # noqa: E402
 
-from forgekernel.skills import orch_tools as OT  # noqa: E402
+from peregrine_kernel.skills import orch_tools as OT  # noqa: E402
 
 def _spin(k: int) -> str:
     a = 0xa000 + 0x20 * k

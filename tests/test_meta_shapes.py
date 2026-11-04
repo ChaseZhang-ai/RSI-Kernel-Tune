@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.loop import meta_shapes as ms
-from forgekernel.loop.driver import (
+from peregrine_kernel.loop import meta_shapes as ms
+from peregrine_kernel.loop.driver import (
     _LEVER_PRICING_CMD,
     _banked_timeline_of,
     _latest_timeline,
@@ -400,7 +400,7 @@ def test_a_reference_workload_job_that_never_ran_is_no_attempt(tmp_path):
 
 
 def test_a_reference_workload_job_that_failed_after_launch_waits_for_a_changed_tree(tmp_path):
-    from forgekernel.loop.driver import BackendError
+    from peregrine_kernel.loop.driver import BackendError
     ctx = _ref_wl_ctx(tmp_path, [BackendError("poll timeout after 7200s")])
     assert _ref_workload_pricing(ctx, "wl3", "plateau") is None
     assert "verdict=job-failed" in (ctx.evidence_dir / "ref_price_wl3.attempt1.log").read_text()

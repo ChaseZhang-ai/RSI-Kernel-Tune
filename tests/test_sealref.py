@@ -1,4 +1,4 @@
-"""The sealed SOURCE reference (forgekernel.sealref) on a generated task card: the card,
+"""The sealed SOURCE reference (peregrine_kernel.sealref) on a generated task card: the card,
 the recon tree, the key, the fence, the guards."""
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import sealref
+from peregrine_kernel import sealref
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE_EVAL = REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval"
+TEMPLATE_EVAL = REPO_ROOT / "src" / "peregrine_kernel" / "card_template" / "eval"
 KERNEL = ("from launch_helpers import launch_the_scaled_product_kernel\n\n\n"
           "def run(hidden_states, weight, output):\n"
           "    launch_the_scaled_product_kernel(hidden_states, weight, output)\n")
@@ -52,19 +52,19 @@ def solution(**over) -> dict:
 
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch) -> Path:
-    monkeypatch.setenv("FORGEKERNEL_RUNS_DIR", str(tmp_path / "runs"))
-    monkeypatch.setenv("FORGEKERNEL_LOCK_DIR", str(tmp_path / "locks"))
-    monkeypatch.delenv("FORGEKERNEL_OPERATORS_DIR", raising=False)
-    monkeypatch.setenv("FK_DELIVERY", "local")
-    monkeypatch.setenv("FK_GPU", "0")
+    monkeypatch.setenv("PEREGRINE_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("PEREGRINE_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("PEREGRINE_OPERATORS_DIR", raising=False)
+    monkeypatch.setenv("PK_DELIVERY", "local")
+    monkeypatch.setenv("PK_GPU", "0")
     return tmp_path
 
 
 @pytest.fixture
 def base(repo: Path) -> Path:
     shutil.copytree(REPO_ROOT / "meta", repo / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "forgekernel" / "card_template",
-                    repo / "src" / "forgekernel" / "card_template")
+    shutil.copytree(REPO_ROOT / "src" / "peregrine_kernel" / "card_template",
+                    repo / "src" / "peregrine_kernel" / "card_template")
     return repo
 
 
@@ -72,10 +72,10 @@ def new_card(base: Path, sol: dict | None = None, *, git: bool = False,
              definition: str = "rmsnorm") -> tuple[Path, Path, str]:
     """A generated task card (taskcard.write_card) with the reference sealed into it:
     sealref.write_trees, the loop.toml of a blackbox run, the recon tree next to it."""
-    from forgekernel import judge as judge_mod, taskcard
-    from forgekernel.localenv import load_machine
-    from forgekernel.runs import new_run
-    from forgekernel.task import load_task
+    from peregrine_kernel import judge as judge_mod, taskcard
+    from peregrine_kernel.localenv import load_machine
+    from peregrine_kernel.runs import new_run
+    from peregrine_kernel.task import load_task
     sol = sol or solution()
     d = base / "tasks" / "rmsnorm"
     (d / "reference").mkdir(parents=True, exist_ok=True)
@@ -121,7 +121,7 @@ def _closed_ref():
 
 def _key(tree: Path) -> str:
     import tomllib
-    return tomllib.loads((tree / "submit.local.toml").read_text())["env"]["FK_REF_KEY"]
+    return tomllib.loads((tree / "submit.local.toml").read_text())["env"]["PK_REF_KEY"]
 
 
 def test_card_times_a_sealed_source_reference(base: Path) -> None:
@@ -130,7 +130,7 @@ def test_card_times_a_sealed_source_reference(base: Path) -> None:
     assert problem["reference_impl"] == {
         "kind": "sealed", "name": f"sealed source reference {module}",
         "path": "../../ref_bin/ref_payload.bin", "module": module, "entry": "run", "dps": True,
-        "key_env": "FK_REF_KEY", "languages": ["triton"]}
+        "key_env": "PK_REF_KEY", "languages": ["triton"]}
     assert problem["time_reference"] is True            # a real kernel: timed in-job
     assert (card / "eval" / "closed_ref.py").read_text() == (TEMPLATE_EVAL / "closed_ref.py").read_text()
     loop = tomllib_load(card / "loop.toml")["loop"]
@@ -181,15 +181,15 @@ def test_the_key_is_gitignored_in_both_trees_and_the_payload_committed(
                                check=True).stdout.split()
         assert "ref_bin/ref_payload.bin" in files and "submit.local.toml" not in files
         assert (tree / "submit.local.toml").is_file()
-    from forgekernel.submit.config import load_config
+    from peregrine_kernel.submit.config import load_config
     for tree in (card, ref):
-        assert load_config(tree).env["FK_REF_KEY"] == _key(card)
+        assert load_config(tree).env["PK_REF_KEY"] == _key(card)
 
 
 def test_the_agent_policy_denies_both_keys(base: Path, monkeypatch) -> None:
-    from forgekernel.loop import agent_policy
+    from peregrine_kernel.loop import agent_policy
     card, ref, _ = new_card(base)
-    monkeypatch.setenv("FORGEKERNEL_OPERATORS_DIR", str(card.parent))
+    monkeypatch.setenv("PEREGRINE_OPERATORS_DIR", str(card.parent))
     secrets = agent_policy.secret_files_for(base, "rmsnorm", [ref])
     assert card / "submit.local.toml" in secrets and ref / "submit.local.toml" in secrets
 
@@ -205,7 +205,7 @@ def test_recon_tree_gpu_entry_and_fresh_start(base: Path) -> None:
     for task in ("check)", "crosscheck)", "bench|ref)", "ncu)", "sealref)", "cmd)"):
         assert f"    {task}" in entry
     assert "binref" not in entry.split('case "$TASK" in')[-1]
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     assert fresh_start_contamination(card, card / "milestone.md", card / "student" / "status.jsonl",
                                      card / "meta_status.jsonl", ref, evidence_dir=card / "evidence") == []
 
@@ -219,7 +219,7 @@ def _guard(tree: Path, cmd: str) -> str:
 
 def test_guards(base: Path) -> None:
     card, ref, module = new_card(base)
-    refused_both = ["python3 eval/closed_ref.py digest ref_bin/ref_payload.bin", "echo $FK_REF_KEY",
+    refused_both = ["python3 eval/closed_ref.py digest ref_bin/ref_payload.bin", "echo $PK_REF_KEY",
                     "cat /proc/self/environ", "printenv", "python3 -c 'import os; print(os.environ)'",
                     "cat submit.local.toml | grep _REF_KEY", "ls ~/.triton/cache", "cat /tmp/x.ttgir",
                     "TRITON_KERNEL_DUMP=1 python3 eval/bench.py", "python3 -c 'import linecache'",
@@ -248,8 +248,8 @@ def test_the_loops_own_jobs_pass_both_guards_with_notes_seeded_as_the_loop_seeds
     recon tree, the recon toolkit and blackbox-guard.sh into the recon tree; every job
     the loop itself sends must pass, a probe reaching for the reference must not."""
     from types import SimpleNamespace
-    from forgekernel import binref
-    from forgekernel.loop import driver
+    from peregrine_kernel import binref
+    from peregrine_kernel.loop import driver
     card, ref, module = new_card(base)
     stub = SimpleNamespace(commit=lambda *a, **k: None)
     driver._seed_pricing_toolkits(card, stub)
@@ -274,7 +274,7 @@ def test_the_loops_own_jobs_pass_both_guards_with_notes_seeded_as_the_loop_seeds
 
 def test_the_generic_routes_to_the_key_are_words_of_the_cmd_guard(base: Path) -> None:
     card, ref, _ = new_card(base)
-    for cmd in ("python3 -c \"import os; print(os.getenv('FK_' + 'REF' + '_KEY'))\"",
+    for cmd in ("python3 -c \"import os; print(os.getenv('PK_' + 'REF' + '_KEY'))\"",
                 "cat /proc/$PPID/cmdline", "cat /proc/self/e?viron", "cat ref_bin/ref_payload.key"):
         assert _guard(card, cmd) == "REFUSED", ("card", cmd)
         assert _guard(ref, cmd) == "REFUSED", ("recon tree", cmd)
@@ -305,12 +305,12 @@ def test_the_key_leaves_the_job_environment_before_any_task_runs(base: Path,
     env = {k: v for k, v in os.environ.items()
            if k not in ("LB_SM_CLOCK_MHZ", "LB_MEM_CLOCK_MHZ", "LB_REQUIRE_CLOCK_LOCK")}
     env.update({"PATH": f"{bin_dir}:{os.environ['PATH']}", "LB_SM_CLOCK_MHZ": "", "LB_CLOCK_SETTLE_S": "0",
-                "TASK_TIMEOUT": "60", "FK_REF_KEY": key})
+                "TASK_TIMEOUT": "60", "PK_REF_KEY": key})
     proc = subprocess.run(["bash", str(tree / "gpu_entry.sh"), "cmd", f"python3 notes/dump.py {out}"],
                           cwd=tree, env=env, capture_output=True, text=True, timeout=120)
     assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
     seen = json.loads(out.read_text())
-    assert "FK_REF_KEY" not in seen["env"] and not any(key in v for v in seen["env"].values())
+    assert "PK_REF_KEY" not in seen["env"] and not any(key in v for v in seen["env"].values())
     assert key not in " ".join(seen["argv"]) and key not in proc.stdout + proc.stderr
     kf = tree / sealref.KEY_FILE
     assert kf.read_text().strip() == key and (kf.stat().st_mode & 0o777) == 0o600
@@ -369,13 +369,13 @@ def card_lb(base: Path, monkeypatch):
 
 def test_the_bench_loads_the_sealed_reference_with_the_job_key_and_drops_it(card_lb, monkeypatch) -> None:
     lbm, problem, card, module = card_lb
-    monkeypatch.delenv("FK_REF_KEY", raising=False)
-    with pytest.raises(PermissionError, match="FK_REF_KEY"):
+    monkeypatch.delenv("PK_REF_KEY", raising=False)
+    with pytest.raises(PermissionError, match="PK_REF_KEY"):
         lbm._impl(problem, "ref")
-    monkeypatch.setenv("FK_REF_KEY", _key(card))
+    monkeypatch.setenv("PK_REF_KEY", _key(card))
     fn, dps = lbm._impl(problem, "ref")
     import os
-    assert dps is True and "FK_REF_KEY" not in os.environ   # decoded: the key is gone
+    assert dps is True and "PK_REF_KEY" not in os.environ   # decoded: the key is gone
     out = []
     fn("x", "w", out)
     assert out == [("secret_tiling_choice_for_the_product", "x", "w")]
@@ -386,7 +386,7 @@ def test_the_bench_loads_the_sealed_reference_with_the_job_key_and_drops_it(card
     ("import torch\n\ndef run(hidden_states, weight, output):\n    output.copy_(hidden_states * weight)\n", False),
     ("import closed_ref\n", True),
     ("P = open('../ref_bin/ref_payload.bin').read()\n", True),
-    ("import os\nK = os.environ.get('FK_' + 'REF_KEY')\n", True),
+    ("import os\nK = os.environ.get('PK_' + 'REF_KEY')\n", True),
     ("import linecache\n", True),
     ("import sys\nsys.settrace(lambda *a: None)\n", True),
     ("def run(*a):\n    return run.__globals__\n", True),
@@ -404,7 +404,7 @@ def test_the_fence(card_lb, src, fenced) -> None:
 
 def test_the_timeline_probes_preamble_passes_the_sealed_fence(card_lb) -> None:
     lbm, problem, card, module = card_lb
-    from forgekernel.skills import timeline_probe
+    from peregrine_kernel.skills import timeline_probe
     pre = timeline_probe.stamped_preamble()
     (card / "kernel.py").write_text(pre + "\n\ndef run(*a):\n    pass\n")
     assert lbm.kernel_fence(problem) is None

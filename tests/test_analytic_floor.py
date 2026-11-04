@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 
-from forgekernel.loop import analytic_floor as af
+from peregrine_kernel.loop import analytic_floor as af
 
 
 def _problem(**over) -> dict:
@@ -84,7 +84,7 @@ def test_attention_causal_charges_the_masked_half() -> None:
 
 
 def test_backward_attention_charges_the_conservative_chain_factor() -> None:
-    # WP15 (丙WP15-T5): the fwd-only floor sat below half an attention bwd's real
+    # WP15 (C-WP15-T5): the fwd-only floor sat below half an attention bwd's real
     # work (recompute + dgrad + wgrad ≈ 2.5x fwd) — the teacher's headroom was a
     # fiction and floor_stop could never fire on a bwd card. A backward-named
     # problem now charges the fwd chain x2 (conservative: the real chain is

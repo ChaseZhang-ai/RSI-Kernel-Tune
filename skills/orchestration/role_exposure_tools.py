@@ -385,7 +385,7 @@ def align_roles(ref: dict, student: dict, names=("ref", "student")) -> str:
 
 def _stall_tools():
     try:
-        from forgekernel.skills import stall_tools
+        from peregrine_kernel.skills import stall_tools
         return stall_tools
     except ImportError:
         try:
@@ -397,7 +397,7 @@ def _stall_tools():
 
 def _orch():
     try:
-        from forgekernel.skills import orch_tools
+        from peregrine_kernel.skills import orch_tools
         return orch_tools
     except ImportError:
         try:
@@ -409,7 +409,7 @@ def _orch():
 
 def _sass():
     try:
-        from forgekernel.skills import sass_tools
+        from peregrine_kernel.skills import sass_tools
         return sass_tools
     except ImportError:
         try:
@@ -421,7 +421,7 @@ def _sass():
 
 def _pm_tools():
     try:
-        from forgekernel.skills import pm_timeline_tools
+        from peregrine_kernel.skills import pm_timeline_tools
         return pm_timeline_tools
     except ImportError:
         try:

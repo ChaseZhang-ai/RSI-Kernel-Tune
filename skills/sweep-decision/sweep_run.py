@@ -34,7 +34,7 @@ bench carries a reference, inverted device ms otherwise) is best among those
 whose delta clears the job's own noise floor — the same reading discipline as
 the pricing table.
 
-Successive-Halving (WP16, 乙A4; spec key `"halving": true`): after each
+Successive-Halving (WP16, B-A4; spec key `"halving": true`): after each
 completed round but the last, the worst-performing half of the surviving
 variants is eliminated (correctness-dead variants were already kicked; `base`
 is never eliminated) and the freed budget goes to the survivors — the recipe's
@@ -74,7 +74,7 @@ import time
 try:                                    # vendored flat in notes/ (notes/ on sys.path)
     import lever_pricing_run as lpr
 except ImportError:                     # the harness imports it as a skill
-    from forgekernel.skills import lever_pricing_run as lpr
+    from peregrine_kernel.skills import lever_pricing_run as lpr
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_KERNEL = "kernel.py"
@@ -162,7 +162,7 @@ def main(argv=None) -> int:
     t0 = time.monotonic()
     try:
         rnd = 0
-        # WP16 (乙A4): a halving pass keeps its recipe's rounds, and the budget
+        # WP16 (B-A4): a halving pass keeps its recipe's rounds, and the budget
         # the eliminated variants free up buys the survivors extra interleaved
         # rounds (capped at 2x the recipe's rounds — the budget guard bounds it
         # either way).
@@ -248,7 +248,7 @@ def _pct(x):
 
 
 def halving_cut(order, ok, dev, ratio, dead, eliminated) -> set:
-    """WP16 (乙A4): the worst half of the still-timed variants, NOISE-GATED.
+    """WP16 (B-A4): the worst half of the still-timed variants, NOISE-GATED.
     `base` and the already-gone are never touched; fewer than four survivors
     cut nobody; a first round with a single reading per variant cuts nobody
     (one draw names no rank); and a variant sitting within the job's own noise

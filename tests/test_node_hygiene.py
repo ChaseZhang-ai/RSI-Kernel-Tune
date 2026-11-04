@@ -8,7 +8,7 @@ PROCESS GROUP and report a GPU that stays held as NODE-DIRTY).
 import os
 import time
 
-import forgekernel.skills.timeline_probe as tp
+import peregrine_kernel.skills.timeline_probe as tp
 
 
 def test_timeline_sh_timeout_kills_the_whole_process_group(tmp_path, monkeypatch):

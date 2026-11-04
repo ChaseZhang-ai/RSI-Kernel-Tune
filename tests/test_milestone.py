@@ -1,6 +1,6 @@
 """Tests for milestone schema validation (formatted, not free-form)."""
 
-from forgekernel.milestone import is_valid, parse_milestone_dag, validate_milestone
+from peregrine_kernel.milestone import is_valid, parse_milestone_dag, validate_milestone
 
 VALID = """\
 # demo_op milestone
@@ -182,7 +182,7 @@ def test_parse_milestone_dag_extracts_dependencies():
 
 def test_parse_milestone_dag_feeds_compute_resume():
     # changing D1.0 (the foundation decision) invalidates everything downstream of it
-    from forgekernel.resume import compute_resume
+    from peregrine_kernel.resume import compute_resume
     dag = parse_milestone_dag(_DAG_MS)
     plan = compute_resume(dag, ["D1.0"])
     assert plan.resume_after is None  # D1.0 is the first decision -> full restart
@@ -194,23 +194,23 @@ def test_parse_milestone_dag_empty_section():
 
 
 def test_parse_target_ms_reads_machine_readable_marker():
-    from forgekernel.milestone import parse_target_ms
+    from peregrine_kernel.milestone import parse_target_ms
     ms = "# op milestone\n## 0. target and equivalence judge\ntarget_ms: 0.1852\nequivalence judge: ...\n## 1. x\n"
     assert parse_target_ms(ms) == 0.1852
 
 
 def test_parse_target_ms_none_without_marker():
-    from forgekernel.milestone import parse_target_ms
+    from peregrine_kernel.milestone import parse_target_ms
     assert parse_target_ms("# op\n## 0. target\nmeasured performance of the original op.\n") is None
 
 
 def test_parse_target_ms_fullwidth_colon():
-    from forgekernel.milestone import parse_target_ms
+    from peregrine_kernel.milestone import parse_target_ms
     assert parse_target_ms("target_ms：0.40") == 0.40
 
 
 def test_parse_target_window_reads_the_annotation():
-    from forgekernel.milestone import parse_target_window
+    from peregrine_kernel.milestone import parse_target_window
     ms = "## 0. target\ntarget_ms: 0.26\ntarget_window: device\n"
     assert parse_target_window(ms) == "device"
     assert parse_target_window("target_ms: 0.26\ntarget_window: e2e\n") == "e2e"
@@ -219,14 +219,14 @@ def test_parse_target_window_reads_the_annotation():
 def test_parse_target_window_none_on_pre_annotation_milestones():
     # every milestone written before the gate_window knob is e2e-anchored by
     # construction; the reader treats absence as e2e instead of refusing history
-    from forgekernel.milestone import parse_target_window
+    from peregrine_kernel.milestone import parse_target_window
     assert parse_target_window("target_ms: 0.26\n") is None
     assert parse_target_window("target_window: wallclock\n") is None
 
 
 
 def test_parse_verify_tags_reads_the_per_decision_declaration():
-    from forgekernel.milestone import parse_verify_tags
+    from peregrine_kernel.milestone import parse_verify_tags
     text = """# demo milestone
 
 ## 3. Decision details
@@ -560,7 +560,7 @@ x
 
 
 def test_parse_dependency_line_attributes_ids_to_the_nearest_arrow():
-    from forgekernel.milestone import parse_dependency_line
+    from peregrine_kernel.milestone import parse_dependency_line
     assert parse_dependency_line("⇐ D0.1 | ⊗ D0.15 | ⇒ D0.11, D0.18") == (
         {"D0.1"}, {"D0.15"}, {"D0.11", "D0.18"})
     assert parse_dependency_line("⇐ D0.1. ⇒ D0.7 (resident in smem)") == ({"D0.1"}, set(), {"D0.7"})
@@ -580,13 +580,13 @@ def test_parse_milestone_dag_only_follows_upstream_arrows():
 def test_parse_milestone_dag_no_longer_closes_over_the_whole_file():
     # regression (grouped-gemm): every id on the line was an edge, so a patch of D0.2
     # reached D0.1 through its own ⇒ and the "DAG" invalidated everything
-    from forgekernel.resume import compute_resume
+    from peregrine_kernel.resume import compute_resume
     plan = compute_resume(parse_milestone_dag(_ARROW_MS), ["D0.3"])
     assert plan.resume_after == "D0.2" and plan.invalidated == ["D0.3", "D0.4"]
 
 
 def test_validator_requires_an_upstream_edge_on_non_root_decisions_when_authoring():
-    from forgekernel.milestone import dependency_warnings, validate_milestone
+    from peregrine_kernel.milestone import dependency_warnings, validate_milestone
     assert not [v for v in validate_milestone(_ARROW_MS, authoring=True) if "upstream" in v]
     broken = _ARROW_MS.replace("- Depends on: D0.2, D0.3", "- Depends on: ⇒ D0.5")
     v = validate_milestone(broken, authoring=True)
@@ -600,7 +600,7 @@ def test_validator_requires_an_upstream_edge_on_non_root_decisions_when_authorin
 
 
 def test_validator_rejects_a_dependency_cycle_when_authoring():
-    from forgekernel.milestone import dependency_warnings, validate_milestone
+    from peregrine_kernel.milestone import dependency_warnings, validate_milestone
     cyclic = _ARROW_MS.replace("- Depends on: ⇒ D0.2, D0.3", "- Depends on: ⇐ D0.4")
     assert any("dependency cycle" in x for x in validate_milestone(cyclic, authoring=True))
     assert not any("dependency cycle" in x for x in validate_milestone(cyclic))
@@ -608,7 +608,7 @@ def test_validator_rejects_a_dependency_cycle_when_authoring():
 
 
 def test_dependency_warnings_flag_one_sided_downstream_claims():
-    from forgekernel.milestone import dependency_warnings
+    from peregrine_kernel.milestone import dependency_warnings
     # D0.1 ⇒ D0.2 and D0.2 ⇐ D0.1 agree; D0.2 ⇒ D0.4 is echoed by the legacy line;
     # add a ⇒ nobody echoes
     ms = _ARROW_MS.replace("- Depends on: ⇒ D0.2, D0.3", "- Depends on: ⇒ D0.2, D0.3, D0.4")
@@ -682,7 +682,7 @@ def test_gate_lines_admit_only_the_four_verifiable_classes_at_authoring():
 
 
 def test_gate_blocks_see_the_three_gate_spellings():
-    from forgekernel.milestone import gate_blocks
+    from peregrine_kernel.milestone import gate_blocks
     text = ("**M0 Gate**：correctness\n- a [VERIFY: sass-derived] foo\n\n"
             "M1 Gate:\n- b [VERIFY: sass-derived] bar\n\n"
             "### M2 Gate (final ruling)\n- c [VERIFY: sass-derived] baz\n\n## 4. Known dead ends\nx\n")
@@ -754,7 +754,7 @@ def test_shape_grandfathering_does_not_cover_a_class_change_or_a_dropped_price()
 
 # --- pre-scheduled downgrades (POLICY §3 ③ is a failure response, not a step) ---
 
-from forgekernel.milestone import downgrade_schedule_violations  # noqa: E402
+from peregrine_kernel.milestone import downgrade_schedule_violations  # noqa: E402
 
 PLACEHOLDER_ORDER = (
     "Construction order: ① launchable skeleton → whole-machine smoke;\n"

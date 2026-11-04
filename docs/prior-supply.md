@@ -23,7 +23,7 @@ skill and the driver; this page is the three rules reviewers hold the line on.
   yesterday's measurement — the briefs inject it as hypothesis-reuse material
   only, and the pricing discipline re-prices on the current tree as usual.
 
-## 2. Reference replacement (ref 换血) and "strongest legal reference"
+## 2. Reference replacement (a full ref transfusion) and "strongest legal reference"
 
 - A self-evolution chain starts from the strongest **legal** reference available
   in its lane: expert-seeded starts (a competition-grade kernel as generation 0's

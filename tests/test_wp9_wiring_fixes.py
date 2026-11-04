@@ -19,11 +19,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from test_arch_probe import _MS_DUAL, _authored, _distill_ctx  # noqa: E402
 from test_loop_driver import EVAL, NCU, REC, _E2EFake, FakeBackend, _ctx  # noqa: E402
 
-from forgekernel.loop.driver import (  # noqa: E402
+from peregrine_kernel.loop.driver import (  # noqa: E402
     _bindings, _phantom_gap_reanchor, _reanchor_memo, _run_arch_probes,
     _timeline_on, run_two_layer,
 )
-from forgekernel.taskcard import timeline_probe_auto, write_loop_toml
+from peregrine_kernel.taskcard import timeline_probe_auto, write_loop_toml
 
 
 # --- C1 -------------------------------------------------------------------------------

@@ -1,6 +1,6 @@
-"""Tests for the card's bench engine (src/forgekernel/card_template/eval/benchkit.py):
+"""Tests for the card's bench engine (src/peregrine_kernel/card_template/eval/benchkit.py):
 definition axes/shapes, the random input draws, workload views and the meta tools'
-workload scoping (FK_LB_WORKLOAD_SCOPE) across the bench and the NCU window.
+workload scoping (PK_LB_WORKLOAD_SCOPE) across the bench and the NCU window.
 
 CPU only. Needs torch (skipped without it). The task suite's correctness/timing
 runtime is covered by test_task_suite.py / test_multi_workload_perf.py / the fresh
@@ -19,7 +19,7 @@ torch = pytest.importorskip("torch")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location(
-    "fk_template_benchkit", REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval" / "benchkit.py")
+    "pk_template_benchkit", REPO_ROOT / "src" / "peregrine_kernel" / "card_template" / "eval" / "benchkit.py")
 lb = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(lb)
 
@@ -139,7 +139,7 @@ def test_named_scope_is_tagged_in_the_eval_json_and_is_no_gate(tmp_path, monkeyp
                                                                capsys) -> None:
     """A scoped run's JSON carries ``workload_scope``; the loop's gate parser refuses it:
     a meta reading, never a gate."""
-    from forgekernel.loop.parse import parse_eval
+    from peregrine_kernel.loop.parse import parse_eval
     p = _group_problem()
     p["definition"] = {**RMS_DEF,
                        "reference": (
@@ -168,7 +168,7 @@ def test_named_scope_is_tagged_in_the_eval_json_and_is_no_gate(tmp_path, monkeyp
 
 
 def test_ncu_window_profiles_the_scoped_workload(tmp_path, monkeypatch, capsys) -> None:
-    """eval/ncu_run.py follows FK_LB_WORKLOAD_SCOPE, so a meta tool's NCU (stall pricing,
+    """eval/ncu_run.py follows PK_LB_WORKLOAD_SCOPE, so a meta tool's NCU (stall pricing,
     the role pass, ablation timing, the timeline launcher) reads the workload its bench
     timed; unset, a group card profiles its representative as before."""
     built: list = []

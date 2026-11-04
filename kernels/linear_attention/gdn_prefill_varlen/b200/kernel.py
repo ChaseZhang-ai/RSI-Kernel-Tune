@@ -2735,7 +2735,7 @@ def _gdn_kernel(
                                         (cg // GATE_SLOTS) % 2)
                 _seg("wgb.gate.full.end", cg)
 
-                # D0.11 "让位阶梯" rung r1, now at the D2.1 setting
+                # D0.11 "yield ladder" rung r1, now at the D2.1 setting
                 # S16_SEGS = 4: the state passes through in four batches of 32
                 # columns (one `Ld32x32b` each) instead of two of 64. B1 is the
                 # peak segment of WG B (the budget line is "non-accumulator

@@ -25,7 +25,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import FakeBackend, _MILESTONE, _ctx  # noqa: E402
 
-from forgekernel.task import TaskError, load_task, read_global_config  # noqa: E402
+from peregrine_kernel.task import TaskError, load_task, read_global_config  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -78,7 +78,7 @@ def test_global_models_toml_opt_in_merges(tmp_path, monkeypatch):
     (gcfg / "loop.toml").write_text(
         '[target]\nratio = 1.2\ntiming = "device"\n'
         '[budget]\nhours = 1\nmax_meta = 1\nreference_hours = 1\n', encoding="utf-8")
-    import forgekernel.task as task_mod
+    import peregrine_kernel.task as task_mod
     monkeypatch.setattr(task_mod, "global_config_dir", lambda: gcfg)
     problems: list[str] = []
     cfg = read_global_config(problems)
@@ -151,7 +151,7 @@ def _distill_prompt(tmp_path, **fields) -> str:
     """The exact composition run_distill_step renders, captured without the
     schema machinery: render + prior-input post-process, the two lines the
     driver applies around the template."""
-    from forgekernel.loop.driver import (_apply_prior_input, _bindings,
+    from peregrine_kernel.loop.driver import (_apply_prior_input, _bindings,
                                          _distill_prompt_path, render_prompt)
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
@@ -188,7 +188,7 @@ def test_distill_prompt_section_is_gone_when_no_lane_is_on(tmp_path):
 
 
 def test_recon_prompt_states_flip_with_the_lanes(tmp_path):
-    from forgekernel.loop.driver import _recon_prompt
+    from peregrine_kernel.loop.driver import _recon_prompt
     ctx = _ctx(tmp_path, FakeBackend([], []))
     off = _recon_prompt(ctx)
     assert "## Prior inputs" not in off and "PRIOR-INPUT" not in off
@@ -231,7 +231,7 @@ def test_student_prompt_never_carries_a_prior_token(tmp_path):
     """The red line: the prior faces exist only in the teacher briefs. The
     student template does not mention the tokens, so the shared binding table
     cannot leak them."""
-    from forgekernel.loop.driver import _bindings
+    from peregrine_kernel.loop.driver import _bindings
     ctx = _ctx(tmp_path, FakeBackend([], []))
     student = (ctx.meta_dir / "student_prompt.md").read_text(encoding="utf-8")
     for tok in ("{PRIOR_ART}", "{CARRY}", "{PRIORS_INDEX}", "PRIOR-INPUT"):
@@ -263,7 +263,7 @@ def _probe_ctx(tmp_path, be, ms_text: str, *, candidates: int, rounds: int):
 def test_bracket_three_probes_three(tmp_path):
     """The widened bracket: three candidates, budget for all three -> three jobs,
     all three readings stamped, fastest wins."""
-    from forgekernel.loop.driver import _run_arch_probes
+    from peregrine_kernel.loop.driver import _run_arch_probes
     be = FakeBackend([], [f"ARCH_PROBE arch_{i} ms=0.2{i}\n" for i in range(3)])
     ctx = _probe_ctx(tmp_path, be, _ms_n(3), candidates=3, rounds=3)
     _run_arch_probes(ctx)
@@ -280,7 +280,7 @@ def test_bracket_three_probes_three(tmp_path):
 def test_bracket_beyond_budget_degrades_and_records(tmp_path):
     """candidates > rounds: the bracket clamps to the budget, the cut is
     recorded in the stamp, and no job beyond the budget is bought."""
-    from forgekernel.loop.driver import _run_arch_probes
+    from peregrine_kernel.loop.driver import _run_arch_probes
     be = FakeBackend([], ["ARCH_PROBE arch_0 ms=0.30\n", "ARCH_PROBE arch_1 ms=0.20\n"])
     ctx = _probe_ctx(tmp_path, be, _ms_n(3), candidates=3, rounds=2)
     _run_arch_probes(ctx)
@@ -296,7 +296,7 @@ def test_bracket_beyond_budget_degrades_and_records(tmp_path):
 def test_default_bracket_two_keeps_the_wp6_rendering(tmp_path):
     """candidates left at the default 2: the WP6 two-candidate stamp line for
     line — the decision evidence does not change shape behind WP6's back."""
-    from forgekernel.loop.driver import _run_arch_probes
+    from peregrine_kernel.loop.driver import _run_arch_probes
     be = FakeBackend([], ["ARCH_PROBE arch_0 ms=0.200000\n",
                           "ARCH_PROBE arch_1 ms=0.150000\n"])
     ctx = _probe_ctx(tmp_path, be, _ms_n(2), candidates=2, rounds=2)
@@ -313,7 +313,7 @@ def test_default_bracket_two_keeps_the_wp6_rendering(tmp_path):
 
 
 def test_bracket_wider_than_listed_probes_all_listed(tmp_path):
-    from forgekernel.loop.driver import _run_arch_probes
+    from peregrine_kernel.loop.driver import _run_arch_probes
     be = FakeBackend([], [f"ARCH_PROBE arch_{i} ms=0.1{i}\n" for i in range(3)])
     ctx = _probe_ctx(tmp_path, be, _ms_n(3), candidates=5, rounds=5)
     _run_arch_probes(ctx)
@@ -365,7 +365,7 @@ def _carry_fixture(tmp_path, monkeypatch):
         json.dumps({"op_family": "myop", "lever": "double_pump", "class": "harmful"}) + "\n"
         + json.dumps({"op_family": "otherop", "lever": "swizzle", "class": "null"}) + "\n",
         encoding="utf-8")
-    from forgekernel.task import load_task as _load_task
+    from peregrine_kernel.task import load_task as _load_task
     return se, _load_task(task, kb_root=tmp_path), run
 
 
@@ -420,13 +420,13 @@ def test_next_generation_without_run_writes_no_carry(tmp_path, monkeypatch):
 # -- the repo prior library and the KB queue -----------------------------------------
 
 def test_kb_lint_scans_candidates_md_clean():
-    from forgekernel.loop.kb_lint import lint_file
+    from peregrine_kernel.loop.kb_lint import lint_file
     findings = lint_file(REPO / "hw_kb" / "CANDIDATES.md")
     assert findings == []
 
 
 def test_priors_library_carries_no_code_bodies():
-    """The 花括号 spot-check as a standing test: a decisions-only library has no
+    """The curly-brace spot-check as a standing test: a decisions-only library has no
     braces (markdown aside) and no def/class lines — prose decision maps."""
     for f in sorted((REPO / "priors").rglob("*.md")):
         text = f.read_text(encoding="utf-8")
@@ -483,9 +483,9 @@ def test_build_priors_help_and_hermetic_write(tmp_path):
 
 def _loaded(tmp_path, extra_agent: str, *, opname="demoop", carry=False):
     """A loaded task (directory ``opname``), its run (snapshot taken), and the
-    loaded task's dir — the shapes write_loop_toml consumes at `forge run`."""
+    loaded task's dir — the shapes write_loop_toml consumes at `peregrine run`."""
     import shutil
-    from forgekernel.runs import new_run
+    from peregrine_kernel.runs import new_run
     d = _task_dir(tmp_path, extra_agent)
     if opname != "demoop":
         renamed = tmp_path / opname
@@ -500,7 +500,7 @@ def _loaded(tmp_path, extra_agent: str, *, opname="demoop", carry=False):
 
 def test_card_emits_the_prior_keys_and_points_at_the_snapshot(tmp_path):
     import tomllib
-    from forgekernel import taskcard
+    from peregrine_kernel import taskcard
     task, run = _loaded(tmp_path, 'prior_survey = true\nprior_art = "prior-art/op.md"\n')
     opdir = tmp_path / "opdir"; opdir.mkdir()
     out = taskcard.write_loop_toml(run, task, opdir, deny=[])
@@ -518,7 +518,7 @@ def test_card_emits_carry_into_the_snapshot_not_the_repo_tree(tmp_path):
     task -> the card names the snapshot's carry (which exists), never a
     repo-level tasks/<name>/carry that gen0 owns."""
     import tomllib
-    from forgekernel import taskcard
+    from peregrine_kernel import taskcard
     task, run = _loaded(tmp_path, "", opname="foo-g2", carry=True)
     opdir = tmp_path / "opdir"; opdir.mkdir()
     out = taskcard.write_loop_toml(run, task, opdir, deny=[])
@@ -533,7 +533,7 @@ def test_card_emits_carry_into_the_snapshot_not_the_repo_tree(tmp_path):
 
 def test_a_task_with_a_carry_emits_the_prior_keys_too(tmp_path):
     import tomllib
-    from forgekernel import taskcard
+    from peregrine_kernel import taskcard
     task, run = _loaded(tmp_path, 'prior_survey = true\nprior_art = "prior-art/op.md"\n',
                         carry=True)
     opdir = tmp_path / "opdir"; opdir.mkdir()
@@ -548,7 +548,7 @@ def test_card_without_prior_keys_is_byte_unchanged(tmp_path):
     """No keys, no carry -> none of the three lines: the generated file is the
     pre-WP8 shape."""
     import tomllib
-    from forgekernel import taskcard
+    from peregrine_kernel import taskcard
     task, run = _loaded(tmp_path, "")
     opdir = tmp_path / "opdir"; opdir.mkdir()
     text = taskcard.write_loop_toml(run, task, opdir, deny=[]).read_text()
@@ -558,10 +558,10 @@ def test_card_without_prior_keys_is_byte_unchanged(tmp_path):
 
 
 def test_cli_carry_default_prefers_the_run_snapshot(tmp_path, monkeypatch):
-    """Resume / --harvest-only / a bare `forge loop` has no card write: the
+    """Resume / --harvest-only / a bare `peregrine loop` has no card write: the
     default resolves the run snapshot's carry first (the generation's own
     record), falling back to the repo tree beside the task."""
-    import forgekernel.loop.cli as loop_cli
+    import peregrine_kernel.loop.cli as loop_cli
     run_ops = tmp_path / "runs" / "r1" / "operators"
     monkeypatch.setattr(loop_cli, "operators_dir", lambda *a, **k: run_ops)
     # no snapshot carry anywhere -> the repo tree beside the task

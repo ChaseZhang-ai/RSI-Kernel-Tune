@@ -213,3 +213,41 @@ def test_ordinary_imports_are_not_flagged():
 def test_the_import_scan_still_names_the_direct_form():
     assert gr.library_findings("import flashinfer\n", "kernel.py") == \
         ["imports the kernel library flashinfer"]
+
+
+# --- BUG-C3-01: the torch C++ API spellings -------------------------------------------
+
+@pytest.mark.parametrize("call, name", [
+    ("torch::matmul(x, x)", "matmul"),
+    ("at::mm(x, y)", "mm"),
+    ("torch::nn::functional::linear(x, y)", "linear"),
+    ("at::softmax(w, -1)", "softmax"),
+    ("c10::bmm(a, b)", "bmm"),
+    ("torch::ops::my_gemm(x, y)", None),        # a registered op, named as itself
+])
+def test_the_torch_cpp_api_spellings_are_caught(call, name):
+    src = f"#include <torch/extension.h>\nvoid run() {{ {call}; }}\n"
+    found = gr.library_findings(src, "kernel.cu")
+    assert found, call
+    if name is not None:
+        assert any(f"torch C++ API ({name})" in f for f in found), found
+
+
+def test_the_cpp_kernel_importing_cublas_is_still_caught():
+    src = ("#include <torch/extension.h>\n"
+           "void run(at::Tensor x) {\n"
+           "    at::Tensor y = torch::matmul(x, x);  // the whole computation\n"
+           "}\n")
+    assert any("torch C++ API (matmul)" in f for f in gr.library_findings(src, "kernel.cu"))
+
+
+def test_ordinary_cuda_sources_are_not_flagged():
+    src = ("#include <torch/extension.h>\n"
+           "__global__ void k(float* x) { x[threadIdx.x] = x[threadIdx.x] * 2.0f; }\n"
+           "void run() {\n"
+           "    sum_mm(x, n);                                  // the student's own\n"
+           "    auto s = at::cuda::getCurrentCUDAStream();     // plumbing\n"
+           "    c10::cuda::CUDACachingAllocator::raw_alloc(n); // plumbing\n"
+           "    x[torch_i::2];\n"
+           "}\n")
+    assert gr.library_findings(src, "kernel.cu") == []

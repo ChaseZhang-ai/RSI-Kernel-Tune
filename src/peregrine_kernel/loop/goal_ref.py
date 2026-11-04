@@ -414,6 +414,14 @@ _PY_LIBS = ("flashinfer", "sgl_kernel", "vllm", "deep_gemm", "flash_attn", "flas
             "xformers", "transformer_engine", "apex", "liger_kernel", "torchao",
             "fbgemm_gpu", "tensorrt_llm", "bitsandbytes", "cudnn", "nvmath", "cublas")
 _LIBS_ALT = "|".join(_PY_LIBS)
+# The torch calls a kernel of its own does not make -- one name table for the Python
+# (torch.matmul) and the C++ (torch::matmul, at::mm, c10::...) spellings, so the two
+# stay in step. \b before the call name: `sum_mm(` must not read as `mm(`.
+_TORCH_CALLS = ("matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "_scaled_mm",
+                "softmax", "log_softmax", "layer_norm", "rms_norm", "group_norm",
+                "conv\\w*", "cdist", "linear", "scaled_dot_product_attention",
+                "embedding", "silu", "gelu")
+_CALLS_ALT = "|".join(_TORCH_CALLS)
 # One import statement may carry many names (`import os, flashinfer`) and may be
 # parenthesised across lines (the tokenizer below joins the continuation lines into one
 # logical line) -- the import-line scan finds the library anywhere in the name list,
@@ -424,14 +432,16 @@ _LIB_PATTERNS = (
      "imports the kernel library {0}"),
     (re.compile(r"^\s*from\s+(" + _LIBS_ALT + r")\b", re.M),
      "imports the kernel library {0}"),
-    (re.compile(r"\btorch\s*\.\s*(matmul|mm|bmm|addmm|baddbmm|einsum|_scaled_mm|softmax|"
-                r"layer_norm|rms_norm|group_norm|conv\w*|cdist)\s*\("),
+    (re.compile(r"\btorch\s*\.\s*\b(" + _CALLS_ALT + r")\s*\("),
      "computes with torch.{0}"),
-    (re.compile(r"\b(?:F|torch\s*\.\s*nn\s*\.\s*functional)\s*\.\s*(linear|scaled_dot_product_attention|"
-                r"softmax|log_softmax|layer_norm|rms_norm|group_norm|conv\w*|"
-                r"embedding|silu|gelu)\s*\("),
+    (re.compile(r"\b(?:F|torch\s*\.\s*nn\s*\.\s*functional)\s*\.\s*\b(" + _CALLS_ALT + r")\s*\("),
      "computes with torch.nn.functional.{0}"),
     (re.compile(r"\btorch\s*\.\s*ops\s*\.\s*(\w+)"), "calls the registered op torch.ops.{0}"),
+    # the C++ spellings: the same calls through the at/c10 namespaces, however deeply
+    # qualified (torch::nn::functional::linear), and the registered ops
+    (re.compile(r"\b(?:torch|at|c10)\s*::\s*(?:\w+\s*::\s*)*?\b(" + _CALLS_ALT + r")\s*\("),
+     "computes with the torch C++ API ({0})"),
+    (re.compile(r"\btorch\s*::\s*ops\s*::\s*(\w+)"), "calls the registered op torch::ops::{0}"),
     (re.compile(r"[\w\)\]][ \t]*@[ \t]*[\w\(]"), "uses the @ (matmul) operator"),
     (re.compile(r"\b(cublas\w*|cudnn\w*|cublasLt\w*)\s*\("), "calls {0}"),
     (re.compile(r"#\s*include\s*[<\"](cublas\w*|cudnn\w*)"), "includes {0}"),

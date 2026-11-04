@@ -13,8 +13,9 @@ card's ``eval/ncu_run.py`` and reports the direction the WP9 rationale predicts:
     rationale: that is the ``--cache-control none`` revert signal.
   * ``compute_sol_pct`` / ``gpu__time_active.sum`` — base-clock vs the board's
     clock state moves the SOL denominator and the time; no direction is asserted
-    here (a board-locked card and a free-running card land differently), the
-    numbers are reported so the regime shift is visible.
+    here (a board-locked card and a free-running card land differently). They
+    ride the collected NCU_METRICS set for a manual look at the raw ncu output;
+    this script reads and reports only the l2_hit_rate_pct verdict pair.
 
 Variance guard (the WP9 fallback rule): each regime is sampled ``--repeats``
 times; if the warm reading's spread exceeds 2x the flush spread, the verdict

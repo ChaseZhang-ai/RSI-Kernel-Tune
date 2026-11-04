@@ -518,9 +518,13 @@ def _correctness_error(corr_obj: dict) -> str:
         # the bench's own verdict already names the first failing (group, output);
         # the ranked rows add the RUNNERS-UP the first-fail stop never reached.
         return f"{err}; worst checks: {detail}" if detail and detail not in err else err
+    # The per-tensor detail dicts are read BY NAME FROM THE BENCH'S OWN JSON, not
+    # from a hardcoded ("dq", "dk", "dv") (SEED-47): the triple is attention's
+    # vocabulary, and a numeric FAIL of any other operator silently degraded to
+    # "no failure detail" — the exact historical accident the WP11 error band was
+    # built to end. JSON object order (insertion) keeps the bench's own order.
     parts = []
-    for name in ("dq", "dk", "dv"):
-        det = corr_obj.get(name)
+    for name, det in corr_obj.items():
         if not isinstance(det, dict):
             continue
         if det_err := det.get("error"):

@@ -110,10 +110,12 @@ def test_digest_shows_spread_but_never_the_raw_arrays():
     digest = build_digest([rec], {"value": 0.5})
     shown = digest["achieved"]["workloads"]
     assert shown, "the digest keeps the per-workload breakdown"
-    for w in shown:
+    # BUG-C11-01: the medians pin used to compare each digest row with itself
+    # (always true). Compare each row against the source workload it came from.
+    for w, s in zip(shown, ev.workloads):
         assert "device_readings_ms" not in w
         assert "ref_device_readings_ms" not in w
-        assert w["device_median_ms"] == w["device_median_ms"]  # medians stay
+        assert w["device_median_ms"] == s["device_median_ms"]  # medians stay
     assert shown[0]["device_spread_pct"] == ev.workloads[0]["device_spread_pct"]
 
 

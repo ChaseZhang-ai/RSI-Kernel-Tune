@@ -286,7 +286,11 @@ class PrecisionRecorder:
             self.bases.add(basis)
             outs, refs, truths = _as_list(outputs), _as_list(ref_outputs), _as_list(truth)
             names = list(names) if names else [f"output[{i}]" for i in range(len(outs))]
-            for i, (y, r, t) in enumerate(zip(outs, refs, truths)):
+            # strict: a length mismatch between the student's outputs and the
+            # reference/truth lists must not silently truncate to the shortest side
+            # (one output against two truths used to judge and read "pass"); the
+            # mismatch lands in the handler below as an explicit unavailable row.
+            for i, (y, r, t) in enumerate(zip(outs, refs, truths, strict=True)):
                 self._row(case, names[i] if i < len(names) else f"output[{i}]", y, r, t,
                           basis, stress)
         except Exception as e:  # noqa: BLE001 — measuring must never break the judge

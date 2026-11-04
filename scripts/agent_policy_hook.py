@@ -160,8 +160,12 @@ def main(argv: list[str]) -> int:
         return 2
     try:
         event = json.loads(sys.stdin.read() or "{}")
-    except ValueError:
-        return 0
+    except ValueError as e:
+        # BUG-SEED-45: an event that cannot be parsed must not silently allow
+        # everything either — this hook is a guard, so it fails closed exactly like
+        # the unreadable-policy path above.
+        sys.stderr.write(f"BLOCKED: Peregrine-Kernel agent event unreadable ({e})\n")
+        return 2
     msg = decide(policy, event)
     if msg:
         sys.stderr.write(msg + "\n")

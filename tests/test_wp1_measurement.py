@@ -110,10 +110,12 @@ def test_digest_shows_spread_but_never_the_raw_arrays():
     digest = build_digest([rec], {"value": 0.5})
     shown = digest["achieved"]["workloads"]
     assert shown, "the digest keeps the per-workload breakdown"
-    for w in shown:
+    for i, w in enumerate(shown):
         assert "device_readings_ms" not in w
         assert "ref_device_readings_ms" not in w
-        assert w["device_median_ms"] == w["device_median_ms"]  # medians stay
+        # medians stay: against the SOURCE record, not against itself (a
+        # self-comparison is true even when the digest corrupts the value)
+        assert w["device_median_ms"] == ev.workloads[i]["device_median_ms"]
     assert shown[0]["device_spread_pct"] == ev.workloads[0]["device_spread_pct"]
 
 

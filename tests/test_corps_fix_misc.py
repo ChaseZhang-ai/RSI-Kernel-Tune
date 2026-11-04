@@ -320,3 +320,58 @@ def test_seed40_a_code_bug_is_no_longer_swallowed(tmp_path, monkeypatch):
 def test_seed40_a_working_config_still_stamps_the_cluster(tmp_path, monkeypatch):
     _patch_load_config(monkeypatch, lambda op: _NS(cluster="b200-1"))
     assert baseline_cli._submit_cluster("demo-op") == "b200-1"
+
+
+# --- BUG-SEED-44: a hung deliverable check keeps the session resumable ----------------
+
+import importlib.util  # noqa: E402
+import json  # noqa: E402
+import os  # noqa: E402
+
+
+def _goal_leg_module():
+    spec = importlib.util.spec_from_file_location(
+        "claude_goal_misc",
+        Path(__file__).resolve().parents[1] / "scripts" / "claude-goal.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_seed44_a_hung_deliverable_check_keeps_the_session_resumable(
+        tmp_path, monkeypatch, capsys):
+    """The deliverable check's TimeoutExpired used to escape run(): the finally killed
+    the tmux session first and save_session never ran, freezing session.json at
+    launch's resumable:false. Now the leg ends rc=124 with a readable error and the
+    session marker stays resumable."""
+    mod = _goal_leg_module()
+    td = tmp_path / "turn"
+    td.mkdir()
+    (td / "spec.json").write_text(json.dumps({
+        "kind": "caller", "role": "student", "reply": str(td / "reply.md"),
+        "check": "true", "condition": "PEREGRINE TURN. unit fixture."}), encoding="utf-8")
+    leg = mod.GoalLeg("claude-test-1", "test-model", [], "do the thing", env={
+        "PK_GOAL_TURN_DIR": str(td),
+        "CLAUDE_CONFIG_DIR": str(tmp_path / "cfg"),
+        "PK_CLAUDE_BIN": "/usr/bin/true",
+        "PK_GOAL_TMUX_SOCKET": f"fkgoal-misc-{os.getpid()}",
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+    })
+
+    def fake_launch():
+        leg.sid = "unit-sid-1234"
+
+    def hung(tr):
+        raise subprocess.TimeoutExpired(cmd=leg.spec["check"], timeout=300)
+
+    monkeypatch.setattr(leg, "launch", fake_launch)
+    monkeypatch.setattr(leg, "watch", hung)
+    rc = leg.run()
+    assert rc == 124
+    st = json.loads((td / "session.json").read_text(encoding="utf-8"))
+    assert st["resumable"] is True and st["sid"] == "unit-sid-1234"
+    assert st["why"] == "check_timeout"
+    err = capsys.readouterr().err
+    assert "deliverable check hung" in err
+    res = json.loads((td / "result.json").read_text(encoding="utf-8").splitlines()[-1])
+    assert res["outcome"] == "check_timeout" and res["rc"] == 124

@@ -880,10 +880,19 @@ class GoalLeg:
         except Interrupted:
             outcome, detail = "interrupted", "leg interrupted by a signal"
             rc = 143
+        except subprocess.TimeoutExpired as e:
+            # BUG-SEED-44: the deliverable check hanging past its own timeout used to
+            # escape run() — the finally killed the tmux session first and save_session
+            # never ran, so session.json stayed frozen at launch's resumable:false and
+            # the turn could not resume. End as a timeout whose session stays
+            # resumable: the marker is saved here, BEFORE the finally's cleanup.
+            outcome = "check_timeout"
+            detail = f"the deliverable check hung past its 300s timeout: {e}"
+            self.save_session(True, "check timeout (the deliverable check hung)")
         finally:
             tr.poll()
             self.cleanup()
-        resumable = outcome in ("limit", "paused")
+        resumable = outcome in ("limit", "paused", "check_timeout")
         self.save_session(resumable, outcome)
         if outcome == "met":
             reply = self.reply.read_text(encoding="utf-8", errors="replace")
@@ -905,7 +914,7 @@ class GoalLeg:
             sys.stderr.write(why + "\n")
             say(why, self.turn_dir)
             return rc or 77
-        if outcome == "timeout":
+        if outcome in ("timeout", "check_timeout"):
             rc = 124
         msg = f"claude-goal: {outcome}: {detail}".strip()
         self.write_result(tr, outcome, detail, rc)

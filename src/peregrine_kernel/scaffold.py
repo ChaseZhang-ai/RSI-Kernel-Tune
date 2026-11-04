@@ -21,7 +21,9 @@ tasks by peregrine_kernel.taskcard.)
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
+import sys
 from pathlib import Path
 
 # Template files copied verbatim (with ``<op>`` -> op) from src/peregrine_kernel/card_template/.
@@ -60,6 +62,30 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+# A task/operator name becomes a directory under tasks/ or operators/ (and a TOML
+# key, a branch namespace, a job label). It must be ONE ordinary path component:
+# no separators (nothing escapes the container), nothing hidden and not the
+# template namespace (no leading dot or underscore), and no collision with the
+# CLI's own commands (BUG-SEED-36: `peregrine init ../../evil` used to write
+# outside tasks/).
+_TASK_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_RESERVED_TASK_NAMES = frozenset(
+    {"init", "new", "run", "status", "harvest", "export", "help"})
+
+
+def task_name_problems(name: str) -> list[str]:
+    """Why ``name`` cannot be a task/operator name, or [] when it can."""
+    problems = []
+    if not name or not _TASK_NAME_RE.fullmatch(name):
+        problems.append(
+            f"{name!r}: a task name must be one plain path component -- letters, "
+            f"digits, '.', '_', '-' only, starting with a letter or digit (no "
+            f"path separators, no leading '.' or '_')")
+    if name in _RESERVED_TASK_NAMES:
+        problems.append(f"{name!r}: reserved -- a peregrine command is named that")
+    return problems
+
+
 def _render(src: Path, dst: Path, replacements: dict[str, str]) -> Path:
     text = src.read_text(encoding="utf-8")
     for token, value in replacements.items():
@@ -79,6 +105,8 @@ def new_operator(
 
     ``templates_root``: where ``src/peregrine_kernel/card_template`` and ``meta/`` are read from when that
     is not ``base_dir`` (a run directory holds trees, not templates)."""
+    if problems := task_name_problems(op):
+        raise ValueError("; ".join(problems))
     base = Path(base_dir) if base_dir is not None else _repo_root()
     op_dir = base / "operators" / op
     if op_dir.exists():
@@ -135,6 +163,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base-dir", default=None, help="main-repo root override (testing)")
     p.add_argument("--no-git", action="store_true", help="skip git init + initial commit")
     args = p.parse_args(argv)
+
+    if problems := task_name_problems(args.op):
+        for problem in problems:
+            print(f"[new] error: {problem}", file=sys.stderr)
+        return 2
 
     created = new_operator(args.op, kernel_file=args.kernel_file, base_dir=args.base_dir)
     base = Path(args.base_dir) if args.base_dir else _repo_root()

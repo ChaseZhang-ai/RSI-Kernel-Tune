@@ -100,6 +100,11 @@ def cmd_init(argv) -> int:
                                 description="Create tasks/<op>/ from tasks/_template/.")
     p.add_argument("op")
     args = p.parse_args(argv)
+    from peregrine_kernel.scaffold import task_name_problems
+    if problems := task_name_problems(args.op):
+        for problem in problems:
+            sys.stderr.write(f"[peregrine] {problem}\n")
+        return 2
     d = repo_root() / TASKS_DIR / args.op
     if d.exists():
         sys.stderr.write(f"[peregrine] {d} already exists\n")
@@ -148,6 +153,11 @@ def new_kernels_task(argv) -> int:
                    help="JSON object: the campaign point's axes, from the kernel docstring's "
                         "frozen contract (the tool scaffolds; it does not guess the contract)")
     args = p.parse_args(argv)
+    from peregrine_kernel.scaffold import task_name_problems
+    if problems := task_name_problems(args.op):
+        for problem in problems:
+            sys.stderr.write(f"[peregrine] {problem}\n")
+        return 2
     d = repo_root() / TASKS_DIR / args.op
     if d.exists():
         sys.stderr.write(f"[peregrine] {d} already exists\n")

@@ -276,10 +276,13 @@ class RealBackend:
 
     # A job the card's gpu_entry refused to time because its declared clock lock did
     # not hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER) is never returned to a caller:
-    # submit_gpu resubmits it up to this many times, then stops with
-    # ClockLockRefusedError (nothing is charged). The state rarely clears by waiting:
-    # a GPU that would not lock its clocks kept refusing — a few retries rule out a
-    # one-off; the machine needs a look.
+    # submit_gpu spends at most this many submits IN TOTAL on it (the first plus
+    # this many - 1 resubmits), then stops with ClockLockRefusedError (nothing is
+    # charged). Mind the counting: the lost-runner budget in _submit_gpu_once is
+    # stated the other way — lost_retries EXTRA submits after the first, i.e.
+    # lost_retries + 1 in total. The state rarely clears by waiting: a GPU that
+    # would not lock its clocks kept refusing — a few retries rule out a one-off;
+    # the machine needs a look.
     clock_lock_retries = 3
     clock_lock_retry_sleep_s = 30.0
 
@@ -501,9 +504,11 @@ class RealBackend:
         Such a job judged and timed nothing: handed back, parse_eval reads "no eval
         JSON" as a correctness FAIL, the driver records a REVERT and spends an
         iteration, and a meta tool spends an attempt — on the machine, not the payload.
-        So it is resubmitted here, up to ``clock_lock_retries`` times in a row; past
-        that the submit stops with ClockLockRefusedError — a NoRunError, which no caller
-        charges.
+        So submit_gpu spends at most ``clock_lock_retries`` submits here IN TOTAL —
+        the first plus ``clock_lock_retries - 1`` resubmits — and past that stops
+        with ClockLockRefusedError — a NoRunError, which no caller charges. (The
+        lost-runner budget in _submit_gpu_once counts the other way: ``lost_retries``
+        EXTRA submits after the first, i.e. ``lost_retries + 1`` in total.)
         """
         refusals = 0
         while True:

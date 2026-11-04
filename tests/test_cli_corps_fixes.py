@@ -113,3 +113,43 @@ def test_an_interrupted_agent_turn_ends_the_whole_session(monkeypatch, tmp_path)
     assert popen_kw.get("start_new_session") is True
     assert ended                       # the group was ended by name, not proc.kill()
     assert _wait_gone("sleep 300042")  # the sleep under the shell died with the group
+
+
+# -- BUG-SEED-18: the clock-lock budget is a TOTAL of clock_lock_retries submits --------------
+
+
+class _Proc:
+    def __init__(self, returncode, stdout="", stderr=""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+def test_clock_lock_budget_is_a_total_of_clock_lock_retries_submits(monkeypatch, capsys):
+    """submit_gpu's clock-lock budget is a TOTAL of ``clock_lock_retries`` submits —
+    the first submit plus ``clock_lock_retries - 1`` resubmits — the way the loop
+    actually counts; the lost-runner budget next door counts the other way
+    (``lost_retries`` extra submits AFTER the first). The progress line names the
+    refusal against that total.
+
+    Ported from the R1 archive
+    (test_clock_lock_retry_counts_total_submits_and_says_so), adapted: this tree's
+    fix is doc-only (the counting was already the total), so the test pins the
+    implemented counting and phrasing rather than the archive's reworded line."""
+    from peregrine_kernel.submit.jobs import CLOCK_LOCK_REFUSED_MARKER
+
+    refused = f"{CLOCK_LOCK_REFUSED_MARKER} lock not held\n"
+    be = cli.RealBackend("op", None, None, "n", "e")
+    be.clock_lock_retry_sleep_s = 0
+    seen: list = []
+
+    def once(branch, mode):
+        seen.append(mode)
+        be.last_job_id = str(len(seen))
+        return refused
+
+    monkeypatch.setattr(be, "_submit_gpu_once", once)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    with pytest.raises(cli.ClockLockRefusedError):
+        be.submit_gpu("b", "all")
+    assert len(seen) == be.clock_lock_retries == 3   # 3 submits in total, not 3 resubmits
+    out = capsys.readouterr().out
+    assert "resubmitting (1/3)" in out and "resubmitting (2/3)" in out

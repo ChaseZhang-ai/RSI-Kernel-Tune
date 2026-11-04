@@ -136,3 +136,6 @@ Regression (the project venv's Python, CPU only, no GPU used):
    paper can state it verbatim).
 2. The pre-existing open rows (dead fast path, census accounting-only) remain
    as recorded; no action requested.
+
+<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->

@@ -39,9 +39,10 @@ def chain(tmp_path, monkeypatch):
     monkeypatch.setattr(se, "load_task", lambda d: load_task(d, kb_root=kb))
     monkeypatch.setattr(se.launch, "repo_root", lambda: tmp_path)
     ran: list[Path] = []
+    runs: list[Path] = []
     gains: list = []
     monkeypatch.setattr(se.launch, "cmd_new", lambda argv: ran.append(Path(argv[0])) or 0)
-    monkeypatch.setattr(se.launch, "cmd_run", lambda argv: 0)
+    monkeypatch.setattr(se.launch, "cmd_run", lambda argv: runs.append(Path(argv[0])) or 0)
     monkeypatch.setattr(se, "latest_run", lambda name: SimpleNamespace(
         dir=tmp_path / "run", operators_dir=tmp_path / "run" / "operators",
         ws=tmp_path / "run" / "ws"))
@@ -59,7 +60,7 @@ def chain(tmp_path, monkeypatch):
     monkeypatch.setattr(se, "next_generation",
                         lambda task, best, dest, step, **kw: orig(
                             task, best, dest, step, **kw) and dest)
-    return tmp_path, ran, gains, kb
+    return tmp_path, ran, runs, gains, kb
 
 
 def test_dump_task_toml_round_trips(tmp_path):
@@ -69,12 +70,16 @@ def test_dump_task_toml_round_trips(tmp_path):
 
 
 def test_a_gain_writes_the_next_generation_and_runs_it(chain):
-    root, ran, gains, kb = chain
+    root, ran, runs, gains, kb = chain
     gains += [1.30, 1.01]
     first = _task(root)
     assert se.main([str(first), "--max-gen", "4"]) == 0
     g2 = root / "tasks" / "rmsnorm-g2"
     assert ran == [first.resolve(), g2]
+    # "runs it" is load-bearing: every generation is `peregrine new` AND
+    # `peregrine run` on the newest run dir (BUG-SEED-46: the stub was never
+    # asserted, so a self_evolve that stopped running generations stayed green)
+    assert runs == [root / "run", root / "run"]
     assert (g2 / "reference" / "kernel.py").read_text() == KERNEL
     t2 = load_task(g2, kb_root=kb)
     assert t2.mode == "source" and t2.target.ratio == 1.05
@@ -84,21 +89,21 @@ def test_a_gain_writes_the_next_generation_and_runs_it(chain):
 
 
 def test_the_chain_stops_at_max_gen(chain):
-    root, ran, gains, _ = chain
+    root, ran, runs, gains, _ = chain
     gains += [1.5, 1.5, 1.5]
     assert se.main([str(_task(root)), "--max-gen", "2"]) == 0
     assert [p.name for p in ran] == ["rmsnorm", "rmsnorm-g2"]
 
 
 def test_there_is_no_generation_cap_by_default(chain):
-    root, ran, gains, _ = chain
+    root, ran, runs, gains, _ = chain
     gains += [1.2] * 6 + [1.005]
     assert se.main([str(_task(root))]) == 0
     assert [p.name for p in ran] == ["rmsnorm"] + [f"rmsnorm-g{k}" for k in range(2, 8)]
 
 
 def test_the_chain_stops_at_the_noise_floor(chain):
-    root, ran, gains, _ = chain
+    root, ran, runs, gains, _ = chain
     # 1.03x clears the 1.5% minimum, but the generation's own same-job ratios spread 4%
     gains += [(1.03, [1.01, 1.03, 1.0504])]
     assert se.main([str(_task(root))]) == 0
@@ -113,14 +118,15 @@ def test_noise_floor():
 
 
 def test_a_generation_without_a_best_ends_the_chain(chain):
-    root, ran, gains, _ = chain
+    root, ran, runs, gains, _ = chain
     gains += [None]
     assert se.main([str(_task(root))]) == 1
     assert len(ran) == 1
+    assert runs == [root / "run"]           # gen 1 ran before its (missing) best
 
 
 def test_an_existing_next_generation_is_not_overwritten(chain):
-    root, ran, gains, _ = chain
+    root, ran, runs, gains, _ = chain
     gains += [1.3]
     first = _task(root)
     (root / "tasks" / "rmsnorm-g2").mkdir()

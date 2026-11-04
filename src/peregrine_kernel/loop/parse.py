@@ -256,6 +256,15 @@ class EvalResult:
     # only — threads or children appearing after the timed region, beyond the
     # first-call baseline.
     proc_census: dict | None = None
+    # WP29: the replay probe's block ({"status": "pass"|"suspected"|
+    # "unavailable", "ratio_threshold", "shapes": [...]}): after all windows
+    # closed the bench measured one honest-compute latency probe per timed
+    # group on FRESH input draws (a third seed) in a child process. status ==
+    # "suspected" — the probe median dwarfs the judged median, i.e. the timed
+    # calls did not recompute their inputs (the content-keyed replay whose
+    # miss path recomputes honestly) — is a reward-hack reading the driver
+    # turns into a suspicious REVERT; unavailable never convicts.
+    replay_probe: dict | None = None
     # Set by the driver (never the bench): the edge-band judge recheck cleared —
     # `pass` on the fresh draw that replaced a failed edge-band reading. A field,
     # not an attribute, so a dataclasses.replace (the watermark confirmation's
@@ -603,6 +612,8 @@ def parse_eval(text: str) -> EvalResult:
                          if isinstance(obj.get("timer_integrity"), str) else None),
         proc_census=(obj["proc_census"]
                      if isinstance(obj.get("proc_census"), dict) else None),
+        replay_probe=(obj["replay_probe"]
+                      if isinstance(obj.get("replay_probe"), dict) else None),
     )
 
 

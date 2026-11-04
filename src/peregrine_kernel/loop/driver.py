@@ -4014,6 +4014,45 @@ def run_inner_iteration(
         _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
         return rec
+    # --- WP29: the replay probe (the G1 fix). The bench's post-window
+    # honest-compute latency probe on fresh draws (a third seed) dwarfs the
+    # judged median: the timed calls did not recompute their inputs — the
+    # content-keyed replay whose miss path recomputes honestly, the form every
+    # value check passes. Hard REVERT, fresh_recheck-same shape; the record
+    # carries the block with both latency numbers (the evidence face).
+    if (rp := getattr(ev, "replay_probe", None)) and rp.get("status") == "suspected":
+        shapes = "; ".join(
+            f"{s.get('name')}: probe {s.get('probe_median_ms')} ms vs judged "
+            f"{s.get('judged_median_ms')} ms (x{s.get('ratio')})"
+            for s in (rp.get("shapes") or []) if s.get("status") == "suspected")
+        detail = (f"replay_probe SUSPECTED (threshold x{rp.get('ratio_threshold')}): "
+                  f"the honest-compute probe dwarfs the judged median — the timed "
+                  f"windows did not recompute their inputs: {shapes}")
+        _log(f"iter {iter_no}: {record.decision_id} REVERT ({detail})")
+        # --- WP16: pooled trees carry named branches across this reset.
+        try:
+            _preserve_runner_up_trees(ctx, be, load_records(ctx.status_path))
+        except (BackendError, OSError, ValueError) as e:
+            _log(f"iter {iter_no}: runner-up preservation skipped ({e})")
+        if last_good_ref:
+            be.reset(last_good_ref)
+        _ps_ratios, _ps_best = per_shape_ledger(
+            load_records(ctx.status_path), ev.workloads, iter_no, improve=False,
+            gate_window=ctx.gate_window)
+        rec = IterationRecord(
+            iter=iter_no, decision_id=record.decision_id, change=record.change,
+            correctness=False, verdict="REVERT", metric_before=metric_before,
+            error=detail, profiler=profiler, cluster=cluster,
+            orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
+            prep=ev.prep or {}, precision=precision,
+            per_shape_ratios=_ps_ratios, per_shape_best=_ps_best,
+            replay_probe=rp, gpu_state=ev.gpu_state or {},
+            suspicious=True,                   # the reward-hack marker, fresh_recheck-same
+            variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
+        )
+        _wp18_kb_usage_flow(ctx, rec)
+        append_record(ctx.status_path, rec)
+        return rec
 
     ev, confirm_info = _confirm_suspicious_watermark(ctx, be, branch, ev, metric_before,
                                                      profiler=profiler)

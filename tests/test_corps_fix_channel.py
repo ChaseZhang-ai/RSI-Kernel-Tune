@@ -397,3 +397,84 @@ def test_the_run_segment_still_carries_the_run_id(tmp_path):
     tree = direct.remote_tree(cfg)
     assert Path(tree).parts[3] == "demo_260105-101112-abcd"
     assert tree.endswith(f"op-{hashlib.sha256(str(d.resolve()).encode()).hexdigest()[:8]}")
+
+
+# --- BUG-SEED-11: the ssh job deadline starts when the job begins ---------------------
+
+from test_direct_delivery import _ssh_cfg, _ssh_run  # noqa: E402
+import fcntl as fcntl_mod  # noqa: E402
+
+
+class _QueuedSsh:
+    """The exec step's session queues for the host GPU lock: no begin marker until
+    ``queue_polls`` waits have passed, then the job runs and finishes."""
+
+    def __init__(self, queue_polls):
+        self.queue_polls = queue_polls
+        self.polls = 0
+        self.waits = []          # every wait() timeout argument, in order
+        self.began = False
+
+    def run(self, argv, input=None, capture_output=False, timeout=None):
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+    def popen(self, argv, stdout=None, stderr=None, text=None, stdin=None, **kw):
+        fake = self
+
+        class _P:
+            pid = 987654321          # never a real pid: killpg must be a no-op here
+
+            @staticmethod
+            def kill():
+                pass
+
+            @staticmethod
+            def wait(timeout=None):
+                fake.waits.append(timeout)
+                if fake.polls < fake.queue_polls:
+                    fake.polls += 1
+                    raise subprocess.TimeoutExpired(cmd="ssh", timeout=timeout)
+                if not fake.began:
+                    fake.began = True
+                    stdout.write(f"{jobs.BEGIN_MARKER}\n")
+                    stdout.flush()
+                    raise subprocess.TimeoutExpired(cmd="ssh", timeout=timeout)
+                return 0
+
+        return _P()
+
+
+def test_the_ssh_deadline_starts_when_the_job_begins_not_while_it_queues(tmp_path,
+                                                                         monkeypatch):
+    """The host GPU lock's queue used to sit inside the job's deadline: a queued job
+    was killed and charged Failed for time it never ran. The session prints the begin
+    marker only once it holds the lock, and the deadline starts there."""
+    monkeypatch.setattr(direct, "RUN_HEADROOM_S", 0)
+    cfg = _ssh_cfg(tmp_path)                     # timeout 60 -> deadline 60 s
+    fake = _QueuedSsh(queue_polls=3)
+    status, log = _ssh_run(cfg, fake)
+    assert status == jobs.STATUS_SUCCEEDED
+    assert fake.waits[:4] == [1.0, 1.0, 1.0, 1.0], "the queue ran on the job's clock"
+    assert fake.waits[4] == pytest.approx(60.0), "the deadline did not start whole at begin"
+
+
+def test_the_session_prints_the_begin_marker_only_under_the_lock(tmp_path):
+    """The session script is the ssh job's clock gate, so its quoting is load-bearing:
+    with the host lock held by someone else, nothing may print the marker; once the
+    lock is ours, the marker comes and the entry runs under it."""
+    lock = tmp_path / "gpu.lock"
+    lock.write_text("")
+    log = tmp_path / "log.txt"
+    with open(lock, "w") as fh, open(log, "w") as lf:
+        fcntl_mod.flock(fh, fcntl_mod.LOCK_EX)
+        proc = subprocess.Popen(
+            ["sh", "-c", direct._SESSION_SCRIPT, str(lock), "bash", "-c", "echo job ran"],
+            cwd=tmp_path, stdout=lf, stderr=subprocess.STDOUT, start_new_session=True)
+        time.sleep(1.0)
+        assert jobs.BEGIN_MARKER not in log.read_text(), \
+            "the marker showed while the session was still queued"
+        fcntl_mod.flock(fh, fcntl_mod.LOCK_UN)
+    assert proc.wait(timeout=30) == 0
+    text = log.read_text()
+    assert jobs.BEGIN_MARKER in text and "job ran" in text
+    assert text.index(jobs.BEGIN_MARKER) < text.index("job ran")

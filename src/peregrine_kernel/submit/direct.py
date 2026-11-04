@@ -50,9 +50,14 @@ CMD_PREFIX = "cmd:"
 # (in the job's tree): stopping the job ends its whole session. A process group is not
 # enough -- gpu_entry's `timeout` moves itself and the task into a group of their own.
 SESSION_FILE = ".pk_job.sid"
-# Written in the session the job runs in: its id, then gpu_entry under the GPU lock
-# ("$0" is the lock, "$@" the entry command).
-_SESSION_SCRIPT = 'echo $$ > ' + SESSION_FILE + ' && exec flock "$0" "$@"'
+# Written in the session the job runs in: its id, then -- once flock ("$0" is the
+# lock, "$@" the entry command) HOLDS the lock -- the begin marker and the entry
+# itself. The marker is the job's first output on purpose: everything before it is
+# transport, the lock wait included, so the runner's deadline starts only when the
+# job does (the local delivery is the same: gpu_lock waits without a bound, the
+# clock starts after the lock).
+_SESSION_SCRIPT = ('echo $$ > ' + SESSION_FILE + ' && exec flock "$0" sh -c '
+                   '\'echo ' + BEGIN_MARKER + '; exec "$@"\' sh "$@"')
 STOP_GRACE_S = 5
 LOCK_DIR_ENV = "PEREGRINE_LOCK_DIR"
 TRANSPORT_ATTEMPTS = 3
@@ -470,7 +475,8 @@ class DirectRunner:
         parts += [f"{{ IFS= read -r {k} || true; }} && export {k}" for k in secrets]
         lock = shlex.quote(f"{self.cfg.exec_workdir.rstrip('/')}/.gpu{self.cfg.exec_gpu}.lock")
         entry = " ".join(shlex.quote(a) for a in _entry_argv(self.cfg, mode))
-        parts.append(f"echo {BEGIN_MARKER}")
+        # no begin marker here: the session script prints it, inside the setsid
+        # session and only once flock holds the lock
         parts.append(f"setsid --wait sh -c {shlex.quote(_SESSION_SCRIPT)} {lock} {entry}")
         return " && ".join(parts)
 
@@ -487,6 +493,22 @@ class DirectRunner:
         except Exception as e:  # noqa: BLE001 -- best effort; the verdict is written either way
             log_file.write(f"[direct] could not stop the job on {self.cfg.exec_host}: {e!r}\n")
         log_file.flush()
+
+    def _await_begin(self, proc, log_file, start, poll_s: float = 1.0) -> int | None:
+        """Wait for the job's begin marker: the session prints it once it HOLDS the
+        host's GPU lock, so this is where the lock wait goes — outside the deadline.
+
+        None when the marker showed up (the job has begun and the caller may start
+        the job's clock); the ssh client's exit code otherwise (it ended without a
+        marker: the job never started, and the caller takes the transport path).
+        """
+        while True:
+            if _began(log_file, start, BEGIN_MARKER):
+                return None
+            try:
+                return proc.wait(timeout=poll_s)
+            except subprocess.TimeoutExpired:
+                continue
 
     def _run_ssh(self, payload: bytes, branch: str, mode: str, log_file,
                  tree_sha: str | None = None) -> str:
@@ -522,28 +544,38 @@ class DirectRunner:
                         proc.stdin.close()
                     except (BrokenPipeError, OSError):
                         pass
-                try:
-                    deadline = self._deadline_for(mode)
-                    rc = proc.wait(timeout=deadline)
-                except subprocess.TimeoutExpired:
-                    self._stop_remote(log_file)
-                    _kill_group(proc)
-                    log_file.write(f"[direct] gpu_entry {mode} exceeded {deadline:.0f}s "
-                                   f"-- killed\n")
-                    log_file.flush()
-                    return STATUS_FAILED
-                except BaseException:   # stopped (SIGTERM -> SystemExit) or interrupted
-                    self._stop_remote(log_file)
-                    _kill_group(proc)
-                    raise
-                if rc == 0:
-                    return STATUS_SUCCEEDED
-                if _began(log_file, start, BEGIN_MARKER):
-                    log_file.write(f"[direct] gpu_entry {mode} exited rc={rc}\n")
-                    log_file.flush()
-                    return STATUS_FAILED
-                failures.append(f"gpu_entry {mode} on {self.cfg.exec_host} (rc={rc}, never "
-                                f"started)")
+                # The job's deadline covers the JOB, not the queue: the marker is
+                # printed only once the session holds the host's GPU lock, so wait
+                # for it before the clock starts (the local delivery is symmetric:
+                # gpu_lock waits without a bound and the clock starts after it). An
+                # ssh client that ends without a marker never started the job.
+                began_rc = self._await_begin(proc, log_file, start)
+                if began_rc is not None:
+                    failures.append(f"gpu_entry {mode} on {self.cfg.exec_host} "
+                                    f"(rc={began_rc}, never started)")
+                else:
+                    try:
+                        deadline = self._deadline_for(mode)
+                        rc = proc.wait(timeout=deadline)
+                    except subprocess.TimeoutExpired:
+                        self._stop_remote(log_file)
+                        _kill_group(proc)
+                        log_file.write(f"[direct] gpu_entry {mode} exceeded {deadline:.0f}s "
+                                       f"-- killed\n")
+                        log_file.flush()
+                        return STATUS_FAILED
+                    except BaseException:   # stopped (SIGTERM -> SystemExit) or interrupted
+                        self._stop_remote(log_file)
+                        _kill_group(proc)
+                        raise
+                    if rc == 0:
+                        return STATUS_SUCCEEDED
+                    if _began(log_file, start, BEGIN_MARKER):
+                        log_file.write(f"[direct] gpu_entry {mode} exited rc={rc}\n")
+                        log_file.flush()
+                        return STATUS_FAILED
+                    failures.append(f"gpu_entry {mode} on {self.cfg.exec_host} (rc={rc}, "
+                                    f"never started)")
             if len(failures) >= TRANSPORT_ATTEMPTS:
                 log_file.write(f"{TRANSPORT_ERROR_MARKER} {len(failures)} transport failure(s) "
                                f"on {self.cfg.exec_host}: {' | '.join(failures)}\n")

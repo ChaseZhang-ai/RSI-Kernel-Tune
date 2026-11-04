@@ -1166,6 +1166,18 @@ def _resolve_ref_spec(cfg: dict) -> dict:
     return spec
 
 
+# The [loop] keys that DELIVER a reference measurement (a second timed window).
+# ref_name / ref_shape / ref_hardware / ref_ncu_cmd only DESCRIBE one -- treating
+# them as a declaration sent label-only runs down the window preflight's refuse
+# path and the driver's in-job-ratio path for readings no bench can produce
+# (BUG-C3-02).
+_REF_DECL_KEYS = ("ref_cmd", "ref_mode", "submit_op")
+
+
+def _ref_declared(spec: dict) -> bool:
+    return any(spec.get(k) for k in _REF_DECL_KEYS)
+
+
 def _ref_rides_job(spec: dict) -> bool:
     """Whether the declared ref can be timed inside the student eval job.
 
@@ -1176,7 +1188,7 @@ def _ref_rides_job(spec: dict) -> bool:
     (the driver degrades to the absolute median, but the misjudgment also skips
     the fresh ref re-anchor that runs without an in-job ref rely on).
     """
-    return bool(spec) and not spec.get("ref_mode") and not spec.get("submit_op")
+    return bool(spec.get("ref_cmd")) and not spec.get("ref_mode") and not spec.get("submit_op")
 
 
 def _precision_preflight(op_dir: Path, contract: str, defaulted: bool, *, resuming: bool,
@@ -1849,10 +1861,12 @@ def _arm_has_reference(cfg: dict) -> bool:
 
     A reference measured by the loop (``ref_cmd`` / ``ref_mode``), an
     architecture reference, or one declared as archived values all define a
-    reference window; a target-ms-only run defines none.
+    reference window; a target-ms-only run defines none. The label keys
+    (ref_name / ref_shape / ...) describe a reference without delivering one, so
+    they do not count (BUG-C3-02).
     """
     loop = cfg.get("loop", {})
-    return bool(_resolve_ref_spec(cfg) or _arch_ref_spec(cfg)
+    return bool(_ref_declared(_resolve_ref_spec(cfg)) or _arch_ref_spec(cfg)
                 or loop.get("arch_ref_ms") is not None
                 or loop.get("arch_ref_device_ms") is not None)
 

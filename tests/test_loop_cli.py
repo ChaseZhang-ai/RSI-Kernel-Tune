@@ -893,6 +893,23 @@ def test_ref_rides_job_judgment():
     assert not _ref_rides_job({"ref_cmd": "python ref.py", "submit_op": "_recon"})
 
 
+def test_label_only_ref_keys_declare_no_reference():
+    """BUG-C3-02: ref_name / ref_shape / ref_hardware / ref_ncu_cmd DESCRIBE a
+    reference, they do not deliver one -- a loop.toml carrying only labels used to
+    count as a declared reference, so a target-ms-only run was refused at the
+    window gate (EXIT_WINDOW_UNDECLARED, asking it to declare what it has no way
+    to declare) and the driver took the in-job-ratio path for readings no bench
+    can produce."""
+    from peregrine_kernel.loop.cli import _arm_has_reference, _ref_rides_job, _resolve_ref_spec
+    cfg = {"loop": {"ref_name": "cuDNN", "ref_shape": "B=1,H=128", "ref_hardware": "H100"}}
+    spec = _resolve_ref_spec(cfg)
+    assert spec and not _ref_rides_job(spec)
+    assert not _arm_has_reference(cfg)
+    assert _arm_has_reference({"loop": {"ref_cmd": "python3 measure.py"}})
+    assert _arm_has_reference({"loop": {"ref_mode": "sealref", "ref_submit_op": "_ref"}})
+    assert _arm_has_reference({"loop": {"arch_ref_ms": 1.0}})
+
+
 def test_unrecognized_model_flake_is_transient():
     """The CLI's model recognition tracks a dynamic config fetch and fails
     intermittently — including on auxiliary queries (a run died on the
@@ -1151,7 +1168,8 @@ def test_ref_in_job_is_meaningful_only_with_a_separately_measured_ref(capsys):
     assert _resolve_ref_in_job({"loop": {}}, sep) is False
     assert capsys.readouterr().err == ""
     # the ref already rides the job: redundant, said out loud
-    assert _resolve_ref_in_job({"loop": {"ref_in_job": True}}, {"cmd": "python3 ref.py"}) is False
+    assert _resolve_ref_in_job({"loop": {"ref_in_job": True}},
+                               {"ref_cmd": "python3 ref.py"}) is False
     assert "redundant" in capsys.readouterr().err
     # no reference at all: nothing to be in the job
     assert _resolve_ref_in_job({"loop": {"ref_in_job": True}}, {}) is False

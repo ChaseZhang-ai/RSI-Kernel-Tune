@@ -16,6 +16,7 @@ patch's outcome is only known after its inner segment runs.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -112,7 +113,9 @@ def append_meta_record(path: str | Path, rec: MetaRecord) -> None:
 
 
 def load_meta_records(path: str | Path) -> list[MetaRecord]:
-    """Load records, dropping any unknown keys (tolerates schema evolution)."""
+    """Load records, dropping any unknown keys (tolerates schema evolution) and
+    any line that is not valid JSON (a crash-truncated tail row is dropped
+    instead of rendering the whole meta memory unreadable)."""
     p = Path(path)
     if not p.exists():
         return []
@@ -120,7 +123,10 @@ def load_meta_records(path: str | Path) -> list[MetaRecord]:
     for line in p.read_text().splitlines():
         line = line.strip()
         if line:
-            d = json.loads(line)
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
             out.append(MetaRecord(**{k: v for k, v in d.items() if k in _FIELDS}))
     return out
 
@@ -138,7 +144,12 @@ def update_last_outcome(path: str | Path, *, outcome: str,
 
     The whole file is small (one line per meta step), so a load->mutate->rewrite is
     cheaper than any append-a-terminal-event scheme and keeps one row per meta step.
+    The rewrite lands via a temp file + os.replace, so a crash mid-rewrite leaves
+    the previous memory intact instead of truncating every meta record.
     """
+    if outcome not in OUTCOMES:
+        raise ValueError(f"refusing to write outcome {outcome!r} to {path}: not a "
+                         f"legal meta outcome (one of {', '.join(sorted(OUTCOMES))})")
     recs = load_meta_records(path)
     if not recs:
         raise ValueError(f"no meta records to update at {path}")
@@ -150,9 +161,10 @@ def update_last_outcome(path: str | Path, *, outcome: str,
     recs[idx].outcome = outcome
     if best_after is not None:
         recs[idx].best_after = best_after
-    with open(path, "w") as fh:
-        for r in recs:
-            fh.write(json.dumps(asdict(r), ensure_ascii=False) + "\n")
+    tmp = Path(str(path) + ".tmp")
+    tmp.write_text("".join(json.dumps(asdict(r), ensure_ascii=False) + "\n"
+                           for r in recs), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def reflect_summary(records: list[MetaRecord]) -> str:

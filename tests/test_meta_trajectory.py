@@ -156,3 +156,61 @@ def test_update_last_outcome_targets_the_open_hold_over_a_trailing_terminal_row(
     recs = load_meta_records(p)
     assert [r.outcome for r in recs] == ["KEEP_PATCH", "UNPRICED_REOPEN"]
     assert recs[0].best_after == 2.1
+
+
+def test_a_crash_mid_rewrite_leaves_the_memory_intact(tmp_path, monkeypatch):
+    """update_last_outcome rewrites the whole file on every driver judgment: the
+    rewrite must be atomic (tmp + os.replace), so a crash mid-rewrite cannot
+    truncate every meta record (the meta agent's whole memory)."""
+    import json as _json
+    p = tmp_path / "meta_status.jsonl"
+    append_meta_record(p, _mrec(meta_step=0, best_before=2.66))
+    append_meta_record(p, _mrec(meta_step=1))
+    orig = _json.dumps
+    calls = {"n": 0}
+
+    def crash_on_second_call(*a, **kw):
+        calls["n"] += 1
+        if calls["n"] >= 2:
+            raise RuntimeError("simulated crash mid-rewrite")
+        return orig(*a, **kw)
+
+    monkeypatch.setattr(_json, "dumps", crash_on_second_call)
+    crashed = False
+    try:
+        update_last_outcome(p, outcome="KEEP_PATCH")
+    except RuntimeError:
+        crashed = True
+    assert crashed, "the fault was not injected; the test measures nothing"
+    recs = load_meta_records(p)
+    assert [r.meta_step for r in recs] == [0, 1]        # nothing lost
+    assert recs[1].outcome == "PENDING"                 # nothing half-judged
+
+
+def test_a_truncated_tail_line_does_not_blind_the_memory(tmp_path):
+    # a crash-truncated final row is dropped, not fatal: the driver reads its
+    # meta memory on every judgment -- one half-written JSON line must not make
+    # the whole file unreadable
+    p = tmp_path / "meta_status.jsonl"
+    append_meta_record(p, _mrec(meta_step=0, outcome="REVERT_PATCH"))
+    with open(p, "a") as fh:
+        fh.write('{"meta_step": 1, "cause_class": "R1", "defi')
+    recs = load_meta_records(p)
+    assert [r.meta_step for r in recs] == [0]
+    assert recs[0].outcome == "REVERT_PATCH"
+
+
+def test_an_illegal_outcome_is_refused_not_written(tmp_path):
+    # OUTCOMES is the memory's vocabulary (MetaRecord validates on construct):
+    # the write side must hold the same line -- a bad value refuses with a
+    # readable message instead of silently poisoning the file forever
+    p = tmp_path / "meta_status.jsonl"
+    append_meta_record(p, _mrec(meta_step=0))
+    try:
+        update_last_outcome(p, outcome="BANANA")
+    except ValueError as e:
+        assert "BANANA" in str(e) and "PENDING" in str(e), e
+    else:
+        raise AssertionError("the illegal outcome was written")
+    recs = load_meta_records(p)
+    assert len(recs) == 1 and recs[0].outcome == "PENDING"

@@ -576,7 +576,21 @@ def _check_prep_block(entries, report: dict, names: str) -> list[str]:
             out.append(f"prep did not produce {a.name!r} (declared symmetrize; got "
                        f"{', '.join(sorted(outputs)) or 'nothing'})")
             continue
-        shape = [int(s) for s in (got.get("shape") or [])]
+        raw = got.get("shape") or []
+        if isinstance(raw, (list, tuple)):
+            try:
+                shape = [int(s) for s in raw]
+            except (TypeError, ValueError):
+                shape = None
+        else:
+            shape = None
+        if shape is None:
+            # a malformed shape is a structured refusal line like every other prep
+            # mismatch -- never a TypeError escaping as a stopped run
+            out.append(f"prep produced {a.name!r} with a malformed shape {raw!r} "
+                       f"(a shape is a list of ints"
+                       + (f", declared {list(a.shape)}" if a.shape else "") + ")")
+            continue
         if a.shape and shape != list(a.shape):
             out.append(f"prep produced {a.name!r} with shape {shape}, declared {list(a.shape)}")
         if a.dtype and normalize_dtype(got.get("dtype")) != normalize_dtype(a.dtype):

@@ -1,8 +1,8 @@
 """Regression tests for the monitor / resume fix batch (audit corps fix-d).
 
-Ported from the archived ForgeKernel fix batch's test_monitor_resume_fixes.py
-(audit-r2-2026-11-05/forgekernel-untracked-tests), rebranded
-forgekernel -> peregrine_kernel, fk_monitor_hook -> pk_monitor_hook.
+Ported from the audit archive's untracked-tests copy of
+test_monitor_resume_fixes.py (the pre-rename fix batch), rebranded to this
+package: module path peregrine_kernel, hook file pk_monitor_hook.
 
 Covers: classify flagging a monitor whose hook never ran (BUG-SEED-14),
 parse_log rebuilding a partial result when the final JSON was killed mid-dump

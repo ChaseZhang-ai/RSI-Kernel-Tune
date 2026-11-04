@@ -119,8 +119,11 @@ def _find_kernel_tree(op: str, arch: str | None) -> Path:
         trees = [t for t in trees if t.parent.name == arch]
     if len(trees) != 1:
         have = ", ".join(f"{t.parent.parent.name}/{t.parent.name}" for t in trees) or "none"
-        raise SystemExit(f"[peregrine] kernels/: {op}: {len(trees)} kernel tree(s) ({have}); "
-                         f"pass --arch to disambiguate")
+        hint = ("; pass --arch to disambiguate" if trees else
+                "; found no tree at the supported layout kernels/<family>/<op>/<arch>/ "
+                "(generational layouts <op>/<arch>/<gen>/ are not scaffoldable yet)")
+        raise SystemExit(f"[peregrine] kernels/: {op}: {len(trees)} kernel tree(s) ({have})"
+                         f"{hint}")
     return trees[0]
 
 
@@ -178,7 +181,8 @@ def new_kernels_task(argv) -> int:
 
     d.mkdir(parents=True)
     task_toml = FROM_KERNELS_TASK_TOML.format(
-        op=args.op, kernel_dir=kfile.parent.parent.name + "/" + kfile.parent.name,
+        op=args.op,
+        kernel_dir=kfile.parent.relative_to(repo_root() / "kernels").as_posix(),
         language="cutedsl",
         arch={"h100": "sm90", "b200": "sm100"}.get(kfile.parent.name, kfile.parent.name))
     (d / "task.toml").write_text(task_toml, encoding="utf-8")

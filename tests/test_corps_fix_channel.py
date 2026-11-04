@@ -321,3 +321,38 @@ def test_the_gate_still_keeps_a_healthy_overlay_reading(tmp_path):
     ctx.ncu_on_revert = False
     rec = run_inner_iteration(ctx, 1, metric_before=2.5, last_good_ref="sha0", green=True)
     assert rec.verdict == "KEEP" and rec.correctness is True
+
+
+# --- BUG-C3-02: reference label keys are not a declared reference ---------------------
+
+def test_label_only_reference_declarations_declare_nothing():
+    """ref_name / ref_shape / ref_hardware / ref_ncu_cmd only annotate a reference.
+    A [loop] that names one without giving anything to measure declares no reference:
+    neither the rides-the-job judgment nor the window preflight may read it as one."""
+    cfg = {"loop": {"ref_name": "cuDNN", "ref_shape": "B=1,H=128",
+                    "ref_hardware": "H100", "ref_ncu_cmd": "ncu --target-processes all"}}
+    spec = cli._resolve_ref_spec(cfg)
+    assert spec, "the labels still resolve (display uses them)"
+    assert cli._ref_rides_job(spec) is False
+    assert cli._arm_has_reference(cfg) is False
+
+
+def test_measurable_reference_declarations_still_declare():
+    cfg_cmd = {"loop": {"ref_cmd": "python3 eval/measure_ref.py",
+                        "ref_name": "cuDNN"}}
+    assert cli._ref_rides_job(cli._resolve_ref_spec(cfg_cmd)) is True
+    assert cli._arm_has_reference(cfg_cmd) is True
+    cfg_mode = {"loop": {"ref_mode": "faref", "ref_submit_op": "_recon",
+                         "ref_name": "FA"}}
+    assert cli._ref_rides_job(cli._resolve_ref_spec(cfg_mode)) is False
+    assert cli._arm_has_reference(cfg_mode) is True
+
+
+def test_label_only_run_preflights_as_na(tmp_path):
+    """A fresh target-ms-only run whose [loop] only labels a reference preflights as
+    "n/a" — it used to be refused with EXIT_WINDOW_UNDECLARED."""
+    from peregrine_kernel.loop.cli import _window_preflight
+    (tmp_path / "window.toml").write_text("")       # absent contract, no reference
+    state, contract, problems = _window_preflight(
+        tmp_path, {"loop": {"ref_name": "cuDNN", "ref_shape": "B=1"}}, resuming=False)
+    assert state == "n/a" and problems == []

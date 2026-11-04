@@ -1182,17 +1182,33 @@ def _resolve_ref_spec(cfg: dict) -> dict:
     return spec
 
 
+def _declared_ref_route(spec: dict) -> dict:
+    """The spec's measure-and-route entries (``ref_cmd``, ``ref_mode``, ``submit_op``):
+    the keys that actually make the loop measure a reference somewhere.
+
+    The label keys (``ref_name`` / ``ref_shape`` / ``ref_hardware`` / ``ref_ncu_cmd``)
+    only name or annotate a reference — a label-only ``[loop]`` (a reference named but
+    never measured) declares NO timed window, and reading it as one refused fresh
+    target-ms-only runs with EXIT_WINDOW_UNDECLARED.
+    """
+    return {k: spec[k] for k in ("ref_cmd", "ref_mode", "submit_op") if spec.get(k)}
+
+
 def _ref_rides_job(spec: dict) -> bool:
     """Whether the declared ref can be timed inside the student eval job.
 
-    Out-of-job when measured through a separate submission tree — a ref_mode task
-    OR a ref_cmd routed via submit_op — and trivially when no ref is declared at
-    all (target-ms-only runs): nothing rides. Misjudging True is not harmless: the
-    confirmation stage would then expect a same-job ratio the bench cannot produce
-    (the driver degrades to the absolute median, but the misjudgment also skips
-    the fresh ref re-anchor that runs without an in-job ref rely on).
+    Only a plain ``ref_cmd`` rides (measured through the operator's own tree,
+    importable in student jobs); a ref_mode task or a ref_cmd routed via submit_op
+    is measured through a separate submission tree, and when nothing measurable is
+    declared at all (a label-only or target-ms-only run) nothing rides. Misjudging
+    True is not harmless: the confirmation stage would then expect a same-job ratio
+    the bench cannot produce (the driver degrades to the absolute median, but the
+    misjudgment also skips the fresh ref re-anchor that runs without an in-job ref
+    rely on).
     """
-    return bool(spec) and not spec.get("ref_mode") and not spec.get("submit_op")
+    route = _declared_ref_route(spec)
+    return bool(route.get("ref_cmd")) and not route.get("ref_mode") \
+        and not route.get("submit_op")
 
 
 def _precision_preflight(op_dir: Path, contract: str, defaulted: bool, *, resuming: bool,
@@ -1323,7 +1339,7 @@ def _resolve_ref_in_job(cfg: dict, spec: dict) -> bool:
     raw = cfg.get("loop", {}).get("ref_in_job", False)
     if not raw:
         return False
-    if not spec:
+    if not _declared_ref_route(spec):
         sys.stderr.write("[loop] warning: [loop] ref_in_job = true but no reference is "
                          "declared (target-ms-only run) — ignored\n")
         return False
@@ -1863,12 +1879,13 @@ def _fresh_ref_workloads_mismatch(runs: list[dict], confirm: dict) -> str | None
 def _arm_has_reference(cfg: dict) -> bool:
     """Is there a second timed window to hold the student's boundary against?
 
-    A reference measured by the loop (``ref_cmd`` / ``ref_mode``), an
-    architecture reference, or one declared as archived values all define a
-    reference window; a target-ms-only run defines none.
+    A reference measured by the loop (a declared ``ref_cmd`` or ``ref_mode`` — the
+    label keys only annotate one), an architecture reference, or one declared as
+    archived values all define a reference window; a target-ms-only run (and a
+    label-only declaration, which names a reference it never measures) defines none.
     """
     loop = cfg.get("loop", {})
-    return bool(_resolve_ref_spec(cfg) or _arch_ref_spec(cfg)
+    return bool(_declared_ref_route(_resolve_ref_spec(cfg)) or _arch_ref_spec(cfg)
                 or loop.get("arch_ref_ms") is not None
                 or loop.get("arch_ref_device_ms") is not None)
 

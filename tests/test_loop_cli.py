@@ -1126,7 +1126,8 @@ def test_ref_in_job_is_meaningful_only_with_a_separately_measured_ref(capsys):
     assert _resolve_ref_in_job({"loop": {}}, sep) is False
     assert capsys.readouterr().err == ""
     # the ref already rides the job: redundant, said out loud
-    assert _resolve_ref_in_job({"loop": {"ref_in_job": True}}, {"cmd": "python3 ref.py"}) is False
+    assert _resolve_ref_in_job({"loop": {"ref_in_job": True}},
+                               {"ref_cmd": "python3 ref.py"}) is False
     assert "redundant" in capsys.readouterr().err
     # no reference at all: nothing to be in the job
     assert _resolve_ref_in_job({"loop": {"ref_in_job": True}}, {}) is False

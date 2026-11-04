@@ -2678,8 +2678,14 @@ def _run_ablation_probe(ctx: LoopContext, be, path: str, probe_branch: str):
     ablations = _normalise_ablations(ctx, raw.get("ablations") or [], known_ids)
     if not ablations:
         return [], "the spec names no `ablations`", ""
+    # a non-numeric ablation_rounds (e.g. "three") counts as absent, like the
+    # sibling failure modes above, instead of raising and killing the whole run
+    try:
+        rounds = int(raw.get("ablation_rounds") or 0) or None
+    except (TypeError, ValueError):
+        rounds = None
     spec = {"ablations": ablations, "levers": [], "roles": False,
-            "ablation_rounds": int(raw.get("ablation_rounds") or 0) or None,
+            "ablation_rounds": rounds,
             "kernel_file": str(ctx.kernel_file)}
     if spec["ablation_rounds"] is None:
         del spec["ablation_rounds"]

@@ -105,8 +105,9 @@ _ENTRY_DONE_RE = ENTRY_DONE_RE
 # ran, so failing the eval would charge the kernel for the machine — resubmit instead.
 _LOST = {STATUS_LOST}
 
-# How many times a job's log may fail to arrive before the in-flight record is given
-# up: a restart re-adopts a recorded job, and one whose log never comes must not be
+# How many times a job may fail to make progress -- a log that never arrives, or a
+# poll that never reaches a terminal state -- before the in-flight record is given
+# up: a restart re-adopts a recorded job, and one that is wedged must not be
 # re-adopted forever.
 _INFLIGHT_LOG_ATTEMPTS = 3
 
@@ -548,9 +549,16 @@ class RealBackend:
         """WP19 (task 3): the lane's collection half — poll to terminal, fetch the
         log. A runner-lost or transport-failed lane job raises; the lane drops the
         reading rather than retrying into the agent-turn window it must vacate."""
-        status = poll_until_terminal(
-            lambda: self._job_status(job), job, poll_s=self.poll_s,
-            timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+        try:
+            status = poll_until_terminal(
+                lambda: self._job_status(job), job, poll_s=self.poll_s,
+                timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+        except BackendError:
+            # the same give-up accounting as the foreground poll: a wedged job must
+            # not be re-adopted by a later submit of the same branch forever
+            if self._note_inflight_log_failure(job) >= _INFLIGHT_LOG_ATTEMPTS:
+                self._clear_inflight()
+            raise
         if status in _LOST:
             self._clear_inflight()
             raise RunnerLostError(f"lane job {job} lost its runner without a verdict")
@@ -603,9 +611,21 @@ class RealBackend:
             # in every gate it anchors); it is not recoverable from the logs this returns
             self.last_job_id = job
             self.last_mode = mode
-            status = poll_until_terminal(
-                lambda: self._job_status(job), job, poll_s=self.poll_s,
-                timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+            try:
+                status = poll_until_terminal(
+                    lambda: self._job_status(job), job, poll_s=self.poll_s,
+                    timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+            except BackendError:
+                # A poll that never reaches a terminal state must not keep the record
+                # adoptable forever either: the same give-up counter as an unreadable
+                # log, or every restart re-adopts the job, waits out the whole poll
+                # window, and dies on the same timeout -- without end.
+                if self._note_inflight_log_failure(job) >= _INFLIGHT_LOG_ATTEMPTS:
+                    print(f"[loop] job {job}: no terminal state after "
+                          f"{_INFLIGHT_LOG_ATTEMPTS} poll attempts — giving the job up "
+                          f"rather than re-adopting a wedged one", flush=True)
+                    self._clear_inflight()
+                raise
             if status in _LOST:
                 self._clear_inflight()  # a lost job is gone; never re-adopt it
                 lost += 1
@@ -682,11 +702,12 @@ class RealBackend:
         return proc.stdout.strip() if proc.returncode == 0 else ""
 
     def _note_inflight_log_failure(self, job: str) -> int:
-        """Count one failed attempt to read ``job``'s log; return the new count.
+        """Count one failed attempt to make progress on ``job`` (an unreadable log, or
+        a poll that never reached a terminal state); return the new count.
 
         Lives in the record itself, so the count survives the process — the misses
         that matter are spread across guard restarts, which is exactly when an
-        unreadable job would otherwise be re-adopted forever.
+        unreadable or wedged job would otherwise be re-adopted forever.
         """
         path = self._inflight_path()
         if path is None:

@@ -773,6 +773,31 @@ def test_an_aborted_poll_leaves_the_job_adoptable(monkeypatch, tmp_path):
     assert rec["job"] == "5"              # the next run can pick it back up
 
 
+def test_a_poll_timeout_counts_toward_giving_the_job_up(monkeypatch, tmp_path):
+    """BUG-SEED-21: a job whose poll never reaches a terminal state must not stay
+    adoptable forever -- a restart used to re-adopt a wedged job, wait another full
+    poll window, die on the same timeout, and loop like that without end. Poll
+    timeouts feed the same give-up counter as a log that never arrives; a single
+    aborted poll still leaves the job adoptable (the guard above)."""
+    import json as _json
+
+    from peregrine_kernel.loop import cli
+
+    ws = _adoption_ws(tmp_path)
+    monkeypatch.setattr(cli, "_forge", _fake_forge([], status="Running"))
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0, poll_timeout_s=0.0)
+    monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
+    (ws / ".git" / "pk-inflight.json").write_text(_json.dumps(
+        {"job": "5", "branch": "br", "mode": "all", "sha": "abc"}))
+    for attempt in range(cli._INFLIGHT_LOG_ATTEMPTS):
+        with pytest.raises(cli.BackendError, match="job 5"):
+            be.submit_gpu("br", "all")
+        if attempt < cli._INFLIGHT_LOG_ATTEMPTS - 1:
+            assert (ws / ".git" / "pk-inflight.json").exists()   # one miss is not a give-up
+    assert not (ws / ".git" / "pk-inflight.json").exists()       # the record is given up
+
+
 # --- the architecture reference is a precondition, not an input ----------------
 # Every mechanism gate line in a distilled milestone anchors to this reference's NCU
 # signature, and v1 is the one write with no rollback behind it. Measuring it after

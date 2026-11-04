@@ -575,10 +575,15 @@ def reference_callables(problem: dict):
 
 def load_entry(path: Path, entry: str):
     """``entry`` from the python file at ``path``, imported as a module with its own
-    directory on sys.path (a solution may import its sibling files, at call time too)."""
+    directory APPENDED to sys.path (a solution may import its sibling files, at call
+    time too). Appended, never prepended: the kernel directory precedes nothing -- a
+    sibling named ``json.py`` (``timing.py``, ``torch.py``, ...) must not shadow the
+    standard library or site-packages for the imports that follow the load (a lazy
+    import inside the reference or the judge resolves to the kernel's copy, and the
+    verdict rides on it)."""
     path = Path(path).resolve()
     if str(path.parent) not in sys.path:
-        sys.path.insert(0, str(path.parent))
+        sys.path.append(str(path.parent))
     spec = importlib.util.spec_from_file_location(
         f"lb_{path.parent.name}_{path.stem}", path)
     mod = importlib.util.module_from_spec(spec)

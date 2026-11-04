@@ -251,3 +251,61 @@ def test_ordinary_cuda_sources_are_not_flagged():
            "    x[torch_i::2];\n"
            "}\n")
     assert gr.library_findings(src, "kernel.cu") == []
+
+
+# --- BUG-SEED-09: the kernel directory never precedes the real modules on sys.path ----
+
+_BENCHKIT = None
+
+
+def _benchkit():
+    global _BENCHKIT
+    if _BENCHKIT is None:
+        import importlib.util
+        from peregrine_kernel import monitor
+        path = (Path(monitor.__file__).resolve().parents[1] / "card_template" / "eval"
+                / "benchkit.py")
+        spec = importlib.util.spec_from_file_location("benchkit_corps_fix", path)
+        _BENCHKIT = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_BENCHKIT)
+    return _BENCHKIT
+
+
+def _a_stdlib_name_not_yet_imported():
+    import importlib.util
+    for name in ("zoneinfo", "wave", "chunk", "netrc", "statistics", "filecmp"):
+        if name in sys.modules:
+            continue
+        try:
+            if importlib.util.find_spec(name) is not None:
+                return name
+        except (ImportError, ValueError):
+            continue
+    pytest.skip("no unimported stdlib module name left to probe with")
+
+
+def test_load_entry_appends_the_kernel_dir_so_siblings_cannot_shadow(tmp_path):
+    """A sibling named like a module must stay importable for the kernel WITHOUT
+    shadowing the standard library for the call-time imports that follow the load."""
+    bk = _benchkit()
+    kern = tmp_path / "kern"
+    kern.mkdir()
+    shadowed = _a_stdlib_name_not_yet_imported()
+    (kern / f"{shadowed}.py").write_text(
+        "raise RuntimeError('the kernel directory shadowed the standard library')\n")
+    (kern / "kern_helper.py").write_text("SIBLING_VALUE = 21\n")
+    (kern / "kernel.py").write_text(
+        "import kern_helper\n"
+        "def run():\n"
+        f"    import {shadowed}\n"
+        "    return kern_helper.SIBLING_VALUE * 2\n")
+    saved_path = list(sys.path)
+    try:
+        fn = bk.load_entry(kern / "kernel.py", "run")
+        kdir = str(kern)
+        assert sys.path[-1] == kdir      # appended, not prepended
+        assert fn() == 42          # the sibling import still works, the shadow file never ran
+        module = sys.modules[shadowed]
+        assert not module.__file__.startswith(kdir)
+    finally:
+        sys.path[:] = saved_path

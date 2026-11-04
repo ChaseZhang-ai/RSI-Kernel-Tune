@@ -57,8 +57,10 @@ def latest_run(task_name: str):
 
 def noise_floor(best: dict) -> float:
     """The relative gain a generation must clear: the spread of its same-job ratios
-    ((max - min) / min), never below NOISE_FLOOR_MIN."""
-    ratios = best.get("ratios") or []
+    ((max - min) / min), never below NOISE_FLOOR_MIN. A non-positive ratio is an
+    invalid entry (no measurable same-job reading) and is dropped like any other
+    unusable sample."""
+    ratios = [r for r in (best.get("ratios") or []) if r > 0]
     spread = (max(ratios) - min(ratios)) / min(ratios) if len(ratios) > 1 else 0.0
     return max(NOISE_FLOOR_MIN, spread)
 

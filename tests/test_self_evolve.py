@@ -68,11 +68,18 @@ def test_dump_task_toml_round_trips(tmp_path):
     assert tomllib.loads(dump_task_toml(cfg)) == cfg
 
 
-def test_a_gain_writes_the_next_generation_and_runs_it(chain):
+def test_a_gain_writes_the_next_generation_and_runs_it(chain, monkeypatch):
     root, ran, gains, kb = chain
+    # the run step is the production call, `cmd_run([str(run.dir)])` (self_evolve
+    # main): record the stubbed calls and hold them to that shape -- a stub that is
+    # never checked proves nothing about the run step
+    run_calls: list[list[str]] = []
+    monkeypatch.setattr(se.launch, "cmd_run",
+                        lambda argv: run_calls.append(list(argv)) or 0)
     gains += [1.30, 1.01]
     first = _task(root)
     assert se.main([str(first), "--max-gen", "4"]) == 0
+    assert run_calls == [[str(root / "run")]] * 2  # one run per generation, at the run dir
     g2 = root / "tasks" / "rmsnorm-g2"
     assert ran == [first.resolve(), g2]
     assert (g2 / "reference" / "kernel.py").read_text() == KERNEL
@@ -110,6 +117,26 @@ def test_noise_floor():
     assert se.noise_floor({"ratios": []}) == se.NOISE_FLOOR_MIN
     assert se.noise_floor({"ratios": [1.10, 1.101]}) == se.NOISE_FLOOR_MIN
     assert se.noise_floor({"ratios": [1.0, 1.05, 1.02]}) == pytest.approx(0.05)
+
+
+def test_noise_floor_drops_non_positive_ratios():
+    # a non-positive ratio is an invalid entry (no measurable same-job reading):
+    # dropped, never a ZeroDivisionError at the end of a whole generation
+    assert se.noise_floor({"ratios": [0, 1.0, 1.05, 1.02]}) == pytest.approx(0.05)
+    assert se.noise_floor({"ratios": [0, 1.01]}) == se.NOISE_FLOOR_MIN
+    assert se.noise_floor({"ratios": [0, -1.0]}) == se.NOISE_FLOOR_MIN
+
+
+def test_a_zero_ratio_does_not_kill_the_chain(chain):
+    # the noise floor is computed only after the whole generation ran: a 0 ratio
+    # in the confirmation set must degrade to the invalid-entry rule, not crash
+    # the chain loop
+    root, ran, gains, _ = chain
+    # 1.01x sits inside the 1.5% minimum floor (the valid ratios spread under it)
+    gains += [(1.01, [0, 1.005, 1.01])]
+    assert se.main([str(_task(root))]) == 0
+    assert len(ran) == 1
+    assert not (root / "tasks" / "rmsnorm-g2").exists()
 
 
 def test_a_generation_without_a_best_ends_the_chain(chain):

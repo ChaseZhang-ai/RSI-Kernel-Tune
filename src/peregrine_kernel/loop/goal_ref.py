@@ -414,6 +414,25 @@ def bar_met(bar: dict, reading: float | None, vs_ref: float | None) -> bool:
 _PY_LIBS = ("flashinfer", "sgl_kernel", "vllm", "deep_gemm", "flash_attn", "flash_mla",
             "xformers", "transformer_engine", "apex", "liger_kernel", "torchao",
             "fbgemm_gpu", "tensorrt_llm", "bitsandbytes", "cudnn", "nvmath", "cublas")
+_TORCH_COMPUTE_OPS = (r"matmul|mm|bmm|addmm|baddbmm|einsum|_scaled_mm|softmax|"
+                      r"layer_norm|rms_norm|group_norm|conv\w*|cdist")
+_TORCH_NN_OPS = (r"linear|scaled_dot_product_attention|softmax|log_softmax|layer_norm|"
+                 r"rms_norm|group_norm|conv\w*|embedding|silu|gelu")
+_LIB_PATTERNS = (
+    (re.compile(r"\btorch\s*\.\s*(" + _TORCH_COMPUTE_OPS + r")\s*\("),
+     "computes with torch.{0}"),
+    (re.compile(r"\b(?:F|torch\s*\.\s*nn\s*\.\s*functional)\s*\.\s*(" + _TORCH_NN_OPS + r")\s*\("),
+     "computes with torch.nn.functional.{0}"),
+    (re.compile(r"\btorch\s*\.\s*ops\s*\.\s*(\w+)"), "calls the registered op torch.ops.{0}"),
+    # the C++ spellings of the same APIs (a kernel.cu reference computes through them)
+    (re.compile(r"\b(torch|at|c10)::\s*(" + _TORCH_COMPUTE_OPS + r"|linear|"
+                r"scaled_dot_product_attention|embedding|silu|gelu)\s*\("),
+     "computes with {0}::{1}"),
+    (re.compile(r"\btorch\s*::\s*ops\s*::\s*(\w+)"), "calls the registered op torch::ops::{0}"),
+    (re.compile(r"[\w\)\]][ \t]*@[ \t]*[\w\(]"), "uses the @ (matmul) operator"),
+    (re.compile(r"\b(cublas\w*|cudnn\w*|cublasLt\w*)\s*\("), "calls {0}"),
+    (re.compile(r"#\s*include\s*[<\"](cublas\w*|cudnn\w*)"), "includes {0}"),
+)
 
 _CPP_SUFFIXES = (".cu", ".cuh", ".cpp", ".cc", ".h", ".hpp")
 # load_inline-style keyword names whose string value is source code
@@ -515,21 +534,6 @@ def _import_findings(src: str, depth: int = 0) -> list[str]:
                     for text in _string_findings(kw.value.value):
                         add(text)
     return found
-
-
-_LIB_PATTERNS = (
-    (re.compile(r"\btorch\s*\.\s*(matmul|mm|bmm|addmm|baddbmm|einsum|_scaled_mm|softmax|"
-                r"layer_norm|rms_norm|group_norm|conv\w*|cdist)\s*\("),
-     "computes with torch.{0}"),
-    (re.compile(r"\b(?:F|torch\s*\.\s*nn\s*\.\s*functional)\s*\.\s*(linear|scaled_dot_product_attention|"
-                r"softmax|log_softmax|layer_norm|rms_norm|group_norm|conv\w*|"
-                r"embedding|silu|gelu)\s*\("),
-     "computes with torch.nn.functional.{0}"),
-    (re.compile(r"\btorch\s*\.\s*ops\s*\.\s*(\w+)"), "calls the registered op torch.ops.{0}"),
-    (re.compile(r"[\w\)\]][ \t]*@[ \t]*[\w\(]"), "uses the @ (matmul) operator"),
-    (re.compile(r"\b(cublas\w*|cudnn\w*|cublasLt\w*)\s*\("), "calls {0}"),
-    (re.compile(r"#\s*include\s*[<\"](cublas\w*|cudnn\w*)"), "includes {0}"),
-)
 
 
 def _strip_comments(src: str, kernel_file: str) -> str:

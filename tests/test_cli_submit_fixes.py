@@ -17,6 +17,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
+from peregrine_kernel.loop import cli
 from peregrine_kernel.submit import direct
 from peregrine_kernel.submit import jobs as ds
 from peregrine_kernel.submit.config import SubmitConfig
@@ -175,3 +178,31 @@ def test_the_runner_records_a_lost_verdict_that_nothing_charges(tmp_path, monkey
     ds.jobs_dir(d).joinpath("9").mkdir(parents=True)
     ds.runner_main(SubmitConfig(branch="main", op_dir=str(d)), "9", "perf", "main")
     assert ds.job_status(d, "9")["status"] == ds.STATUS_LOST
+
+
+# -- clock-lock retry budget -------------------------------------------------------------------
+
+
+def test_clock_lock_retry_counts_total_submits_and_says_so(monkeypatch, capsys):
+    """The budget is a TOTAL of ``clock_lock_retries`` submits (1 + 2 resubmits), the
+    same counting the lost-runner budget uses, and the progress line names the
+    current attempt out of that total (rewritten from the archived wording, which
+    named a different progress line)."""
+    refused = f"{ds.CLOCK_LOCK_REFUSED_MARKER} lock not held\n"
+    be = cli.RealBackend("op", None, None, "n", "e")
+    be.clock_lock_retry_sleep_s = 0
+    seen: list = []
+
+    def once(branch, mode):
+        seen.append(mode)
+        be.last_job_id = str(len(seen))
+        return refused
+
+    monkeypatch.setattr(be, "_submit_gpu_once", once)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    with pytest.raises(cli.ClockLockRefusedError) as why:
+        be.submit_gpu("b", "all")
+    assert len(seen) == be.clock_lock_retries == 3
+    out = capsys.readouterr().out
+    assert "resubmitting (1/3)" in out and "resubmitting (2/3)" in out
+    assert "3 refusal(s) in a row" in str(why.value)

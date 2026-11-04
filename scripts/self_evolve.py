@@ -57,9 +57,13 @@ def latest_run(task_name: str):
 
 def noise_floor(best: dict) -> float:
     """The relative gain a generation must clear: the spread of its same-job ratios
-    ((max - min) / min), never below NOISE_FLOOR_MIN."""
+    ((max - min) / min), never below NOISE_FLOOR_MIN. Ratios the spread cannot
+    back (none, or a non-positive reading) give the floor minimum -- the caller
+    reports such a generation as having nothing to optimize, it never divides
+    by zero after the generation's jobs have run."""
     ratios = best.get("ratios") or []
-    spread = (max(ratios) - min(ratios)) / min(ratios) if len(ratios) > 1 else 0.0
+    spread = (max(ratios) - min(ratios)) / min(ratios) \
+        if len(ratios) > 1 and min(ratios) > 0 else 0.0
     return max(NOISE_FLOOR_MIN, spread)
 
 
@@ -347,6 +351,22 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
     task_dir = Path(args.task).resolve()
     base = re.sub(r"-g\d+$", "", task_dir.name)
+    # The first destination is known before any job is bought: refuse a start
+    # whose destination is the starting task itself (a chain started from a
+    # -g<k> directory) or that already exists -- a generation must never run
+    # into a FileExistsError only after its jobs have been paid for.
+    first_dest = task_dir.parent / f"{base}-g2"
+    if first_dest == task_dir:
+        sys.stderr.write(f"[self-evolve] refusing to start: the first generation's "
+                         f"destination {first_dest} is the starting task itself "
+                         f"(start from the un-suffixed task, or rename the -g<k> "
+                         f"directory)\n")
+        return 2
+    if first_dest.exists():
+        sys.stderr.write(f"[self-evolve] refusing to start: the first generation's "
+                         f"destination {first_dest} already exists; remove it or "
+                         f"start the chain elsewhere\n")
+        return 2
     for gen in itertools.count(1):
         try:
             task = load_task(task_dir)
@@ -363,6 +383,13 @@ def main(argv=None) -> int:
             print(f"[self-evolve] generation {gen} ended without a confirmed best kernel "
                   f"(loop exit {rc}): the chain stops here", flush=True)
             return 0 if gen > 1 else 1
+        ratios = best.get("ratios") or []
+        if any(not isinstance(r, (int, float)) or r <= 0 for r in ratios):
+            print(f"[self-evolve] generation {gen}: best {best['sha'][:12]} but its "
+                  f"confirmation ratios hold a non-positive reading ({ratios!r}); "
+                  f"the noise floor is unmeasurable, so this generation counts as "
+                  f"nothing to optimize: the chain stops here", flush=True)
+            return 0
         gain = best.get("speedup")
         floor = noise_floor(best)
         print(f"[self-evolve] generation {gen}: best {best['sha'][:12]}, "

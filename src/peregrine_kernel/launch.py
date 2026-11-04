@@ -431,8 +431,11 @@ def drive(run, machine, *, resuming: bool = False, harvest_only: bool = False) -
             raise
         stop = loop_stop(run, task) if rc == 0 else None
         met = rc == 0 and confirmed_at_target(run, task)
-        final = (runs_mod.STATUS_DONE if stop == STOP_TARGET or met
-                 else runs_mod.STATUS_STOPPED)
+        # The stop word never completes a run by itself: DONE needs the final
+        # confirmation to meet the target with no correctness alarm on that kernel
+        # (the `peregrine run` contract in __main__), while a budget that runs out
+        # after the target was met still ends DONE.
+        final = runs_mod.STATUS_DONE if met else runs_mod.STATUS_STOPPED
         run.update(status=final, loop_rc=rc, stop=stop, target_met=met)
         write_report(run, task, rc)
         return 0 if final == runs_mod.STATUS_DONE else 2

@@ -89,7 +89,11 @@ def _start(task_dir) -> int:
 
 def _loop_ends(hook=None, stop="target", confirm=None):
     """A stand-in for the loop: sees its argv, ends with ``stop`` in its summary (and
-    ``confirm`` as its final confirmation, when given)."""
+    ``confirm`` as its final confirmation, when given). stop="target" with no
+    confirmation writes a passing one: the loop ends at the target only on a confirmed
+    best, and `peregrine run` reads DONE out of that confirmation, never out of the
+    stop word (an alarm on the confirmed kernel, or a missing confirmation, must end
+    the run stopped)."""
     from peregrine_kernel.loop.cli import SUMMARY_FILE
 
     def main(argv):
@@ -97,8 +101,12 @@ def _loop_ends(hook=None, stop="target", confirm=None):
             hook(argv)
         d = Path(os.environ["PEREGRINE_OPERATORS_DIR"]) / argv[0]
         (d / SUMMARY_FILE).write_text(json.dumps({"stop": stop}))
-        if confirm is not None:
-            (d / "best_confirmation.json").write_text(json.dumps(confirm))
+        c = confirm
+        if c is None and stop == "target":
+            c = {"sha": "ab" * 20, "window": "device", "median_ms": 0.02,
+                 "median_ratio": 8.0}
+        if c is not None:
+            (d / "best_confirmation.json").write_text(json.dumps(c))
         return 0
     return main
 

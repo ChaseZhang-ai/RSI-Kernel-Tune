@@ -571,3 +571,23 @@ def test_every_command_is_examined_not_just_the_first(tmp_path):
         "agent command: changes directory before running the agent, so "
         "the policy in the working directory would not be loaded",
     ]
+
+
+def test_the_hook_blocks_when_the_event_does_not_parse(tmp_path):
+    """BUG-SEED-45: an unparseable event used to be allowed through with exit 0 --
+    silently fail-open, while an unreadable POLICY fails closed two lines above.
+    The event text is the model's own output channel, so a parse failure is a
+    tampering signal, not a reason to let the call through."""
+    p = subprocess.run([sys.executable, str(REPO / "scripts" / "agent_policy_hook.py"),
+                        str(_policy_file(tmp_path))], input="{not json", text=True,
+                       capture_output=True)
+    assert p.returncode == 2 and "BLOCKED" in p.stderr
+    empty = subprocess.run([sys.executable, str(REPO / "scripts" / "agent_policy_hook.py"),
+                            str(_policy_file(tmp_path))], input="", text=True, capture_output=True)
+    assert empty.returncode == 0          # no event at all is just no opinion
+
+
+def _policy_file(tmp_path):
+    p = tmp_path / "policy.json"
+    p.write_text(json.dumps(POLICY))
+    return p

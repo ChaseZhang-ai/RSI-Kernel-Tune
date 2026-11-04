@@ -160,8 +160,14 @@ def main(argv: list[str]) -> int:
         return 2
     try:
         event = json.loads(sys.stdin.read() or "{}")
-    except ValueError:
-        return 0
+    except ValueError as e:
+        # The event text is the model's own output channel, so a parse failure is a
+        # tampering signal, not a reason to let the call through: the policy side
+        # two lines up fails closed, and this side does the same (BUG-SEED-45 --
+        # this used to `return 0`, silently fail-open, with no comment why).
+        sys.stderr.write(f"BLOCKED: Peregrine-Kernel agent policy: the tool-call event "
+                         f"does not parse ({e})\n")
+        return 2
     msg = decide(policy, event)
     if msg:
         sys.stderr.write(msg + "\n")

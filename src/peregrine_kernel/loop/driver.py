@@ -2286,12 +2286,15 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
     watermark takes the MEDIAN OF THE JOB MEDIANS — not the first, faster one —
     except that a failed FIRST confirmation keeps the original reading (a flaky
     queue must not veto a measured KEEP); once a dissenting confirmation is in
-    hand, a failed tie-break settles on the median of what was measured. Draws
-    whose spread exceeds the band mark the row ``best_low_confidence``: the
-    reading is one this run cannot settle, and plateau/meta read it with that
-    caution. Confirmation draws' same-job ratios refuel the between-job sigma
-    (the ctx memo — same-sha re-measurements are the one between-job sample with
-    no kernel difference in it).
+    hand, a failed tie-break settles on the median of what was measured. A
+    confirmation draw that lands past the old best (``metric_before``) is a
+    dissent too — draw-to-draw agreement inside the margin does not confirm a
+    jump the second draw contradicts. Draws whose spread exceeds the band mark
+    the row ``best_low_confidence``: the reading is one this run cannot settle,
+    and plateau/meta read it with that caution. Confirmation draws' same-job
+    ratios refuel the between-job sigma (the ctx memo — same-sha
+    re-measurements are the one between-job sample with no kernel difference in
+    it).
 
     Returns ``(ev, info)``: the (possibly median-rewritten) eval result and
     {"confirm_jobs", "confirm_readings", "low_confidence", "why"} — the
@@ -2445,24 +2448,37 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
         _log(f"watermark: confirmation job {getattr(be, 'last_job_id', '') or '?'} "
              f"read {ms_n}")
         if len(readings) == 2 and abs(ms_n - ms) <= margin * ms:
-            if ncu_suspect_ns is None:
+            # Draw-to-draw agreement is not the whole bar: the confirmation draw
+            # is the jump's replication attempt, and one that lands past the OLD
+            # best (metric_before) is a dissent — the level the first draw
+            # claimed to clear was not cleared. best 100 -> 98.0 -> 100.9 agrees
+            # inside the margin (2.9 <= 2.94) yet median-banks 99.45, a gain the
+            # confirmation draw contradicts. Such a draw settles unconfirmed
+            # (tie-break when the protocol buys one, else the median below with
+            # its low-confidence mark).
+            if ms_n > metric_before:
+                _log(f"watermark: confirmation {ms_n} lands past the old best "
+                     f"{metric_before} — the jump did not replicate; "
+                     f"tie-breaking")
+            elif ncu_suspect_ns is None:
                 confirmed = True  # two independent draws agree — the jump is real
                 break
-            # ms agreement cannot clear the NCU trigger: on a bimodal queue the
-            # confirmation draws from the same fast-node pool the suspect did,
-            # so band-consistent readings are near coin-flip likely even when
-            # the kernel really regressed. The alarm came from the kernel
-            # clock; only the kernel clock clears it.
-            try:
-                t_n = _ncu_profiler(ctx, branch, correctness=True).get("time_ns")
-            except BackendError:
-                t_n = None
-            if t_n and float(t_n) <= ncu_suspect_ns * ncu_band:
-                confirmed = True  # kernel time recovered too — the jump is real
-                break
-            _log(f"watermark: ms agrees but the re-profiled kernel time "
-                 f"({t_n or 'unavailable'} ns) does not clear the regression vs "
-                 f"{ncu_suspect_ns:.0f} ns — tie-breaking")
+            else:
+                # ms agreement cannot clear the NCU trigger: on a bimodal queue the
+                # confirmation draws from the same fast-node pool the suspect did,
+                # so band-consistent readings are near coin-flip likely even when
+                # the kernel really regressed. The alarm came from the kernel
+                # clock; only the kernel clock clears it.
+                try:
+                    t_n = _ncu_profiler(ctx, branch, correctness=True).get("time_ns")
+                except BackendError:
+                    t_n = None
+                if t_n and float(t_n) <= ncu_suspect_ns * ncu_band:
+                    confirmed = True  # kernel time recovered too — the jump is real
+                    break
+                _log(f"watermark: ms agrees but the re-profiled kernel time "
+                     f"({t_n or 'unavailable'} ns) does not clear the regression vs "
+                     f"{ncu_suspect_ns:.0f} ns — tie-breaking")
     final = statistics.median(readings)
     if confirmed:
         if final != ms:

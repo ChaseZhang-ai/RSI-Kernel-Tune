@@ -18699,14 +18699,23 @@ def _wp5_measured_headroom(best_ms: float | None, floor_ms: float | None) -> flo
 
 def _wp5_sol_pcts(records) -> dict:
     """WP2's SOL readbacks (compute_sol_pct / memory_sol_pct) off the newest KEEP
-    that carries them, for the stop summary. WP2 ships in parallel: attributes
-    absent -> {} and nothing else changes — this channel never blocks."""
+    that carries them, for the stop summary. WP2 writes them into the record's
+    ``profiler`` dict (inner/ncu.py's metric map; the same place the digest's
+    sol_header reads them), so that dict is the read location; the bare-attribute
+    getattr stays as the documented parallel-shipping fallback. Both absent ->
+    {} and nothing else changes — this channel never blocks."""
     out: dict = {}
     for r in reversed(list(records)):
         if r.verdict != "KEEP":
             continue
-        c = getattr(r, "compute_sol_pct", None)
-        m = getattr(r, "memory_sol_pct", None)
+        prof = getattr(r, "profiler", None)
+        prof = prof if isinstance(prof, dict) else {}
+        c = prof.get("compute_sol_pct")
+        if c is None:
+            c = getattr(r, "compute_sol_pct", None)
+        m = prof.get("memory_sol_pct")
+        if m is None:
+            m = getattr(r, "memory_sol_pct", None)
         if c is None and m is None:
             continue
         for k, v in (("compute_sol_pct", c), ("memory_sol_pct", m)):

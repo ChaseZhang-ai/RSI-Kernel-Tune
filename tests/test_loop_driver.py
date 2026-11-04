@@ -1566,6 +1566,15 @@ def test_wp5_stop_fields_carry_wp2_sol_side_evidence(tmp_path):
     out = _wp5_sol_pcts([plain, keep])
     assert out == {"compute_sol_pct": 55.0, "memory_sol_pct": 61.0,
                    "sol_corroborates_headroom": True}
+    # production records carry the readbacks in the PROFILER dict (inner/ncu.py's
+    # metric map — the same place the digest's sol_header reads them): the newest
+    # KEEP's dict values ride exactly like the attribute spelling above.
+    prof_keep = SimpleNamespace(verdict="KEEP", profiler={"compute_sol_pct": 42.0,
+                                                          "memory_sol_pct": 66.0},
+                                device_median_ms=2.0, bwd_median_ms=None, cluster="")
+    assert _wp5_sol_pcts([prof_keep]) == {"compute_sol_pct": 42.0,
+                                          "memory_sol_pct": 66.0,
+                                          "sol_corroborates_headroom": True}
     ctx = _ctx(tmp_path, FakeBackend([], []))
     fields = _wp5_stop_fields(ctx, [plain, keep], meta_steps=4, max_meta=3)
     assert fields["meta_extra_used"] == 1

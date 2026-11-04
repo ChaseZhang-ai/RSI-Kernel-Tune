@@ -52,7 +52,7 @@ A/B numbers exist. These are recorded so nobody re-proposes them as new:
 | B7 | binref compiled-reference route | Compiled (.cu) reference routing is not wired into ordinary tasks; `--from-kernels` explicitly refuses `.cu` published kernels with a P2-backlog pointer. | CHANGES-WP24 §7 |
 | B8 | Milestone validator "all-labels-deleted" WARN | Downgraded, non-blocking, de-silencing only (~10 lines; the residual hole `milestone.py` self-documents). | 59 WP20 P2 |
 | B9 | Hot/cold L2 dual readings (report-only) + symmetric CUDA-graph timing option | Measurement-side option for launch-bound cards, report-only, never enters a gate. | 59 WP18 P2 |
-| B10 | WP21 smoke defect registry | Defects D-1..D-10 found by the mini smoke are dispatched to owning packages per the energize protocol section 4 (e.g. the `_wp5_sol_pcts` getattr bug — WP5's never-realized consumption of WP2 telemetry; `build_digest` dead link closed by WP19). | 97 §B5, energize protocol §4 |
+| B10 | WP21 smoke defect registry | Defects D-1..D-10 found by the mini smoke are dispatched to owning packages per the energize protocol section 4 (e.g. the `_wp5_sol_pcts` getattr bug — WP5's never-realized consumption of WP2 telemetry, closed by auditA 2026-11-04: it reads the record's `profiler` dict now; `build_digest` dead link closed by WP19). | 97 §B5, energize protocol §4 |
 | B11 | Optional minimal GitHub Actions CI | ubuntu + `pip install -e .` + `pytest tests/ -q`, CPU-only. **Requires user approval before enabling** (WP25 task 3, P2). | 102 task 3 |
 | B12 | Run-level multi-GPU parallelism | Zero framework code; deployment self-serve (distinct `with-lock` lock names per GPU). | 59 section 6 |
 

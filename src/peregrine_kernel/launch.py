@@ -650,13 +650,24 @@ def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
 
 
 def kb_changes() -> list[str]:
-    """Knowledge-base entries this machine's runs certified and nobody has committed yet."""
+    """Knowledge-base entries this machine's runs certified and nobody has committed yet.
+
+    A git status that fails (or cannot run) is reported on stderr and yields no
+    entries — never silently masqueraded as a clean knowledge base, which would drop
+    pending entries from the report (BUG-SEED-38)."""
     try:
-        out = subprocess.run(["git", "-C", str(repo_root()), "status", "--porcelain", "--",
-                              *KB_DIRS], capture_output=True, text=True, timeout=30).stdout
-    except (OSError, subprocess.SubprocessError):
+        p = subprocess.run(["git", "-C", str(repo_root()), "status", "--porcelain", "--",
+                            *KB_DIRS], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        sys.stderr.write(f"[peregrine] git status over the knowledge bases failed "
+                         f"({e}); the KB state is unknown, not clean\n")
         return []
-    return [line[3:] for line in out.splitlines() if line.strip()]
+    if p.returncode != 0:
+        sys.stderr.write(f"[peregrine] git status over the knowledge bases failed "
+                         f"(rc={p.returncode}): {p.stderr.strip()}; the KB state is "
+                         f"unknown, not clean\n")
+        return []
+    return [line[3:] for line in p.stdout.splitlines() if line.strip()]
 
 
 def confirmation(run, task) -> dict | None:

@@ -168,3 +168,64 @@ def test_seed36_scaffold_cli_reports_a_bad_name_readably(capsys):
     rc = scaffold_mod.main(["../escape"])
     assert rc == 2
     assert "not a task name" in capsys.readouterr().out
+
+
+# --- BUG-SEED-38: a failed git status no longer masquerades as "no changes" ------------
+
+import subprocess  # noqa: E402
+from types import SimpleNamespace as _NS  # noqa: E402
+
+from peregrine_kernel import taskcard  # noqa: E402
+
+
+def _git_repo(path: Path) -> None:
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=path, check=True,
+                   capture_output=True)
+
+
+def test_seed38_commit_raises_when_git_status_fails(tmp_path, monkeypatch):
+    """A failed `git status --porcelain` (empty stdout) used to read as 'nothing to
+    commit' and silently skip the commit; it must be a loud failure instead."""
+    _git_repo(tmp_path)
+    real_run = subprocess.run
+
+    def fake_run(argv, *a, **kw):
+        if "status" in argv:
+            return _NS(returncode=128, stdout="", stderr="fatal: bad object HEAD")
+        return real_run(argv, *a, **kw)
+
+    monkeypatch.setattr(taskcard.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match="git status failed"):
+        taskcard._commit(tmp_path, "should never land")
+
+
+def test_seed38_commit_still_commits_changes_and_skips_a_clean_tree(tmp_path):
+    _git_repo(tmp_path)
+    (tmp_path / "f.txt").write_text("x\n", encoding="utf-8")
+    taskcard._commit(tmp_path, "add f")
+
+    def n_commits():
+        log = subprocess.run(["git", "-C", str(tmp_path), "log", "--oneline"],
+                             capture_output=True, text=True, check=True)
+        return log.stdout.splitlines()
+
+    assert len(n_commits()) == 1 and "add f" in n_commits()[0]
+    taskcard._commit(tmp_path, "nothing to commit")     # clean tree: no-op, no error
+    assert len(n_commits()) == 1
+
+
+def test_seed38_kb_changes_reports_a_failed_git_status(tmp_path, monkeypatch, capsys):
+    """rc != 0 used to be read as an empty change set; now it warns on stderr."""
+    monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)   # not a git repo
+    assert launch.kb_changes() == []
+    err = capsys.readouterr().err
+    assert "unknown, not clean" in err and "rc=" in err
+
+
+def test_seed38_kb_changes_still_lists_real_changes(tmp_path, monkeypatch):
+    _git_repo(tmp_path)
+    (tmp_path / "hw_kb").mkdir()
+    (tmp_path / "hw_kb" / "leak.md").write_text("x\n", encoding="utf-8")
+    monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)
+    # porcelain lists an untracked directory as the directory itself
+    assert launch.kb_changes() == ["hw_kb/"]

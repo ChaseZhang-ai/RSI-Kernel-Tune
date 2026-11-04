@@ -466,8 +466,14 @@ def _git_init(tree: Path, message: str) -> None:
 def _commit(tree: Path, message: str) -> None:
     _git(tree, "add", "-A")
     status = subprocess.run(["git", "-C", str(tree), "status", "--porcelain"],
-                            capture_output=True, text=True).stdout
-    if status.strip():
+                            capture_output=True, text=True)
+    # BUG-SEED-38: the status call's return code used to go unchecked, so a failed
+    # status (index lock, corrupt repo) came back with empty stdout and read as
+    # "nothing to commit" — silently skipping a commit the card tree needs.
+    if status.returncode != 0:
+        raise RuntimeError(f"git status failed in {tree} (rc={status.returncode}): "
+                           f"{status.stderr.strip()}")
+    if status.stdout.strip():
         _git(tree, "commit", "-q", "-m", message)
 
 

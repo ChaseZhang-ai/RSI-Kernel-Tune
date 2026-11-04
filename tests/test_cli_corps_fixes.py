@@ -210,3 +210,53 @@ def test_an_unreadable_card_file_never_reads_as_no_overlay_needed(tmp_path, caps
     rec = json.loads((ws / ".git" / cli.RealBackend.overlay_fallback_file)
                      .read_text().splitlines()[-1])
     assert rec["ref"] == "abc1234" and "missing.sh" in rec["error"]
+
+
+# -- BUG-SEED-21: a poll timeout counts toward giving an in-flight job up ---------------------
+
+
+def _poll_timeout_backend(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    ws = tmp_path / "ws"
+    (ws / ".git").mkdir(parents=True)
+    n = {"submits": 0}
+
+    def fake_forge(op, verb, *a, **k):
+        if verb == "submit":
+            n["submits"] += 1
+            return SimpleNamespace(returncode=0, stderr="",
+                                   stdout=f"[submit] job={654999 + n['submits']}\n")
+        if verb == "status":
+            return SimpleNamespace(returncode=0, stderr="",
+                                   stdout='{"id": 9, "status": "Running"}')
+        return SimpleNamespace(returncode=0, stderr="", stdout="log body")
+
+    monkeypatch.setattr(cli, "_forge", fake_forge)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0, poll_timeout_s=0.0)
+    monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
+    return be, ws / ".git" / cli.RealBackend.inflight_file, n
+
+
+def test_a_poll_timeout_counts_toward_giving_the_job_up(monkeypatch, tmp_path):
+    """poll_until_terminal's BackendError used to fly straight out of _submit_gpu_once,
+    so a recorded job whose poll never settled was re-adopted after every restart,
+    forever — the record neither counted the miss nor was ever cleared. The timeout now
+    counts its misses in the record like an unreadable log does; at the threshold the
+    record is cleared and the next submit is fresh.
+
+    Ported from the R1 archive (test_a_poll_timeout_counts_toward_giving_the_job_up);
+    fk-inflight.json -> RealBackend.inflight_file."""
+    be, rec_path, n = _poll_timeout_backend(monkeypatch, tmp_path)
+    for expected_misses in (1, 2):
+        with pytest.raises(cli.BackendError, match="job 655000"):
+            be.submit_gpu("br", "all")
+        rec = json.loads(rec_path.read_text())
+        assert rec["log_failures"] == expected_misses     # the record survives, still adoptable
+    with pytest.raises(cli.BackendError, match="job 655000"):
+        be.submit_gpu("br", "all")
+    assert not rec_path.exists()                          # third miss: the job is given up
+    with pytest.raises(cli.BackendError, match="job 655001"):
+        be.submit_gpu("br", "all")
+    assert n["submits"] == 2                              # only the 1st and this submit ran

@@ -615,9 +615,23 @@ class RealBackend:
             # in every gate it anchors); it is not recoverable from the logs this returns
             self.last_job_id = job
             self.last_mode = mode
-            status = poll_until_terminal(
-                lambda: self._job_status(job), job, poll_s=self.poll_s,
-                timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+            try:
+                status = poll_until_terminal(
+                    lambda: self._job_status(job), job, poll_s=self.poll_s,
+                    timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+            except BackendError as e:
+                # BUG-SEED-21: a poll that never settles is the same kind of unknowable
+                # as a log that never comes — the BackendError must not fly straight out
+                # leaving a record every restart re-adopts into the same 4-hour wait.
+                # The timeout counts its misses in the record; at the threshold the job
+                # is given up and the next submit is fresh.
+                if "did not reach a terminal state" in str(e) and \
+                        self._note_inflight_log_failure(job) >= _INFLIGHT_LOG_ATTEMPTS:
+                    print(f"[loop] job {job}: the poll did not settle within "
+                          f"{_INFLIGHT_LOG_ATTEMPTS} attempts — giving the job up rather "
+                          f"than re-adopting it into another full poll window", flush=True)
+                    self._clear_inflight()
+                raise
             if status in _LOST:
                 self._clear_inflight()  # a lost job is gone; never re-adopt it
                 lost += 1

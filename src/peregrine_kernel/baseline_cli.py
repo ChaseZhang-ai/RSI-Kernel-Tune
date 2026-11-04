@@ -20,6 +20,7 @@ import argparse
 import json
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 from peregrine_kernel.paths import operators_dir
@@ -184,11 +185,17 @@ def parse_ref_stdout(text: str) -> dict:
 def _submit_cluster(op: str) -> str:
     """The machine this op's jobs run on ("local" or the ssh host), for stamping
     baseline provenance. "" when the submit config is unreadable — an unstamped
-    baseline is merely unguarded, not wrong."""
+    baseline is merely unguarded, not wrong. BUG-SEED-40: the blanket
+    ``except Exception`` used to swallow real bugs (a renamed attribute, a config
+    schema error) as if nothing was configured; only the expected config failures
+    (missing/unreadable file, malformed TOML) degrade now, they say so, and
+    everything else propagates."""
     try:
         from peregrine_kernel.submit.config import load_config
         return load_config(op).cluster
-    except Exception:
+    except (OSError, tomllib.TOMLDecodeError) as e:    # FileNotFoundError ⊂ OSError
+        print(f"[baseline] note: {op}: no readable submit config ({e}) — the "
+              f"baseline is stamped without a cluster")
         return ""
 
 

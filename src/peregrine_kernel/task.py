@@ -240,6 +240,21 @@ class Task:
         return LOOP_LANGUAGE[self.language]
 
 
+def name_problem(name: str) -> str | None:
+    """Why ``name`` cannot name a task/operator tree, or None when it can.
+
+    The load-time rules of ``load_task`` applied at the creation entry points
+    (``peregrine init``, the scaffolder): a bad name is refused there before any
+    directory is written, instead of surfacing hours later at ``load_task``
+    (BUG-SEED-36: the creators never checked)."""
+    if not _NAME_RE.match(name) or name.startswith("_"):
+        return (f"the name {name!r} is not a task name (letters, digits, '_', '.', "
+                f"-'; not starting with '_')")
+    if name in RESERVED_NAMES:
+        return f"{name!r} is one of peregrine's own commands; name the task otherwise"
+    return None
+
+
 def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
               name: str | None = None) -> Task:
     """Read and validate ``task_dir``; raise TaskError listing every problem.
@@ -252,11 +267,9 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
     if not d.is_dir():
         raise TaskError(d, ["no such directory"])
     name = name or d.name
-    if not _NAME_RE.match(name) or name.startswith("_"):
-        problems.append(f"the directory name {name!r} is not a task name "
-                        f"(letters, digits, '_', '.', '-'; not starting with '_')")
-    elif name in RESERVED_NAMES:
-        problems.append(f"{name!r} is one of peregrine's own commands; name the task otherwise")
+    problem = name_problem(name)
+    if problem:
+        problems.append(problem)
 
     own = _read_toml(d / TASK_FILE, problems)
     _unknown_keys(own, problems)

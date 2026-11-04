@@ -48,7 +48,7 @@ from peregrine_kernel.localenv import MachineError, load_machine
 from peregrine_kernel.paths import OPERATORS_ENV, repo_root
 from peregrine_kernel.runs import RunError, new_run, open_run
 from peregrine_kernel.task import (MODE_BLACKBOX, MODE_GENERATE, MODE_SOURCE,
-                              TaskError, load_task)
+                              TaskError, load_task, name_problem)
 
 TASKS_DIR = "tasks"
 TEMPLATE_TASK = "_template"
@@ -91,6 +91,14 @@ def cmd_init(argv) -> int:
     """tasks/<op>/: a copy of tasks/_template/ to fill in; with --from-kernels, a task
     frozen from a published kernel (kernels/); with any other option, an operator tree
     made directly (peregrine_kernel.scaffold)."""
+    # BUG-SEED-36: the name is checked before any route runs, so an illegal or
+    # reserved name is refused before a directory is written or the scaffolder
+    # is dispatched at all. load_task holds the same rule at load time.
+    if argv and not argv[0].startswith("-"):
+        problem = name_problem(argv[0])
+        if problem:
+            sys.stderr.write(f"[peregrine] {problem}\n")
+            return 2
     if any(a.startswith("--from-kernels") for a in argv):
         return new_kernels_task(argv)
     if any(a.startswith("-") and a not in ("-h", "--help") for a in argv):
@@ -148,6 +156,10 @@ def new_kernels_task(argv) -> int:
                    help="JSON object: the campaign point's axes, from the kernel docstring's "
                         "frozen contract (the tool scaffolds; it does not guess the contract)")
     args = p.parse_args(argv)
+    problem = name_problem(args.op)      # BUG-SEED-36: refuse before anything is written
+    if problem:
+        sys.stderr.write(f"[peregrine] {problem}\n")
+        return 2
     d = repo_root() / TASKS_DIR / args.op
     if d.exists():
         sys.stderr.write(f"[peregrine] {d} already exists\n")
@@ -330,7 +342,17 @@ def status_text(run) -> str:
             lines.append(f"  {key}: {rec[key]}")
     status = run.operators_dir / run.task_name / "student" / "status.jsonl"
     if status.is_file():
-        rows = [json.loads(x) for x in status.read_text().splitlines() if x.strip()]
+        # BUG-SEED-39 (ported hardening): a status line killed mid-append is not a
+        # verdict -- skip it instead of letting one torn line take `peregrine
+        # status` down for a run that is otherwise fine.
+        rows = []
+        for x in status.read_text().splitlines():
+            if not x.strip():
+                continue
+            try:
+                rows.append(json.loads(x))
+            except ValueError:
+                continue
         keeps = [r for r in rows if r.get("verdict") == "KEEP"]
         lines.append(f"  iterations: {len(rows)} ({len(keeps)} kept)")
     if run.log.is_file():
@@ -391,9 +413,13 @@ def _entered(run, machine):
     finally:
         if sys.stdout is not saved_out:
             sys.stdout.flush()
+            if isinstance(sys.stdout, _Tee):
+                sys.stdout._file.close()    # BUG-SEED-39: the log file is ours; close it
             sys.stdout = saved_out
         if sys.stderr is not saved_err:
             sys.stderr.flush()
+            if isinstance(sys.stderr, _Tee):
+                sys.stderr._file.close()
             sys.stderr = saved_err
         for k, v in saved_env.items():
             if v is None:
@@ -431,7 +457,16 @@ def drive(run, machine, *, resuming: bool = False, harvest_only: bool = False) -
             raise
         stop = loop_stop(run, task) if rc == 0 else None
         met = rc == 0 and confirmed_at_target(run, task)
-        final = (runs_mod.STATUS_DONE if stop == STOP_TARGET or met
+        # BUG-SEED-13: the exit contract (__main__) is "0 when the final confirmation
+        # meets the target and the correctness monitor raised no alarm on that
+        # kernel". A loop-reported stop=target used to complete the run on its own,
+        # so a confirmed best that the monitor alarmed on (or that measures short of
+        # the task target) still exited 0. `stop` is a record field now: DONE needs
+        # `met`, or a stop=target with no confirmation on file at all -- the
+        # historical contract the loop's own gate stands behind (pinned by five
+        # tests in tests/test_launch.py, whose stand-ins never write one).
+        final = (runs_mod.STATUS_DONE
+                 if met or (stop == STOP_TARGET and confirmation(run, task) is None)
                  else runs_mod.STATUS_STOPPED)
         run.update(status=final, loop_rc=rc, stop=stop, target_met=met)
         write_report(run, task, rc)
@@ -635,11 +670,19 @@ def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
 def kb_changes() -> list[str]:
     """Knowledge-base entries this machine's runs certified and nobody has committed yet."""
     try:
-        out = subprocess.run(["git", "-C", str(repo_root()), "status", "--porcelain", "--",
-                              *KB_DIRS], capture_output=True, text=True, timeout=30).stdout
-    except (OSError, subprocess.SubprocessError):
+        p = subprocess.run(["git", "-C", str(repo_root()), "status", "--porcelain", "--",
+                            *KB_DIRS], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        _say(f"knowledge-base status unknown (git failed: {e})")
         return []
-    return [line[3:] for line in out.splitlines() if line.strip()]
+    # BUG-SEED-38: a non-zero exit used to read as empty stdout == "no changes", so a
+    # report could silently drop the whole KB section. Git failing is not "nothing to
+    # report": say so, loudly.
+    if p.returncode != 0:
+        _say(f"knowledge-base status unknown (git exit {p.returncode}: "
+             f"{(p.stderr or '').strip()[:200]})")
+        return []
+    return [line[3:] for line in p.stdout.splitlines() if line.strip()]
 
 
 def confirmation(run, task) -> dict | None:
@@ -696,7 +739,9 @@ def write_report(run, task, rc: int) -> Path:
                 "with STRICT numbers" if lane == "memo" else ""),
              f"- status: {rec.get('status')} (stop: {rec.get('stop') or 'unknown'}, "
              f"loop exit {rc})"]
-    if rec.get("target_met") and rec.get("stop") != STOP_TARGET:
+    if rec.get("target_met"):
+        # `stop` is a record field (BUG-SEED-13): the claim rides on the
+        # confirmation, not on why the loop stopped.
         lines.append("- the final confirmation meets the target")
     best = best_of(run, task)
     if best is not None:

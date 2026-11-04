@@ -688,7 +688,11 @@ error norm at all — probes have reported values like 8e10 and 8.1e15, smugglin
 sub-check bitmasks through the one field the driver echoes back.
 """
 
-_PROBE_VERDICT_RE = re.compile(r"PROBE\s+(PASS|FAIL)(?:\s+max_diff=(\S+))?([^\n]*)")
+# The verdict word's PASSED/FAILED spellings are consumed by the optional (?:ED)?
+# — otherwise the "ED" landed in the note group and, worse, broke the optional
+# max_diff match ("PASS" then "ED ..." is not \s+max_diff=), so "PROBE PASSED
+# max_diff=0.5" reported the reading as unreported (P3-10).
+_PROBE_VERDICT_RE = re.compile(r"PROBE\s+(PASS|FAIL)(?:ED)?\b(?:\s+max_diff=(\S+))?([^\n]*)")
 _PROBE_NON_NUMERIC = {"n/a", "na", "none", "-"}
 _PROBE_NOTE_LEAD = " \t#-/:;|"
 _PROBE_READING_MAX = 96

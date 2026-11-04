@@ -66,3 +66,21 @@ def test_non_finite_ratio_does_not_widen_the_resolution_band():
     not a NaN-driven number)."""
     recs = [_rec(0, vs_dev=float("nan"))]
     assert resolvable_diff(recs, "device") == resolvable_diff([], "device")
+
+
+# --- P3-10 [P3]: "PROBE PASSED" keeps its max_diff capture -----------------------
+
+def test_probe_passed_suffix_keeps_max_diff():
+    """P3-10: the PASSED spelling let the trailing 'ED' eat the optional
+    max_diff= group (after 'PASS' comes 'ED', not \s+max_diff=), so a real
+    reading was reported unreported."""
+    v = parse_probe_verdict("PROBE PASSED max_diff=0.5")
+    assert v.passed is True and v.max_diff == 0.5
+    c = v.contracts[0]
+    assert c.verdict == "PASS" and c.raw == "0.5" and c.note == ""
+    # FAILED still reads as FAIL, with its reading kept for the feedback
+    v = parse_probe_verdict("PROBE FAILED max_diff=2.5")
+    assert v.passed is False and v.max_diff == 2.5 and v.found is True
+    # the bare spellings parse exactly as before
+    assert parse_probe_verdict("PROBE PASS max_diff=0.0").passed is True
+    assert parse_probe_verdict("PROBE FAIL max_diff=1.13").passed is False

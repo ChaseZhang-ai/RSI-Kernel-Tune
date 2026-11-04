@@ -2770,9 +2770,16 @@ def _run_meta_verdict_probe(ctx: LoopContext, be, probe_branch: str, path: str,
 
     WP19 (task 2): extracted verbatim so the manifest's wholesale-failure
     fallback runs exactly this — the old path is the fallback, not a copy."""
-    be.commit(f"meta-probe: {path}")
-    be.push_branch(probe_branch)
-    probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    try:
+        be.commit(f"meta-probe: {path}")
+        be.push_branch(probe_branch)
+        probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    except BackendError as e:
+        # a flaked job must not end the whole run (the ablation probe and the
+        # stall pricing degrade locally on the same failure): the round reads
+        # as NO VERDICT, with the reason naming the job failure
+        _log(f"meta: verdict probe {path} job failed ({e}) — no reading this round")
+        return ProbeVerdict(False, found=False, reason=f"job failed ({e})"), "", []
     # audit=False: these lines answer pre-registered hypotheses, and the
     # max_diff field carries the reading as printed. The certification
     # audit (error-norm ceiling, float-only) was downgrading a PASS with a
@@ -2789,7 +2796,14 @@ def _run_probe_manifest_batch(ctx: LoopContext, be, branch: str,
                               paths: list[str]) -> "list[tuple[str, str]] | None":
     """One batched job over the manifest's scripts; None when the log carries
     no begin markers (the job never really ran — the caller falls back)."""
-    log = be.submit_gpu(branch, _probe_batch_mode(paths))
+    try:
+        log = be.submit_gpu(branch, _probe_batch_mode(paths))
+    except BackendError as e:
+        # same local degradation as the single-script probe: a wholesale job
+        # failure falls back to the per-script path instead of ending the run
+        _log(f"meta: probe manifest batch job failed ({e}) — falling back "
+             f"to the per-script path")
+        return None
     return _split_probe_batch_log(log, paths)
 
 
@@ -5355,13 +5369,22 @@ def _quarantine_leaky_kb(ctx: LoopContext, findings: list[str]) -> None:
     A finding's path is relative to the lint root's parent (lint_kb_dir's
     rel_to), i.e. ``<arch>/<entry>.md`` under hw_kb/; the quarantine hangs off
     the repo root, because a quarantine inside hw_kb/ would still sit in the
-    tree this is trying to take the entry out of."""
+    tree this is trying to take the entry out of. It keeps that relative shape
+    (``kb_quarantine/<arch>/<entry>.md``) so two archs' same-named entries
+    cannot overwrite one another."""
     qdir = lang_mode.kb_repo_root(ctx.kb_dir) / "kb_quarantine"
     for rel in sorted({f.split(":", 1)[0] for f in findings}):
         src = kb_read_dir(ctx).parent / rel
         if src.is_file():
-            qdir.mkdir(exist_ok=True)
-            dst = qdir / src.name
+            # keep the finding's own `<arch>/<entry>.md` shape: flattening to
+            # src.name made two archs' same-named entries rename onto one file,
+            # each silently destroying the other's quarantined evidence
+            dst = qdir / rel
+            n = 0
+            while dst.exists():        # POSIX rename overwrites silently: a
+                n += 1                 # re-quarantine must not erase the first
+                dst = dst.with_name(f"{dst.stem}.q{n}{dst.suffix}")
+            dst.parent.mkdir(parents=True, exist_ok=True)
             src.rename(dst)
             _log(f"meta/kb: QUARANTINED leaky entry {rel} -> {dst} — review by hand")
 
@@ -7220,12 +7243,12 @@ def _seed_sweep_toolkits(ctx: LoopContext, be) -> None:
     changed = []
     for name in modules:
         vendor = importlib.import_module(name)
-        text = Path(vendor.__file__).read_text()
+        text = Path(vendor.__file__).read_text(encoding="utf-8")
         dst = Path(ctx.workspace) / "notes" / Path(vendor.__file__).name
-        if dst.exists() and dst.read_text() == text:
+        if dst.exists() and dst.read_text(encoding="utf-8") == text:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(dst.name)
     if changed:
         be.commit(f"notes: vendor {', '.join(changed)} (driver-seeded sweep toolkit)")
@@ -8884,14 +8907,14 @@ def _mc_seed_toolkit(ctx: LoopContext, be) -> None:
     import importlib
     changed = []
     vendor = importlib.import_module("peregrine_kernel.skills.lever_pricing_run")
-    text = Path(vendor.__file__).read_text()
+    text = Path(vendor.__file__).read_text(encoding="utf-8")
     dst = Path(ctx.workspace) / "notes" / Path(vendor.__file__).name
-    if not (dst.exists() and dst.read_text() == text):
+    if not (dst.exists() and dst.read_text(encoding="utf-8") == text):
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(dst.name)
     dst = Path(ctx.workspace) / "notes" / "mc_prescreen.py"
-    if not (dst.exists() and dst.read_text() == _MC_PRESCREEN_SRC):
+    if not (dst.exists() and dst.read_text(encoding="utf-8") == _MC_PRESCREEN_SRC):
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(_MC_PRESCREEN_SRC, encoding="utf-8")
         changed.append("mc_prescreen.py")
@@ -13878,13 +13901,15 @@ def _pkg_decl(change: str) -> re.Match | None:
 
 def _declared_construction(change: str) -> str | None:
     """What the delivery's opening declares about the tree being mid-build, or
-    None: an unfinished package step (``part k of n``, k < n, the prompt's
+    None: an unfinished package step (``part k of n``, 1 <= k < n, the prompt's
     multi-step build package contract) or an opened placeholder (``[PLACEHOLDER: …]``). Read
     by run_inner_iteration to scaffold such a row while the lineage's green state
     is still unknown, instead of buying a full eval that can only say
-    "under construction"."""
+    "under construction". A malformed declaration — ``part 0 of n`` (no step was
+    built), what _open_package_tail already refuses to price on — is None here
+    too: the row prices like any other instead of scaffolding for free."""
     m = _pkg_decl(change)
-    if m and int(m.group(1)) < int(m.group(2)):
+    if m and 1 <= int(m.group(1)) < int(m.group(2)):
         return f"part {m.group(1)} of {m.group(2)}"
     head = (change or "").split("\n", 1)[0]
     p = _PLACEHOLDER_TAG.search(head)
@@ -15189,10 +15214,21 @@ _ROLE_WAIVED = re.compile(r"^ROLE-WAIVED:\s*\S", re.M)
 _ROLE_BLOCK_RE = re.compile(
     r"=== ROLE EXPOSURE BEGIN ===\n(.*?)\n=== ROLE EXPOSURE END ===", re.S)
 _REF_ROLE_EXPOSURE_NAME = "ref_role_exposure.txt"
-_STUDENT_ROLE_EXPOSURE_NAME = "student_role_exposure.txt"
+_STUDENT_ROLE_EXPOSURE_NAME = "student_role_exposure.txt"            # tree under judgment (HEAD)
+_STUDENT_BEST_ROLE_EXPOSURE_NAME = "student_role_exposure_best.txt"  # best-so-far KEEP
 _REF_PRICE_JOB_LOG_NAME = "ref_price_job.log"   # the ref pricing attempts: see _REF_PRICE_MARKER_NAMES
 _STUDENT_ORCH_DOSSIER_NAME = "student_orch_dossier.txt"        # tree under judgment (HEAD)
 _STUDENT_BEST_ORCH_DOSSIER_NAME = "student_orch_dossier_best.txt"  # best-so-far KEEP
+
+
+def _role_bank_names(bank_as: "tuple[str, ...]") -> "tuple[str, ...]":
+    """The roles-ledger file names matching ``bank_as``'s dossier names — the
+    best/HEAD split the dossiers have: with head != best, the head pricing job
+    must not overwrite the one file the best tree's job just banked (the roles
+    ledger had a single name for both trees, and the head job's table won)."""
+    return tuple(_STUDENT_BEST_ROLE_EXPOSURE_NAME
+                 if n == _STUDENT_BEST_ORCH_DOSSIER_NAME else _STUDENT_ROLE_EXPOSURE_NAME
+                 for n in bank_as)
 
 
 def _orch_summary(dossier_text: str | None) -> dict | None:
@@ -15877,13 +15913,13 @@ def _seed_sass_tools(ctx: LoopContext, rbe) -> None:
     # copy them in by hand). launch_tools: §1's cluster shape off the NCU
     # launch metrics, never off the grid shape.
     for vendor in map(importlib.import_module, RECON_SEEDED_MODULES):
-        text = Path(vendor.__file__).read_text()
+        text = Path(vendor.__file__).read_text(encoding="utf-8")
         name = Path(vendor.__file__).name
         dst = ctx.recon_dir / "notes" / name
-        if dst.exists() and dst.read_text() == text:
+        if dst.exists() and dst.read_text(encoding="utf-8") == text:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(name)
     # The closed-source run's in-job tripwire rides the same way, for the same
     # reason: the ref tree's gpu_entry.sh is what runs on the node, and the node
@@ -15894,11 +15930,11 @@ def _seed_sass_tools(ctx: LoopContext, rbe) -> None:
     if ctx.oracle_mode == "blackbox":
         src = _blackbox_guard_source()
         if src is not None:
-            text = src.read_text()
+            text = src.read_text(encoding="utf-8")
             dst = ctx.recon_dir / "notes" / BLACKBOX_GUARD_NAME
-            if not (dst.exists() and dst.read_text() == text):
+            if not (dst.exists() and dst.read_text(encoding="utf-8") == text):
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                dst.write_text(text)
+                dst.write_text(text, encoding="utf-8")
                 changed.append(BLACKBOX_GUARD_NAME)
         else:
             _log(f"meta/recon: {BLACKBOX_GUARD_NAME} not found beside this checkout "
@@ -15959,17 +15995,18 @@ def _save_ref_struct_table(ctx: LoopContext, log: str) -> None:
                   log, re.S)
     if m is None:
         return
+    dst = ctx.recon_path.parent / _REF_STRUCT_TABLE_NAME
     try:
-        (ctx.recon_path.parent / _REF_STRUCT_TABLE_NAME).write_text(m.group(1))
+        dst.write_text(m.group(1), encoding="utf-8")
     except OSError as e:
-        _log(f"meta/recon: could not persist {_REF_STRUCT_TABLE_NAME} to {e}")
+        _log(f"meta/recon: could not persist {_REF_STRUCT_TABLE_NAME} to {dst}: {e}")
 
 
 def _read_ref_struct_table(ctx: LoopContext) -> str | None:
     if ctx.recon_path is None:
         return None
     try:
-        return (ctx.recon_path.parent / _REF_STRUCT_TABLE_NAME).read_text()
+        return (ctx.recon_path.parent / _REF_STRUCT_TABLE_NAME).read_text(encoding="utf-8")
     except OSError:
         return None
 
@@ -15977,6 +16014,7 @@ def _read_ref_struct_table(ctx: LoopContext) -> str | None:
 EVIDENCE_FILE_NAMES = (
     _REF_STALL_LEDGER_NAME, _REF_SEGMENT_LEDGER_NAME, _REF_ORCH_DOSSIER_NAME,
     _REF_ROLE_EXPOSURE_NAME, _REF_PM_TIMELINE_NAME, _STUDENT_ROLE_EXPOSURE_NAME,
+    _STUDENT_BEST_ROLE_EXPOSURE_NAME,
     _STUDENT_ORCH_DOSSIER_NAME, _STUDENT_BEST_ORCH_DOSSIER_NAME,
     # the attempt markers: inherited, they would silence a fresh run's ref pricing
     "ref_price_job.log", "ref_price_job.2.log", "ref_price_job.3.log")
@@ -16184,7 +16222,9 @@ def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
 
     A partial table (no tensor term) is banked only where no full one is: a
     later --set-source probe must not downgrade the account a pricing job
-    delivered."""
+    delivered. Two full tables are compared by identity (same preference as
+    the dossier's banking guard): a smaller full table does not replace a
+    banked bigger one."""
     ev = _evidence_dir(ctx, create=True)
     if ev is None:
         return
@@ -16195,11 +16235,45 @@ def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
     if not full and _ref_overlap_banked(ctx):
         return
     dst = ev / _REF_ROLE_EXPOSURE_NAME
+    # Same cross-log guard as the dossier's: a later probe log carrying only a
+    # bystander kernel's full table must not silently replace the main kernel's
+    # account (the dossier's 9112-vs-6232 overwrite, in roles form). An equal
+    # or larger table still supersedes.
+    kept = _banked_role_totals(dst)
+    new = _banked_role_totals_text(block)
+    if (kept is not None and new is not None and kept[1] and new[1]
+            and kept[0] > new[0]):
+        _log(f"meta/recon: ref role exposure kept banked samples={kept[0]} "
+             f"over the smaller samples={new[0]} from this log")
+        return
     try:
         dst.write_text(block)
     except OSError as e:
         _log(f"meta/recon: could not persist {_REF_ROLE_EXPOSURE_NAME} "
              f"to {dst}: {e}")
+
+
+_ROLE_SAMPLES_RE = re.compile(r"^ROLE label=\S+ regions=\d+ samples=(\d+) ", re.M)
+
+
+def _banked_role_totals_text(text: str) -> "tuple[int, bool] | None":
+    """(stall samples, carries-tensor) of a role block body — the identity the
+    ref banking guard compares across logs, the counterpart of the dossier
+    guard's (kernel, instrs, verdict). None when the body carries no ROLE-JSON
+    core or no ROLE rows (the guard must not fire on an unparsable block)."""
+    from peregrine_kernel.skills.role_exposure_tools import parse_core
+    samples = sum(int(m.group(1)) for m in _ROLE_SAMPLES_RE.finditer(text))
+    core = parse_core(text)
+    if core is None or not samples:
+        return None
+    return samples, core.get("tensor_active") is not None
+
+
+def _banked_role_totals(path: Path) -> "tuple[int, bool] | None":
+    try:
+        return _banked_role_totals_text(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
 
 
 def _pick_role_block(log: str) -> "tuple[str, bool] | None":
@@ -16494,13 +16568,13 @@ def _seed_pricing_toolkits(root: Path, backend) -> None:
     import importlib
     changed = []
     for vendor in map(importlib.import_module, PRICING_SEEDED_MODULES):
-        text = Path(vendor.__file__).read_text()
+        text = Path(vendor.__file__).read_text(encoding="utf-8")
         name = Path(vendor.__file__).name
         dst = root / "notes" / name
-        if dst.exists() and dst.read_text() == text:
+        if dst.exists() and dst.read_text(encoding="utf-8") == text:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(name)
     if changed:
         backend.commit(f"notes: vendor {', '.join(changed)} (driver-seeded "
@@ -17153,11 +17227,11 @@ def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
         if (ev := _evidence_dir(ctx, create=True)) is not None and (
                 _STUDENT_ORCH_DOSSIER_NAME in bank_as
                 or _STUDENT_BEST_ORCH_DOSSIER_NAME in bank_as):
-            try:
-                (ev / _STUDENT_ROLE_EXPOSURE_NAME).write_text(roles)
-            except OSError as e:
-                _log(f"meta/stall-price[{label}]: could not persist "
-                     f"{_STUDENT_ROLE_EXPOSURE_NAME}: {e}")
+            for name in _role_bank_names(bank_as):
+                try:
+                    (ev / name).write_text(roles)
+                except OSError as e:
+                    _log(f"meta/stall-price[{label}]: could not persist {name}: {e}")
     dossier = None
     dm = _ORCH_DOSSIER_RE.search(log)
     # Banked on a parsable summary, NOT on the trailing ORCH-OK line: the

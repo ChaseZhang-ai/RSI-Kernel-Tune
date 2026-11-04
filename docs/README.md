@@ -18,6 +18,7 @@ One line per document. Historical per-package change documents were distilled in
 | [milestones-template.md](milestones-template.md) | The milestones meta-template — how to write a kernel-optimization milestone |
 | [prior-supply.md](prior-supply.md) | The prior supply discipline (survey / prior-art / carry channels) |
 | [safeguard-refusals.md](safeguard-refusals.md) | What a model-safeguard refusal looks like in the transcript and why it is dangerous |
+| [wp20r-known-gaps.md](wp20r-known-gaps.md) | The red-team matrix's open rows: the recorded not-caught cheat forms (G1 closed by WP29's replay probe) and their regression-visible fixtures |
 
 ## Design rationale
 

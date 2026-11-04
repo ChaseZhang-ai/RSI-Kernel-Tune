@@ -3277,6 +3277,20 @@ def _run(q, k, v, o, do, lse, compile_only: bool = False):
     of D0.3's ledger (probes read them; `flash_attn_bwd` drops them)."""
     global _COMPILED
 
+    # The compiled artifact and every buffer below are sized from the frozen
+    # constants (_B/_N/_H/_D: grid, strides, the 256 MiB dq_accum), so a
+    # wrong-shape call would read and write out of bounds through the baked
+    # strides.  The h100 sister raises a ValueError on shapes its topology
+    # cannot take (attn_bwd_mha/h100 flash_attn_bwd); this single-shape
+    # kernel refuses everything that is not exactly that geometry.
+    want = (_B, _N, _H, _D)
+    shapes = (tuple(q.shape), tuple(k.shape), tuple(v.shape),
+              tuple(o.shape), tuple(do.shape))
+    if shapes != (want,) * 5 or tuple(lse.shape) != (_B, _H, _N):
+        raise ValueError(
+            f"unsupported shape {shapes} / lse {tuple(lse.shape)} "
+            f"(compiled for B={_B}, N={_N}, H={_H}, D={_D})")
+
     dq = torch.empty_like(q)
     dk = torch.empty_like(k)
     dv = torch.empty_like(v)

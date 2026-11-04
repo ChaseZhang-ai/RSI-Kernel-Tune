@@ -292,3 +292,37 @@ def test_dependency_warnings_stay_silent_on_a_two_sided_companion_declaration():
     from peregrine_kernel.milestone import dependency_warnings
     assert dependency_warnings(
         _companion_milestone("- Depends on: ⇐ D0.1 | ⊗ D0.2")) == []
+
+
+# --- BUG-SEED-17: every agent command is seen by the policy gate -----------------------
+
+
+def test_command_findings_see_the_teacher_command_too():
+    """All agent commands used to share the "agent command" source, so the dedup key
+    collided and the second command's findings were dropped whole: the teacher leg —
+    always the second — could carry --settings past the gate unseen."""
+    from peregrine_kernel.loop import agent_policy as ap
+    student = 'claude -p "optimize the kernel"'
+    teacher = 'claude --settings /tmp/evil.json -p "recon the reference"'
+    assert ap.command_findings([student, teacher], {}) == [
+        "agent command: --settings outranks the project settings the "
+        "agent policy is delivered in, and could turn its sandbox or hooks off"]
+    findings = ap.command_findings(["claude -p --bare", teacher], {})
+    assert len(findings) == 2
+    assert "--bare" in findings[0] and "--settings" in findings[1]
+
+
+def test_command_findings_report_an_identical_command_once():
+    from peregrine_kernel.loop import agent_policy as ap
+    assert len(ap.command_findings(["claude -p --bare", "claude -p --bare"], {})) == 1
+
+
+def test_command_findings_still_read_a_shared_script_once(tmp_path):
+    """A script file named by two commands is scanned once: its (path, text) pair is
+    what repeats, and the dedup keeps working on it."""
+    from peregrine_kernel.loop import agent_policy as ap
+    script = tmp_path / "agent.sh"
+    script.write_text("claude -p --bare\n")
+    findings = ap.command_findings([f"bash {script}", f"bash {script}"], {})
+    assert len(findings) == 1
+    assert findings[0].startswith(str(script)) and "--bare" in findings[0]

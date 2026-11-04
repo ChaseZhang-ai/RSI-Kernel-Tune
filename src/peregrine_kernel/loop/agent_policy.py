@@ -480,11 +480,15 @@ def command_findings(cmds: list[str | None], env: dict[str, str],
         texts.append(("agent command", cmd))
         texts += scripts_in(cmd)
 
+    # Every agent command rides the same "agent command" source: keying the dedup on
+    # the source alone dropped the second command's findings whole (the teacher leg
+    # rides second and was invisible to the gate). A script file is still read once —
+    # its (path, text) pair repeats only when the same unchanged file is named again.
     findings, seen = [], set()
     for source, text in texts:
-        if source in seen:
+        if (source, text) in seen:
             continue
-        seen.add(source)
+        seen.add((source, text))
         body = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
         for m in _SOURCES_FLAG.finditer(body):
             if "project" not in m.group(2).split(","):

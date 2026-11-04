@@ -1,6 +1,6 @@
 """Loop CLI + submit fixes: honest ssh job verdicts.
 
-Ported from the ForgeKernel fix-wave's test_cli_submit_fixes.py (the sections that
+Ported from the archived fix-wave's test_cli_submit_fixes.py (the sections that
 pin the ssh delivery's verdict semantics), renamed and rebranded: peregrine_kernel
 imports, PK_JOB_BEGIN, pk paths. One fix per section:
 

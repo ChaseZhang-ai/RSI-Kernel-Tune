@@ -69,3 +69,38 @@ def test_a_nan_reading_cannot_hijack_the_plateau_minimum():
     assert ev.device_median_ms is None
     nan_row = _rec(0, ev.device_median_ms)
     assert detect_plateau([nan_row] + rows, window=3) is True
+
+
+# --- BUG-T4C-01: scalar eval readings swallowed bools/strings the list fields ---
+
+def test_scalar_eval_readings_reject_bool_and_string():
+    # the list fields have always demanded a real number; the scalars took
+    # anything float() swallowed, so a malformed bench's `true` became a
+    # 1.0 ms gate reading
+    ev = parse_eval(_eval_text(device_median_ms=True, bwd_median_ms="2.5",
+                               ref_device_ms="0.9", vs_ref=False,
+                               mfu="42", host_bound_ratio=True))
+    assert ev.device_median_ms is None
+    assert ev.bwd_median_ms is None
+    assert ev.ref_device_ms is None
+    assert ev.vs_ref is None
+    assert ev.mfu is None
+    assert ev.host_bound_ratio is None
+
+
+def test_scalar_eval_readings_still_accept_real_numbers():
+    ev = parse_eval(_eval_text(device_median_ms=2, bwd_median_ms=2.5,
+                               ref_device_ms=3, vs_ref=1.2, mfu=36))
+    assert ev.device_median_ms == 2.0
+    assert ev.bwd_median_ms == 2.5
+    assert ev.ref_device_ms == 3.0
+    assert ev.vs_ref == 1.2
+    assert ev.mfu == 36.0
+
+
+def test_scalar_eval_readings_reject_garbage_without_raising():
+    # a non-numeric string used to raise ValueError out of parse_eval; now the
+    # field simply reads as absent
+    ev = parse_eval(_eval_text(device_median_ms="fast", bwd_median_ms=[1.0]))
+    assert ev.device_median_ms is None
+    assert ev.bwd_median_ms is None

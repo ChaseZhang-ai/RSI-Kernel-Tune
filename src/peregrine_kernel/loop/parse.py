@@ -303,6 +303,18 @@ def readings_spread_pct(readings) -> float | None:
     return (max(vals) - min(vals)) / min(vals)
 
 
+def _finite_float(v) -> float | None:
+    """A scalar reading, read the way the list fields read theirs: a real number,
+    never a bool or a string, and finite. The list fields already demanded
+    ``isinstance(v, (int, float)) and not isinstance(v, bool)``; the scalars used
+    to take anything ``float()`` swallowed — a bench JSON that wrote
+    ``"device_median_ms": true`` parsed as a 1.0 ms gate reading, and ``"2.5"``
+    as 2.5, straight into best / plateau / watermark arithmetic."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(float(v)):
+        return float(v)
+    return None
+
+
 def _workloads(perf: dict) -> list:
     """Compact per-workload readings from a multi-workload performance block."""
     out = []
@@ -566,15 +578,11 @@ def parse_eval(text: str) -> EvalResult:
     def _opt(key: str, legacy: str | None = None) -> float | None:
         # legacy: pre-rename bench key (cublas_* — the in-job reference was recorded
         # under that name whatever library it was). Read so older cards' bench.py
-        # keeps parsing; new benches emit the ref_* names only. A non-finite value
-        # (a NaN median from a bench that measured nothing) reads as None — the same
-        # filter readings_spread_pct applies — because a NaN gate reading takes over
-        # every min() it joins and silently disables the plateau trigger.
-        v = perf.get(key, perf.get(legacy) if legacy else None)
-        if v is None:
-            return None
-        f = float(v)
-        return f if math.isfinite(f) else None
+        # keeps parsing; new benches emit the ref_* names only. The same guard the
+        # list fields apply: a real finite number or nothing (a NaN gate reading
+        # takes over every min() it joins and silently disables the plateau
+        # trigger; a bool/string "reading" is a malformed bench, not a small one).
+        return _finite_float(perf.get(key, perf.get(legacy) if legacy else None))
 
     def _opt_any(*keys: str) -> float | None:
         for key in keys:
@@ -612,10 +620,8 @@ def parse_eval(text: str) -> EvalResult:
         # COMPILE_ERROR verdict's nvcc/ptxas error and a numeric FAIL's surrounding
         # output are in the log the parser holds, so the record now holds them too.
         error="" if correct else _with_log_tail(_correctness_error(corr_obj), text),
-        bwd_median_ms=(float(ms) if ms is not None and math.isfinite(float(ms))
-                       else None),
-        mfu=(float(mfu) if mfu is not None and math.isfinite(float(mfu))
-             else None),
+        bwd_median_ms=_finite_float(ms),
+        mfu=_finite_float(mfu),
         ref_median_ms=_opt("ref_median_ms", "cublas_median_ms"),
         vs_ref=_opt("vs_ref", "vs_cublas"),
         device_median_ms=_opt("device_median_ms"),

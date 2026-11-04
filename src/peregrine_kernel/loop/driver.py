@@ -3417,7 +3417,8 @@ def _keep_probe_across_reset(ctx: LoopContext, probe_path: str) -> str | None:
     survive the reset that ends the iteration, or the next student starts the
     apparatus from scratch (observed: five rounds lost to rig debugging)."""
     try:
-        return (ctx.workspace / probe_path).read_text()
+        return (ctx.workspace / probe_path).read_text(encoding="utf-8",
+                                                       errors="replace")
     except OSError:
         return None
 
@@ -3431,7 +3432,7 @@ def _restore_probe_after_reset(ctx: LoopContext, probe_path: str, text: str) -> 
     dst = ctx.workspace / probe_path
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
     except OSError as e:
         _log(f"could not keep {probe_path} across the reset: {e}")
 
@@ -3445,7 +3446,9 @@ def _restore_kept_probes(ctx: LoopContext) -> None:
         dst = ctx.workspace / path
         if dst.is_file():
             try:
-                same = dst.read_text() == text
+                # errors="replace": a probe with non-UTF-8 bytes must compare
+                # (and restore, below) instead of raising through the iteration
+                same = dst.read_text(encoding="utf-8", errors="replace") == text
             except OSError:
                 same = False
             if not same:
@@ -3455,7 +3458,7 @@ def _restore_kept_probes(ctx: LoopContext) -> None:
             continue
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(text)
+            dst.write_text(text, encoding="utf-8")
             _log(f"restored kept probe {path} into the workspace")
         except OSError as e:
             _log(f"could not restore kept probe {path}: {e}")
@@ -5414,7 +5417,7 @@ def _detach_kb_probes(ctx: LoopContext, pre_head: str, probes: dict,
         dst = ctx.workspace / path
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(text)
+            dst.write_text(text, encoding="utf-8")
             kept.append(path)
         except OSError as e:
             _log(f"{what}: could not re-materialise {path}: {e}")

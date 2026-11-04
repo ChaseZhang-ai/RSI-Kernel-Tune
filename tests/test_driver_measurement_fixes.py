@@ -88,3 +88,23 @@ def test_probe_blocked_revert_row_is_neutral_on_green(tmp_path):
     rec = drv.run_inner_iteration(ctx, 0, metric_before=3.0, last_good_ref="sha-prev")
     assert rec.verdict == "REVERT" and rec.decision_id == "probe-blocked"
     assert rec.correctness is None
+
+
+# --- BUG-C1-02: probe reads/writes survive non-UTF-8 bytes ----------------------
+
+def test_bad_bytes_in_a_kept_probe_do_not_stop_the_run(tmp_path):
+    # The kept-probe read sides used bare read_text(): one stray non-UTF-8 byte
+    # in the probe file raised UnicodeDecodeError (not caught by the OSError
+    # handlers) — the reset that ends the iteration never happened because the
+    # keep blew up first, and the next iteration's re-materialisation blew up
+    # the same way (it runs every iteration at run_inner_iteration's top).
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "p.py").write_bytes(b"print('rig \xff')\n")
+    be = FakeBackend(["PROBE_REQUEST: notes/p.py"] * 2, ["PROBE FAIL max_diff=9"] * 2)
+    ctx = _ctx(tmp_path, be)
+    ctx.max_probe_rounds = 2
+    rec = drv.run_inner_iteration(ctx, 0, metric_before=3.0, last_good_ref="sha-prev")
+    assert rec.decision_id == "probe-blocked"      # the iteration ended normally
+    assert "notes/p.py" in ctx.kept_probes         # and the keep survived the reset
+    drv._restore_kept_probes(ctx)                  # the next iteration's restore
+    assert (tmp_path / "notes" / "p.py").read_bytes().startswith(b"print('rig ")

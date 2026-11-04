@@ -32,8 +32,11 @@ from types import SimpleNamespace
 import pytest
 
 from peregrine_kernel import launch, taskcard
+from peregrine_kernel.milestone import validate_milestone
 from peregrine_kernel.resume import Decision, ReopenPlan, compute_reopen
 from peregrine_kernel.runs import list_runs
+
+from test_milestone import VALID
 
 from test_launch import (  # noqa: F401 -- the repo fixture and the end-to-end stand-ins
     _confirmed, _loop_ends, _start, _task, _Teacher, repo,
@@ -100,3 +103,34 @@ def test_reopen_follows_a_companion_chain_to_the_fixpoint():
             Decision("C")]
     for changed in ("A", "B", "C"):
         assert compute_reopen(traj, {changed}).reopen == ["A", "B", "C"]
+
+
+# -- BUG-SEED-26: section presence/order is matched at line start ----------------------------
+
+
+def test_a_numbered_subheading_does_not_stand_in_for_section_4():
+    # "### 4. M2 pipeline" contains "## 4." as a substring; a real distillation
+    # artifact wrote such sub-headings, and a substring find let the real section
+    # go missing (BUG-SEED-26)
+    text = VALID.replace("## 4. Known dead ends", "### 4. M2 pipeline")
+    v = validate_milestone(text)
+    assert any("missing required section: ## 4." in x for x in v)
+
+
+def test_a_missing_section_4_is_still_reported():
+    text = VALID.replace("## 4. Known dead ends", "## 4b. Dead ends live elsewhere")
+    assert any("missing required section: ## 4." in x for x in validate_milestone(text))
+
+
+def test_a_real_section_4_alongside_a_numbered_subheading_passes():
+    text = VALID.replace("## 4. Known dead ends",
+                         "## 4. Known dead ends\n\n### 4. M2 pipeline\n(sub plan)\n")
+    assert not any("## 4." in x for x in validate_milestone(text))
+
+
+def test_sections_out_of_order_are_still_reported():
+    sec5 = "## 5. Global correctness / performance gate\natol=5, rtol=0.05; MFU ≥95% target.\n\n"
+    sec6 = "## 6. Rules\nOne variable per round; anti-plagiarism clause; INFEASIBLE clause.\n\n"
+    swapped = VALID.replace(sec5 + sec6, sec6 + sec5)
+    assert swapped != VALID
+    assert any("out of order" in x for x in validate_milestone(swapped))

@@ -7,6 +7,8 @@ docstring names the finding; one test per audit item.
 
 import json
 
+import pytest
+
 from peregrine_kernel.inner.trajectory import IterationRecord
 from peregrine_kernel.loop.parse import (
     _gate_ratio,
@@ -101,3 +103,23 @@ def test_probe_passed_suffix_keeps_max_diff():
     # the bare spellings parse exactly as before
     assert parse_probe_verdict("PROBE PASS max_diff=0.0").passed is True
     assert parse_probe_verdict("PROBE FAIL max_diff=1.13").passed is False
+# --- P3-5 [P3]: update_last_outcome validates the outcome at the entry -----------
+
+from peregrine_kernel.meta_trajectory import (MetaRecord, append_meta_record,
+                                              load_meta_records, update_last_outcome)
+
+
+def test_update_last_outcome_rejects_an_invalid_outcome(tmp_path):
+    """P3-5: the attribute write bypassed __post_init__, so a bad outcome landed
+    on disk and made the whole meta_status unreadable at the next load. The
+    entry now validates before anything is written; the file is untouched."""
+    p = tmp_path / "meta_status.jsonl"
+    append_meta_record(p, MetaRecord(meta_step=0, cause_class="G1",
+                                     deficient_locus="D0", patch_class="additive",
+                                     changed_entries=[], patch_direction="x"))
+    with pytest.raises(ValueError):
+        update_last_outcome(p, outcome="BOGUS_OUTCOME")
+    recs = load_meta_records(p)                    # the file still loads
+    assert recs[0].outcome == "PENDING"            # ...and was not touched
+    update_last_outcome(p, outcome="KEEP_PATCH", best_after=1.9)
+    assert load_meta_records(p)[0].outcome == "KEEP_PATCH"

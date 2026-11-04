@@ -139,6 +139,12 @@ def update_last_outcome(path: str | Path, *, outcome: str,
     The whole file is small (one line per meta step), so a load->mutate->rewrite is
     cheaper than any append-a-terminal-event scheme and keeps one row per meta step.
     """
+    # The dataclass validates only in __post_init__; a plain attribute write here
+    # bypassed it, so a bad outcome landed on disk and made the WHOLE file
+    # unreadable at the next load (ValueError per record; P3-5). Validate at the
+    # entry, before anything is read or written.
+    if outcome not in OUTCOMES:
+        raise ValueError(f"invalid outcome: {outcome!r}")
     recs = load_meta_records(path)
     if not recs:
         raise ValueError(f"no meta records to update at {path}")

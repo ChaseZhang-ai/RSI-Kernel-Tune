@@ -575,10 +575,13 @@ def reference_callables(problem: dict):
 
 def load_entry(path: Path, entry: str):
     """``entry`` from the python file at ``path``, imported as a module with its own
-    directory on sys.path (a solution may import its sibling files, at call time too)."""
+    directory on sys.path (a solution may import its sibling files, at call time too).
+    APPENDED, never prepended: the directory stays on sys.path for the life of the
+    process, and the reference loads before the kernel (BUG-SEED-09 -- a prepended
+    kernel directory shadowed the stdlib and the reference's own lazy imports)."""
     path = Path(path).resolve()
     if str(path.parent) not in sys.path:
-        sys.path.insert(0, str(path.parent))
+        sys.path.append(str(path.parent))
     spec = importlib.util.spec_from_file_location(
         f"lb_{path.parent.name}_{path.stem}", path)
     mod = importlib.util.module_from_spec(spec)

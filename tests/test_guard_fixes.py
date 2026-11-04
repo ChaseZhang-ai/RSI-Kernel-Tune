@@ -200,3 +200,44 @@ def test_a_handwritten_cuda_kernel_stays_quiet():
            "    cudaDeviceSynchronize();\n"
            "}\n")
     assert library_findings(src, "kernel.cu") == []
+
+
+# --- BUG-SEED-09: load_entry must not shadow already-visible modules ------------------
+
+def test_load_entry_appends_so_the_stdlib_and_the_reference_are_not_shadowed(tmp_path):
+    """The kernel's directory used to be PREPENDED to sys.path and stayed there for the
+    life of the process: the reference loads first (run_bench 2440) and the kernel second
+    (2455), so the reference's lazy imports resolved into the kernel's directory -- a
+    kernel-side csv.py was the csv the judge imported (BUG-SEED-09)."""
+    sfx = uuid.uuid4().hex[:8]                      # unique names: no sys.modules carry-over
+    ref_dir = tmp_path / "ref"
+    ref_dir.mkdir()
+    k_dir = tmp_path / "kern"
+    k_dir.mkdir()
+    (k_dir / "csv.py").write_text("GOT = 'kernel-forged'\n")     # the stdlib shadow
+    (ref_dir / f"helper{sfx}.py").write_text("W = 'reference'\n")
+    # the reference imports its helper LAZILY, at call time -- after the kernel's
+    # directory is already on sys.path
+    (ref_dir / "refimpl.py").write_text(f"def run():\n    import helper{sfx}\n"
+                                        f"    return helper{sfx}.W\n")
+    (k_dir / "kernel.py").write_text("def run(): return 'k'\n")
+    saved_path = list(sys.path)
+    saved_csv = sys.modules.pop("csv", None)
+    try:
+        ref_fn = lb.load_entry(ref_dir / "refimpl.py", "run")     # reference loads first
+        kernel_fn = lb.load_entry(k_dir / "kernel.py", "run")     # kernel loads second
+        assert sys.path.index(str(ref_dir)) < sys.path.index(str(k_dir))
+        import csv as after
+        assert Path(after.__file__).resolve() != (k_dir / "csv.py").resolve()
+        assert ref_fn() == "reference"
+        # a sibling import of the kernel's own still resolves from the kernel's dir
+        (k_dir / f"own{sfx}.py").write_text("V = 42\n")
+        (k_dir / "sibling.py").write_text(f"def run():\n    import own{sfx}\n"
+                                          f"    return own{sfx}.V\n")
+        assert lb.load_entry(k_dir / "sibling.py", "run")() == 42
+    finally:
+        sys.path[:] = saved_path
+        for name in (f"helper{sfx}", f"own{sfx}", "csv"):
+            sys.modules.pop(name, None)
+        if saved_csv is not None:
+            sys.modules["csv"] = saved_csv

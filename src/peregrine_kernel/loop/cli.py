@@ -375,6 +375,11 @@ class RealBackend:
         proc = subprocess.Popen(
             cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, cwd=self.workspace,
+            # The agent runs in a session of its own: a leg script spawns children
+            # (the model process) that must be reachable as a GROUP when the turn is
+            # interrupted, and must not sit in this loop's own process group where a
+            # group-wide signal would take the loop down with it.
+            start_new_session=(os.name == "posix"),
         )
         box: dict = {}
 
@@ -398,9 +403,12 @@ class RealBackend:
         except BaseException:
             # Ctrl-C / SystemExit lands on THIS thread while the pump owns the
             # pipes. `subprocess.run` killed the child on its way out; a Popen
-            # driven from a thread must do that by hand, or the agent (a claude
-            # process) outlives the loop and keeps spending API usage.
-            proc.kill()
+            # driven from a thread must do that by hand — and killing only the
+            # shell is not enough either: the leg scripts spawn children (the
+            # model process) that would outlive the loop and keep spending API
+            # usage. The turn runs in its own session (start_new_session above),
+            # so _end_process_group reaches the whole leg and nothing else.
+            _end_process_group(proc)
             pump.join(timeout=5)
             raise
         if "exc" in box:

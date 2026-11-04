@@ -1310,3 +1310,36 @@ def test_harvest_only_runs_the_write_up_and_nothing_else(tmp_path, monkeypatch, 
     status.write_text("", encoding="utf-8")
     assert cli._harvest_only(ctx, args, tmp_path, tmp_path / "m.md", None) == 2
     assert len(called) == 1
+
+
+# --- BUG-SEED-10: an interrupted agent turn must not leave the agent's session ----
+
+def test_an_interrupted_agent_turn_ends_the_whole_session(tmp_path, monkeypatch):
+    """A Ctrl-C / SystemExit landing on the heartbeat thread must take down the whole
+    agent process group, not just the shell: the leg scripts spawn children (the model
+    process) that keep spending API usage after the loop is gone. The turn therefore
+    starts its own session (Popen start_new_session) and the interrupt kills the group
+    (_end_process_group), the way goal_ref's legs already did."""
+    import subprocess as sp
+    import uuid
+
+    from peregrine_kernel.loop import cli
+
+    marker = f"pk-seed10-orphan-{uuid.uuid4().hex[:8]}"
+    cmd = (f"bash -c 'python3 -c \"import time; time.sleep(300)\" {marker} & wait'")
+    be = cli.RealBackend("op", tmp_path, None, "n", "e")
+    be.agent_heartbeat_s = 0.05
+
+    def boom(*a, **k):
+        raise KeyboardInterrupt
+    monkeypatch.setattr("builtins.print", boom)
+
+    def _orphans():
+        return sp.run(["pgrep", "-f", marker], capture_output=True, text=True).stdout.split()
+
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            be._agent_turn(cmd, "p", "student")
+        assert _orphans() == []          # the grandchild did not survive the interrupt
+    finally:
+        sp.run(["pkill", "-f", marker], capture_output=True)

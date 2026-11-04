@@ -1563,8 +1563,9 @@ def _probe_group_reading(view: dict, impl, dps: bool, device, group: dict,
     """One drawn group's honest-compute reading: burn-in, then PROBE_WINDOWS
     batch windows of PROBE_CALLS_PER_WINDOW fresh-draw calls each, in the main
     timing's device-event protocol (one event pair around back-to-back calls,
-    divided by the calls; the median is the reading)."""
-    make_inputs = _task_custom(view)[1]
+    divided by the calls; the median is the reading). The draws go through
+    ``task_inputs`` (via ``_probe_task_inputs``'s pinned seed env), which derives
+    the judge's own ``make_inputs`` itself."""
     burn_draws = [_probe_task_inputs(view, group, device,
                                      _probe_draw_seed(group, group_index, offset))
                   for offset in range(PROBE_BURN_IN_DRAWS)]

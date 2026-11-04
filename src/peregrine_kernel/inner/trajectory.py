@@ -164,6 +164,14 @@ class IterationRecord:
     # `pass` on the KEEP row (one re-measured eval, judged by the unchanged
     # protocol; the first edge-band offender of the run is the only buyer).
     judge_edge_recheck: str | None = None
+    # WP29: the replay probe's block on the REVERT it caused ({"status":
+    # "suspected", "ratio_threshold", "shapes": [{"name", "judged_median_ms",
+    # "probe_median_ms", "ratio"}, ...]}): the timed windows' own median against
+    # the honest-compute probe's median on fresh draws (a third seed) — the
+    # evidence face for the content-keyed replay whose miss path recomputes
+    # honestly, the form every value check passes. None = the probe was off,
+    # read unavailable, or the row predates the field.
+    replay_probe: dict | None = None
     # The paired protocol's reference side spread beyond twice the kernel's on
     # the same gate window: the ratio's noise was the reference's own. Report-
     # only, rendered into the teacher's workload block. (The name is kept from

@@ -64,6 +64,7 @@ A/B numbers exist. These are recorded so nobody re-proposes them as new:
 | C2 | Board double gate / cold-L2 axis | Voided with WP24's deboarding (the board protocol no longer exists). A generic strict cold-L2 measurement axis, if ever wanted, returns via a WP22-style review. | 59 WP21 final adjudication |
 | C3 | OpenTuner/BO replacing the SWEEP searcher | Long-term deferral stands: in-principle-constrained search + successive halving already cover the bulk of its benefit. (See A6 for the conditional re-estimation.) | 59 section 6 |
 | C4 | board docs / leaderboard-facing machinery | Removed by WP24; WP25 completed the removal of the Chinese change-history files (content distilled into `CHANGELOG.md`; originals live in git history). Not a backlog item — recorded to prevent "restore the board docs" proposals. | WP24; WP25 task 3b |
+| C5 | G1 replay-probe proposal (the recon replay cheat's honest miss path escaped every value check) | **Implemented and closed, WP29, 2026-11-04 — approved by the user** ("fill the gap directly, add a switch"): the replay probe landed in `benchkit.py` (post-window honest-compute latency on fresh draws, `PK_REPLAY_PROBE` default on, `PK_REPLAY_PROBE_RATIO` default 3.0, suspected -> fresh_recheck-same REVERT). Ledger entry: `docs/wp20r-known-gaps.md` G1 (now CLOSED); evidence: `tests/redteam/test_redteam_recon.py`; record: `CHANGES-WP29.md`. Do not re-propose. | WP20R decision request 1 (`CHANGES-WP20R.md` §6); handoff/139 |
 
 ## D. Version policy (WP25 note, P2)
 

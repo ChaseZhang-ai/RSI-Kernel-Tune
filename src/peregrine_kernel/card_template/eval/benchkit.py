@@ -1369,6 +1369,368 @@ def _run_fresh_recheck_child(problem: dict, args) -> int:
     return 0
 
 
+# --- WP29: the replay probe (the G1 fix) ----------------------------------------
+#
+# The gap (docs/wp20r-known-gaps.md G1, closed 2026-11-04 by user adjudication):
+# a content-keyed replay cheat that answers any input it does NOT recognize with
+# an honest computation passes every VALUE check the eval has — the judged
+# correctness call, and the fresh-recheck child at its shifted seed (the miss
+# path recomputes, correct by construction) — while the timed windows measured
+# replays of parked answers. The SPEEDS expose what the values cannot: an honest
+# kernel answers "same shape, same distribution, fresh values only" inputs at
+# the same latency magnitude as the judged inputs it was timed on, but the
+# cheat's honest miss path sits far above its judged median (which a replay
+# produced). The probe measures that honest latency and compares:
+#
+#     probe_median > PK_REPLAY_PROBE_RATIO x judged_median  ->  suspected
+#
+# ``suspected`` rides the eval JSON's top-level ``replay_probe`` block and the
+# driver turns it into a fresh_recheck-same REVERT (strict contract — the timed
+# windows did not compute their own inputs). The integration is the WP9
+# fresh-recheck shape exactly (eval JSON records -> driver judges), never a new
+# mechanism:
+#
+#   trigger — after ALL timing windows closed, on a PASSING kernel with a
+#     performance block; a fresh_recheck FAIL already reverts and the probe is
+#     not bought (the stronger evidence rides first);
+#   input — an independent THIRD draw per timed group (seed shift 104729: the
+#     judged draw sits at +0 and the recheck child's at +7919, the probe's is
+#     disjoint from both), same shape and distribution as the judged inputs.
+#     Every timed probe call draws FRESH content, so a content-keyed store
+#     recognizes nothing and every probe call sits on the honest path — a
+#     repeated draw would let the cheat park during burn-in and replay through
+#     the window, missing the cheat;
+#   measurement — a child process (the fresh-recheck child's spawn shape):
+#     burn-in FIRST (an unfamiliar input's first-call cold effects are the
+#     false-positive surface; never skipped), then per timed group a pipelined
+#     batch window in the main timing's device-event protocol (one event pair
+#     around back-to-back calls, divided by the calls; median over the windows)
+#     — on the CPU rehearsal device the same window shape runs under a wall
+#     clock;
+#   unavailable — a probe that cannot speak never convicts (the fresh_recheck
+#     posture): file-based inputs have no content re-draw (recheck mode
+#     "process"), a non-finite probe draw, or any probe failure reads
+#     ``unavailable`` on the record, never a FAIL;
+#   switch — PK_REPLAY_PROBE (default ON per the 2026-11-04 user adjudication;
+#     =0/off turns the probe fully off: no child spawn, no block, the bench is
+#     byte-identical to pre-WP29). PK_REPLAY_PROBE_RATIO overrides the
+#     threshold (default 3.0 — deliberately conservative: better to miss a
+#     cheat than to convict an honest kernel).
+#
+# Residual false-positive surface, by design: an HONEST kernel whose latency
+# depends on the input VALUES (a sparse-adaptive shape) with a natural >3x
+# spread between draws can read suspected. The conservative threshold, the
+# mandatory burn-in and the ``unavailable`` escape hatch are the guardrails;
+# CHANGES-WP29.md carries the full discussion. Not caught by design: a cheat
+# that crashes or hangs on unrecognized input degrades the probe to
+# ``unavailable`` (a no-reading, per the fresh_recheck precedent).
+#
+# Frozen surfaces untouched: timing.py is byte-identical (the probe never runs
+# inside a timing window), measure_paired and the window protocol untouched,
+# precision / correctness semantics untouched.
+REPLAY_PROBE_ENV = "PK_REPLAY_PROBE"
+REPLAY_PROBE_RATIO_ENV = "PK_REPLAY_PROBE_RATIO"
+REPLAY_PROBE_DEVICE_ENV = "PK_REPLAY_PROBE_DEVICE"
+REPLAY_PROBE_CHILD_ENV = "PK_REPLAY_PROBE_CHILD"
+REPLAY_PROBE_TIMEOUT_ENV = "PK_REPLAY_PROBE_TIMEOUT_S"
+REPLAY_PROBE_RATIO_DEFAULT = 3.0
+REPLAY_PROBE_TIMEOUT_S = 1800
+PROBE_VERDICT_LINE = "REPLAY-PROBE-VERDICT "
+# The probe's draw shift: judged content sits at group seed + 0, the
+# fresh-recheck child re-draws at +7919, the probe draws at +104729 — three
+# disjoint content sets, none reuses another's draw.
+REPLAY_PROBE_SEED_SHIFT = 104729
+PROBE_BURN_IN_S = 2.0     # seconds of burn-in before the first probe window
+PROBE_BURN_IN_DRAWS = 3   # fresh draws the burn-in rotates through
+PROBE_WINDOWS = 3         # batch windows per drawn group; median is the reading
+PROBE_CALLS_PER_WINDOW = 8  # fresh-draw calls inside one batch window
+PROBE_GROUP_STRIDE = 1000   # per-group draw-seed stride: groups never collide
+
+
+class _ProbeUnavailable(Exception):
+    """Raised inside the probe child when a probe input is not usable (a
+    non-finite draw): the child reports ``unavailable`` — never a conviction."""
+
+
+def _replay_probe_enabled() -> bool:
+    """The switch: ``PK_REPLAY_PROBE=0`` (or ``off``) turns the probe fully off
+    — the pre-WP29 behavior, byte for byte; anything else, including unset, is
+    ON (the 2026-11-04 user adjudication)."""
+    return os.environ.get(REPLAY_PROBE_ENV, "").strip().lower() not in ("0", "off")
+
+
+def _replay_probe_ratio() -> float:
+    """The suspected threshold: ``PK_REPLAY_PROBE_RATIO`` overrides; an
+    unreadable value keeps the conservative default."""
+    try:
+        return float(os.environ.get(REPLAY_PROBE_RATIO_ENV) or REPLAY_PROBE_RATIO_DEFAULT)
+    except ValueError:
+        return REPLAY_PROBE_RATIO_DEFAULT
+
+
+def _probe_draw_seed(group: dict, group_index: int, offset: int) -> int:
+    """One probe draw's seed: the group's own seed plus the probe shift and a
+    per-group stride — disjoint from the judged draw (+0), the recheck's
+    (+7919), every other group's draws, and the probe's own burn-in draws."""
+    return (int(group.get("seed", 0)) + REPLAY_PROBE_SEED_SHIFT
+            + (group_index + 1) * PROBE_GROUP_STRIDE + offset)
+
+
+def _probe_task_inputs(view: dict, group: dict, device, seed: int) -> list:
+    """``task_inputs`` pinned to an explicit probe seed: the draw shift is the
+    one seam ``task_inputs`` reads (the recheck child rides it too), so the
+    probe pins the env around the call and restores it. The judged and recheck
+    draws never run through this path."""
+    saved = os.environ.get(FRESH_SEED_ENV)
+    os.environ[FRESH_SEED_ENV] = str(seed - int(group.get("seed", 0)))
+    try:
+        return task_inputs(view, group, device)
+    finally:
+        if saved is None:
+            os.environ.pop(FRESH_SEED_ENV, None)
+        else:
+            os.environ[FRESH_SEED_ENV] = saved
+
+
+def _probe_check_finite(inp: list) -> None:
+    """A non-finite probe draw is not a measurement (and not the kernel's
+    fault): raise the unavailable marker — never a conviction."""
+    for t in inp:
+        if isinstance(t, torch.Tensor) and t.is_floating_point() \
+                and not bool(torch.isfinite(t).all()):
+            raise _ProbeUnavailable("a probe draw produced non-finite inputs")
+
+
+def _probe_calls(view: dict, impl, dps: bool, device, draws: list) -> list:
+    """One zero-argument callable per fresh draw, outputs pre-allocated OUTSIDE
+    any window (the timed call's own shape: ``fn(*inp, *outs)`` destination
+    style, ``fn(*inp)`` otherwise). No per-call synchronize — the batch window
+    pipelines exactly like the main timing's device window."""
+    calls = []
+    for inp in draws:
+        out = allocate_outputs(view, device) if dps else []
+        calls.append(lambda inp=inp, out=out: impl(*inp, *out))
+    return calls
+
+
+def _probe_burn_in(calls: list, on_cuda: bool) -> None:
+    """Heat the part before any probe window, on the burn-in draws (fresh
+    content cycled — never a timed probe draw, which a content-keyed store
+    would park and then replay through the window). Mandatory: an unfamiliar
+    input's first-call cold effects are the false-positive surface."""
+    if not calls:
+        return
+    i = 0
+    t0 = time.perf_counter()
+    while time.perf_counter() - t0 < PROBE_BURN_IN_S:
+        for _ in range(PROBE_BURN_IN_DRAWS):
+            calls[i % len(calls)]()
+            i += 1
+        if on_cuda:
+            torch.cuda.synchronize()
+
+
+def _probe_group_reading(view: dict, impl, dps: bool, device, group: dict,
+                         group_index: int) -> dict:
+    """One drawn group's honest-compute reading: burn-in, then PROBE_WINDOWS
+    batch windows of PROBE_CALLS_PER_WINDOW fresh-draw calls each, in the main
+    timing's device-event protocol (one event pair around back-to-back calls,
+    divided by the calls; the median is the reading)."""
+    make_inputs = _task_custom(view)[1]
+    burn_draws = [_probe_task_inputs(view, group, device,
+                                     _probe_draw_seed(group, group_index, offset))
+                  for offset in range(PROBE_BURN_IN_DRAWS)]
+    timed_draws = [_probe_task_inputs(view, group, device,
+                                      _probe_draw_seed(group, group_index,
+                                                       PROBE_BURN_IN_DRAWS + w))
+                   for w in range(PROBE_WINDOWS * PROBE_CALLS_PER_WINDOW)]
+    for inp in burn_draws + timed_draws:
+        _probe_check_finite(inp)
+    burn_calls = _probe_calls(view, impl, dps, device, burn_draws)
+    windows = _probe_calls(view, impl, dps, device, timed_draws)
+    on_cuda = torch.cuda.is_available() and str(device).startswith("cuda")
+    _probe_burn_in(burn_calls, on_cuda)
+    readings = []
+    for w in range(PROBE_WINDOWS):
+        batch = windows[w * PROBE_CALLS_PER_WINDOW:(w + 1) * PROBE_CALLS_PER_WINDOW]
+        if on_cuda:
+            torch.cuda.synchronize()
+            start = torch.cuda.Event(enable_timing=True)
+            stop = torch.cuda.Event(enable_timing=True)
+            start.record()
+            for call in batch:
+                call()
+            stop.record()
+            torch.cuda.synchronize()
+            readings.append(start.elapsed_time(stop) / len(batch))
+        else:
+            t0 = time.perf_counter()
+            for call in batch:
+                call()
+            readings.append((time.perf_counter() - t0) * 1e3 / len(batch))
+    return {"seed_shift": REPLAY_PROBE_SEED_SHIFT, "n_calls": len(timed_draws),
+            "probe_median_ms": _round(statistics.median(readings)),
+            "readings_ms": [_round(r) for r in readings]}
+
+
+def _run_replay_probe_child(problem: dict) -> int:
+    """The child side (--replay-probe): draw fresh probe content (the third
+    seed), burn in, measure the honest-compute latency per timed group in the
+    main timing's device-event protocol, print one machine-readable verdict
+    line. Exit code stays 0: the parent reads the verdict, not the rc. ANY
+    failure inside the probe — a kernel that raises on unrecognized input
+    included — reads ``unavailable``: a probe that cannot speak never convicts
+    (the fresh_recheck unavailable posture)."""
+    try:
+        device = os.environ.get(REPLAY_PROBE_DEVICE_ENV, "cuda")
+        impl, dps = _impl(problem, "kernel")
+        shapes = []
+        for view in _task_shapes(problem):
+            medians, drawn, total = [], 0, 0
+            for gi, group in enumerate(task_groups(view)):
+                total += 1
+                if group.get("kind") == "file":
+                    continue   # no content re-draw -> no honest path to measure
+                drawn += 1
+                medians.append(_probe_group_reading(view, impl, dps, device,
+                                                    group, gi))
+            entry = {"name": str(view["_wl_name"]), "n_groups": total,
+                     "n_drawn_groups": drawn}
+            positive = [m["probe_median_ms"] for m in medians
+                        if isinstance(m["probe_median_ms"], (int, float))
+                        and m["probe_median_ms"] > 0]
+            if positive:
+                entry["probe_median_ms"] = _round(_geomean(positive))
+                entry["groups"] = medians
+            else:
+                entry["status"] = "unavailable"
+                entry["why"] = ("no drawn input group to probe: file-based inputs "
+                                "have no content re-draw (recheck mode 'process')")
+            shapes.append(entry)
+        payload = {"shapes": shapes}
+    except _ProbeUnavailable as exc:
+        payload = {"status": "unavailable", "detail": str(exc)}
+    except Exception as exc:  # noqa: BLE001 — the impl is foreign code; never convict from a crash
+        payload = {"status": "unavailable",
+                   "detail": f"{type(exc).__name__}: {exc}"}
+    print(PROBE_VERDICT_LINE + json.dumps(payload))
+    return 0
+
+
+def _probe_child(problem: dict) -> dict:
+    """One fresh-process probe run over the SAME card: returns the parsed
+    verdict, or the ``unavailable`` reading when the child could not produce
+    one (env failure — a no-reading, never counted as a fail). The fresh-recheck
+    child's spawn shape, with the probe's seed shift on the draw env and the
+    probe's own child marker (no nesting)."""
+    env = dict(os.environ)
+    env[FRESH_RECHECK_ENV] = "1"   # the draw-shift gate the child's task_inputs reads
+    env[FRESH_SEED_ENV] = str(REPLAY_PROBE_SEED_SHIFT)
+    env[REPLAY_PROBE_CHILD_ENV] = "1"
+    bench = (Path(__file__).parent / "bench.py").resolve()
+    root = (Path(__file__).parent.parent).resolve()   # the workspace (eval/ below it)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(root), str(root / "eval")]
+        + [p for p in [env.get("PYTHONPATH", "")] if p])
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(bench), "--mode", "correctness", "--replay-probe"],
+            cwd=str(root), env=env, capture_output=True, text=True,
+            timeout=int(os.environ.get(REPLAY_PROBE_TIMEOUT_ENV,
+                                       REPLAY_PROBE_TIMEOUT_S)))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"status": "unavailable",
+                "detail": f"probe child did not run: {type(exc).__name__}: {exc}"}
+    for line in proc.stdout.splitlines():
+        if line.startswith(PROBE_VERDICT_LINE):
+            try:
+                return json.loads(line[len(PROBE_VERDICT_LINE):])
+            except ValueError:
+                break
+    return {"status": "unavailable",
+            "detail": f"probe child printed no verdict (rc={proc.returncode})"}
+
+
+def _replay_probe_block(problem: dict, blocks: list) -> dict:
+    """The parent's probe verdict over the timed shapes: the child's
+    honest-compute medians against each shape's judged median (the timed
+    windows' own device reading). ``suspected`` when any compared shape's
+    probe median exceeds the ratio threshold; ``unavailable`` when nothing
+    could be compared — a probe that cannot speak never convicts."""
+    ratio = _replay_probe_ratio()
+    child = _probe_child(problem)
+    shapes = child.get("shapes") if isinstance(child.get("shapes"), list) else []
+    by_name = {s.get("name"): s for s in shapes if isinstance(s, dict)}
+    rows, compared, suspected = [], 0, False
+    for b in blocks:
+        name = str(b.get("name"))
+        judged = b.get("device_median_ms")
+        probe = by_name.get(name)
+        if probe is None and len(blocks) == 1 and len(shapes) == 1:
+            probe = shapes[0]   # one shape on both sides: match positionally
+        entry: dict = {"name": name}
+        if isinstance(judged, (int, float)) and judged > 0 and isinstance(probe, dict) \
+                and isinstance(probe.get("probe_median_ms"), (int, float)) \
+                and probe["probe_median_ms"] > 0:
+            r = probe["probe_median_ms"] / judged
+            entry.update(judged_median_ms=_round(judged),
+                         probe_median_ms=_round(probe["probe_median_ms"]),
+                         ratio=_round(r), n_groups=probe.get("n_groups"),
+                         n_drawn_groups=probe.get("n_drawn_groups"))
+            compared += 1
+            if r > ratio:
+                entry["status"] = "suspected"
+                suspected = True
+        elif isinstance(probe, dict) and probe.get("status") == "unavailable":
+            entry.update(status="unavailable", why=probe.get("why"))
+        else:
+            entry.update(status="unavailable",
+                         why="the probe child reported no reading for this shape")
+        rows.append(entry)
+    out: dict = {"ratio_threshold": ratio, "shapes": rows}
+    if compared == 0:
+        out["status"] = "unavailable"
+        out["detail"] = (child.get("detail")
+                         or "no timed shape could be probed on fresh draws")
+    elif suspected:
+        out["status"] = "suspected"
+    else:
+        out["status"] = "pass"
+    return out
+
+
+def _maybe_replay_probe(result: dict, problem: dict, args, blocks: list) -> None:
+    """The replay probe (WP29), attached after ALL timing windows closed on a
+    PASSING kernel the student wrote, in the fresh_recheck integration shape:
+    the block rides the eval JSON's top level and the DRIVER owns the verdict.
+    The switch-off path returns before anything runs — with PK_REPLAY_PROBE=0
+    the bench is byte-identical to pre-WP29 (no child spawn, no block)."""
+    if os.environ.get(REPLAY_PROBE_CHILD_ENV):
+        return                                # a probe child never probes
+    if not _replay_probe_enabled():
+        return
+    if args.impl != "kernel" or not (result.get("correctness") or {}).get("pass"):
+        return
+    if not (result.get("performance") or {}):
+        return
+    if result.get("fresh_recheck", {}).get("pass") is False:
+        return   # the verdict is already REVERT; the recheck is the stronger evidence
+    block = _replay_probe_block(problem, blocks)
+    result["replay_probe"] = block
+    if block["status"] == "suspected":
+        worst = max((e for e in block["shapes"] if e.get("status") == "suspected"),
+                    key=lambda e: e.get("ratio") or 0.0)
+        print(f"[bench] replay probe: SUSPECTED — workload {worst.get('name')}: "
+              f"honest-compute probe {worst.get('probe_median_ms')} ms vs judged "
+              f"{worst.get('judged_median_ms')} ms "
+              f"(x{worst.get('ratio')} > {block['ratio_threshold']})")
+    elif block["status"] == "pass":
+        print(f"[bench] replay probe: pass (threshold x{block['ratio_threshold']})")
+    else:
+        print(f"[bench] replay probe: no reading "
+              f"({block.get('detail', 'unavailable')})")
+
+
 def _correctness(problem: dict, impl, dps: bool, device):
     """The correctness protocol (task_correctness: every input group of every shape).
     With the precision contract on (``precision_on`` -- the default), a timed workload
@@ -1932,6 +2294,7 @@ def _run_task(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, timed
           + f"; clock {clock_state()}")
     _maybe_fresh_recheck(result, problem, args)   # --- WP9: after ALL windows
     _wp20_sentinel_blocks(result)                 # --- WP20: sentinels read after ALL windows
+    _maybe_replay_probe(result, problem, args, blocks)   # --- WP29: after ALL windows
     _emit(result)
     return 0
 
@@ -2015,10 +2378,18 @@ def run_bench(argv=None, problem_path=None) -> int:
     # protocol once and prints one FRESH-RECHECK-VERDICT line.
     p.add_argument("--fresh-recheck", action="store_true",
                    help=argparse.SUPPRESS)
+    # WP29 replay-probe child mode: the parent's LAST step spawns a fresh process
+    # in this mode after all timing windows closed; the child draws fresh probe
+    # content (the third seed), burns in, measures the honest-compute latency and
+    # prints one REPLAY-PROBE-VERDICT line.
+    p.add_argument("--replay-probe", action="store_true",
+                   help=argparse.SUPPRESS)
     args = p.parse_args(argv)
     problem = load_problem(problem_path)
     if args.fresh_recheck:
         return _run_fresh_recheck_child(problem, args)
+    if args.replay_probe:
+        return _run_replay_probe_child(problem)
     install_wp20_sentinels()   # --- WP20: armed before any foreign code imports
     _SCOPE.clear()
     if scope := apply_workload_scope(problem):

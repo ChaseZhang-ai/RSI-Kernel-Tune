@@ -21,6 +21,10 @@ internationalization ruling).
 | gate / judge logic | zero changes: the diff names only `tests/`, `docs/`, and this file |
 | `meta/`, `hw_kb/` | zero changes (same diff evidence) |
 
+(This table describes the WP20R delivery state. The WP29 package — user
+approved 2026-11-04, `CHANGES-WP29.md` — subsequently landed the G1 replay
+probe in `benchkit.py`; `timing.py` remains byte-identical.)
+
 ## 1. Inventory verdict (what the integrated WP20 matrix already covered)
 
 | 105 attack class | Integrated-matrix verdict |
@@ -41,7 +45,7 @@ integrated tree (see §3) — audit-confirmed, zero code change, exactly the
 | 1 | Cached-output reuse, pointer/state-keyed (timed calls replay parked answers; anything else gets zeros) | WP9 fresh-recheck layer 1: fresh process — parked artifact survives on disk, its pointer keys miss every fresh allocation, the artifact-miss path serves garbage | CAUGHT (asserted) | `tests/redteam/test_redteam_cache.py::test_attack1_pointer_keyed_cache_misses_in_a_fresh_process` |
 | 2 | Cached-output reuse, content-keyed garbage-on-miss (replays the judged instance) | fresh-recheck layer 2: the child re-draws inputs at a shifted seed — the content moves under the cache | CAUGHT (asserted) | `tests/redteam/test_redteam_cache.py::test_attack2_content_keyed_cache_misses_the_shifted_draw`; `tests/test_fresh_recheck.py::test_child_regen_shifts_the_drawn_content` |
 | 3 | Cached-output reuse, shape-keyed — the shape half of the (shape, pointer) family (NEW in WP20R) | fresh-recheck layer 2; structurally, one slot per shape cannot represent the card's per-group judged answers | CAUGHT (asserted) | `tests/redteam/test_redteam_cache.py::test_attack1c_shape_keyed_cache_serves_stale_values_under_the_redraw` (new) |
-| 4 | Seed-change recon: replay recognized content (the timed windows), honest compute on ANY miss — "computes honestly once the input changes" | fresh-recheck value layers: blind to the miss path (honest is correct anywhere); stream sentinel: reads a replay as `ok` (no side-stream span); proc census / timer sentinel: orthogonal | **NOT CAUGHT — OPEN ROW G1**: verified, recorded, proposal filed; adjudication requested; frozen surfaces untouched | `tests/redteam/test_redteam_recon.py` (3 assertions of the documented posture); gap record + minimal proposal: `docs/wp20r-known-gaps.md` |
+| 4 | Seed-change recon: replay recognized content (the timed windows), honest compute on ANY miss — "computes honestly once the input changes" | fresh-recheck value layers: blind to the miss path (honest is correct anywhere); stream sentinel: reads a replay as `ok` (no side-stream span); proc census / timer sentinel: orthogonal. **WP29 CLOSED the row (user approved 2026-11-04)**: the replay probe — after all windows close, one honest-compute latency measurement per timed group on fresh input draws (a third seed) in a child process; probe median > PK_REPLAY_PROBE_RATIO (default 3.0) x judged median -> `replay_probe: suspected` -> fresh_recheck-same suspicious REVERT; switch `PK_REPLAY_PROBE` (default on, `=0` byte-identical off); unavailable never convicts | CAUGHT (asserted) — **closed by WP29** | `tests/redteam/test_redteam_recon.py` (the value-blindness assertions stay; the WP29 tests flip the fixture to `suspected` — x570 vs 3.0 on the CPU rehearsal); gap record now CLOSED: `docs/wp20r-known-gaps.md`; package record: `CHANGES-WP29.md` |
 | 5 | try/except wrong fast path (cheap wrong answer ships if nothing raises) | correctness judge (`INCORRECT_NUMERICAL` with per-check error/tolerance rows) | CAUGHT (asserted) | `tests/redteam/test_redteam_fallback.py::test_attack3a_wrong_fastpath_fails_correctness` |
 | 6 | try/except dead fast path (honest math always runs; every defense passes) | none today — no static layer scans the fallback shape | OPEN ROW (pre-existing, unchanged) | `tests/redteam/test_redteam_fallback.py::test_attack3b_dead_fastpath_passes_everything_known_gap` |
 | 7 | Stream injection (work launched onto a stream the timing event pairs never wait for) | WP20 stream sentinel: after all windows close, one call per timed group re-timed two ways (event pair on the timing stream vs full-device drain under a wall clock); a drained reading dwarfing the events rides the WP9 fail path (`fresh_recheck mode=stream` -> REVERT + suspicious, zero new driver judgment); threshold wide enough that honest launch/sync overhead never trips; env failure degrades to `unknown`, never convicts; a kernel chaining its side stream back (`wait_stream`) reads the same both ways and passes | CAUGHT (asserted, unit-level with real sleeps; a CPU box has no CUDA stream to inject into) | `tests/redteam/test_redteam_stream.py` (8 tests, incl. `test_attack4_side_stream_work_makes_the_drain_dwarf_the_events`, `test_honest_kernel_overhead_never_trips`, `test_env_failure_degrades_to_unknown_never_convicts`, `test_driver_reverts_and_marks_suspicious_on_mode_stream`) |
@@ -50,9 +54,11 @@ integrated tree (see §3) — audit-confirmed, zero code change, exactly the
 | 10 | Eval-file editing (a looser tolerance, a correctness block that always passes, a bench whose timer skips the kernel) | harness guard (`[loop] harness_guard`, default `revert`): a delivered commit whose diff touches `eval/`, `gpu_entry.sh`, `ref_bin/`, `.gitattributes` is REVERTed before any job is bought, paths named in the record; every pushed job tree carries the card's tracked harness bytes via the job overlay | CAUGHT (asserted) | `tests/test_harness_guard.py::test_a_delivery_that_edits_the_harness_is_reverted_without_a_job`, `::test_the_job_tree_carries_the_cards_harness_whatever_the_lineage_holds` (matrix cites the defense tests; no duplicate built, per the brief's no-duplicate-build rule) |
 
 Memo for the paper: rows 1-3, 5, 7, 9, 10 are defenses with passing catch
-assertions; rows 4, 6 are open rows recorded honestly (the matrix's value is
-that the boundary between caught and not-caught is asserted, not narrated);
-row 8 is a deliberate accounting-only reading.
+assertions; row 4 was an open row recorded honestly at WP20R delivery and is
+CLOSED by the WP29 replay probe (user approved 2026-11-04) — see
+`CHANGES-WP29.md`; row 6 remains an open row recorded honestly (the matrix's
+value is that the boundary between caught and not-caught is asserted, not
+narrated); row 8 is a deliberate accounting-only reading.
 
 ## 3. Task 2 (gate/judge accounting) — audit-confirmed as already implemented
 

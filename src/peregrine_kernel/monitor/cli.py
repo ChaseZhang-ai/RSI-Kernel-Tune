@@ -48,7 +48,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--sha", default=None, help="tree to monitor (default: confirmed best, "
                                                "else the workspace HEAD)")
     p.add_argument("--profiles", default=",".join(monitor.DEFAULT_PROFILES))
-    p.add_argument("--kernel-file", default="kernel.py")
+    p.add_argument("--kernel-file", default=None,
+                   help="the student's kernel file, relative to the tree root "
+                        "(default: the card's own kernel_file from "
+                        "eval/problem/problem.json — kernel.cu on a CUDA card — "
+                        "else kernel.py)")
     p.add_argument("--budget-s", type=float, default=None,
                    help="wall-clock for all profiles (default: 85%% of the job timeout)")
     p.add_argument("--branch", default=None, help="submit branch (default <op>-monitor)")
@@ -63,6 +67,12 @@ def main(argv: list[str] | None = None) -> int:
     if not (ws / ".git").exists():
         sys.stderr.write(f"[monitor] error: no workspace repo at {ws} (pass --workspace)\n")
         return 3
+    if args.kernel_file is None:
+        # the loop's own default: the file the generated card names (kernel.cu on a
+        # CUDA card), so a monitor job watches what the card actually runs. Lazy
+        # import — loop.cli sits above this module in the package graph.
+        from peregrine_kernel.loop.cli import _card_kernel_file
+        args.kernel_file = _card_kernel_file(op_dir)
     profiles = tuple(x.strip() for x in args.profiles.split(",") if x.strip())
     try:
         mode = monitor.job_mode(profiles, args.kernel_file, args.budget_s)

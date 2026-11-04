@@ -13517,7 +13517,9 @@ def _paired_reanchor(ctx: LoopContext, best: float, gap: float | None) -> dict |
     _log(f"meta/re-anchor: same-job median ratio {med:.4f} < {eq} — paired "
          f"residual +{residual:.1%} to the {eq:g} line"
          + (f" (parity {parity:+.1%})" if above_parity else "")
-         + f" (absolute account said +{gap:.1%})")
+         # gap is None when the absolute target is suspended over a workloads
+         # mismatch — there is no absolute account to quote alongside the ratio
+         + (f" (absolute account said +{gap:.1%})" if gap is not None else ""))
     return None
 
 

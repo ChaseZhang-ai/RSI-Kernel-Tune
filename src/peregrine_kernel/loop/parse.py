@@ -80,6 +80,24 @@ def _clean_path(tok: str) -> str:
     return tok.lstrip(_PATH_LWRAP).rstrip(_PATH_RWRAP)
 
 
+# The student markers, matched as the protocol spells them — a line of their own —
+# not anywhere in the text. A word character ahead of the marker on its line (a
+# sentence citing, quoting or negating it) leaves it prose; the non-word run a
+# line may open with is the markdown agents copy verbatim from the prompts
+# (backticks, quotes, a list dash). Whole-text matching sent a record turn's
+# quoted ``PROBE_REQUEST: ...`` back out as a GPU probe job on a path the student
+# had only mentioned, and let a cited ``EXHAUSTED:`` end a phase that was still
+# alive; the milestone's ARCH_PROBE_REQUEST marker has always been line-anchored
+# for the same reason. The trailing text is left alone on purpose: trailing
+# commentary on a real marker line costs at most one re-prompt round, while
+# re-prompting a citation burns a GPU job or ends the phase.
+_MARKER_LEAD = r"[^\w\r\n]*"
+_PROBE_REQUEST_LINE_RE = re.compile(
+    rf"(?mi)^{_MARKER_LEAD}PROBE_REQUEST\s*[:：]\s*(\S+)")
+_EXHAUSTED_LINE_RE = re.compile(
+    rf"(?mi)^{_MARKER_LEAD}EXHAUSTED\s*[:：]\s*(.+)")
+
+
 def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     """Classify a student agent's final message into the three terminal shapes.
 
@@ -87,13 +105,23 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     markers); otherwise the record block fields are extracted from anywhere in
     the text (agents often emit prose before the block).
 
+    A marker is recognized only on a line of its own — the protocol places it
+    there ("end your turn with EXACTLY one of ..."), and only markdown wrappers
+    may sit between the line start and the marker word, because agents copy the
+    prompts' wrapped spellings verbatim. Matching the whole text instead read a
+    sentence that merely cited the vocabulary as a request: a record turn
+    quoting ``PROBE_REQUEST: ...`` in its change note went back out as a GPU
+    probe job on a path the student only mentioned, and a quoted ``EXHAUSTED:``
+    ended a phase that was still alive. RECON_REQUEST carries the same hazard
+    with a caller gate instead (next paragraph).
+
     RECON_REQUEST is only a valid shape for the reconnaissance caller
     (``allow_recon=True``). Recognizing it everywhere let a student turn that
     merely echoed the marker — likely in a blackbox run, where the vocabulary
     saturates the prompts — reach the probe branch and burn a GPU job on a
     path that exists only in the teacher's tree.
     """
-    probe = re.search(r"PROBE_REQUEST:\s*(\S+)", text)
+    probe = _PROBE_REQUEST_LINE_RE.search(text)
     if probe:
         return ProbeRequest(path=_clean_path(probe.group(1)))
     # WP19 (task 2): a PROBE-MANIFEST names a ≤4-line list of self-contained
@@ -109,7 +137,7 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
         recon = re.search(r"RECON_REQUEST:\s*(\S+)", text)
         if recon:
             return ReconRequest(path=_clean_path(recon.group(1)))
-    exhausted = re.search(r"EXHAUSTED:\s*(.+)", text)
+    exhausted = _EXHAUSTED_LINE_RE.search(text)
     if exhausted:
         return Exhausted(reason=exhausted.group(1).strip())
 

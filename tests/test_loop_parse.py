@@ -70,6 +70,36 @@ def test_malformed_turn_raises():
         parse_student_turn("just some prose with no record, no probe, no exhausted marker")
 
 
+def test_cited_markers_are_prose_not_requests():
+    """A marker is read only where the protocol puts it — on a line of its own.
+    Matching the whole text once let a turn that merely cited the vocabulary
+    reach the probe branch (a GPU job on a path the student only mentioned) or
+    end a phase that was still alive; the recon marker already needed the same
+    protection (its gate), and the meta diagnose path works around this parser
+    for exactly this reason."""
+    with pytest.raises(ValueError):
+        parse_student_turn("I considered running PROBE_REQUEST: notes/p.py "
+                           "but decided against it.")
+    with pytest.raises(ValueError):
+        parse_student_turn("nothing here is EXHAUSTED: out of ideas yet — "
+                           "the next variant is queued.")
+    # a record turn citing the markers in its OBJECTIVE fields stays a record
+    record = RECORD_TEXT + "notes: the change quotes `PROBE_REQUEST: timeline` only as history\n"
+    turn = parse_student_turn(record)
+    assert isinstance(turn, Record)
+
+
+def test_markers_on_their_own_line_are_still_requests():
+    # the wrapped spellings agents copy from the prompts verbatim, and a list
+    # item, all still parse: only word characters ahead of the marker on its
+    # line turn it into prose.
+    assert parse_student_turn("`PROBE_REQUEST: notes/x.py`").path == "notes/x.py"
+    turn = parse_student_turn("prose first\n- PROBE_REQUEST: notes/y.py")
+    assert isinstance(turn, ProbeRequest) and turn.path == "notes/y.py"
+    turn = parse_student_turn("prose first\nEXHAUSTED: reached M5, no further decision")
+    assert isinstance(turn, Exhausted) and "M5" in turn.reason
+
+
 def test_parse_eval_from_gpu_entry_json():
     log = """
 [task] Correctness + Performance

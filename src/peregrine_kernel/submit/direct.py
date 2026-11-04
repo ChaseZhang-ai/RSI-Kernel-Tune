@@ -19,7 +19,9 @@ One run:
    deliver it (no begin marker) -> retried, then Failed with TRANSPORT_ERROR_MARKER, which
    the loop reports as a transport problem rather than charging the kernel. A job whose
    window expired while it was still waiting on the host GPU lock never began (the begin
-   marker prints only once the lock is held): it is Lost, which the loop resubmits.
+   marker prints only once the lock is held): it is Lost, which the loop resubmits. So is
+   a job whose ssh client died (rc 255) with the job in flight: the remote session's
+   outcome is unknowable, and the orphaned session is stopped before the verdict.
 
 Nothing here kills processes it did not start: on a user's machine a GPU held by someone
 else is theirs. The lock is what keeps peregrine_kernel's own runs apart.
@@ -586,6 +588,20 @@ class DirectRunner:
                     log_file.flush()
                     return STATUS_LOST
                 if began:
+                    if rc == 255:
+                        # ssh's own exit code: the client died (the network blip
+                        # outlived ServerAlive's patience) while the job was in
+                        # flight on the host -- the session kept running, and its
+                        # outcome is unknowable. The machine's fault, not the
+                        # kernel's: end the orphaned session (it still holds the
+                        # GPU lock) and record Lost, which the loop resubmits.
+                        self._stop_remote(log_file)
+                        _kill_group(proc)
+                        log_file.write(f"[direct] ssh to {self.cfg.exec_host} died (rc=255) "
+                                       f"with the job in flight -- the outcome on the host "
+                                       f"is unknown, recorded {STATUS_LOST}\n")
+                        log_file.flush()
+                        return STATUS_LOST
                     log_file.write(f"[direct] gpu_entry {mode} exited rc={rc}\n")
                     log_file.flush()
                     return STATUS_FAILED

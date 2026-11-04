@@ -119,10 +119,14 @@ def test_a_generation_without_a_best_ends_the_chain(chain):
     assert len(ran) == 1
 
 
-def test_an_existing_next_generation_is_not_overwritten(chain):
+def test_an_existing_next_generation_is_not_overwritten(chain, capsys):
+    """BUG-SEED-27: a chain destination that already exists stops the run with one
+    readable stderr line (exit 2), not a bare FileExistsError traceback."""
     root, ran, gains, _ = chain
     gains += [1.3]
     first = _task(root)
     (root / "tasks" / "rmsnorm-g2").mkdir()
-    with pytest.raises(FileExistsError):
-        se.main([str(first)])
+    assert se.main([str(first)]) == 2
+    err = capsys.readouterr().err
+    assert "rmsnorm-g2" in err and "exists" in err
+    assert not (root / "tasks" / "rmsnorm-g2" / "task.toml").exists()

@@ -74,3 +74,37 @@ def test_seed26_the_order_check_uses_the_anchored_offsets_too():
     ).replace("@@ONE@@", "## 2. Decision DAG + phase order")
     v = validate_milestone(swapped)
     assert any("out of order" in x for x in v)
+
+
+# --- BUG-SEED-27: self_evolve's ratio=0 and chain-destination errors stay readable ----
+
+from test_self_evolve import KERNEL, _task, chain, se  # noqa: E402, F401
+
+
+def test_seed27_noise_floor_zero_ratio_raises_a_readable_error():
+    """A zero confirmation ratio used to raise ZeroDivisionError after the whole
+    generation had run; it must be a named, readable error instead."""
+    with pytest.raises(ValueError, match="non-positive"):
+        se.noise_floor({"ratios": [0.0, 1.02]})
+    with pytest.raises(ValueError, match="non-positive"):
+        se.noise_floor({"ratios": [1.02, -0.5]})
+
+
+def test_seed27_main_reports_ratio_zero_as_a_readable_error(chain, capsys):
+    root, ran, gains, _ = chain
+    gains += [(1.3, [0.0, 1.02])]
+    assert se.main([str(_task(root))]) == 2
+    err = capsys.readouterr().err
+    assert "non-positive" in err and "generation 1" in err
+
+
+def test_seed27_chain_from_a_suffixed_task_continues_forward_numbering(chain):
+    """Starting from rmsnorm-g3 the first jump must land on rmsnorm-g4, not on the
+    ancestor rmsnorm-g2 that the bare generation counter produced."""
+    root, ran, gains, kb = chain
+    gains += [1.3, 1.01]
+    first = _task(root, name="rmsnorm-g3")
+    assert se.main([str(first), "--max-gen", "4"]) == 0
+    assert (root / "tasks" / "rmsnorm-g4" / "reference" / "kernel.py").read_text() == KERNEL
+    assert ran == [first.resolve(), root / "tasks" / "rmsnorm-g4"]
+    assert not (root / "tasks" / "rmsnorm-g2").exists()

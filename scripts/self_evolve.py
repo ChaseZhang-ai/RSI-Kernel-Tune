@@ -57,10 +57,23 @@ def latest_run(task_name: str):
 
 def noise_floor(best: dict) -> float:
     """The relative gain a generation must clear: the spread of its same-job ratios
-    ((max - min) / min), never below NOISE_FLOOR_MIN."""
+    ((max - min) / min), never below NOISE_FLOOR_MIN.
+
+    Raises ValueError when a ratio is not a positive number: a zero (or negative)
+    reading makes the division meaningless, and the chain must stop with one
+    readable line instead of a ZeroDivisionError after a whole generation ran.
+    """
     ratios = best.get("ratios") or []
-    spread = (max(ratios) - min(ratios)) / min(ratios) if len(ratios) > 1 else 0.0
-    return max(NOISE_FLOOR_MIN, spread)
+    if len(ratios) <= 1:
+        return NOISE_FLOOR_MIN
+    bad = [r for r in ratios
+           if not isinstance(r, (int, float)) or isinstance(r, bool) or r <= 0]
+    if bad:
+        raise ValueError(
+            f"confirmation ratios {ratios!r} contain non-positive reading(s) {bad!r} "
+            f"— the noise-floor spread (max-min)/min needs positive ratios; the "
+            f"generation's confirming eval JSON is broken")
+    return max(NOISE_FLOOR_MIN, (max(ratios) - min(ratios)) / min(ratios))
 
 
 def _floor_progress_text(task, best: dict) -> str | None:
@@ -347,6 +360,12 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
     task_dir = Path(args.task).resolve()
     base = re.sub(r"-g\d+$", "", task_dir.name)
+    # The chain continues the start task's own numbering: from tasks/rmsnorm-g3 the
+    # first jump lands on rmsnorm-g4, not on the ancestor rmsnorm-g2 that the bare
+    # generation counter produced (a backwards destination that either already
+    # exists or collides with the start task itself).
+    start = re.search(r"-g(\d+)$", task_dir.name)
+    start_gen = int(start.group(1)) if start else 1
     for gen in itertools.count(1):
         try:
             task = load_task(task_dir)
@@ -364,7 +383,11 @@ def main(argv=None) -> int:
                   f"(loop exit {rc}): the chain stops here", flush=True)
             return 0 if gen > 1 else 1
         gain = best.get("speedup")
-        floor = noise_floor(best)
+        try:
+            floor = noise_floor(best)
+        except ValueError as e:
+            sys.stderr.write(f"[self-evolve] generation {gen}: {e}\n")
+            return 2
         print(f"[self-evolve] generation {gen}: best {best['sha'][:12]}, "
               + (f"{gain:.4f}x its reference" if gain else "speedup unknown")
               + f" (noise floor {floor:.1%})", flush=True)
@@ -382,8 +405,13 @@ def main(argv=None) -> int:
         if args.max_gen is not None and gen >= args.max_gen:
             print(f"[self-evolve] reached --max-gen {args.max_gen}", flush=True)
             return 0
-        task_dir = next_generation(task, best, task_dir.parent / f"{base}-g{gen + 1}",
-                                   args.step, run=run, best_data=best)
+        try:
+            task_dir = next_generation(task, best,
+                                       task_dir.parent / f"{base}-g{start_gen + gen}",
+                                       args.step, run=run, best_data=best)
+        except FileExistsError as e:
+            sys.stderr.write(f"[self-evolve] {e}\n")
+            return 2
         print(f"[self-evolve] next generation: {task_dir}", flush=True)
     return 0
 

@@ -25,6 +25,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 
 from peregrine_kernel.loop import cli  # noqa: E402
+from peregrine_kernel.loop.cli import RunnerLostError  # noqa: E402
 from peregrine_kernel.loop.driver import BackendError  # noqa: E402
 from peregrine_kernel.submit import direct, jobs  # noqa: E402
 
@@ -92,3 +93,66 @@ def test_agent_turn_start_new_session_is_passed(tmp_path, monkeypatch):
     be = cli.RealBackend("op", tmp_path, None, "t", "t@t")
     be._agent_turn("true", "prompt", "student")
     assert seen.get("start_new_session") is True
+
+
+# --- BUG-SEED-18: the retry budgets say what they spend ------------------------------
+
+def _lost_backend(monkeypatch, tmp_path, *, lost_retries):
+    """A backend whose every job comes back Lost (no runner, no verdict)."""
+    ws = tmp_path / "ws"
+    (ws / ".git").mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+
+    def fake_forge(op, verb, *a, **k):
+        calls.append(verb)
+        if verb == "submit":
+            return type("P", (), {"returncode": 0,
+                                  "stdout": f"[submit] job={len(calls)}\n"})()
+        if verb == "status":
+            return type("P", (), {"returncode": 0,
+                                  "stdout": '{"id": 1, "status": "Lost"}\n'})()
+        return type("P", (), {"returncode": 0, "stdout": ""})()
+
+    monkeypatch.setattr(cli, "_forge", fake_forge)
+    be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0,
+                         lost_retries=lost_retries)
+    return be, calls
+
+
+def test_the_lost_budget_spends_its_extra_submits_then_stops(monkeypatch, tmp_path, capsys):
+    """lost_retries reads "extra submits": the same value as clock_lock_retries buys
+    one MORE attempt on this path (lost_retries + 1 total), and the run log never
+    prints a count past the budget (the old "(4/3)" overflow)."""
+    be, calls = _lost_backend(monkeypatch, tmp_path, lost_retries=1)
+    with pytest.raises(RunnerLostError):
+        be.submit_gpu("br", "all")
+    assert calls.count("submit") == 2          # initial + 1 extra submit
+    out = capsys.readouterr().out
+    assert "extra submit 1/1" in out
+    assert "/1)" not in out.replace("extra submit 1/1", ""), \
+        "a lost count past the budget was printed"
+
+
+def test_the_clock_lock_budget_prints_its_attempt_count(monkeypatch, tmp_path, capsys):
+    """The resubmit line names the ATTEMPT about to be spent (an initial submit plus
+    clock_lock_retries - 1 resubmits), not a resubmit number that over-reads it."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    logs = iter([jobs.CLOCK_LOCK_REFUSED_MARKER + " lock not held\n"] * 5)
+    seen = []
+
+    def once(branch, mode):
+        seen.append(mode)
+        return next(logs)
+
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    be = cli.RealBackend("op", ws, None, "t", "t@t")
+    be.clock_lock_retry_sleep_s = 0
+    monkeypatch.setattr(be, "_submit_gpu_once", once)
+    with pytest.raises(cli.ClockLockRefusedError):
+        be.submit_gpu("b", "all")
+    assert len(seen) == be.clock_lock_retries  # attempts semantics, as ever
+    out = capsys.readouterr().out
+    assert "attempt 2 of 3" in out and "attempt 3 of 3" in out
+    assert "attempt 4" not in out

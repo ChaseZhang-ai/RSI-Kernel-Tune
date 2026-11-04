@@ -276,10 +276,10 @@ class RealBackend:
 
     # A job the card's gpu_entry refused to time because its declared clock lock did
     # not hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER) is never returned to a caller:
-    # submit_gpu resubmits it up to this many times, then stops with
-    # ClockLockRefusedError (nothing is charged). The state rarely clears by waiting:
-    # a GPU that would not lock its clocks kept refusing — a few retries rule out a
-    # one-off; the machine needs a look.
+    # submit_gpu spends at most this many ATTEMPTS on it (an initial submit plus
+    # clock_lock_retries - 1 resubmits), then stops with ClockLockRefusedError (nothing
+    # is charged). The state rarely clears by waiting: a GPU that would not lock its
+    # clocks kept refusing — a few retries rule out a one-off; the machine needs a look.
     clock_lock_retries = 3
     clock_lock_retry_sleep_s = 30.0
 
@@ -500,9 +500,12 @@ class RealBackend:
         Such a job judged and timed nothing: handed back, parse_eval reads "no eval
         JSON" as a correctness FAIL, the driver records a REVERT and spends an
         iteration, and a meta tool spends an attempt — on the machine, not the payload.
-        So it is resubmitted here, up to ``clock_lock_retries`` times in a row; past
-        that the submit stops with ClockLockRefusedError — a NoRunError, which no caller
-        charges.
+        So it is resubmitted here, within an ``clock_lock_retries``-attempt budget —
+        an initial submit plus ``clock_lock_retries - 1`` resubmits; past that the
+        submit stops with ClockLockRefusedError — a NoRunError, which no caller
+        charges. (``lost_retries`` below reads differently on purpose: there the
+        number is the EXTRA submits after the first loss, so the same value buys one
+        more attempt on that path.)
         """
         refusals = 0
         while True:
@@ -517,7 +520,8 @@ class RealBackend:
                     f"recorded and nothing is charged")
             if refusals >= max(1, int(self.clock_lock_retries)):
                 raise ClockLockRefusedError(f"{head} ({refusals} refusal(s) in a row)")
-            print(f"{head}; resubmitting ({refusals}/{self.clock_lock_retries})", flush=True)
+            print(f"{head}; resubmitting (attempt {refusals + 1} of "
+                  f"{max(1, int(self.clock_lock_retries))})", flush=True)
             time.sleep(self.clock_lock_retry_sleep_s)
 
     def submit_gpu_start(self, branch: str, mode: str) -> int:
@@ -605,12 +609,15 @@ class RealBackend:
             if status in _LOST:
                 self._clear_inflight()  # a lost job is gone; never re-adopt it
                 lost += 1
-                print(f"[loop] job {job} lost its runner without a verdict; resubmitting "
-                      f"({lost}/{self.lost_retries})", flush=True)
                 if lost > self.lost_retries:
                     raise RunnerLostError(
                         f"job lost its runner {lost} times in a row (last: {job}); nothing "
                         f"ran to completion")
+                # said only when a resubmit really follows: the count is the extra
+                # submit about to be spent (lost_retries reads "extra submits", one
+                # more attempt than clock_lock_retries buys on the same value)
+                print(f"[loop] job {job} lost its runner without a verdict; resubmitting "
+                      f"(extra submit {lost}/{self.lost_retries})", flush=True)
                 continue
             try:
                 log = self._fetch_log(job, status, task=_entry_task(mode))

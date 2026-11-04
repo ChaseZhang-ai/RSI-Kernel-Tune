@@ -274,12 +274,22 @@ class RealBackend:
 
     inflight_file = "pk-inflight.json"
 
+    # Structured trace of overlays that degraded to the tree's own copies
+    # (BUG-SEED-19), one JSON line per affected job: a fail-open overlay failure
+    # must be distinguishable from "identical, no overlay needed" after the fact,
+    # not only in the run log. Lives in the workspace's git dir beside the
+    # in-flight record: it survives every reset and can never ride a job's tree.
+    overlay_fallback_file = "pk-overlay-fallbacks.jsonl"
+
     # A job the card's gpu_entry refused to time because its declared clock lock did
     # not hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER) is never returned to a caller:
-    # submit_gpu resubmits it up to this many times, then stops with
-    # ClockLockRefusedError (nothing is charged). The state rarely clears by waiting:
-    # a GPU that would not lock its clocks kept refusing — a few retries rule out a
-    # one-off; the machine needs a look.
+    # submit_gpu spends at most this many submits IN TOTAL on it (the first plus
+    # this many - 1 resubmits), then stops with ClockLockRefusedError (nothing is
+    # charged). Mind the counting: the lost-runner budget in _submit_gpu_once is
+    # stated the other way — lost_retries EXTRA submits after the first, i.e.
+    # lost_retries + 1 in total. The state rarely clears by waiting: a GPU that
+    # would not lock its clocks kept refusing — a few retries rule out a one-off;
+    # the machine needs a look.
     clock_lock_retries = 3
     clock_lock_retry_sleep_s = 30.0
 
@@ -328,6 +338,9 @@ class RealBackend:
         # sha this backend pushes for a job (see _with_job_env). Empty = off.
         self.job_env_files: dict[str, Path] = {}
         self._job_env_announced: dict[str, str] = {}
+        # Why the last overlay degraded to the tree's own copies ("" = it did not):
+        # a job that did not run the card's judge must be visible, not silent.
+        self._overlay_degraded = ""
         # [loop] harness_guard (loop/harness_guard.py): the card whose tracked harness
         # files (gpu_entry.sh, eval/, ref_bin/, .gitattributes) every job tree carries
         # instead of the lineage's; None = no harness overlay. kernel_file is never
@@ -372,9 +385,14 @@ class RealBackend:
         drains the pipes so this side can print a line every
         ``agent_heartbeat_s`` seconds.
         """
+        # The turn's own session: `shell=True` makes Popen's child a wrapper shell,
+        # so killing only that child would orphan the model process under it. A
+        # dedicated process group (the same hygiene goal_ref.py gives a /goal
+        # session) lets the exit path below end everything at once.
         proc = subprocess.Popen(
             cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, cwd=self.workspace,
+            start_new_session=True,
         )
         box: dict = {}
 
@@ -399,8 +417,11 @@ class RealBackend:
             # Ctrl-C / SystemExit lands on THIS thread while the pump owns the
             # pipes. `subprocess.run` killed the child on its way out; a Popen
             # driven from a thread must do that by hand, or the agent (a claude
-            # process) outlives the loop and keeps spending API usage.
-            proc.kill()
+            # process) outlives the loop and keeps spending API usage. The
+            # process group is ended, not just the wrapper shell: under
+            # `shell=True` the model process is the wrapper's child, and a
+            # watchdog's SIGKILL path gets no say at all.
+            _end_process_group(proc)
             pump.join(timeout=5)
             raise
         if "exc" in box:
@@ -493,9 +514,11 @@ class RealBackend:
         Such a job judged and timed nothing: handed back, parse_eval reads "no eval
         JSON" as a correctness FAIL, the driver records a REVERT and spends an
         iteration, and a meta tool spends an attempt — on the machine, not the payload.
-        So it is resubmitted here, up to ``clock_lock_retries`` times in a row; past
-        that the submit stops with ClockLockRefusedError — a NoRunError, which no caller
-        charges.
+        So submit_gpu spends at most ``clock_lock_retries`` submits here IN TOTAL —
+        the first plus ``clock_lock_retries - 1`` resubmits — and past that stops
+        with ClockLockRefusedError — a NoRunError, which no caller charges. (The
+        lost-runner budget in _submit_gpu_once counts the other way: ``lost_retries``
+        EXTRA submits after the first, i.e. ``lost_retries + 1`` in total.)
         """
         refusals = 0
         while True:
@@ -592,9 +615,23 @@ class RealBackend:
             # in every gate it anchors); it is not recoverable from the logs this returns
             self.last_job_id = job
             self.last_mode = mode
-            status = poll_until_terminal(
-                lambda: self._job_status(job), job, poll_s=self.poll_s,
-                timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+            try:
+                status = poll_until_terminal(
+                    lambda: self._job_status(job), job, poll_s=self.poll_s,
+                    timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+            except BackendError as e:
+                # BUG-SEED-21: a poll that never settles is the same kind of unknowable
+                # as a log that never comes — the BackendError must not fly straight out
+                # leaving a record every restart re-adopts into the same 4-hour wait.
+                # The timeout counts its misses in the record; at the threshold the job
+                # is given up and the next submit is fresh.
+                if "did not reach a terminal state" in str(e) and \
+                        self._note_inflight_log_failure(job) >= _INFLIGHT_LOG_ATTEMPTS:
+                    print(f"[loop] job {job}: the poll did not settle within "
+                          f"{_INFLIGHT_LOG_ATTEMPTS} attempts — giving the job up rather "
+                          f"than re-adopting it into another full poll window", flush=True)
+                    self._clear_inflight()
+                raise
             if status in _LOST:
                 self._clear_inflight()  # a lost job is gone; never re-adopt it
                 lost += 1
@@ -772,7 +809,10 @@ class RealBackend:
 
     def _retry_call(self, fn, what: str):
         """Retry a subprocess.CompletedProcess-returning call on non-zero rc / OS error,
-        with a short backoff: a git or local hiccup clears in seconds."""
+        with a short backoff: a git or local hiccup clears in seconds. The backoff runs
+        between attempts only — sleeping after the last failure just hung the submit —
+        and every retry is announced, so a caller reading the run log can tell a
+        retrying call from a stalled one."""
         last = ""
         for attempt in range(1, self.git_retries + 1):
             try:
@@ -783,7 +823,10 @@ class RealBackend:
                 if getattr(proc, "returncode", 0) == 0:
                     return proc
                 last = f"rc={proc.returncode} {getattr(proc, 'stderr', '')[-200:].strip()!r}"
-            time.sleep(self.git_retry_sleep * attempt)  # transient backoff
+            if attempt < self.git_retries:  # no sleep after the last failure
+                print(f"[loop] {what} failed ({last}); retrying — attempt "
+                      f"{attempt + 1}/{self.git_retries}", flush=True)
+                time.sleep(self.git_retry_sleep * attempt)  # transient backoff
         raise BackendError(f"{what} failed after {self.git_retries} attempts: {last}")
 
     def _git(self, *args: str, what: str) -> None:
@@ -906,23 +949,22 @@ class RealBackend:
             try:
                 want[path] = src.read_bytes()
             except OSError as e:
-                print(f"[loop] job-env: cannot read the card's {src} ({e}) — {path} rides "
-                      f"the tree's own copy", flush=True)
+                self._overlay_degraded = (f"cannot read the card's {src} ({e}); {path} "
+                                          f"is missing from the overlay")
         drop: list = []
         if self.harness_card is not None:
             card = harness_guard.card_harness_files(self.harness_card, self.kernel_file)
             tree = harness_guard.tree_harness_files(self.workspace, ref, self.kernel_file)
             if card is None or tree is None:
-                print(f"[loop] harness overlay: cannot list the harness of the card "
-                      f"{self.harness_card} or of {ref[:10]} — this job runs the tree's own "
-                      f"copies", flush=True)
+                self._overlay_degraded = (f"cannot list the harness of the card "
+                                          f"{self.harness_card} or of {ref[:10]}")
             else:
                 for path, src in card.items():
                     try:
                         want.setdefault(path, src.read_bytes())
                     except OSError as e:
-                        print(f"[loop] harness overlay: cannot read the card's {src} ({e})",
-                              flush=True)
+                        self._overlay_degraded = (f"cannot read the card's {src} ({e}); "
+                                                  f"{path} is missing from the overlay")
                 drop = [p for p in sorted(tree) if p not in card and p not in want]
         return want, drop
 
@@ -943,6 +985,7 @@ class RealBackend:
         gpu_entry.sh never reaches a job (loop/harness_guard.py). One child commit built
         from a temporary index, bytes for bytes (binary blobs and sealed references
         included): working tree, index and HEAD are never touched."""
+        self._overlay_degraded = ""
         want, drop = self._overlay_wanted(ref)
         ws = self.workspace
         tree = harness_guard.tree_harness_files(ws, ref, "") or {}
@@ -966,9 +1009,17 @@ class RealBackend:
             if changes:
                 sha = self._commit_overlay(ref, changes)
         except (OSError, BackendError) as e:
-            print(f"[loop] job-env: could not overlay the card's files ({e}) — this job "
-                  f"runs the tree's own copies", flush=True)
+            self._overlay_degraded = f"could not overlay the card's files ({e})"
             sha, changes = ref, []
+        if self._overlay_degraded:
+            # BUG-SEED-19: a degraded overlay must never fall through to the dedup'd
+            # announce branch, where an empty change set read as "the tree's copies
+            # match the card — no overlay" and hid the one job that did not run the
+            # card's judge. Say WARNING and leave a structured trace instead.
+            print(f"[loop] WARNING: job-env: {self._overlay_degraded} — the affected "
+                  f"files run the tree's own copies", flush=True)
+            self._note_overlay_fallback(ref, self._overlay_degraded)
+            return sha
         changed = [p for p, _, _ in changes]
         key = ",".join(changed)
         if self._job_env_announced.get("last") != key:
@@ -981,6 +1032,21 @@ class RealBackend:
                 print("[loop] job-env: the tree's copies match the card — no overlay",
                       flush=True)
         return sha
+
+    def _note_overlay_fallback(self, ref: str, error: str) -> None:
+        """Append one structured line about an overlay that degraded to the tree's own
+        copies (BUG-SEED-19). Best-effort: a workspace that is not a git checkout (or
+        an unwritable git dir) keeps the run-log WARNING as the only trace."""
+        gd = self.workspace / ".git"
+        if not gd.is_dir():
+            return
+        rec = {"ref": ref, "error": error[:300],
+               "note": "the overlay failed; the job ran the tree's own copies"}
+        try:
+            with (gd / self.overlay_fallback_file).open("a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
+        except OSError:
+            pass
 
     def _commit_overlay(self, ref: str, changes: list) -> str:
         """A child commit of ``ref`` carrying ``changes`` [(path, mode, blob) | (path,
@@ -1111,6 +1177,26 @@ def _resolve_ref_spec(cfg: dict) -> dict:
     return spec
 
 
+# The ref-spec keys that only DESCRIBE a reference measured somewhere else. None of
+# them declares a measurement: a spec carrying only these is a target-ms-style run
+# without a second window, however full the spec looks (BUG-C3-02).
+_REF_LABEL_KEYS = ("ref_ncu_cmd", "ref_name", "ref_shape", "ref_hardware")
+
+
+def _ref_spec_declared(spec: dict) -> bool:
+    """Whether ``spec`` declares an actual way to measure a reference.
+
+    The action keys count — ``ref_cmd`` / ``ref_mode`` / ``submit_op``, the keys the
+    rest of this file reads (the dry-run line and the no-target error do the same).
+    The label keys never do: a label-only card (a name, a shape, a hardware tag, an
+    NCU command) is not a declared reference, and reading it as one made
+    _window_preflight refuse fresh starts over a contract nothing needs and told the
+    driver a ref rides the student job. Any other non-label key counts too, so an
+    unrecognized declaration reads loud here rather than silently degrading the run
+    to target-ms-only."""
+    return any(v and k not in _REF_LABEL_KEYS for k, v in spec.items())
+
+
 def _ref_rides_job(spec: dict) -> bool:
     """Whether the declared ref can be timed inside the student eval job.
 
@@ -1121,7 +1207,8 @@ def _ref_rides_job(spec: dict) -> bool:
     (the driver degrades to the absolute median, but the misjudgment also skips
     the fresh ref re-anchor that runs without an in-job ref rely on).
     """
-    return bool(spec) and not spec.get("ref_mode") and not spec.get("submit_op")
+    return (_ref_spec_declared(spec)
+            and not spec.get("ref_mode") and not spec.get("submit_op"))
 
 
 def _precision_preflight(op_dir: Path, contract: str, defaulted: bool, *, resuming: bool,
@@ -1797,9 +1884,9 @@ def _arm_has_reference(cfg: dict) -> bool:
     reference window; a target-ms-only run defines none.
     """
     loop = cfg.get("loop", {})
-    return bool(_resolve_ref_spec(cfg) or _arch_ref_spec(cfg)
-                or loop.get("arch_ref_ms") is not None
-                or loop.get("arch_ref_device_ms") is not None)
+    return (_ref_spec_declared(_resolve_ref_spec(cfg)) or _arch_ref_spec(cfg)
+            or loop.get("arch_ref_ms") is not None
+            or loop.get("arch_ref_device_ms") is not None)
 
 
 def _window_preflight(op_dir: Path, cfg: dict, *, resuming: bool

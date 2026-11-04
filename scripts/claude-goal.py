@@ -911,6 +911,11 @@ class GoalLeg:
         if outcome == "refusal":
             rc, why = self.model_verdict(tr)
             self.write_result(tr, outcome, detail, rc)
+            # 75/76/77 all hand the reply back on stdout (the contract this script's
+            # docstring states and the met branch above keeps): the refusal explains on
+            # stderr, but the turn's work is still the caller's to read.
+            reply = self.reply.read_text(encoding="utf-8", errors="replace")
+            sys.stdout.write(reply)
             sys.stderr.write(why + "\n")
             say(why, self.turn_dir)
             return rc or 77

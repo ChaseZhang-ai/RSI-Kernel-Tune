@@ -76,19 +76,51 @@ def _err(where: str, e: BaseException) -> None:
         errs.append(f"{where}: {e.__class__.__name__}: {e}"[:300])
 
 
+_dump_warned = False
+
+
+def _dump_fallback(payload) -> str | None:
+    """Last resort when PK_MON_OUT is unwritable: drop the summary in the temp dir
+    so the data is not simply gone. The runner will not see it (it scans
+    PK_MON_OUT only) — this is for a human diagnosing why the monitor came back
+    empty."""
+    try:
+        import tempfile
+        path = os.path.join(tempfile.gettempdir(), f"pk-mon-dump-fallback-{os.getpid()}.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh)
+        return path
+    except Exception:  # noqa: BLE001 — nowhere writable: the warn line is all there is
+        return None
+
+
 def _dump() -> None:
+    global _dump_warned
     out = _state.get("out")
     if not out:
         return
+    payload = {k: v for k, v in _state.items() if k != "out"}
     try:
         os.makedirs(out, exist_ok=True)
         path = os.path.join(out, f"hook-{os.getpid()}.json")
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump({k: v for k, v in _state.items() if k != "out"}, fh)
+            json.dump(payload, fh)
         os.replace(tmp, path)
-    except Exception:  # noqa: BLE001 — the monitor never costs the bench
-        pass
+    except Exception as e:  # noqa: BLE001 — the monitor never costs the bench
+        # a write failure used to vanish here: the runner then reads zero
+        # hook-<pid>.json files and (with BUG-SEED-14 fixed) says "the hook never
+        # ran" without anyone knowing the data existed and was lost. Record it in
+        # the state (it rides the next successful dump), say it on stderr once,
+        # and try somewhere else for the payload itself.
+        _err("dump", e)
+        fallback = _dump_fallback(payload)
+        if not _dump_warned:
+            _dump_warned = True
+            print(f"pk_monitor_hook: cannot write the monitor summary to {out} "
+                  f"({e.__class__.__name__}: {e})"
+                  + (f" — saved to {fallback} instead" if fallback else ""),
+                  file=sys.stderr)
 
 
 # --- tensor summaries -------------------------------------------------------------

@@ -16,8 +16,8 @@ Four ledger bugs, one test section each:
 
 from __future__ import annotations
 
-from peregrine_kernel.inner.trajectory import GATE_WINDOW_DEVICE, IterationRecord
-from peregrine_kernel.loop.parse import resolvable_diff
+from peregrine_kernel.inner.trajectory import GATE_WINDOW_DEVICE, IterationRecord, gate_ms
+from peregrine_kernel.loop.parse import parse_eval, resolvable_diff
 
 
 def _rec(i, ratio=None, *, reading_of=None, ms=2.0, dev=None, ref=None):
@@ -66,3 +66,54 @@ def test_resolvable_diff_reused_rows_change_nothing_they_touch():
               _rec(8, 1.011, reading_of=3, dev=dev, ref=ref)]
     without = resolvable_diff(fresh, GATE_WINDOW_DEVICE)
     assert resolvable_diff(fresh + copies, GATE_WINDOW_DEVICE) == without
+
+
+# --- BUG-SEED-22: NaN / inf timing readings never reach the parsed eval --------
+
+def test_parse_eval_drops_non_finite_timing_readings():
+    """The probe verdict path audits a reported diff for finiteness (the
+    NaN/inf branch of _audit_pass); the timing readings took isinstance checks
+    only, so a bench fault's NaN reached the parsed record and locked every
+    downstream comparison (min(recs, key=gate_ms) kept returning the NaN row,
+    plateau's recent_best >= prior_best * (1 - margin) went permanently False).
+    A non-finite reading is a bench fault, not a fact: dropped at parse, the
+    field stays None / the list entry absent, exactly like an unreported one."""
+    log = ('=== JSON ===\n{"correctness": {"pass": true}, "performance": {'
+           '"bwd_median_ms": NaN, "device_median_ms": Infinity, '
+           '"vs_ref_device": NaN, "host_enqueue_ms": Infinity, '
+           '"device_readings_ms": [1.0, NaN, Infinity, 1.02], '
+           '"ref_device_readings_ms": [Infinity, 2.0], '
+           '"workloads": [{"name": "w0", "device_median_ms": NaN, '
+           '"bwd_median_ms": 1.5, "host_enqueue_ms": NaN, '
+           '"device_readings_ms": [NaN, 3.0, Infinity]}], "n_workloads": 1}}')
+    ev = parse_eval(log)
+    assert ev.correctness is True
+    assert ev.bwd_median_ms is None
+    assert ev.device_median_ms is None
+    assert ev.vs_ref_device is None
+    assert ev.host_enqueue_ms is None
+    assert ev.device_readings_ms == [1.0, 1.02]
+    assert ev.ref_device_readings_ms == [2.0]
+    w = ev.workloads[0]
+    assert "device_median_ms" not in w
+    assert "host_enqueue_ms" not in w
+    assert w["bwd_median_ms"] == 1.5
+    assert w["device_readings_ms"] == [3.0]
+    assert "device_spread_pct" not in w
+    # the gate-consumption shape the bug locked: a NaN window reads as no
+    # reading (None), never as a row min() can keep selecting forever
+    assert gate_ms(ev, GATE_WINDOW_DEVICE) is None
+
+
+def test_parse_eval_finite_readings_ride_unchanged():
+    log = ('=== JSON ===\n{"correctness": {"pass": true}, "performance": {'
+           '"bwd_median_ms": 2.6, "device_median_ms": 0.25, '
+           '"device_readings_ms": [0.25, 0.26], '
+           '"workloads": [{"name": "w0", "device_median_ms": 0.24, '
+           '"device_readings_ms": [0.23, 0.24, 0.25]}], "n_workloads": 1}}')
+    ev = parse_eval(log)
+    assert ev.bwd_median_ms == 2.6
+    assert ev.device_median_ms == 0.25
+    assert ev.device_readings_ms == [0.25, 0.26]
+    assert ev.workloads[0]["device_median_ms"] == 0.24
+    assert ev.workloads[0]["device_readings_ms"] == [0.23, 0.24, 0.25]

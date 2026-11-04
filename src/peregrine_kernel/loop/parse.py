@@ -303,6 +303,20 @@ def readings_spread_pct(readings) -> float | None:
     return (max(vals) - min(vals)) / min(vals)
 
 
+def _finite_num(v) -> float | None:
+    """The non-bool number as a float, or None when it is not one or is not
+    finite (NaN / inf) — the same audit the probe verdict path applies to a
+    reported max_diff (_audit_pass). A non-finite timing reading is a bench
+    fault, not a fact: left in, it reached the trajectory and locked every
+    downstream comparison (min(recs, key=gate_ms) kept selecting the NaN row;
+    plateau's best comparison went permanently False)."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        f = float(v)
+        if f == f and f not in (float("inf"), float("-inf")):
+            return f
+    return None
+
+
 def _workloads(perf: dict) -> list:
     """Compact per-workload readings from a multi-workload performance block."""
     out = []
@@ -312,16 +326,15 @@ def _workloads(perf: dict) -> list:
         item = {"name": str(w.get("name", len(out)))}
         for key in _WORKLOAD_KEYS:
             v = w.get(key)
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
-                item[key] = float(v)
+            if (f := _finite_num(v)) is not None:
+                item[key] = f
         for key in _WORKLOAD_LIST_KEYS:
             v = w.get(key)
             if isinstance(v, (list, tuple)):
-                item[key] = [float(x) for x in v
-                             if isinstance(x, (int, float)) and not isinstance(x, bool)]
+                item[key] = [f for x in v if (f := _finite_num(x)) is not None]
         host = w.get("host_enqueue_ms")
-        if isinstance(host, (int, float)) and not isinstance(host, bool):
-            item["host_enqueue_ms"] = float(host)
+        if (fh := _finite_num(host)) is not None:
+            item["host_enqueue_ms"] = fh
         # WP15: the workload's SPRT early-stop decision (timing.py's controller),
         # so the driver's card rule (a loss-stopped workload cannot acquit the
         # card) and the digest can read it off the row.
@@ -335,12 +348,12 @@ def _workloads(perf: dict) -> list:
 
 
 def _float_list(raw) -> list:
-    """The numeric entries of ``raw`` as floats; [] for anything else (a bench that
-    reports no raw readings, or a malformed one)."""
+    """The finite numeric entries of ``raw`` as floats; [] for anything else (a
+    bench that reports no raw readings, a malformed one, or NaN / inf entries —
+    a fault the spread arithmetic cannot survive, dropped like a non-number)."""
     if not isinstance(raw, (list, tuple)):
         return []
-    return [float(v) for v in raw
-            if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    return [f for x in raw if (f := _finite_num(x)) is not None]
 
 
 def describe_workload_readings(workloads: list) -> str:
@@ -556,9 +569,10 @@ def parse_eval(text: str) -> EvalResult:
     def _opt(key: str, legacy: str | None = None) -> float | None:
         # legacy: pre-rename bench key (cublas_* — the in-job reference was recorded
         # under that name whatever library it was). Read so older cards' bench.py
-        # keeps parsing; new benches emit the ref_* names only.
+        # keeps parsing; new benches emit the ref_* names only. NaN / inf read as
+        # None — a bench fault is an absent reading, never a fact.
         v = perf.get(key, perf.get(legacy) if legacy else None)
-        return float(v) if v is not None else None
+        return _as_finite_float(v)
 
     def _opt_any(*keys: str) -> float | None:
         for key in keys:
@@ -596,8 +610,8 @@ def parse_eval(text: str) -> EvalResult:
         # COMPILE_ERROR verdict's nvcc/ptxas error and a numeric FAIL's surrounding
         # output are in the log the parser holds, so the record now holds them too.
         error="" if correct else _with_log_tail(_correctness_error(corr_obj), text),
-        bwd_median_ms=float(ms) if ms is not None else None,
-        mfu=float(mfu) if mfu is not None else None,
+        bwd_median_ms=_as_finite_float(ms),
+        mfu=_as_finite_float(mfu),
         ref_median_ms=_opt("ref_median_ms", "cublas_median_ms"),
         vs_ref=_opt("vs_ref", "vs_cublas"),
         device_median_ms=_opt("device_median_ms"),
@@ -732,13 +746,16 @@ def job_abend(log: str) -> JobEnd:
         "the archive is cut (the log archiver lags the job) or the job died silently"))
 
 
-def _as_finite_float(raw: str | None) -> float | None:
-    """The token as an error norm / reading, or None when it is not a finite number."""
+def _as_finite_float(raw) -> float | None:
+    """The token / number as a reading, or None when it is not a finite number.
+    The probe verdict path's audit (_audit_pass), reused for the eval JSON's
+    perf scalars: ``float()`` alone turned a bench fault's NaN / inf into a
+    recorded reading that locked every downstream comparison."""
     if raw is None:
         return None
     try:
         v = float(raw)
-    except ValueError:
+    except (ValueError, TypeError):
         return None
     if v != v or v in (float("inf"), float("-inf")):
         return None

@@ -29,9 +29,11 @@ class Decision:
 
     id: str
     depends_on: frozenset[str] = field(default_factory=frozenset)
-    # ⊗ companions: decisions that must land in the same commit. Not DAG edges —
-    # kept beside them so a resume plan can name the group, never so it widens
-    # invalidation symmetrically.
+    # ⊗ companions: decisions that must land in the same commit. Not ⇐ DAG edges --
+    # ``compute_resume`` ignores them (the prefix cut follows dependencies alone);
+    # ``compute_reopen`` does read them, in BOTH declaration directions, because
+    # one commit cannot keep half of a pair (BUG-SEED-16). The declaration itself
+    # is one-sided by design (an id belongs to the most recent arrow on its line).
     companions: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
@@ -78,8 +80,9 @@ class ReopenPlan:
 
     reopen: decisions to redo ON THE CURRENT TREE, in trajectory order — the
             dependency closure of the changed entries (a changed decision, every
-            decision that transitively depends on one, and the ⊗ companions of
-            any of those, since companions land in one commit).
+            decision that transitively depends on one, and every ⊗ companion of
+            any of those — read in both declaration directions, since companions
+            land in one commit whoever named the pair).
     kept:   decisions that stay as built (not in the closure), trajectory order.
     """
 
@@ -101,16 +104,26 @@ def compute_reopen(
     """
     changed = frozenset(changed_entries)
     reopen: set[str] = set()
+    # BUG-SEED-16: the ⊗ declaration is one-sided (an id belongs to the most
+    # recent arrow on its line), so the companion closure must read the edges in
+    # both directions -- a reopened decision pulls in the companions it names,
+    # and every decision that names IT as a companion. Reverse index, built once.
+    named_by: dict[str, list[str]] = {}
+    for d in trajectory:
+        for c in d.companions:
+            named_by.setdefault(c, []).append(d.id)
     # Fixpoint over the trajectory: dependencies are declared by id and may
     # point at decisions later in the list (companions especially), so one
     # ordered pass is not enough.
     while True:
+        hot = changed | reopen
         grew = False
         for d in trajectory:
             if d.id in reopen:
                 continue
-            if (d.id in changed or (d.depends_on & changed)
-                    or (d.depends_on & reopen) or (d.companions & reopen)):
+            if (d.id in changed or (d.depends_on & hot)
+                    or (d.companions & hot)
+                    or any(who in hot for who in named_by.get(d.id, ()))):
                 reopen.add(d.id)
                 grew = True
         if not grew:

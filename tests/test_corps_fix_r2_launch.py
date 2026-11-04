@@ -32,6 +32,7 @@ from types import SimpleNamespace
 import pytest
 
 from peregrine_kernel import launch, taskcard
+from peregrine_kernel.resume import Decision, ReopenPlan, compute_reopen
 from peregrine_kernel.runs import list_runs
 
 from test_launch import (  # noqa: F401 -- the repo fixture and the end-to-end stand-ins
@@ -83,3 +84,19 @@ def test_stop_at_target_with_a_confirmed_best_still_completes(repo, monkeypatch)
     rc, rec = _confirmed_run(repo, monkeypatch, "target", _confirmed(1.3))
     assert rc == 0
     assert rec["status"] == "done" and rec["target_met"] is True
+
+
+# -- BUG-SEED-16: a one-sided ⊗ companion declaration keeps the pair together ----------------
+
+
+def test_reopen_pulls_a_one_sided_companion_both_ways():
+    traj = [Decision("D1"), Decision("D2", depends_on={"D1"}, companions={"D1"})]
+    assert compute_reopen(traj, {"D2"}) == ReopenPlan(reopen=["D1", "D2"], kept=[])
+    assert compute_reopen(traj, {"D1"}) == ReopenPlan(reopen=["D1", "D2"], kept=[])
+
+
+def test_reopen_follows_a_companion_chain_to_the_fixpoint():
+    traj = [Decision("A", companions={"B"}), Decision("B", companions={"C"}),
+            Decision("C")]
+    for changed in ("A", "B", "C"):
+        assert compute_reopen(traj, {changed}).reopen == ["A", "B", "C"]

@@ -707,7 +707,6 @@ class GoalLeg:
         acted_at_size = -1
         acted_at = 0.0
         last_pane_at = 0.0
-        met_seen_at = 0.0
         checked_at_size = -1
         while True:
             now = time.time()
@@ -731,7 +730,6 @@ class GoalLeg:
             if tr.refusal:
                 return "refusal", json.dumps(tr.refusal)
             if tr.met is not None:
-                met_seen_at = met_seen_at or now
                 # the turn that the judge closed finishes its bookkeeping first
                 if tr.last_kind == "turn_end" or quiet > self.settle_s or dead:
                     ok, out = self.deliverable()
@@ -742,7 +740,6 @@ class GoalLeg:
                         return "fail", ("the goal was judged met but the deliverable check "
                                         f"still fails: {out}")
                     tr.met = None
-                    met_seen_at = 0.0
                     self.resend_goal(f"judged met but the check fails: {out[:160]}")
                     acted_at_size, acted_at = tr.size, now
                     continue

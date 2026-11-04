@@ -502,15 +502,21 @@ def test_build_priors_from_artifacts_turns_skeletons_into_priors(tmp_path):
         "kernel": "kernels/gemm/demo_gem/h100",
         "regime": "demo GEMM — published: +1.2% vs cuBLAS (Figure 3)"}), encoding="utf-8")
 
+    # WP23 (95-审查报告-WP18 F-3): the fill pass rides the same write gate as
+    # the skeleton pass — a dry run lists, --write lands
+    text_before = prior.read_text(encoding="utf-8")
     assert bp.main(["--repo", str(root), "--from-artifacts"]) == 0
+    assert prior.read_text(encoding="utf-8") == text_before   # dry run wrote nothing
+    assert bp.main(["--repo", str(root), "--from-artifacts", "--write"]) == 0
     filled = prior.read_text(encoding="utf-8")
+    assert filled != text_before
     assert filled.count("- Measured anchor (") >= 6       # every section anchored
     assert "Status: filled (auto from measured artifacts" in filled
     assert "the published launch is grid=132 CTAs" in filled
     assert "sass census" in filled and "STSM/LDSM" in filled
     assert "Shape domain" in filled and "published: +1.2%" in filled
-    # a filled file is never touched again
-    assert bp.main(["--repo", str(root), "--from-artifacts"]) == 0
+    # a filled file is never touched again (write or not)
+    assert bp.main(["--repo", str(root), "--from-artifacts", "--write"]) == 0
     assert prior.read_text(encoding="utf-8") == filled
 
 
@@ -523,7 +529,7 @@ def test_build_priors_partial_artifacts_stay_anchored_not_filled(tmp_path):
     arts.mkdir(parents=True)
     (arts / "sass_census.json").write_text(json.dumps({
         "k.cubin": {"total": 10, "families": {"mbarrier": 3}}}), encoding="utf-8")
-    assert bp.main(["--repo", str(root), "--from-artifacts"]) == 0
+    assert bp.main(["--repo", str(root), "--from-artifacts", "--write"]) == 0
     text = prior.read_text(encoding="utf-8")
     assert "Status: auto-anchored" in text
     assert "Measured anchor (sass census): 3" in text

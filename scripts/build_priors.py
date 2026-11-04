@@ -244,9 +244,12 @@ def _fill_status(text: str, anchored: int, total: int) -> str:
                         "TODO await a harvest/human pass)", 1)
 
 
-def _run_from_artifacts() -> int:
+def _run_from_artifacts(write: bool = False) -> int:
     """The WP18 fill pass: every skeleton whose artifacts landed gains its
-    measured anchors. Filled / human files are never touched."""
+    measured anchors. Filled / human files are never touched. Write gate =
+    the skeleton pass's own discipline (WP23, 95-审查报告-WP18 F-3): the
+    default is a dry run that lists what would be anchored; --write lands
+    the diff."""
     kernels = _kernels()
     touched, full, partial = 0, 0, 0
     for k in kernels:
@@ -267,14 +270,21 @@ def _run_from_artifacts() -> int:
         if n == 0:
             continue
         new = _fill_status(new, n, len(_SECTIONS))
-        dst.write_text(new, encoding="utf-8")
-        touched += 1
-        full += 1 if n >= len(_SECTIONS) else 0
-        partial += 1 if n < len(_SECTIONS) else 0
-        print(f"anchored {rel} ({n}/{len(_SECTIONS)} sections)"
-              + (" — FILLED" if n >= len(_SECTIONS) else " — partial"))
-    print(f"{len(kernels)} published kernel(s); {touched} skeleton(s) gained measured anchors "
-          f"({full} now filled, {partial} partial)")
+        if write:
+            dst.write_text(new, encoding="utf-8")
+            touched += 1
+            full += 1 if n >= len(_SECTIONS) else 0
+            partial += 1 if n < len(_SECTIONS) else 0
+            print(f"anchored {rel} ({n}/{len(_SECTIONS)} sections)"
+                  + (" — FILLED" if n >= len(_SECTIONS) else " — partial"))
+        else:
+            print(f"would anchor {rel} ({n}/{len(_SECTIONS)} sections)"
+                  + (" — FILLED" if n >= len(_SECTIONS) else " — partial"))
+    if write:
+        print(f"{len(kernels)} published kernel(s); {touched} skeleton(s) gained measured anchors "
+              f"({full} now filled, {partial} partial)")
+    else:
+        print("dry run — pass --write to anchor the listed skeletons")
     return 0
 
 
@@ -306,10 +316,12 @@ def main(argv: list[str] | None = None) -> int:
         epilog="Filled samples ship in priors/ (gemm, attention, conv); the script "
                "never overwrites a file whose Status: filled line is present.")
     p.add_argument("--write", action="store_true",
-                   help="write skeletons (default: dry run, list only)")
+                   help="write skeletons / land the --from-artifacts anchors "
+                        "(default: dry run, list only)")
     p.add_argument("--from-artifacts", action="store_true", dest="from_artifacts",
                    help="fill skeleton sections from the measured artifacts under "
-                        "priors/artifacts/ (scripts/collect_kernel_artifacts.py lands them)")
+                        "priors/artifacts/ (scripts/collect_kernel_artifacts.py lands "
+                        "them); default dry run, --write to anchor")
     p.add_argument("--force", action="store_true",
                    help="with --write: refresh auto skeletons too (a filled file is "
                         "never overwritten)")
@@ -326,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
         globals()["ARTIFACTS"] = REPO / "priors" / "artifacts"
 
     if args.from_artifacts:
-        return _run_from_artifacts()
+        return _run_from_artifacts(write=args.write)
 
     rows = _rows()
     kernels = _kernels()

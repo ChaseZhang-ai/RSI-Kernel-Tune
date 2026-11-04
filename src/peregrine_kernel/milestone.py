@@ -120,8 +120,9 @@ def parse_dependency_line(line: str) -> tuple[set[str], set[str], set[str]]:
 def dependency_warnings(text: str) -> list[str]:
     """Advisory (not violations): the DAG-shape findings of the resume/patch mode.
 
-    ⇒ claims the other side does not echo as ⇐, ⇐ holes on non-root decisions,
-    ⇐ cycles. In ``validate_milestone(authoring=True)`` the last two are
+    ⇒ claims the other side does not echo as ⇐, ⊗ companions declared on one side
+    only, ⇐ holes on non-root decisions, ⇐ cycles. In
+    ``validate_milestone(authoring=True)`` the last two are
     violations; here they are logged, never re-prompted and never read as "not
     distilled": both resume gates translate a violation into re-authoring, and
     the milestones written before the arrow grammar (three of twelve checked: a
@@ -138,6 +139,12 @@ def dependency_warnings(text: str) -> list[str]:
         for other in sorted(down):
             if other in lines and did not in lines[other][0]:
                 warns.append(f"§3 {did} declares ⇒ {other} but {other} does not list ⇐ {did}")
+    for did, (_up, comp, _down) in lines.items():
+        for other in sorted(comp):
+            if other in lines and did not in lines[other][1]:
+                warns.append(f"§3 {did} declares ⊗ {other} but {other} does not list ⊗ {did}"
+                             f" — companions land in one commit, and the reopen plan can only"
+                             f" keep the pair together when both sides declare it")
     warns += _dag_shape_findings(blocks, {d: {r for r in up if r != d}
                                           for d, (up, _c, _d) in lines.items()})
     return warns

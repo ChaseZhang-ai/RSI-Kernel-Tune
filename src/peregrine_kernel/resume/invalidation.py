@@ -30,8 +30,10 @@ class Decision:
     id: str
     depends_on: frozenset[str] = field(default_factory=frozenset)
     # ⊗ companions: decisions that must land in the same commit. Not DAG edges —
-    # kept beside them so a resume plan can name the group, never so it widens
-    # invalidation symmetrically.
+    # kept beside the dependency set so a resume plan can name the group. The
+    # reopen closure reads them symmetrically (a companion named by a reopened
+    # decision joins even when it declared no edge back): a pair split across a
+    # reopen would leave one side validating a tree the other side rewrites.
     companions: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
@@ -101,6 +103,15 @@ def compute_reopen(
     """
     changed = frozenset(changed_entries)
     reopen: set[str] = set()
+    # Companion edges are symmetric (companions land in one commit), but the ⊗
+    # declaration may be written on one side only: when a reopened decision names
+    # a companion, that companion is pulled in even if it never named the edge
+    # back — one side of the pair kept would validate a tree the other rewrites.
+    companions: dict[str, set[str]] = {}
+    for d in trajectory:
+        for c in d.companions:
+            companions.setdefault(d.id, set()).add(c)
+            companions.setdefault(c, set()).add(d.id)
     # Fixpoint over the trajectory: dependencies are declared by id and may
     # point at decisions later in the list (companions especially), so one
     # ordered pass is not enough.
@@ -110,7 +121,7 @@ def compute_reopen(
             if d.id in reopen:
                 continue
             if (d.id in changed or (d.depends_on & changed)
-                    or (d.depends_on & reopen) or (d.companions & reopen)):
+                    or (d.depends_on & reopen) or (companions.get(d.id, set()) & reopen)):
                 reopen.add(d.id)
                 grew = True
         if not grew:

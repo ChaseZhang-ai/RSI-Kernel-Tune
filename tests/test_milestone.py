@@ -610,10 +610,14 @@ def test_validator_rejects_a_dependency_cycle_when_authoring():
 def test_dependency_warnings_flag_one_sided_downstream_claims():
     from peregrine_kernel.milestone import dependency_warnings
     # D0.1 ⇒ D0.2 and D0.2 ⇐ D0.1 agree; D0.2 ⇒ D0.4 is echoed by the legacy line;
-    # add a ⇒ nobody echoes
+    # add a ⇒ nobody echoes. The fixture's D0.2 ⊗ D0.3 is one-sided, so its echo
+    # warning rides along (companions land in one commit; see BUG-SEED-16).
     ms = _ARROW_MS.replace("- Depends on: ⇒ D0.2, D0.3", "- Depends on: ⇒ D0.2, D0.3, D0.4")
     w = dependency_warnings(ms)
-    assert w == ["§3 D0.1 declares ⇒ D0.4 but D0.4 does not list ⇐ D0.1"]
+    assert w == ["§3 D0.1 declares ⇒ D0.4 but D0.4 does not list ⇐ D0.1",
+                 "§3 D0.2 declares ⊗ D0.3 but D0.3 does not list ⊗ D0.2"
+                 " — companions land in one commit, and the reopen plan can only"
+                 " keep the pair together when both sides declare it"]
 
 
 def _with_gate(lines: str) -> str:

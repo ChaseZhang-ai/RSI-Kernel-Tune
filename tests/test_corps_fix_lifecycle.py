@@ -180,3 +180,115 @@ def test_parse_log_without_any_final_marker_still_rebuilds():
     res = monitor.parse_log(log)
     assert res is not None and res["complete"] is False
     assert [r["profile"] for r in res["profiles"]] == ["base"]
+
+
+# --- BUG-SEED-16: companion pairs are not split across a reopen -----------------------
+
+
+def test_a_one_sided_companion_declaration_reopens_both_sides():
+    """D2 declares ⊗ D3 and D3 declares nothing back: reopening D2 pulls D3 in too —
+    companions land in one commit, so half a pair kept would validate a tree the
+    other half rewrites."""
+    from peregrine_kernel.resume import Decision, compute_reopen
+    traj = [Decision("D1"), Decision("D2", companions={"D3"}), Decision("D3")]
+    plan = compute_reopen(traj, {"D2"})
+    assert plan.reopen == ["D2", "D3"] and plan.kept == ["D1"]
+
+
+def test_a_one_sided_companion_declaration_reopens_the_declarer_too():
+    """The direction that always worked stays working: the companion (D3) declaring ⊗
+    D2 is pulled in when D2 is reopened — and now so is anything D2 named."""
+    from peregrine_kernel.resume import Decision, compute_reopen
+    traj = [Decision("D1"), Decision("D2"), Decision("D3", companions={"D2"})]
+    plan = compute_reopen(traj, {"D2"})
+    assert plan.reopen == ["D2", "D3"] and plan.kept == ["D1"]
+
+
+def test_a_two_sided_companion_declaration_behaves_as_before():
+    """Both sides declaring ⊗ each other: the symmetric closure changes nothing."""
+    from peregrine_kernel.resume import Decision, compute_reopen
+    traj = [Decision("D1"), Decision("D2", companions={"D3"}),
+            Decision("D3", companions={"D2"})]
+    plan = compute_reopen(traj, {"D2"})
+    assert plan.reopen == ["D2", "D3"] and plan.kept == ["D1"]
+    plan = compute_reopen(traj, {"D3"})
+    assert plan.reopen == ["D2", "D3"] and plan.kept == ["D1"]
+
+
+def test_companion_closure_does_not_reach_past_the_changed_set():
+    """A decision that declares no companion and is not changed stays kept even when a
+    companion pair elsewhere reopens: the closure is the pair, not the trajectory."""
+    from peregrine_kernel.resume import Decision, compute_reopen
+    traj = [Decision("D1"), Decision("D2", companions={"D3"}), Decision("D3"),
+            Decision("D4")]
+    plan = compute_reopen(traj, {"D2"})
+    assert plan.reopen == ["D2", "D3"] and plan.kept == ["D1", "D4"]
+
+
+def _companion_milestone(d03_depends: str = "- Depends on: ⇐ D0.1") -> str:
+    """A three-decision milestone whose D0.2 declares ⊗ D0.3; ``d03_depends`` decides
+    whether D0.3 declares the companion edge back."""
+    return f"""# op milestone
+
+## 0. Problem statement and target
+x
+
+## 1. Problem contract (Math Spec)
+x
+
+## 2. Decision DAG + phase order
+x
+
+## 3. Decision details
+### D0.1 root
+- Action: a
+- Purpose: b
+- Trigger condition: c
+- Cost: d
+- Depends on: ⇒ D0.2, D0.3
+
+### D0.2 producer
+- Action: a
+- Purpose: b
+- Trigger condition: c
+- Cost: d
+- Depends on: ⇐ D0.1 | ⊗ D0.3
+
+### D0.3 consumer
+- Action: a
+- Purpose: b
+- Trigger condition: c
+- Cost: d
+{d03_depends}
+
+M0 Gate:
+- Mechanism-verification line: tensor pipe active % ≥60%
+
+## 4. Known dead ends
+x
+
+## 5. Global correctness / performance gate
+x
+
+## 6. Rules
+x
+
+## Worked Example
+x
+"""
+
+
+def test_dependency_warnings_flag_a_one_sided_companion_declaration():
+    """⊗ declared on one side only is warned, in the style of the ⇒ echo check: the
+    reopen plan can only keep the pair together when both sides declare it."""
+    from peregrine_kernel.milestone import dependency_warnings
+    w = dependency_warnings(_companion_milestone())
+    assert w == ["§3 D0.2 declares ⊗ D0.3 but D0.3 does not list ⊗ D0.2"
+                 " — companions land in one commit, and the reopen plan can only"
+                 " keep the pair together when both sides declare it"]
+
+
+def test_dependency_warnings_stay_silent_on_a_two_sided_companion_declaration():
+    from peregrine_kernel.milestone import dependency_warnings
+    assert dependency_warnings(
+        _companion_milestone("- Depends on: ⇐ D0.1 | ⊗ D0.2")) == []

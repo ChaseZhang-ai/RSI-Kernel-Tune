@@ -11,7 +11,7 @@ One line per document. Historical per-package change documents were distilled in
 | [correctness-monitor.md](correctness-monitor.md) | The advisory correctness monitor riding into GPU jobs (`.pk_monitor/` tree, stressed-input checks, output watch) |
 | [energize-protocol.md](energize-protocol.md) | The energize-and-harvest protocol: the acceptance A/B matrix, one-default-at-a-time flipping, JustGoal comparisons |
 | [backlog.md](backlog.md) | The single ledger of frozen / deferred / rejected items (do not re-propose) |
-| [external-eval.md](external-eval.md) | External evaluation export (placeholder — WP27 fills it) |
+| [external-eval.md](external-eval.md) | The external evaluation export lane: suite submission formats and protocols, the packager (`scripts/eval-export/`), the leased-card self-evaluation discipline, and the lane's boundary rules |
 | [kb-harvest.md](kb-harvest.md) | How certified recipes get into the knowledge base at run end (written for people, not agents) |
 | [kb-provenance/](kb-provenance/README.md) | Provenance discipline for hw_kb entries and the mechanical lint |
 | [milestones-template.md](milestones-template.md) | The milestones meta-template — how to write a kernel-optimization milestone |

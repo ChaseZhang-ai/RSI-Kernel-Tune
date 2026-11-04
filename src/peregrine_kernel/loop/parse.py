@@ -80,12 +80,41 @@ def _clean_path(tok: str) -> str:
     return tok.lstrip(_PATH_LWRAP).rstrip(_PATH_RWRAP)
 
 
+_STUDENT_MARK = r"(?m)^[ \t]*{}:[ \t]*"
+"""The turn markers are LINES: anchored to line start like driver.py's
+_ARCH_PROBE_REQUEST_RE, because the vocabulary saturates the prompts and a
+student turn that merely quotes a marker mid-prose must not act on it — a
+prose 'EXHAUSTED: no more ideas' used to terminate the whole run (the driver
+returns None on Exhausted) and a quoted PROBE_REQUEST used to burn a GPU job
+on a path that was never submitted."""
+
+_EXHAUSTED_RE = re.compile(_STUDENT_MARK.format("EXHAUSTED") + r"(.+)")
+
+
+def _exhausted_close(text: str) -> Exhausted | None:
+    """The Exhausted marker, only when it closes the message. The driver's
+    re-prompt states the contract — end the turn with EXACTLY one marker 'and
+    nothing after it' — and Exhausted terminates the whole run, the
+    highest-stakes reading in this parser, so it is held to that contract: the
+    last line-start EXHAUSTED line must be the last non-empty line, or the text
+    falls through to the ordinary shapes (a record after the marker then lands
+    instead of being dropped). The probe markers stay line-start-only: WP19
+    pins PROBE_REQUEST winning over a line that follows it."""
+    last = None
+    for m in _EXHAUSTED_RE.finditer(text):
+        last = m
+    if last is not None and not text[last.end():].strip():
+        return Exhausted(reason=last.group(1).strip())
+    return None
+
+
 def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     """Classify a student agent's final message into the three terminal shapes.
 
     PROBE_REQUEST / EXHAUSTED take precedence (they are explicit single-line
-    markers); otherwise the record block fields are extracted from anywhere in
-    the text (agents often emit prose before the block).
+    markers, matched at line start only — a mid-prose mention is prose, see
+    ``_STUDENT_MARK``); otherwise the record block fields are extracted from
+    anywhere in the text (agents often emit prose before the block).
 
     RECON_REQUEST is only a valid shape for the reconnaissance caller
     (``allow_recon=True``). Recognizing it everywhere let a student turn that
@@ -93,7 +122,7 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     saturates the prompts — reach the probe branch and burn a GPU job on a
     path that exists only in the teacher's tree.
     """
-    probe = re.search(r"PROBE_REQUEST:\s*(\S+)", text)
+    probe = re.search(_STUDENT_MARK.format("PROBE_REQUEST") + r"(\S+)", text)
     if probe:
         return ProbeRequest(path=_clean_path(probe.group(1)))
     # WP19 (task 2): a PROBE-MANIFEST names a ≤4-line list of self-contained
@@ -102,16 +131,15 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     # fields — the manifest is a meta-side vocabulary; a student turn is not
     # expected to carry it, and a stray echo falls through to the ordinary
     # shapes exactly like a stray RECON_REQUEST does.
-    manifest = re.search(r"PROBE-MANIFEST:\s*(\S+)", text)
+    manifest = re.search(_STUDENT_MARK.format("PROBE-MANIFEST") + r"(\S+)", text)
     if manifest:
         return ProbeRequest(path=_clean_path(manifest.group(1)), manifest=True)
     if allow_recon:
-        recon = re.search(r"RECON_REQUEST:\s*(\S+)", text)
+        recon = re.search(_STUDENT_MARK.format("RECON_REQUEST") + r"(\S+)", text)
         if recon:
             return ReconRequest(path=_clean_path(recon.group(1)))
-    exhausted = re.search(r"EXHAUSTED:\s*(.+)", text)
-    if exhausted:
-        return Exhausted(reason=exhausted.group(1).strip())
+    if (exhausted := _exhausted_close(text)) is not None:
+        return exhausted
 
     fields: dict[str, str] = {}
     for line in text.splitlines():

@@ -17,7 +17,9 @@ Four ledger bugs, one test section each:
 from __future__ import annotations
 
 from peregrine_kernel.inner.trajectory import GATE_WINDOW_DEVICE, IterationRecord, gate_ms
-from peregrine_kernel.loop.parse import parse_eval, resolvable_diff
+from peregrine_kernel.loop.parse import (Exhausted, ProbeRequest, Record,
+                                         parse_eval, parse_student_turn,
+                                         resolvable_diff)
 
 
 def _rec(i, ratio=None, *, reading_of=None, ms=2.0, dev=None, ref=None):
@@ -161,3 +163,51 @@ def test_parse_eval_correctness_detail_ignores_non_detail_dicts():
     ev = parse_eval(log)
     assert "meta:" not in ev.error
     assert "gate_out: max_diff=0.7 tol=0.001" in ev.error
+
+
+# --- BUG-SEED-50: the turn markers are lines, not substrings --------------------
+
+_RECORD_TAIL = "decision_id: D1\nchange: tweak tile size\n"
+
+
+def test_markers_ignored_when_mentioned_in_prose():
+    """A prose mention of a marker (the student vocabulary saturates the blackbox
+    prompts, so agents quote it) matched the same unanchored regexes and a
+    sentence reading 'EXHAUSTED: no more ideas' terminated the whole run (the
+    driver returns None on Exhausted) or burned a GPU job on a quoted path."""
+    prose = ('The protocol says a turn ends with "PROBE_REQUEST: notes/x.py" or '
+             '"EXHAUSTED: no more ideas" — but I have a delivery.\n' + _RECORD_TAIL)
+    turn = parse_student_turn(prose)
+    assert isinstance(turn, Record)
+
+
+def test_exhausted_only_closes_the_message():
+    """The driver's own re-prompt states the contract: end the turn with EXACTLY
+    one marker 'and nothing after it'. An EXHAUSTED line followed by content is
+    prose, not a termination — and the record after it now lands instead of
+    being dropped the way the old first-match semantics dropped it."""
+    turn = parse_student_turn("EXHAUSTED: no more ideas\n" + _RECORD_TAIL)
+    assert isinstance(turn, Record)
+
+
+def test_line_start_markers_still_parse():
+    # a marker needs only its own line: leading prose lines and trailing blank
+    # / whitespace-only lines do not disarm it
+    assert isinstance(parse_student_turn("PROBE_REQUEST: notes/x.py"), ProbeRequest)
+    assert isinstance(parse_student_turn(
+        "layout check first.\nPROBE_REQUEST: notes/x.py\n\n   \n"), ProbeRequest)
+    manifest = parse_student_turn("PROBE-MANIFEST: notes/batch.txt\n")
+    assert isinstance(manifest, ProbeRequest) and manifest.manifest
+    assert isinstance(parse_student_turn("EXHAUSTED: nothing left"), Exhausted)
+    assert isinstance(parse_student_turn(
+        "intro\nEXHAUSTED: nothing left\n\n  \n"), Exhausted)
+
+
+def test_probe_request_survives_trailing_lines():
+    """Pinned: the probe markers need line-start only — trailing lines do not
+    disarm them (WP19 pins the precedence the other way round: PROBE_REQUEST on
+    its own line beats a following PROBE-MANIFEST line, both still parsed)."""
+    turn = parse_student_turn("PROBE_REQUEST: notes/x.py\nsome trailing note\n")
+    assert isinstance(turn, ProbeRequest) and turn.path == "notes/x.py"
+    both = parse_student_turn("PROBE_REQUEST: p1.py\nPROBE-MANIFEST: m.txt\n")
+    assert isinstance(both, ProbeRequest) and not both.manifest

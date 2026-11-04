@@ -34,3 +34,34 @@ def test_judge_axis_check_spans_every_shapes_axes(tmp_path):
     (d / judge.DEFINITION).write_text(json.dumps(bad))
     v = judge.check_problems(d, _Task())
     assert any("'zzz'" in p and "'k'" in p and "'m'" in p for p in v), v
+
+
+# --- P3-7: a malformed prep shape lands in problems, not in a traceback -------------
+
+def test_prep_report_holds_a_malformed_shape_without_crashing(tmp_path):
+    """[int(s) for s in got["shape"]] raised straight out of check_prep_report
+    on a hand-written bench that reported the shape as a string (or a list
+    carrying a non-number): the whole prep block went unheld because the check
+    died instead of naming the tensor. Bad shapes are problems now."""
+    from test_window_contract import SYMMETRIZED
+    from peregrine_kernel.window_contract import check_prep_report, parse_window_contract
+    contract = parse_window_contract(SYMMETRIZED)
+    gc = {"shape": [4, 32], "dtype": "torch.float32"}       # g_cumsum, always well-formed
+    ok = {"outputs": {"A": {"shape": [4, 32, 64], "dtype": "bfloat16"}, "g_cumsum": gc}}
+    assert check_prep_report(contract, ok) == []
+
+    as_string = {"outputs": {"A": {"shape": "[4, 32, 64]", "dtype": "bfloat16"},
+                             "g_cumsum": gc}}
+    v = check_prep_report(contract, as_string)
+    assert len(v) == 1 and "malformed shape" in v[0] and "'A'" in v[0], v
+
+    junk_element = {"outputs": {"A": {"shape": [4, 32, {"b": 1}], "dtype": "bfloat16"},
+                                "g_cumsum": gc}}
+    v = check_prep_report(contract, junk_element)
+    assert len(v) == 1 and "malformed shape" in v[0] and "[4, 32, {'b': 1}]" in v[0], v
+
+    # a report with no shape at all keeps its old meaning: the mismatch path,
+    # not the malformed one
+    no_shape = {"outputs": {"A": {"dtype": "bfloat16"}, "g_cumsum": gc}}
+    v = check_prep_report(contract, no_shape)
+    assert v == ["prep produced 'A' with shape [], declared [4, 32, 64]"], v

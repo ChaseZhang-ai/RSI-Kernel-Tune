@@ -511,3 +511,40 @@ def test_a_confirmed_remote_failure_stays_failed(tmp_path):
     assert status == jobs.STATUS_FAILED
     assert "exited rc=1" in log and "pkill" not in log
     assert len(fake.execs) == 1 and len(fake.runs) == 1
+
+
+# --- BUG-T2C-02: the ssh extract step is bounded and rides the transport channel ------
+
+def test_a_wedged_extract_is_a_transport_failure_not_a_hang(tmp_path):
+    """The extract step had no timeout: a host that accepts the connection and never
+    finishes (a full disk, a stuck NFS) held this runner -- and with it the op's job
+    lock -- forever. Now the step is bounded and rides the transport retries."""
+    cfg = _ssh_cfg(tmp_path)
+    fake = _FakeSsh([])
+    calls = []
+
+    def wedged_run(argv, input=None, capture_output=False, timeout=None):
+        assert timeout is not None and timeout >= direct.EXTRACT_TIMEOUT_S
+        calls.append(timeout)
+        raise subprocess.TimeoutExpired(cmd="ssh", timeout=timeout)
+
+    fake.run = wedged_run
+    log = Path(cfg.op_dir) / "log.txt"
+    with open(log, "a+", encoding="utf-8") as lf:
+        status = direct.DirectRunner(cfg, run=wedged_run, popen=fake.popen,
+                                     sleep=lambda s: None).run_mode("main", "perf", lf)
+    text = log.read_text()
+    assert status == jobs.STATUS_FAILED
+    assert jobs.TRANSPORT_ERROR_MARKER in text
+    assert "the host may be wedged" in text
+    assert len(calls) == direct.TRANSPORT_ATTEMPTS
+    assert fake.execs == [], "a wedged extract must not reach the exec step"
+
+
+def test_the_extract_timeout_grows_with_the_payload():
+    """The floor is the stop step's bound; a big tree buys time at a conservative
+    unpack rate, so slow-but-healthy transport is not read as a wedged host."""
+    r = direct.DirectRunner(direct.SubmitConfig(branch="main", op_dir="x",
+                                                exec_host="h", exec_workdir="/w"))
+    assert r._extract_timeout(b"x" * 1000) == direct.EXTRACT_TIMEOUT_S
+    assert r._extract_timeout(b"x" * (direct.EXTRACT_MIN_RATE * 300)) == pytest.approx(300.0)

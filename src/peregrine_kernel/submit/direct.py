@@ -63,6 +63,13 @@ STOP_GRACE_S = 5
 LOCK_DIR_ENV = "PEREGRINE_LOCK_DIR"
 TRANSPORT_ATTEMPTS = 3
 TRANSPORT_RETRY_S = 10.0
+# The extract step's bound (the stop step's, at least). SSH_OPTS protects the
+# connection, not a remote command that hangs with the TCP alive: a full disk, a
+# stuck NFS, a tar blocked forever would hold this runner -- and with it the op's
+# job lock -- for good. A big payload buys more than the floor, at a conservative
+# unpack rate, so a large tree is slow transport rather than a wedged host.
+EXTRACT_TIMEOUT_S = 120.0
+EXTRACT_MIN_RATE = 5 * (1 << 20)
 SSH_OPTS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=20",
             "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=6")
 
@@ -511,6 +518,11 @@ class DirectRunner:
             except subprocess.TimeoutExpired:
                 continue
 
+    @staticmethod
+    def _extract_timeout(packed: bytes) -> float:
+        """The extract step's bound: the stop step's floor, more for a big payload."""
+        return max(EXTRACT_TIMEOUT_S, len(packed) / EXTRACT_MIN_RATE)
+
     def _run_ssh(self, payload: bytes, branch: str, mode: str, log_file,
                  tree_sha: str | None = None) -> str:
         # WP11 (task 3): the ssh delivery keeps the FULL archive — the input
@@ -524,11 +536,26 @@ class DirectRunner:
         secrets = "".join(f"{env[k]}\n" for k in sorted(env) if is_secret_env(k)) or None
         failures: list[str] = []
         while True:
-            sync = self._run(self._ssh(self._extract_cmd()), input=packed, capture_output=True)
-            if sync.returncode != 0:
-                err = sync.stderr.decode(errors="replace") if isinstance(sync.stderr, bytes) \
-                    else str(sync.stderr or "")
-                failures.append(f"sync to {self.cfg.exec_host} (rc={sync.returncode}): "
+            extract_timeout = self._extract_timeout(packed)
+            try:
+                sync = self._run(self._ssh(self._extract_cmd()), input=packed,
+                                 capture_output=True, timeout=extract_timeout)
+            except subprocess.TimeoutExpired:
+                # A wedged host (a full disk, a stuck NFS, tar hung with the TCP
+                # alive) must not hold this runner -- and with it the op's job lock
+                # -- forever: the extract rides the same transport channel as any
+                # other delivery failure.
+                sync = None
+            if sync is None or sync.returncode != 0:
+                if sync is None:
+                    err = (f"the extract did not finish in {extract_timeout:.0f}s "
+                           f"(the host may be wedged)")
+                    rc_shown = "timeout"
+                else:
+                    err = sync.stderr.decode(errors="replace") \
+                        if isinstance(sync.stderr, bytes) else str(sync.stderr or "")
+                    rc_shown = sync.returncode
+                failures.append(f"sync to {self.cfg.exec_host} (rc={rc_shown}): "
                                 f"{err.strip()[-200:]}")
             else:
                 log_file.write(f"[direct] ssh {self.cfg.exec_host} GPU {self.cfg.exec_gpu} "

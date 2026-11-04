@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from test_harness_guard import _backend, _card, _commit, _git, _tree  # noqa: E402
 
-from peregrine_kernel.loop import cli, harness_guard  # noqa: E402
+from peregrine_kernel.loop import cli, goal_ref as gr, harness_guard  # noqa: E402
 
 
 # --- BUG-SEED-07: tree-root shadow modules are harness --------------------------------
@@ -170,3 +170,46 @@ def test_the_monitor_runner_hands_the_hook_dir_to_the_entry(tmp_path, monkeypatc
     mon_run._run_task("gpu_entry.sh", "correctness", "base", str(tmp_path / "out"), 120, None)
     assert captured["env"]["PK_MON_HOOK_DIR"] == mon_run.HOOK_DIR
     assert captured["env"]["PYTHONPATH"].split(":")[0] == mon_run.HOOK_DIR
+
+
+# --- BUG-SEED-08: the import scan sees every name and every spelling ------------------
+
+def test_a_comma_import_list_is_caught():
+    src = "import os, flashinfer\ndef run(a, b, out):\n    out.copy_(a)\n"
+    assert gr.library_findings(src, "kernel.py") == ["imports the kernel library flashinfer"]
+
+
+def test_a_parenthesised_import_is_caught():
+    src = ("import (\n    os,\n    flashinfer,\n)\n"
+           "def run(a, b, out):\n    out.copy_(a)\n")
+    assert gr.library_findings(src, "kernel.py") == ["imports the kernel library flashinfer"]
+
+
+def test_dynamic_imports_are_caught():
+    importlib_call = ('import importlib\n'
+                      'def run(a, b, out):\n'
+                      '    m = importlib.import_module("flashinfer")\n')
+    assert "dynamically imports the kernel library flashinfer" in \
+        gr.library_findings(importlib_call, "kernel.py")
+    dunder = 'def run(a, b, out):\n    m = __import__(\'vllm\')\n'
+    assert "dynamically imports the kernel library vllm" in \
+        gr.library_findings(dunder, "kernel.py")
+
+
+def test_ordinary_imports_are_not_flagged():
+    src = ("import os, json\n"
+           "import torch\n"
+           "from torch import nn\n"
+           "from torch.nn import functional\n"
+           "import flashinfer_utils\n"                  # a different module...
+           "from mypkg import flashinfer_thing\n"       # ...and a different name
+           "import (os, json)\n"
+           "def run(a, b, out):\n    out.copy_(a)\n"
+           "# from flashinfer import x\n"               # a comment
+           '"""from flashinfer import x"""\n')          # a docstring
+    assert gr.library_findings(src, "kernel.py") == []
+
+
+def test_the_import_scan_still_names_the_direct_form():
+    assert gr.library_findings("import flashinfer\n", "kernel.py") == \
+        ["imports the kernel library flashinfer"]

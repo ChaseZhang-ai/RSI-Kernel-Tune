@@ -413,8 +413,16 @@ def bar_met(bar: dict, reading: float | None, vs_ref: float | None) -> bool:
 _PY_LIBS = ("flashinfer", "sgl_kernel", "vllm", "deep_gemm", "flash_attn", "flash_mla",
             "xformers", "transformer_engine", "apex", "liger_kernel", "torchao",
             "fbgemm_gpu", "tensorrt_llm", "bitsandbytes", "cudnn", "nvmath", "cublas")
+_LIBS_ALT = "|".join(_PY_LIBS)
+# One import statement may carry many names (`import os, flashinfer`) and may be
+# parenthesised across lines (the tokenizer below joins the continuation lines into one
+# logical line) -- the import-line scan finds the library anywhere in the name list,
+# not just first. `from` keeps its single-name shape (the library follows `from`
+# directly).
 _LIB_PATTERNS = (
-    (re.compile(r"^\s*(?:from|import)\s+(" + "|".join(_PY_LIBS) + r")\b", re.M),
+    (re.compile(r"^\s*import\s+.*?\b(" + _LIBS_ALT + r")\b", re.M),
+     "imports the kernel library {0}"),
+    (re.compile(r"^\s*from\s+(" + _LIBS_ALT + r")\b", re.M),
      "imports the kernel library {0}"),
     (re.compile(r"\btorch\s*\.\s*(matmul|mm|bmm|addmm|baddbmm|einsum|_scaled_mm|softmax|"
                 r"layer_norm|rms_norm|group_norm|conv\w*|cdist)\s*\("),
@@ -428,28 +436,46 @@ _LIB_PATTERNS = (
     (re.compile(r"\b(cublas\w*|cudnn\w*|cublasLt\w*)\s*\("), "calls {0}"),
     (re.compile(r"#\s*include\s*[<\"](cublas\w*|cudnn\w*)"), "includes {0}"),
 )
+# Dynamic imports: the library name is a string argument, and the body the patterns
+# above scan has string literals stripped -- these run over a copy that keeps the
+# strings (only the comments go).
+_DYNAMIC_LIB_PATTERNS = (
+    (re.compile(r"\bimport_module\s*\(\s*[\"'](" + _LIBS_ALT + r")[\"']"),
+     "dynamically imports the kernel library {0}"),
+    (re.compile(r"\b__import__\s*\(\s*[\"'](" + _LIBS_ALT + r")[\"']"),
+     "dynamically imports the kernel library {0}"),
+)
 
 
-def _strip_comments(src: str, kernel_file: str) -> str:
+def _strip_comments(src: str, kernel_file: str, keep_strings: bool = False) -> str:
     """The code without comments and (Python) string literals: the stub's contract text
-    names torch functions on purpose, and so may a comment."""
+    names torch functions on purpose, and so may a comment. ``keep_strings`` keeps the
+    string literals (the comments still go) -- for the dynamic-import patterns, whose
+    library name only exists inside a string."""
     if str(kernel_file).endswith((".cu", ".cuh", ".cpp", ".cc", ".h", ".hpp")):
         src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
         return re.sub(r"//[^\n]*", "", src)
     import io
     import tokenize
+    # NL (a non-logical line break: inside brackets, after a comment, a blank line) is
+    # dropped as well, so a bracketed statement joins into ONE line:
+    # `import (\n  os,\n  flashinfer,\n)` is one import line, not four.
+    skip = [tokenize.COMMENT, tokenize.NL, tokenize.INDENT, tokenize.DEDENT,
+            tokenize.ENDMARKER]
+    if not keep_strings:
+        skip.append(tokenize.STRING)
+    skip = tuple(skip)
     lines: list[str] = []
     cur: list[str] = []
     try:
         for tok in tokenize.generate_tokens(io.StringIO(src).readline):
-            if tok.type in (tokenize.NEWLINE, tokenize.NL):
+            if tok.type is tokenize.NEWLINE:
                 lines.append(" ".join(cur))
                 cur = []
-            elif tok.type not in (tokenize.COMMENT, tokenize.STRING, tokenize.INDENT,
-                                  tokenize.DEDENT, tokenize.ENDMARKER):
+            elif tok.type not in skip:
                 cur.append(tok.string)
     except (tokenize.TokenError, IndentationError, SyntaxError):
-        body = re.sub(r'("""|\'\'\').*?\1', "", src, flags=re.S)
+        body = src if keep_strings else re.sub(r'("""|\'\'\').*?\1', "", src, flags=re.S)
         return re.sub(r"#[^\n]*", "", body)
     lines.append(" ".join(cur))
     return "\n".join(lines)
@@ -463,6 +489,12 @@ def library_findings(src: str, kernel_file: str) -> list[str]:
     found = []
     for rx, what in _LIB_PATTERNS:
         for m in rx.finditer(body):
+            text = what.format(*(m.groups() or ("",)))
+            if text not in found:
+                found.append(text)
+    with_strings = _strip_comments(src, kernel_file, keep_strings=True)
+    for rx, what in _DYNAMIC_LIB_PATTERNS:
+        for m in rx.finditer(with_strings):
             text = what.format(*(m.groups() or ("",)))
             if text not in found:
                 found.append(text)

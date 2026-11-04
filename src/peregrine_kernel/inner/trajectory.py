@@ -255,6 +255,21 @@ class IterationRecord:
     # per_shape_ledger() below; the read-side recompute is per_shape_best_readings().
     per_shape_ratios: dict = field(default_factory=dict)
     per_shape_best: dict = field(default_factory=dict)
+    # --- M3: the two-lane contract (docs/industrial-lane.md §6.6) ----------------
+    #
+    # The lane this row belongs to (False = STRICT, the default and every
+    # pre-M3 row: the append-only rule handles older files — load_records drops
+    # unknown keys and a row without the field reads False). All rows of a run
+    # share one lane (the task snapshot pins it); build_digest asserts that and
+    # stamps the digest with it, so no renderer can mix the lanes' numbers.
+    memo_lane: bool = False
+    # The MEMO lane's fallback verdict as it stood on this row (the WP9 fresh
+    # child re-purposed: {"mode": "regen"|"process", "pass": bool|None, ...}).
+    # pass=False rides the REVERT it caused (the evidence face); pass=None rides
+    # as a no-reading — the WP9 posture: an env failure never convicts, and the
+    # digest flags the unverified fallback instead of letting it look verified.
+    # None on STRICT rows (the fresh_recheck family carries the STRICT verdict).
+    memo_fallback: dict | None = None
 
     def __post_init__(self):
         if self.verdict not in ("KEEP", "REVERT", "NEUTRAL"):
@@ -514,6 +529,28 @@ def clock_header(records: list[IterationRecord]) -> dict:
     return {}
 
 
+def memo_fallback_unknown_flag(records: list[IterationRecord]) -> dict | None:
+    """M3 (docs/industrial-lane.md §6.5): rows whose memo_fallback produced no
+    reading (``pass`` is None — the WP9 posture: an env failure never convicts).
+    The block rides the row, and this flag makes the unverified fallback LOUD in
+    the digest: the cache's unseen-input correctness is not verified there, and
+    it must never silently look verified. None when every reading resolved (and
+    for every STRICT-era trajectory, whose rows carry no memo_fallback)."""
+    iters = [r.iter for r in records
+             if r.memo_fallback is not None and r.memo_fallback.get("pass") is None]
+    if not iters:
+        return None
+    return {
+        "kind": "memo_fallback_unknown",
+        "iters": iters,
+        "hint": ("the MEMO lane's unseen-input check produced no reading (an env "
+                 "failure is a no-reading, never a conviction): the cache's miss "
+                 "path is not verified on fresh draws for these rows — the lane's "
+                 "honesty rests on the production stream's repeat claim until one "
+                 "fallback reading resolves"),
+    }
+
+
 def build_digest(records: list[IterationRecord], target: dict,
                  gate_window: str = GATE_WINDOW_DEFAULT) -> dict:
     """Assemble the Layer-1 digest (target/achieved/curve/decisions/regressions/profiler).
@@ -526,7 +563,18 @@ def build_digest(records: list[IterationRecord], target: dict,
     from — the digest must agree with the driver's verdicts, or the meta agent
     diagnoses a different run than the one that happened. Both windows' readings
     stay in the rows regardless; the window only decides which one ranks.
+
+    M3 (docs/industrial-lane.md §6.6): the digest is single-lane. It is stamped
+    with the newest row's lane (all rows of a run share it), and a row set that
+    mixes lanes is refused at render time rather than silently juxtaposed —
+    cross-lane numbers never share a comparison column.
     """
+    lanes = {bool(r.memo_lane) for r in records}
+    if len(lanes) > 1:
+        raise ValueError(
+            "the trajectory mixes STRICT and MEMO rows — cross-lane numbers are "
+            "never rendered in one digest (docs/industrial-lane.md §3)")
+    lane = "memo" if (records and records[-1].memo_lane) else "strict"
     kept = [r for r in records
             if r.verdict == "KEEP" and gate_ms(r, gate_window) is not None]
     best = min(kept, key=lambda r: gate_ms(r, gate_window)) if kept else None
@@ -572,6 +620,10 @@ def build_digest(records: list[IterationRecord], target: dict,
         # it used to hide inside — the reading a cross-job comparison checks FIRST
         # before treating two numbers as one condition. Report-only.
         "clock": clock_header(records),
+        # M3: the digest's lane stamp sits in its header block (top-level, beside
+        # the header rows) — every number below it belongs to this lane, and
+        # "strict" is the only source of paper capability numbers.
+        "lane": lane,
         "target": target,
         "achieved": achieved,
         # WP14 per-shape ledger: each workload's historical best (gate window), the
@@ -596,6 +648,7 @@ def build_digest(records: list[IterationRecord], target: dict,
         "profiler": [{"iter": r.iter, "verdict": r.verdict, **r.profiler}
                      for r in records if r.profiler],
         # red flags derived from the trajectory shape itself; empty list when clean
-        "flags": [f for f in (constant_output_flag(records),) if f],
+        "flags": [f for f in (constant_output_flag(records),
+                              memo_fallback_unknown_flag(records)) if f],
     }
     return out

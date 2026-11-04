@@ -2337,6 +2337,14 @@ def _main(argv: list[str] | None = None) -> int:
                         "kernel-quality claim), 'e2e' = per-call+sync incl. host tax. "
                         "target_ms is derived from the ref's reading in this same "
                         "window. Default: loop.toml [loop].gate_window, else device")
+    # M3 (docs/industrial-lane.md §6.5): the task's lane. The launcher derives it
+    # from the task snapshot it re-read ([protocol] memo_lane) and passes it here,
+    # like every other task key; absent = STRICT. A run never changes lanes.
+    p.add_argument("--memo-lane", action="store_true",
+                   help="the MEMO industrial lane ([protocol] memo_lane = true): "
+                        "memoization on repeated content is legal, the timed reading "
+                        "is service latency over the task's repeating input stream; "
+                        "default off (STRICT — the only source of paper numbers)")
     p.add_argument("--allow-host-bound-ref", action="store_true",
                    help="derive target from a reference whose device window is HOST-BOUND "
                         "(its reading is python dispatch cost, so the target is loose by "
@@ -2885,6 +2893,9 @@ def _main(argv: list[str] | None = None) -> int:
         meta_status_path=meta_status_path,
         branch_prefix=branch_prefix, target_ms=target_ms,
         language=language, gate_window=gate_window, kb_arch=kb_arch,
+        # M3: the task snapshot's lane (docs/industrial-lane.md §6.5) — the
+        # launcher re-read <run>/task/ and passes it; the default is STRICT.
+        memo_lane=bool(args.memo_lane),
         ref_baseline=ref_baseline, arch_baseline=arch_baseline,
         window_contract=window_contract,
         deadline_epoch=time.time() + args.hours * 3600, backend=backend, now=time.time,
@@ -3381,6 +3392,10 @@ def _main(argv: list[str] | None = None) -> int:
         # and commits or discards them, and until then the next run's guard refuses
         # to start on top of them.
         summary["unharvested"] = [c.path for c in left]
+    # M3 (docs/industrial-lane.md §6.6): the run-end summary carries the lane —
+    # every number the summary quotes belongs to it, and the two lanes' numbers
+    # are never compared.
+    summary["lane"] = "memo" if ctx.memo_lane else "strict"
     print(f"[loop] done: {json.dumps(summary)}")
     (op_dir / SUMMARY_FILE).write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
     records = status_path.read_text().count("\n")

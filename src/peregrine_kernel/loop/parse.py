@@ -265,6 +265,19 @@ class EvalResult:
     # miss path recomputes honestly) — is a reward-hack reading the driver
     # turns into a suspicious REVERT; unavailable never convicts.
     replay_probe: dict | None = None
+    # M3, the two-lane contract (docs/industrial-lane.md §6.4): the eval JSON's
+    # lane stamp, MEMO cards only — {"memo": true}. None (absent) = STRICT; the
+    # STRICT eval JSON stays byte-identical to pre-M3. Every MEMO reading
+    # inherits the lane from this stamp; the lanes' numbers are never compared.
+    lane: dict | None = None
+    # M3: the MEMO lane's unseen-input hard gate (the WP9 fresh child, verdict
+    # re-purposed — {"mode": "regen"|"process", "pass": bool|None, ...}): on a
+    # fresh draw the timed stream never showed, the cache's miss path must still
+    # answer correctly. pass=False is a hard correctness REVERT (never marked
+    # suspicious — replaying timed content is legal in this lane); pass=None is
+    # a no-reading (the WP9 posture: env failure never convicts). None on
+    # STRICT rows (the fresh_recheck key carries the STRICT verdict instead).
+    memo_fallback: dict | None = None
     # Set by the driver (never the bench): the edge-band judge recheck cleared —
     # `pass` on the fresh draw that replaced a failed edge-band reading. A field,
     # not an attribute, so a dataclasses.replace (the watermark confirmation's
@@ -614,6 +627,11 @@ def parse_eval(text: str) -> EvalResult:
                      if isinstance(obj.get("proc_census"), dict) else None),
         replay_probe=(obj["replay_probe"]
                       if isinstance(obj.get("replay_probe"), dict) else None),
+        # --- M3: the lane stamp and the memo_fallback gate (MEMO cards only;
+        # absent on a STRICT eval JSON -> None, the fresh_recheck pattern) ---
+        lane=(obj["lane"] if isinstance(obj.get("lane"), dict) else None),
+        memo_fallback=(obj["memo_fallback"]
+                       if isinstance(obj.get("memo_fallback"), dict) else None),
     )
 
 

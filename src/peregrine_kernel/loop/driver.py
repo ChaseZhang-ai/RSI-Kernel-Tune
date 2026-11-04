@@ -3789,7 +3789,12 @@ def run_inner_iteration(
             err = f"no parseable decision from the student in {ctx.max_probe_rounds} rounds"
         rec = IterationRecord(
             iter=iter_no, decision_id=did, change=change,
-            correctness=False, verdict="REVERT", metric_before=metric_before,
+            # correctness None: none of these four outcomes evaluated anything, so
+            # the lineage's green state is not moved (a False would flip an unknown
+            # lineage to not-green and drop every later non-gate delivery into
+            # scaffold mode — across resume too, via _green_on_resume). Same
+            # semantics as _harness_edit_revert below.
+            correctness=None, verdict="REVERT", metric_before=metric_before,
             error=err, profiler={}, cluster=_active_cluster(ctx),
             memo_lane=ctx.memo_lane,   # M3: every row carries its lane
         )

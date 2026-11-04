@@ -20,6 +20,7 @@ from peregrine_kernel.loop.parse import (
 )
 
 from test_loop_driver import FakeBackend, _ctx
+from test_wp1_measurement import _ratio_rec
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -426,3 +427,58 @@ def test_student_role_tables_coincident_head_and_best_bank_both_names(tmp_path):
         encoding="utf-8") == roles
     assert (tmp_path / _STUDENT_ROLE_EXPOSURE_BEST_NAME).read_text(
         encoding="utf-8") == roles
+
+
+# --- BUG-T1C-01: reused readings entered the resolvable_diff sample pool ------
+
+
+def _reuse_ratio_rec(it, ms, ratio, origin):
+    """A reuse-unchanged / declared-gate-close row: replace(base, ...) kept the
+    base row's vs_ref and stamped reading_of (driver._archive_reused_reading)."""
+    return replace(IterationRecord(iter=it, decision_id="D", change="c",
+                                   correctness=True, verdict="KEEP",
+                                   device_median_ms=ms, vs_ref_device=ratio),
+                   reading_of=origin)
+
+
+def test_resolvable_diff_excludes_reused_readings_from_the_pool():
+    """Observed (triage's ratio-only direction): 4 reuse duplicates + 2 honest
+    rows read rd at the FLOOR — the duplicated values occupied the
+    leave-one-out center, their residuals collapsed to 0, and sigma_between
+    with it: a resolution the run never earned (KEEP_PATCH margins and plateau
+    margins ride the same band). A reused reading is the same measurement
+    twice; the pool now excludes it like the driver's own pools do, and the
+    same history honestly reports data-poor (the cap)."""
+    dup = _ratio_rec(0, 1.0, 1.200)
+    reused = [_reuse_ratio_rec(10 + i, 1.0, 1.200, origin=0) for i in range(4)]
+    honest = [_ratio_rec(20, 1.0, 1.203), _ratio_rec(21, 1.0, 1.197)]
+    assert resolvable_diff(reused + honest, "device") == RESOLVABLE_DIFF_CAP
+
+
+def test_resolvable_diff_honest_tight_pool_still_resolves():
+    """The exclusion is of reuse rows only: an honest tight series still
+    resolves to the floor."""
+    recs = [_ratio_rec(i, 1.0, 1.20 + (i % 3) * 0.001) for i in range(6)]
+    assert resolvable_diff(recs, "device") == RESOLVABLE_DIFF_FLOOR
+
+
+def test_resolvable_diff_honest_spread_pool_still_lands_between():
+    """And an honest spread series still lands strictly inside [floor, cap] —
+    the filter did not silently empty the pool."""
+    recs = [_ratio_rec(i, 1.0, r) for i, r in
+            enumerate([1.200, 1.202, 1.198, 1.201, 1.199, 1.2016])]
+    rd = resolvable_diff(recs, "device")
+    assert RESOLVABLE_DIFF_FLOOR < rd < RESOLVABLE_DIFF_CAP
+
+
+def test_resolvable_diff_reused_rows_add_no_resolution():
+    """A mixed history reads exactly like its honest subset when the reuse rows
+    would have fit the window: duplicating one honest row as a reused reading
+    must not move the band."""
+    honest = [_ratio_rec(i, 1.0, r) for i, r in
+              enumerate([1.200, 1.203, 1.197, 1.201, 1.199, 1.202])]
+    base = resolvable_diff(honest[:5], "device")
+    dup = _reuse_ratio_rec(99, 1.0, honest[4].vs_ref_device, origin=honest[4].iter)
+    # 5 honest rows + 1 reused copy of the last honest row: same 5 real
+    # measurements either way
+    assert resolvable_diff(honest[:5] + [dup], "device") == base

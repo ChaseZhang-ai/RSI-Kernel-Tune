@@ -1147,10 +1147,20 @@ def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
     None (the default) reads everything off the records; an injected dict is
     POOLED with the records' own samples, never a replacement.
 
+    Records carrying a reused reading (``reading_of`` set — the
+    reuse-unchanged and declared-gate-close rows, which inherit the base row's
+    vs_ref via ``replace()``) are excluded from the pool: they are the same
+    measurement twice, and enough of them let duplicate values occupy the
+    leave-one-out center and press sigma_between toward 0 — a resolution the
+    run never earned (the triage direction that reproduced rd at the floor on a
+    ratio-only surface). Same exclusion the driver's own pools apply
+    (driver.py _runner_up_pool and the watermark guard).
+
     ``floor`` / ``cap`` are loop.toml [loop] resolvable_floor / resolvable_cap
     (defaults here); detect_plateau forwards its caller's.
     """
-    evaluated = [r for r in records if gate_ms(r, gate_window) is not None]
+    evaluated = [r for r in records if gate_ms(r, gate_window) is not None
+                 and getattr(r, "reading_of", None) is None]
     recent = _drift_clean(evaluated[-RESOLVABLE_SAMPLES:], RESOLVABLE_MIN_SAMPLES)
     ratios = [v for r in recent if (v := _gate_ratio(r, gate_window)) is not None]
     extra = [float(v) for v in ((raw or {}).get("ratios") or ())

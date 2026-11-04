@@ -14106,6 +14106,16 @@ def _judge_patch(ctx: LoopContext, pending: _PendingPatch) -> str:
     else:
         eps = _patch_improve_eps(records, ctx.gate_window, floor=ctx.resolvable_floor,
                                  cap=ctx.resolvable_cap)
+        # The rd band is derived from the run's own paired ratios, whose
+        # between-job spread comes from vs_ref-style ratios — node speed cancels
+        # in a ratio by construction, so it cannot testify to how much an
+        # absolute ms reading drifts between jobs. This branch compares absolute
+        # ms minima across jobs (one draw per row, min-vs-min against a lucky
+        # draw's bar), and the band the codebase itself assigns to that exact
+        # comparison shape is _GATE_REGRESSION_TOLERANCE_MS (see
+        # _gate_regression's absolute branch): an unchanged commit moves ~6%
+        # between jobs. Credit a patch only past the wider of the two.
+        eps = max(eps, _GATE_REGRESSION_TOLERANCE_MS)
         improved = best_after is not None and (
             best_before is None or best_after < best_before * (1 - eps))
         reading = f"best {best_before} -> {best_after}"

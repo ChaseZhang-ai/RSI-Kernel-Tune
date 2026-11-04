@@ -1681,7 +1681,8 @@ def test_a_sub_noise_patch_gain_is_not_attribution(tmp_path):
 
 
 def test_a_supra_noise_patch_gain_is_kept(tmp_path):
-    # 2.66 -> 2.60 is 2.26% — distinguishable from noise, so the patch is credited
+    # 2.66 -> 2.40 is 9.8% — clearly past the 6% cross-job band the absolute
+    # branch prices in (see _judge_patch), so the patch is credited
     from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
     from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
@@ -1689,7 +1690,7 @@ def test_a_supra_noise_patch_gain_is_kept(tmp_path):
     ctx.meta_status_path = None
     append_record(ctx.status_path, IR(iter=0, decision_id="D", change="x",
                                       correctness=True, verdict="KEEP",
-                                      bwd_median_ms=2.60, device_median_ms=2.60,
+                                      bwd_median_ms=2.40, device_median_ms=2.40,
                                       sha="s0"))
     out = _judge_patch(ctx, _PendingPatch(best_before=2.66,
                                           milestone_before="snapshot", good_ref="good"))

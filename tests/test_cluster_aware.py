@@ -197,6 +197,23 @@ def test_patch_is_priced_against_the_same_cluster_prior_best(tmp_path):
     out = _judge_patch(ctx, _PendingPatch(best_before=2.0, milestone_before="m",
                                           good_ref="good", records_before=1,
                                           cluster="home"))
+    # -3.8% across jobs sits inside the 6% cross-job band (_judge_patch's
+    # absolute branch), so the gain is unattributable: the patch is reverted,
+    # not kept.
+    assert out == "REVERT_PATCH"
+
+
+def test_patch_clearing_the_cross_job_band_is_kept_on_the_same_cluster(tmp_path):
+    be = ClusterBackend([], [], cluster="away")
+    ctx = _home_ctx(tmp_path, be, target_ms=0.1)
+    ctx.meta_status_path = None
+    append_record(ctx.status_path, _row(0, 2.6, "away"))   # pre-patch, on away
+    append_record(ctx.status_path, _row(1, 2.2, "away"))   # post-patch: -15.4%
+    out = _judge_patch(ctx, _PendingPatch(best_before=2.0, milestone_before="m",
+                                          good_ref="good", records_before=1,
+                                          cluster="home"))
+    # Far past the 6% cross-job band: a real gain on the cluster the patch ran
+    # on is still priced there and kept.
     assert out == "KEEP_PATCH"
 
 

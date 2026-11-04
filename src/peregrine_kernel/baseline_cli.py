@@ -184,11 +184,19 @@ def parse_ref_stdout(text: str) -> dict:
 def _submit_cluster(op: str) -> str:
     """The machine this op's jobs run on ("local" or the ssh host), for stamping
     baseline provenance. "" when the submit config is unreadable — an unstamped
-    baseline is merely unguarded, not wrong."""
+    baseline is merely unguarded, not wrong — but the degradation is announced:
+    a silent "" is indistinguishable from a stamped one (BUG-SEED-40: the blind
+    `except Exception` also swallowed real bugs, e.g. a load_config refactor,
+    and the cross-machine guard quietly switched off)."""
     try:
         from peregrine_kernel.submit.config import load_config
         return load_config(op).cluster
-    except Exception:
+    except (OSError, ValueError, KeyError) as e:
+        # what an unreadable config raises: missing submit.toml (FileNotFoundError),
+        # a bad delivery / ssh block (ValueError, tomllib included), or a missing
+        # [repo] branch key (KeyError). Anything else propagates.
+        print(f"[baseline] note: no cluster stamp for {op} — its submit config does "
+              f"not read ({e}); the baseline's cross-machine guard is off")
         return ""
 
 

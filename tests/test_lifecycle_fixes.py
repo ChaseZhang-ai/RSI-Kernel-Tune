@@ -96,3 +96,26 @@ def test_status_skips_a_half_written_line(tmp_path):
     run = SimpleNamespace(name="op", operators_dir=tmp_path / "ops", task_name="op",
                           record=lambda: {}, log=tmp_path / "no.log")
     assert "iterations: 2 (2 kept)" in _launch.status_text(run)
+
+
+# -- fix: the baseline CLI degrades narrowly and says so -------------------------------------
+
+
+def test_submit_cluster_degrades_with_a_note_on_config_errors(capsys):
+    # no submit.toml anywhere for this op: degrade to "" and say so
+    from peregrine_kernel import baseline_cli
+    assert baseline_cli._submit_cluster("no_such_operator_here") == ""
+    out = capsys.readouterr().out
+    assert "[baseline] note:" in out and "no_such_operator_here" in out
+
+
+def test_submit_cluster_lets_unexpected_errors_propagate(monkeypatch):
+    import peregrine_kernel.submit.config as submit_config
+    from peregrine_kernel import baseline_cli
+
+    def boom(op):
+        raise AttributeError("load_config changed shape")
+
+    monkeypatch.setattr(submit_config, "load_config", boom)
+    with pytest.raises(AttributeError):
+        baseline_cli._submit_cluster("op")

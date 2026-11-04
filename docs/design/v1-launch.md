@@ -410,7 +410,7 @@ harness's job (§3.4), not the script's.
 | tuning knobs (about 40) | pricing rounds, verdict experiments, reopen, repricing, watermark confirmation, the re-anchoring band, the timeline probe, round caps, ... | fixed inside the harness, invisible and not configurable; values set to the configurations that actually ran well |
 | switches that bypass checks | `--allow-*`, `--skip-*`, `--no-m0-audit` | off the launch surface; the harness satisfies the checks it needs |
 | hand-written things that can be derived | `window.toml`, the deny list, the job entry script, `--kernel-file`, the branch prefix, the git identity, the reference's description fields | generated or derived by the harness |
-| a second reference | the library baseline (`ref_cmd` / `ref_baseline.json`) | merged into the one reference |
+| a second reference | the library baseline (`ref_cmd` / `ref_baseline.json`) | not a second, separately cached reference: the library baseline is declared on the operator card (its `ref_cmd` lands in the generated `loop.toml`) and is measured into the run directory on every run; the dual-role measurement mechanism behind it is unchanged (a reference measured through another submission tree — `ref_mode` / `ref_submit_op` — is still the one reference, seen from its other role) |
 | reference-generation options | `ref_from_goal = always/off`, `ref_from_goal_*` | off the launch surface; a reference is generated automatically when there is none, and only the budget `[budget].reference_hours` remains |
 | run-time overrides | `--hours`, `--equivalence-ratio`, `--target-ms`, `--language`, ... | only in `task.toml` |
 | internal infrastructure | cluster job submission and related machinery | removed |

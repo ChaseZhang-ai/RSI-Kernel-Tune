@@ -15,8 +15,10 @@ One run:
 2. Take the GPU lock, then ``bash gpu_entry.sh <mode>`` with the tree's ``[env]``,
    ``CUDA_VISIBLE_DEVICES`` and ``TASK_TIMEOUT``. The lock is per GPU and per machine
    (two runs on one GPU would time each other), shared by every op and every run.
-3. Map the exit: rc 0 -> Succeeded; the task ran and failed -> Failed; ssh could not
-   deliver it (no begin marker) -> retried, then Failed with TRANSPORT_ERROR_MARKER, which
+3. Map the exit: rc 0 -> Succeeded; the task ran and failed -> Failed; the ssh client
+   dropping after the job began -> the session is stopped on the host and the job is
+   Lost (the loop resubmits rather than charging the kernel); ssh could not deliver it
+   (no begin marker) -> retried, then Failed with TRANSPORT_ERROR_MARKER, which
    the loop reports as a transport problem rather than charging the kernel.
 
 Nothing here kills processes it did not start: on a user's machine a GPU held by someone

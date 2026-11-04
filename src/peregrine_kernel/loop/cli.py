@@ -505,7 +505,7 @@ class RealBackend:
         Such a job judged and timed nothing: handed back, parse_eval reads "no eval
         JSON" as a correctness FAIL, the driver records a REVERT and spends an
         iteration, and a meta tool spends an attempt — on the machine, not the payload.
-        So it is resubmitted here, within an ``clock_lock_retries``-attempt budget —
+        So it is resubmitted here, within a ``clock_lock_retries``-attempt budget —
         an initial submit plus ``clock_lock_retries - 1`` resubmits; past that the
         submit stops with ClockLockRefusedError — a NoRunError, which no caller
         charges. (``lost_retries`` below reads differently on purpose: there the

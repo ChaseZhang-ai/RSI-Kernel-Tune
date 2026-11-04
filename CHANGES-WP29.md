@@ -259,3 +259,6 @@ WP20-precedented, zero behavior change):
 
 GPU runs used `~/tools/bin/with-lock gpu` throughout; the pytest suite never
 holds the lock.
+
+<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->

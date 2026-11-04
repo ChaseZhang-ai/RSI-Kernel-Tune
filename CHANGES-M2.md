@@ -91,3 +91,6 @@ Branding gate green (all outputs English; zero CJK, zero forbidden-brand
 residuals in the new files). Working tree clean after commit; branch
 `feat/m2-memo-fixture` is local only — not pushed, not merged (integration
 and lane wiring are collected separately).
+
+<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->

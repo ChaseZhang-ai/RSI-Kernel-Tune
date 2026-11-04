@@ -83,3 +83,6 @@ measurement-integrity section via the attack -> defense -> status table in
   (`tests/redteam/test_redteam_timer_proc.py`): a thread/child anomaly never
   flips a verdict (convicting needs a per-job-image baseline the loop keys do
   not carry); recorded posture.
+
+<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->

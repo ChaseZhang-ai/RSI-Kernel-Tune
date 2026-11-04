@@ -284,3 +284,6 @@ Branch `feat/m3-memo-lane-wiring`, working tree clean; not pushed, not
 merged (the chief engineer collects). Baseline `2655 passed` at `ac24e59`;
 branch tip `2692 passed` (the delta is exactly the new test file's 37
 tests).
+
+<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->

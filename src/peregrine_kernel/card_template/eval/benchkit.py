@@ -2458,12 +2458,18 @@ def run_bench(argv=None, problem_path=None) -> int:
         warm_reference(problem, ref_fn, ref_dps, device)
     try:
         impl, dps = (ref_fn, ref_dps) if args.impl == "ref" else _impl(problem, "kernel")
-    except Exception as e:  # noqa: BLE001
-        if Path(problem.get("kernel_file", "kernel.py")).suffix not in CUDA_KERNEL_SUFFIXES:
-            raise
+    except Exception as e:  # noqa: BLE001 — the kernel's load, its Python import included
+        # No suffix split on the capture: a Python kernel's import-time failure lands
+        # in the same structured verdict as a .cu build failure (re-raising burned the
+        # whole job with no JSON block for the parse to read). The .cu build keeps its
+        # COMPILE_ERROR name; the import failure says IMPORT_ERROR — same shape, same
+        # why[-6000:] cap.
         why = f"{type(e).__name__}: {e}"
-        print(f"[bench] correctness: COMPILE_ERROR — {why[-6000:]}")
-        _emit({"correctness": {"pass": False, "status": "COMPILE_ERROR", "error": why[-6000:]},
+        status = ("COMPILE_ERROR"
+                  if Path(problem.get("kernel_file", "kernel.py")).suffix in CUDA_KERNEL_SUFFIXES
+                  else "IMPORT_ERROR")
+        print(f"[bench] correctness: {status} — {why[-6000:]}")
+        _emit({"correctness": {"pass": False, "status": status, "error": why[-6000:]},
                "performance": None})
         return 0
     return _run_task(problem, args, impl, dps, ref_fn, ref_dps, timed_ref, device)

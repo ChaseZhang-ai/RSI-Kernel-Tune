@@ -181,7 +181,8 @@ def new_kernels_task(argv) -> int:
 
     d.mkdir(parents=True)
     task_toml = FROM_KERNELS_TASK_TOML.format(
-        op=args.op, kernel_dir=kfile.parent.parent.name + "/" + kfile.parent.name,
+        op=args.op,
+        kernel_dir=kfile.parent.relative_to(repo_root() / "kernels").as_posix(),
         language="cutedsl",
         arch={"h100": "sm90", "b200": "sm100"}.get(kfile.parent.name, kfile.parent.name))
     (d / "task.toml").write_text(task_toml, encoding="utf-8")

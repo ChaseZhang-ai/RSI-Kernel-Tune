@@ -198,3 +198,34 @@ def test_fresh_recheck_child_still_rechecks_an_honest_kernel(tmp_path):
     lines = [l for l in r.stdout.splitlines() if l.startswith(_VERDICT)]
     assert len(lines) == 1, r.stdout
     assert json.loads(lines[0][len(_VERDICT):])["pass"] is True
+
+
+# --- BUG-SEED-24: disagreeing measure lengths are a visible row, not a truncation ----
+
+
+def test_precision_measure_flags_disagreeing_lengths_instead_of_truncating():
+    """A hand-written bench whose outputs / refs / truths disagree in length used
+    to zip silently short: the extra outputs got no row and no error — a false
+    pass by omission. strict zip makes the mismatch a ValueError, and measure's
+    own except turns it into one visible unavailable row."""
+    y = torch.ones(4, dtype=torch.float32)
+    rec = P.PrecisionRecorder()
+    rec.measure("case", [y, y.clone(), y.clone()], [y.clone()], [y.clone()])
+    assert len(rec.rows) == 2            # the one aligned row + the mismatch row
+    last = rec.rows[-1]
+    assert last["status"] == "unavailable"
+    assert "ValueError" in last["why"] and "zip" in last["why"]
+
+
+def test_precision_measure_still_rows_equal_lengths():
+    """Aligned lists measure exactly as before (strict zip changes nothing): the
+    candidate sits inside the reference's own error against the truth."""
+    t = torch.ones(4, dtype=torch.float64)
+    r = (t * 1.02).to(torch.float32)
+    y = (t * 1.021).to(torch.float32)
+    rec = P.PrecisionRecorder()
+    rec.measure("case", [y], [r], [t])
+    assert len(rec.rows) == 1
+    row = rec.rows[0]
+    assert row["status"] == "pass"       # a real measurement, not an unavailable row
+    assert row["e_cand"] is not None and row["limit"] is not None

@@ -286,7 +286,10 @@ class PrecisionRecorder:
             self.bases.add(basis)
             outs, refs, truths = _as_list(outputs), _as_list(ref_outputs), _as_list(truth)
             names = list(names) if names else [f"output[{i}]" for i in range(len(outs))]
-            for i, (y, r, t) in enumerate(zip(outs, refs, truths)):
+            # strict: a hand-written bench whose outputs / refs / truths disagree in
+            # length is a visible unavailable row (the except below), never a silent
+            # truncation that leaves the extra outputs unmeasured.
+            for i, (y, r, t) in enumerate(zip(outs, refs, truths, strict=True)):
                 self._row(case, names[i] if i < len(names) else f"output[{i}]", y, r, t,
                           basis, stress)
         except Exception as e:  # noqa: BLE001 — measuring must never break the judge

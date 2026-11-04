@@ -1,0 +1,21 @@
+# wp21mini -- WP21 mini 冒烟 task（测试专用，非正式算子集成员）。
+# 目的：在本机 3060 上把机器机制链路通电（eval/NCU job、轨迹落行、kbmenu、
+# floor 回测、墙钟构成表），只产链路与数据流证据，不产性能结论（红线 11）。
+# 选型：CUDA C++ elementwise add（float32, n=1M）= 最小可评测面。
+# 用法见同目录 run_smoke.sh（stub agent 替身 + loop CLI 直启）。
+
+[task]
+language = "cuda"
+arch     = "sm86"
+
+[reference]
+run    = "reference/run.py:run"
+source = "reference"
+
+[target]
+ratio  = 1.2
+timing = "device"
+
+[budget]
+hours    = 2
+max_meta = 1

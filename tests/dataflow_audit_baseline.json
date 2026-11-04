@@ -1,0 +1,37 @@
+{
+ "build_digest": {
+  "kind": "production-caller",
+  "owner": "WP19",
+  "note": "Layer-1 digest 零生产调用点（仅定义 trajectory.py:320 与导出）——digest 输出从未进任何 agent 上下文；WP19 上下文有界装配接线。"
+ },
+ "EvalResult.clock_drift": {
+  "kind": "field",
+  "owner": "WP15",
+  "note": "全库零读点：driver 不读 bench 旗标而是用 _sm_clock_drift(ev.gpu_state,...) 现场重算（driver.py:1739,3006）——读点应统一到旗标或字段废弃。"
+ },
+ "EvalResult.ref_device_readings_ms": {
+  "kind": "field",
+  "owner": "WP15",
+  "note": "仅 parse.py 构造侧命中；driver 只读 ev.device_readings_ms（driver.py:3026 spread），ref 原始读数对无人消费——WP15 A2 分层方差（within×between）需成对消费。"
+ },
+ "IterationRecord.clock_drift": {
+  "kind": "field",
+  "owner": "WP15",
+  "note": "全库零读点：driver 写入（driver.py:3030）后无任何消费；触发逻辑读 gpu_state 重算不经旗标。WP15 落确认带之外的历史行消费（剔除/判读）。"
+ },
+ "IterationRecord.gate_spread_pct": {
+  "kind": "field",
+  "owner": "WP15",
+  "note": "全库零读点：driver 写入（driver.py:3026）后无消费（digest 不含、判读不用）——best 元分析需按 spread 判读 best 置信。"
+ },
+ "IterationRecord.ref_host_enqueue_ms": {
+  "kind": "field",
+  "owner": "WP15/WP19",
+  "note": "轨迹行零消费（消费命中全部是 EvalResult 侧：driver.py:2443 getattr(ev,...)→timing_audit 反馈；leaderboard.py:2271 eval JSON geo 提取）；digest 设计性排除（trajectory.py:58-61）——行级读者待 WP15 遥测闭环/WP19 接线。"
+ },
+ "IterationRecord.variant_timings": {
+  "kind": "field",
+  "owner": "P2",
+  "note": "全库零读点：driver 生成写入（driver.py:6642 等）后无回读；driver.py:6538 宣称 status.jsonl 为 MC 变体的 durable fact source，但 resume/他处无读点——三代 Wave-3 各包均未领收，进 P2 积压。"
+ }
+}

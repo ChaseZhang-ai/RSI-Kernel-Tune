@@ -81,3 +81,78 @@ def test_cuda_kernel_build_failure_keeps_its_compile_error_name(tmp_path):
     assert payload["correctness"]["pass"] is False
     assert payload["correctness"]["status"] == "COMPILE_ERROR"
     assert payload["correctness"]["error"]
+
+
+# --- BUG-C5-03: an empty input_groups workload fails, it does not fake a PASS --------
+
+# The task suite's judge + its input generator (what a task card's definition
+# reference carries; task_correctness execs it before anything else).
+JUDGE = '''import torch
+
+def run(hidden_states, weight):
+    x = hidden_states.float()
+    return (x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-5) * weight.float())
+
+def make_inputs(axes_and_scalars, group=None, seed=0, device="cpu"):
+    g = torch.Generator().manual_seed(seed)
+    n = int(axes_and_scalars["batch_size"])
+    dev = torch.device(device)
+    return {"hidden_states": torch.randn(n, 64, generator=g, device=dev),
+            "weight": (torch.rand(64, generator=g, device=dev) + 0.5)}
+'''
+
+
+def _task_problem(**workload) -> dict:
+    wl = {"uuid": "w0", "axes": {"batch_size": 5, "hidden_size": 64}}
+    wl.update(workload)
+    return {"definition": {"name": "rmsnorm_h64", "op_type": "rmsnorm",
+                           "inputs": {"hidden_states": {"shape": ["batch_size", "hidden_size"],
+                                                        "dtype": "float32"},
+                                      "weight": {"shape": ["hidden_size"], "dtype": "float32"}},
+                           "outputs": {"output": {"shape": ["batch_size", "hidden_size"],
+                                                  "dtype": "float32"}},
+                           "reference": JUDGE},
+            "workload": wl, "dps": True, "kernel_file": "kernel.py",
+            "reference_impl": {"kind": "definition"}, "time_reference": False, "_dir": "."}
+
+
+def _honest_kernel(hidden_states, weight, output):
+    x = hidden_states.float()
+    output.copy_(x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-5) * weight.float())
+
+
+@pytest.mark.parametrize("wl", [{}, {"input_groups": []}],
+                             ids=["no-key", "empty-list"])
+def test_task_correctness_fails_a_workload_with_no_input_groups(wl):
+    """Zero input groups judged zero checks and fell through to a PASS — a fake
+    pass no check backed (and the timing / NCU stages after it crashed bare).
+    It is an INPUT_ERROR fail, the same verdict every other malformed input of
+    this function gets."""
+    verdict, sets = lb.task_correctness(_task_problem(**wl), _honest_kernel, True, "cpu")
+    assert verdict["pass"] is False
+    assert verdict["status"] == "INPUT_ERROR"
+    assert "input_groups" in verdict["error"]
+    assert verdict["checks"] == [] and sets == []
+
+
+def test_task_correctness_still_judges_a_populated_workload():
+    """The guard rides before the loop; a workload with groups judges exactly as
+    before (the honest kernel passes its judge)."""
+    problem = _task_problem(input_groups=[{"name": "g0", "kind": "drawn", "seed": 0},
+                                          {"name": "g1", "kind": "drawn", "seed": 1}])
+    verdict, sets = lb.task_correctness(problem, _honest_kernel, True, "cpu")
+    assert verdict["pass"] is True and verdict["status"] == "PASSED"
+    assert len(sets) == 2
+    assert {c["group"] for c in verdict["checks"]} == {"g0", "g1"}
+
+
+def test_ncu_window_says_why_when_the_card_has_no_input_groups(tmp_path, monkeypatch):
+    """Empty pairs used to reach `calls // len(pairs)` — a ZeroDivisionError with
+    no hint. The window now refuses with a message naming the empty card."""
+    pdir = tmp_path / "eval" / "problem"
+    pdir.mkdir(parents=True)
+    pjson = pdir / "problem.json"
+    pjson.write_text(json.dumps(_task_problem()), encoding="utf-8")
+    monkeypatch.setattr(lb, "_impl", lambda problem, which: (lambda *a: None, False))
+    with pytest.raises(SystemExit, match="no input groups to profile"):
+        lb.ncu_window(problem_path=str(pjson))

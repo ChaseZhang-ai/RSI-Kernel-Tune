@@ -2208,6 +2208,13 @@ def task_correctness(problem: dict, impl, dps: bool, device, prec=None) -> tuple
         verdict.update(status=status, error=error)
         return verdict, sets
 
+    if not task_groups(problem):
+        # A workload with no input_groups used to fall through the loop and judge
+        # zero checks into a PASS — a fake pass no check backed, and the timing /
+        # NCU stages after it crashed bare. The same INPUT_ERROR fail every other
+        # malformed input gets in the loop below.
+        return fail("INPUT_ERROR", "workload has no input_groups — nothing to judge or time")
+
     for gi, group in enumerate(task_groups(problem)):
         try:
             inp = task_inputs(problem, group, device, make_inputs)
@@ -2527,6 +2534,9 @@ def ncu_window(problem_path=None, calls: int = 8, which: str = "kernel") -> None
     # the calls spread over them: a profile of one group is a profile tuned to it
     pairs = [(v, task_inputs(v, g, "cuda")) for v in _task_shapes(problem)
              for g in task_groups(v)]
+    if not pairs:
+        # an empty spread divides by zero below — say why instead
+        raise SystemExit("[ncu] the card has no input groups to profile")
     per = max(1, calls // len(pairs))
     outs = {id(v): allocate_outputs(v, "cuda") if dps else [] for v, _ in pairs}
     for v, inp in pairs:

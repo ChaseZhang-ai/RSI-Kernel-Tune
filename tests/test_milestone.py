@@ -613,7 +613,20 @@ def test_dependency_warnings_flag_one_sided_downstream_claims():
     # add a ⇒ nobody echoes
     ms = _ARROW_MS.replace("- Depends on: ⇒ D0.2, D0.3", "- Depends on: ⇒ D0.2, D0.3, D0.4")
     w = dependency_warnings(ms)
-    assert w == ["§3 D0.1 declares ⇒ D0.4 but D0.4 does not list ⇐ D0.1"]
+    assert "§3 D0.1 declares ⇒ D0.4 but D0.4 does not list ⇐ D0.1" in w
+    # the fixture's own ⊗ D0.3 is one-sided (D0.3 echoes nothing) — the pair
+    # obligation is warned from the declaring side too (BUG-SEED-16)
+    assert any("D0.2 declares ⊗ D0.3" in x for x in w)
+
+
+def test_dependency_warnings_flag_a_one_sided_companion_declaration():
+    from peregrine_kernel.milestone import dependency_warnings
+    # both sides echo: quiet
+    ms = _ARROW_MS.replace("**Depends on** —— ⇐ D0.1. ⇒ D0.4 (`grad` resident in smem).",
+                           "**Depends on** —— ⇐ D0.1 | ⊗ D0.2. ⇒ D0.4 (`grad` resident in smem).")
+    assert not any("⊗" in x for x in dependency_warnings(ms))
+    # one side only: warned
+    assert any("D0.2 declares ⊗ D0.3" in x for x in dependency_warnings(_ARROW_MS))
 
 
 def _with_gate(lines: str) -> str:

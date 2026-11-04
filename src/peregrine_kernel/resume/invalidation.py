@@ -29,9 +29,10 @@ class Decision:
 
     id: str
     depends_on: frozenset[str] = field(default_factory=frozenset)
-    # ⊗ companions: decisions that must land in the same commit. Not DAG edges —
-    # kept beside them so a resume plan can name the group, never so it widens
-    # invalidation symmetrically.
+    # ⊗ companions: decisions that must land in the same commit. Not DAG edges, and
+    # the prefix cut (compute_resume) ignores them; the in-place reopen
+    # (compute_reopen) closes over them symmetrically — a declaration on either
+    # side keeps the pair together.
     companions: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
@@ -106,11 +107,21 @@ def compute_reopen(
     # ordered pass is not enough.
     while True:
         grew = False
+        # ⊗ is a pair obligation, not a directed edge: a decision named by a
+        # reopened declaration joins even when it declares nothing itself, so a
+        # one-sided declaration cannot split the pair (one half redone, one kept
+        # describing the old tree). The d.companions & reopen condition below is
+        # the other direction (the declarator follows its reopened companion).
+        named: set[str] = set()
+        for o in trajectory:
+            if o.id in reopen:
+                named |= o.companions
         for d in trajectory:
             if d.id in reopen:
                 continue
             if (d.id in changed or (d.depends_on & changed)
-                    or (d.depends_on & reopen) or (d.companions & reopen)):
+                    or (d.depends_on & reopen) or (d.companions & reopen)
+                    or d.id in named):
                 reopen.add(d.id)
                 grew = True
         if not grew:

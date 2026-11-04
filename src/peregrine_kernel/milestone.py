@@ -138,6 +138,17 @@ def dependency_warnings(text: str) -> list[str]:
         for other in sorted(down):
             if other in lines and did not in lines[other][0]:
                 warns.append(f"§3 {did} declares ⇒ {other} but {other} does not list ⇐ {did}")
+    # ⊗ is a pair obligation and the reopen closure honours it from either side, so
+    # a declaration only one side carries is exactly the "pair split across a
+    # reopen" risk — echoed or not, the machine cannot tell intent from a typo
+    # without a warning.
+    for did, (_up, comp, _down) in lines.items():
+        for other in sorted(comp):
+            if other in lines and did not in lines[other][1]:
+                warns.append(f"§3 {did} declares ⊗ {other} but {other} does not list "
+                             f"⊗ {did} — a companion declaration on one side only "
+                             f"still reopens the pair from either side, but the "
+                             f"asymmetry is usually a typo")
     warns += _dag_shape_findings(blocks, {d: {r for r in up if r != d}
                                           for d, (up, _c, _d) in lines.items()})
     return warns

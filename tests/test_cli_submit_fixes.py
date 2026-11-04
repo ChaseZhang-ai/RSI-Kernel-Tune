@@ -134,3 +134,44 @@ def test_the_remote_begin_marker_is_printed_by_the_lock_holder(tmp_path):
     setsid_pos = remote.find("setsid")
     assert setsid_pos < flock_pos < marker_pos       # marker is printed inside flock's command
     assert remote.count(ds.BEGIN_MARKER) == 1        # the old bare pre-session echo is gone
+
+
+def test_a_dropped_ssh_connection_is_lost_whatever_the_log_shows(tmp_path):
+    """ssh exits 255 when the connection dies (a ~3 min network blip kills the client
+    long before the remote session): the outcome is unknowable, so Lost -- the kernel
+    is not charged for a job that may well have succeeded. The orphaned remote
+    session is still cleaned up best-effort (reachable: its sid file lives outside
+    the synced tree)."""
+    cfg = _ssh_op(tmp_path)
+    for began in (True, False):
+        fake = _SshFake([(255, began)])
+        status, log = _ssh_run(cfg, fake)
+        assert status == ds.STATUS_LOST, f"began={began}"
+        assert "outcome on the host is unknown" in log
+        assert fake.stops
+
+
+def test_a_relayed_remote_exit_code_is_still_a_charged_failure(tmp_path):
+    """rc 1-254 is the remote command's own exit code: trustworthy. With the marker
+    (the job ran) it stays Failed -- a broken kernel must still cost an iteration.
+    And the session needs no cleanup: setsid --wait relayed it, so the chain (and
+    the session with it) is already gone."""
+    cfg = _ssh_op(tmp_path)
+    fake = _SshFake([(3, True)])
+    status, log = _ssh_run(cfg, fake)
+    assert status == ds.STATUS_FAILED and "exited rc=3" in log
+    assert not fake.stops
+
+
+def test_the_runner_records_a_lost_verdict_that_nothing_charges(tmp_path, monkeypatch):
+    """jobs.runner_main writes run_mode's Lost verdict verbatim; the loop then
+    resubmits it (loop-side: _submit_gpu_once counts it against lost_retries and
+    never charges the kernel)."""
+    d = tmp_path / "operators" / "op"
+    d.mkdir(parents=True)
+    (d / "submit.toml").write_text('[repo]\ndelivery = "local"\nbranch = "main"\n')
+    monkeypatch.setattr(direct.DirectRunner, "run_mode",
+                        lambda self, branch, mode, lf: ds.STATUS_LOST)
+    ds.jobs_dir(d).joinpath("9").mkdir(parents=True)
+    ds.runner_main(SubmitConfig(branch="main", op_dir=str(d)), "9", "perf", "main")
+    assert ds.job_status(d, "9")["status"] == ds.STATUS_LOST

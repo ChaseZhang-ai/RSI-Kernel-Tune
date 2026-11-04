@@ -320,3 +320,40 @@ def test_label_only_ref_declaration_is_not_a_reference():
                          "ref_submit_op": "_ref_tree"}}
     assert not _ref_rides_job(_resolve_ref_spec(via_tree))   # a separate tree never rides
     assert _arm_has_reference(via_tree)
+
+
+# -- BUG-SEED-17: command findings check every agent command, not just the first --------------
+
+
+def test_command_findings_check_the_teacher_command_too():
+    """command_findings stamped every command "agent command" and deduped by source
+    alone, so only the FIRST command was ever analyzed: a teacher command carrying
+    --bare / --settings / a cd sailed through the launch gate and ran without the
+    project settings the policy is delivered in. Deduping on (source, text) checks
+    each distinct text; a single command behaves exactly as before.
+
+    Reproduces the triage experiment for BUG-SEED-17."""
+    from peregrine_kernel.loop import agent_policy
+
+    clean = "claude -p --model x"
+    bad_teacher = "claude -p --bare --settings /x/off.json --model y"
+    assert agent_policy.command_findings([clean], {}) == []     # unchanged: single, clean
+    single = agent_policy.command_findings([bad_teacher], {})
+    assert len(single) == 2                                     # unchanged: single, bad
+    findings = agent_policy.command_findings([clean, bad_teacher], {})
+    assert len(findings) == 2                                   # the teacher is no longer dropped
+    assert any("--bare" in f for f in findings)
+    assert any("--settings" in f for f in findings)
+
+
+def test_command_findings_read_a_shared_script_once(tmp_path):
+    """Dedup still exists — on (source, text): the same script named by two different
+    commands is analyzed once, so its findings are not doubled."""
+    from peregrine_kernel.loop import agent_policy
+
+    wrapper = tmp_path / "agent.sh"
+    wrapper.write_text("cd /somewhere\nexec claude -p\n")
+    findings = agent_policy.command_findings([f"bash agent.sh", f"sh agent.sh"],
+                                             {}, cwd=tmp_path)
+    assert len(findings) == 1
+    assert "changes directory" in findings[0]

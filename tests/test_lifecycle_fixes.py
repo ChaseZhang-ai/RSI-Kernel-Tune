@@ -119,3 +119,42 @@ def test_submit_cluster_lets_unexpected_errors_propagate(monkeypatch):
     monkeypatch.setattr(submit_config, "load_config", boom)
     with pytest.raises(AttributeError):
         baseline_cli._submit_cluster("op")
+
+
+# -- fix: DONE follows a clean confirmed-at-target best, stop=target may not vouch ----
+
+
+def _confirmed_run(repo, monkeypatch, stop, confirm):
+    from peregrine_kernel.loop import cli as loop_cli
+    from peregrine_kernel.runs import list_runs
+    monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
+    monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
+        "match": True, "tolerance": {"y": 2e-6}, "problems": []})
+    monkeypatch.setattr(loop_cli, "main", _loop_ends(stop=stop, confirm=confirm))
+    rc = _start(_task(repo))
+    return rc, list_runs()[0].record()
+
+
+def test_stop_at_target_with_an_alarmed_best_is_not_done(repo, monkeypatch):
+    # the loop stopped at its target and its best kernel is fast, but the correctness
+    # monitor alarmed on it: the run must stay stopped, exit 2
+    rc, rec = _confirmed_run(repo, monkeypatch, "target",
+                             _confirmed(8.0, monitor="alarm"))
+    assert rc == 2
+    assert rec["status"] == "stopped" and rec["stop"] == "target"
+    assert rec["target_met"] is False
+
+
+def test_stop_at_target_without_a_confirmation_is_not_done(repo, monkeypatch):
+    # stop=target with no best_confirmation.json on file is no better
+    rc, rec = _confirmed_run(repo, monkeypatch, "target", None)
+    assert rc == 2
+    assert rec["status"] == "stopped" and rec["stop"] == "target"
+    assert rec["target_met"] is False
+
+
+def test_stop_at_target_with_a_confirmed_best_still_completes(repo, monkeypatch):
+    # the positive control: stop=target AND a clean confirmation at the target is done
+    rc, rec = _confirmed_run(repo, monkeypatch, "target", _confirmed(1.3))
+    assert rc == 0
+    assert rec["status"] == "done" and rec["target_met"] is True

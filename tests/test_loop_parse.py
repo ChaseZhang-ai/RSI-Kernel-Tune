@@ -505,3 +505,105 @@ def test_wrapper_kill_lines_are_read_only_around_an_open_outer_run():
     # the runner's rc line is read at its own line start only
     assert job_abend("[gpu_entry.sh] timeout=1s\nPROBE PASS max_diff=0\n"
                      "[direct] gpu_entry cmd:python3 p.py exited rc=1\n").reason.endswith("(exit 1)")
+
+
+# --- audit-corps fix round: NaN readings, marker echo protection, PROBE PASSED --
+
+
+def test_parse_eval_treats_a_nan_literal_as_an_unavailable_reading():
+    """A NaN literal in the eval JSON is an unavailable reading, never a number.
+    The raw literal used to ride every timing field, and the consumers take
+    min() / medians over these readings (driver.py _best_ms, the resolvable-diff
+    ratio pools) — both are order-dependent around a NaN."""
+    log = ('=== JSON ===\n{"correctness": {"pass": true}, "performance": {'
+           '"bwd_median_ms": NaN, "device_median_ms": NaN, "vs_ref_device": NaN, '
+           '"ref_device_ms": 3.0, '
+           '"device_readings_ms": [1.0, NaN, 2.0], "ref_device_readings_ms": [1.0, 1.1, 2.2], '
+           '"workloads": [{"name": "w0", "device_median_ms": NaN, "vs_ref": 0.9, '
+           '"device_readings_ms": [1.0, NaN]}]}}')
+    ev = parse_eval(log)
+    assert ev.correctness is True                    # the bench's own verdict stands
+    assert ev.bwd_median_ms is None
+    assert ev.device_median_ms is None
+    assert ev.vs_ref_device is None
+    assert ev.ref_device_ms == 3.0                   # finite neighbours still parse
+    assert ev.device_readings_ms == [1.0, 2.0]       # the NaN entry is dropped
+    assert ev.ref_device_readings_ms == [1.0, 1.1, 2.2]
+    w = ev.workloads[0]
+    assert "device_median_ms" not in w
+    assert w["vs_ref"] == 0.9
+    assert w["device_readings_ms"] == [1.0]
+
+
+def test_a_nan_reading_cannot_hijack_the_running_best():
+    """End to end through the parser: a row whose reading is a NaN literal drops
+    out of _best_ms's sample as a no-reading row, so the running best no longer
+    flips with the rows' order (it used to read nan for [nan, 2.5] and 2.5 for
+    [2.5, nan])."""
+    from peregrine_kernel.loop.driver import _best_ms
+
+    nan_ev = parse_eval('=== JSON ===\n{"correctness": {"pass": true}, '
+                        '"performance": {"bwd_median_ms": NaN, "device_median_ms": NaN}}')
+    ok_ev = parse_eval('=== JSON ===\n{"correctness": {"pass": true}, '
+                       '"performance": {"bwd_median_ms": 2.5, "device_median_ms": 2.5}}')
+    assert _best_ms([nan_ev, ok_ev]) == _best_ms([ok_ev, nan_ev]) == 2.5
+
+
+def test_a_record_citing_a_marker_is_not_routed_by_the_marker():
+    """PROBE_REQUEST / EXHAUSTED are explicit single-line markers and are matched
+    only at the start of a line. A whole-text search also matched the marker
+    quoted inside a record's ``change:`` line — the normal way to say how a
+    decision was verified — and routed the record to the probe branch (a GPU job
+    on a path quoted from prose) or ended the phase as EXHAUSTED. A marker on its
+    own line still takes precedence over prose, exactly as before."""
+    turn = parse_student_turn(
+        "decision_id: D2.4\n"
+        "change: re-ran last round's PROBE_REQUEST: notes/probe_audit.py, it passed\n"
+        "files_touched: k.py")
+    assert isinstance(turn, Record)
+    assert "PROBE_REQUEST: notes/probe_audit.py" in turn.change
+
+    turn = parse_student_turn(
+        "decision_id: D2.5\n"
+        "change: the prior turn said EXHAUSTED: no levers left; this one landed one\n"
+        "files_touched: k.py")
+    assert isinstance(turn, Record)
+
+    # honest shapes unchanged
+    assert parse_student_turn("PROBE_REQUEST: notes/x.py").path == "notes/x.py"
+    assert parse_student_turn(
+        "I need a probe first\nPROBE_REQUEST: notes/x.py").path == "notes/x.py"
+    assert parse_student_turn(
+        "EXHAUSTED: reached M5, nothing left").reason.startswith("reached M5")
+
+
+def test_a_stray_probe_manifest_echo_parses_as_a_manifest_request():
+    """WP19: PROBE-MANIFEST is meta-side vocabulary. A student turn that echoes
+    it does not fall through to the ordinary shapes — it parses as
+    ProbeRequest(manifest=True), which the student-facing driver answers with a
+    not-available feedback round (the round is spent, but no job runs and no
+    phase ends). (The old comment claimed a fall-through the code never had.)"""
+    turn = parse_student_turn("the manifest I saw earlier was PROBE-MANIFEST: notes/batch.txt")
+    assert isinstance(turn, ProbeRequest) and turn.manifest
+    assert turn.path == "notes/batch.txt"
+
+
+def test_spelled_out_verdict_words_keep_the_max_diff():
+    """``PROBE PASSED`` / ``PROBE FAILED`` are the same verdict lines. Matching a
+    bare PASS|FAIL left the tail of the word (``ED ...``) in the note and the
+    max_diff unread: a PASS line then failed its own audit with "no max_diff=..."
+    while the diff sat in the note, and a FAIL line logged its diff as
+    unreported."""
+    pv = parse_probe_verdict("PROBE PASSED max_diff=0.001\n")
+    assert pv.passed is True and pv.max_diff == 0.001
+    assert pv.contracts[0].verdict == "PASS" and pv.contracts[0].raw == "0.001"
+
+    pv = parse_probe_verdict("PROBE FAILED max_diff=3.0\n")
+    assert pv.passed is False and pv.max_diff == 3.0
+    assert pv.contracts[0].verdict == "FAIL" and pv.contracts[0].raw == "3.0"
+
+    # the short spellings and the fail-closed shape around them are unchanged
+    assert parse_probe_verdict("PROBE PASS max_diff=0.5\n").passed is True
+    assert parse_probe_verdict("PROBE FAIL max_diff=9.9\n").max_diff == 9.9
+    v = parse_probe_verdict("PROBE PASSED\n")     # really carries no max_diff
+    assert v.passed is False and "no max_diff" in v.reason

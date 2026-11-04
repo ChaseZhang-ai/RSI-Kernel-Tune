@@ -87,21 +87,32 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     markers); otherwise the record block fields are extracted from anywhere in
     the text (agents often emit prose before the block).
 
+    The two student markers are matched only at the start of a line. A
+    whole-text search also matched the marker *quoted mid-line* — a record turn
+    citing ``PROBE_REQUEST: ...`` inside its ``change:`` line as the way a
+    decision was verified, or citing an earlier ``EXHAUSTED: ...`` — and routed
+    the record to the probe branch (a GPU job on a path quoted from prose) or
+    ended the phase. Same family of accident as the RECON_REQUEST echo below,
+    guarded the same way: the marker vocabulary counts only in the line shape
+    the prompt actually demands.
+
     RECON_REQUEST is only a valid shape for the reconnaissance caller
     (``allow_recon=True``). Recognizing it everywhere let a student turn that
     merely echoed the marker — likely in a blackbox run, where the vocabulary
     saturates the prompts — reach the probe branch and burn a GPU job on a
     path that exists only in the teacher's tree.
     """
-    probe = re.search(r"PROBE_REQUEST:\s*(\S+)", text)
+    probe = re.search(r"^[ \t]*PROBE_REQUEST:[ \t]*(\S+)", text, re.M)
     if probe:
         return ProbeRequest(path=_clean_path(probe.group(1)))
     # WP19 (task 2): a PROBE-MANIFEST names a ≤4-line list of self-contained
     # probe scripts for one batched job. Parsed AFTER PROBE_REQUEST (an
     # explicit single-script request always wins) and before the record
     # fields — the manifest is a meta-side vocabulary; a student turn is not
-    # expected to carry it, and a stray echo falls through to the ordinary
-    # shapes exactly like a stray RECON_REQUEST does.
+    # expected to carry it, and a stray echo does NOT fall through to the
+    # ordinary shapes: it parses as ProbeRequest(manifest=True), which the
+    # student-facing driver answers with a not-available feedback round
+    # (the round is spent, but no job runs and no phase ends).
     manifest = re.search(r"PROBE-MANIFEST:\s*(\S+)", text)
     if manifest:
         return ProbeRequest(path=_clean_path(manifest.group(1)), manifest=True)
@@ -109,7 +120,7 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
         recon = re.search(r"RECON_REQUEST:\s*(\S+)", text)
         if recon:
             return ReconRequest(path=_clean_path(recon.group(1)))
-    exhausted = re.search(r"EXHAUSTED:\s*(.+)", text)
+    exhausted = re.search(r"^[ \t]*EXHAUSTED:[ \t]*(.+)$", text, re.M)
     if exhausted:
         return Exhausted(reason=exhausted.group(1).strip())
 
@@ -303,6 +314,20 @@ def readings_spread_pct(readings) -> float | None:
     return (max(vals) - min(vals)) / min(vals)
 
 
+def _finite_float(v) -> float | None:
+    """``v`` as a finite float, or None. A NaN / inf literal in the eval JSON (a
+    bench that crashed a window and logged it anyway) is an unavailable reading,
+    never a number: the raw literal used to ride every timing field, and
+    consumers take min() / medians over these readings — driver.py's ``_best_ms``
+    is order-dependent around a NaN, so one hijacked the running best and the
+    resolvable-diff ratio pools."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
 def _workloads(perf: dict) -> list:
     """Compact per-workload readings from a multi-workload performance block."""
     out = []
@@ -312,15 +337,18 @@ def _workloads(perf: dict) -> list:
         item = {"name": str(w.get("name", len(out)))}
         for key in _WORKLOAD_KEYS:
             v = w.get(key)
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
+            if isinstance(v, (int, float)) and not isinstance(v, bool) \
+                    and math.isfinite(float(v)):
                 item[key] = float(v)
         for key in _WORKLOAD_LIST_KEYS:
             v = w.get(key)
             if isinstance(v, (list, tuple)):
                 item[key] = [float(x) for x in v
-                             if isinstance(x, (int, float)) and not isinstance(x, bool)]
+                             if isinstance(x, (int, float)) and not isinstance(x, bool)
+                             and math.isfinite(float(x))]
         host = w.get("host_enqueue_ms")
-        if isinstance(host, (int, float)) and not isinstance(host, bool):
+        if isinstance(host, (int, float)) and not isinstance(host, bool) \
+                and math.isfinite(float(host)):
             item["host_enqueue_ms"] = float(host)
         # WP15: the workload's SPRT early-stop decision (timing.py's controller),
         # so the driver's card rule (a loss-stopped workload cannot acquit the
@@ -335,12 +363,15 @@ def _workloads(perf: dict) -> list:
 
 
 def _float_list(raw) -> list:
-    """The numeric entries of ``raw`` as floats; [] for anything else (a bench that
-    reports no raw readings, or a malformed one)."""
+    """The finite numeric entries of ``raw`` as floats; [] for anything else (a
+    bench that reports no raw readings, or a malformed one). A NaN / inf entry is
+    dropped, not carried: these arrays feed the ratio pools, and one NaN sample
+    poisons every median it lands in."""
     if not isinstance(raw, (list, tuple)):
         return []
     return [float(v) for v in raw
-            if isinstance(v, (int, float)) and not isinstance(v, bool)]
+            if isinstance(v, (int, float)) and not isinstance(v, bool)
+            and math.isfinite(float(v))]
 
 
 def describe_workload_readings(workloads: list) -> str:
@@ -556,9 +587,10 @@ def parse_eval(text: str) -> EvalResult:
     def _opt(key: str, legacy: str | None = None) -> float | None:
         # legacy: pre-rename bench key (cublas_* — the in-job reference was recorded
         # under that name whatever library it was). Read so older cards' bench.py
-        # keeps parsing; new benches emit the ref_* names only.
+        # keeps parsing; new benches emit the ref_* names only. A NaN / inf
+        # literal is an unavailable reading (_finite_float), never a number.
         v = perf.get(key, perf.get(legacy) if legacy else None)
-        return float(v) if v is not None else None
+        return _finite_float(v)
 
     def _opt_any(*keys: str) -> float | None:
         for key in keys:
@@ -596,8 +628,8 @@ def parse_eval(text: str) -> EvalResult:
         # COMPILE_ERROR verdict's nvcc/ptxas error and a numeric FAIL's surrounding
         # output are in the log the parser holds, so the record now holds them too.
         error="" if correct else _with_log_tail(_correctness_error(corr_obj), text),
-        bwd_median_ms=float(ms) if ms is not None else None,
-        mfu=float(mfu) if mfu is not None else None,
+        bwd_median_ms=_finite_float(ms),
+        mfu=_finite_float(mfu),
         ref_median_ms=_opt("ref_median_ms", "cublas_median_ms"),
         vs_ref=_opt("vs_ref", "vs_cublas"),
         device_median_ms=_opt("device_median_ms"),
@@ -647,7 +679,8 @@ error norm at all — probes have reported values like 8e10 and 8.1e15, smugglin
 sub-check bitmasks through the one field the driver echoes back.
 """
 
-_PROBE_VERDICT_RE = re.compile(r"PROBE\s+(PASS|FAIL)(?:\s+max_diff=(\S+))?([^\n]*)")
+_PROBE_VERDICT_RE = re.compile(
+    r"PROBE\s+(PASSED|FAILED|PASS|FAIL)\b(?:\s+max_diff=(\S+))?([^\n]*)")
 _PROBE_NON_NUMERIC = {"n/a", "na", "none", "-"}
 _PROBE_NOTE_LEAD = " \t#-/:;|"
 _PROBE_READING_MAX = 96
@@ -782,8 +815,14 @@ class ProbeContract:
 def _contracts(text: str) -> tuple[ProbeContract, ...]:
     out = []
     for i, m in enumerate(_PROBE_VERDICT_RE.finditer(text), start=1):
+        # The spelled-out past tense is the same verdict ("PROBE PASSED"). The
+        # bare PASS|FAIL match used to leave the tail of the word (``ED ...``)
+        # in the note and the max_diff unread — a PASS line then failed its own
+        # audit with "no max_diff=..." while the diff sat in the note, and a
+        # FAIL line logged its diff as unreported.
+        verdict = "PASS" if m.group(1).startswith("PASS") else "FAIL"
         note = m.group(3).strip().lstrip(_PROBE_NOTE_LEAD).strip()
-        out.append(ProbeContract(i, m.group(1), m.group(2) or None, note))
+        out.append(ProbeContract(i, verdict, m.group(2) or None, note))
     return tuple(out)
 
 

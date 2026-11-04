@@ -156,3 +156,45 @@ def test_ncu_window_says_why_when_the_card_has_no_input_groups(tmp_path, monkeyp
     monkeypatch.setattr(lb, "_impl", lambda problem, which: (lambda *a: None, False))
     with pytest.raises(SystemExit, match="no input groups to profile"):
         lb.ncu_window(problem_path=str(pjson))
+
+
+# --- BUG-T7C-01: the fresh-recheck child speaks even when the kernel cannot load -----
+
+
+def test_fresh_recheck_child_prints_a_verdict_when_the_kernel_cannot_import(tmp_path):
+    """The child re-imports the kernel in a fresh process; a module that dies at
+    import (an allocation, a sys.exit, parent state it cannot see) used to kill
+    the child bare — no verdict line, and the parent could only guess "the child
+    printed no verdict". The load now sits inside the child's try: one
+    pass=null verdict line, the WP29 replay-probe child's posture."""
+    broken = ("import torch\n"
+              "raise RuntimeError('boom at module import — the child cannot load me')\n"
+              "\n"
+              "def run(hidden_states, weight, output):\n"
+              "    output.copy_(hidden_states)\n")
+    card = _card(tmp_path / "dies", broken)
+    r = _run_card(card, "--mode", "correctness", "--fresh-recheck")
+    assert r.returncode == 0, r.stdout + r.stderr
+    lines = [l for l in r.stdout.splitlines() if l.startswith(_VERDICT)]
+    assert len(lines) == 1, r.stdout
+    verdict = json.loads(lines[0][len(_VERDICT):])
+    assert verdict["pass"] is None
+    assert "RuntimeError" in verdict["detail"] and "boom at module import" in verdict["detail"]
+    assert "Traceback" not in r.stdout
+
+
+def test_fresh_recheck_child_still_rechecks_an_honest_kernel(tmp_path):
+    """The moved call keeps the honest path byte-identical: the child loads the
+    kernel, runs the protocol, and reports pass=True."""
+    honest = ("import torch\n"
+              "\n"
+              "def run(hidden_states, weight, output):\n"
+              "    x = hidden_states.float()\n"
+              "    output.copy_(x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-5)\n"
+              "                * weight.float())\n")
+    card = _card(tmp_path / "honest", honest)
+    r = _run_card(card, "--mode", "correctness", "--fresh-recheck")
+    assert r.returncode == 0, r.stdout + r.stderr
+    lines = [l for l in r.stdout.splitlines() if l.startswith(_VERDICT)]
+    assert len(lines) == 1, r.stdout
+    assert json.loads(lines[0][len(_VERDICT):])["pass"] is True

@@ -1389,8 +1389,13 @@ def _run_fresh_recheck_child(problem: dict, args) -> int:
     device is the job's GPU; PK_FRESH_RECHECK_DEVICE exists so the protocol can
     be rehearsed on a CPU box (tests) without touching the GPU path."""
     device = os.environ.get("PK_FRESH_RECHECK_DEVICE", "cuda")
-    impl, dps = _impl(problem, "kernel")
     try:
+        # the kernel's re-entry into the child is inside the try: a load that
+        # fails here (a fresh process re-importing a kernel whose module level
+        # allocates, exits, or leans on parent state) still speaks — the
+        # replay-probe child's posture, pass=None is a no-reading, never a
+        # conviction. Bare, it died with no verdict line at all.
+        impl, dps = _impl(problem, "kernel")
         verdict, _ = _correctness(problem, impl, dps, device)
     except Exception as exc:  # noqa: BLE001 — the impl is foreign code
         print(_VERDICT_LINE + json.dumps({"pass": None,

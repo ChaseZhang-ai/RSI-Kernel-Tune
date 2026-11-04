@@ -2444,7 +2444,17 @@ def run_bench(argv=None, problem_path=None) -> int:
     print(f"[bench] definition={problem['definition']['name']} "
           f"{describe_card_workloads(problem)}")
 
-    ref_fn, ref_dps = _impl(problem, "ref")
+    try:
+        ref_fn, ref_dps = _impl(problem, "ref")
+    except Exception as e:  # noqa: BLE001 — the card's own reference failing to load
+        # is the card's finding, not the bench's crash: the same structured verdict
+        # channel a compile error takes, so the job parses and reports instead of a
+        # bare traceback with no JSON block
+        why = f"{type(e).__name__}: {e}"
+        print(f"[bench] correctness: REFERENCE_ERROR — {why[-6000:]}")
+        _emit({"correctness": {"pass": False, "status": "REFERENCE_ERROR",
+                               "error": why[-6000:]}, "performance": None})
+        return 0
     if args.mode == "calibrate":
         return _task_calibrate(problem, ref_fn, ref_dps, device)
     if args.mode == "ref":
@@ -2460,12 +2470,15 @@ def run_bench(argv=None, problem_path=None) -> int:
         warm_reference(problem, ref_fn, ref_dps, device)
     try:
         impl, dps = (ref_fn, ref_dps) if args.impl == "ref" else _impl(problem, "kernel")
-    except Exception as e:  # noqa: BLE001
-        if Path(problem.get("kernel_file", "kernel.py")).suffix not in CUDA_KERNEL_SUFFIXES:
-            raise
+    except Exception as e:  # noqa: BLE001 — the kernel's, not the bench's
+        # every load failure lands in the same structured channel: a .cu build error
+        # as before, a python module's syntax error / missing entry / broken sibling
+        # as IMPORT_ERROR -- never a bare traceback with no JSON block
+        suffix = Path(problem.get("kernel_file", "kernel.py")).suffix
+        status = "COMPILE_ERROR" if suffix in CUDA_KERNEL_SUFFIXES else "IMPORT_ERROR"
         why = f"{type(e).__name__}: {e}"
-        print(f"[bench] correctness: COMPILE_ERROR — {why[-6000:]}")
-        _emit({"correctness": {"pass": False, "status": "COMPILE_ERROR", "error": why[-6000:]},
+        print(f"[bench] correctness: {status} — {why[-6000:]}")
+        _emit({"correctness": {"pass": False, "status": status, "error": why[-6000:]},
                "performance": None})
         return 0
     return _run_task(problem, args, impl, dps, ref_fn, ref_dps, timed_ref, device)

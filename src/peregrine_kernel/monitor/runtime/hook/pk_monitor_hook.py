@@ -87,8 +87,18 @@ def _dump() -> None:
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump({k: v for k, v in _state.items() if k != "out"}, fh)
         os.replace(tmp, path)
-    except Exception:  # noqa: BLE001 — the monitor never costs the bench
-        pass
+    except Exception as e:  # noqa: BLE001 — the monitor never costs the bench: the
+        # swallow is deliberate (a raising hook would kill the bench it watches),
+        # but the summary itself is going nowhere, so the recorded errors list would
+        # never be seen either — leave one trace on stderr and lose the rest quietly.
+        if not _state.get("dump_failed"):
+            _state["dump_failed"] = True
+            try:
+                sys.stderr.write(f"[pk-monitor] dump to {out} failed: "
+                                 f"{e.__class__.__name__}: {e}; monitor data is being "
+                                 f"lost\n")
+            except Exception:  # noqa: BLE001 — stderr is not ours either
+                pass
 
 
 # --- tensor summaries -------------------------------------------------------------

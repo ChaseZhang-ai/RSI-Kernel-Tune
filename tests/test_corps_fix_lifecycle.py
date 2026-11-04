@@ -326,3 +326,59 @@ def test_command_findings_still_read_a_shared_script_once(tmp_path):
     findings = ap.command_findings([f"bash {script}", f"bash {script}"], {})
     assert len(findings) == 1
     assert findings[0].startswith(str(script)) and "--bare" in findings[0]
+
+
+# --- BUG-SEED-41: a hook dump that cannot write leaves one trace on stderr ------------
+
+
+def _load_hook_module():
+    """The in-process monitor hook, standalone: it is stdlib-only and installs nothing
+    on import (the install happens through sitecustomize)."""
+    path = Path(monitor.__file__).parent / "runtime" / "hook" / "pk_monitor_hook.py"
+    spec = importlib.util.spec_from_file_location("pk_monitor_hook_lifecycle", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_dump_failure_leaves_a_one_time_stderr_trace(tmp_path, capsys):
+    """PK_MON_OUT is not writable: the dump still swallows (a raising hook would kill
+    the bench it watches) but stderr names the failure once — the data loss is not
+    silent, and the second failing dump does not spam."""
+    hook = _load_hook_module()
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    os.chmod(ro, 0o500)
+    try:
+        hook._state.clear()
+        hook._state["out"] = str(ro)
+        hook._dump()                                   # must not raise
+        err = capsys.readouterr().err
+        assert "dump to" in err and "monitor data is being lost" in err
+        hook._dump()
+        assert capsys.readouterr().err == ""           # warned once, not per record
+    finally:
+        os.chmod(ro, 0o700)
+
+
+def test_dump_failure_is_reported_when_the_path_cannot_exist(tmp_path, capsys):
+    """A PK_MON_OUT under a regular file cannot become a directory on any uid: same
+    one-time trace, same swallow."""
+    block = tmp_path / "block"
+    block.write_text("a file, not a directory\n")
+    hook = _load_hook_module()
+    hook._state.clear()
+    hook._state["out"] = str(block / "inner")
+    hook._dump()                                       # must not raise
+    assert "monitor data is being lost" in capsys.readouterr().err
+
+
+def test_dump_stays_silent_when_it_succeeds(tmp_path, capsys):
+    hook = _load_hook_module()
+    out = tmp_path / "out"
+    hook._state.clear()
+    hook._state["out"] = str(out)
+    hook._state["calls"] = []
+    hook._dump()
+    assert (out / f"hook-{os.getpid()}.json").is_file()
+    assert capsys.readouterr().err == ""

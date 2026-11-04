@@ -160,8 +160,13 @@ def main(argv: list[str]) -> int:
         return 2
     try:
         event = json.loads(sys.stdin.read() or "{}")
-    except ValueError:
-        return 0
+    except ValueError as e:
+        # Same contract as the policy side: an event that cannot be read must not
+        # silently allow everything (exit 0). Claude Code blocks on exit 2 and hands
+        # stderr to the agent; exit 1 would be a NON-blocking pass.
+        sys.stderr.write(f"BLOCKED: Peregrine-Kernel agent policy could not read the "
+                         f"tool-call event ({e})\n")
+        return 2
     msg = decide(policy, event)
     if msg:
         sys.stderr.write(msg + "\n")

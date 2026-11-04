@@ -19,6 +19,8 @@ from test_launch import _confirmed, _loop_ends, _start, _task, _Teacher  # noqa:
 from peregrine_kernel import launch, monitor  # noqa: E402
 from peregrine_kernel.runs import list_runs  # noqa: E402
 
+REPO = Path(__file__).resolve().parents[1]
+
 
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
@@ -432,3 +434,25 @@ def test_classify_still_pairs_base_against_profile_after_the_merge():
     assert v["status"] == "alarm"
     assert any(f["profile"] == "seed1" and "produces 7 NaN" in f["what"]
                for f in v["findings"])
+
+
+# --- BUG-SEED-45: an unreadable event blocks, like an unreadable policy ---------------
+
+
+def _run_hook(policy_path, stdin: str):
+    return subprocess.run([sys.executable, str(REPO / "scripts" / "agent_policy_hook.py"),
+                           str(policy_path)], input=stdin, text=True, capture_output=True)
+
+
+def test_the_hook_blocks_when_the_event_cannot_be_parsed(tmp_path):
+    """The event side of the hook used to fail open (exit 0, no comment) while the
+    policy side failed closed: a stdin line that is not JSON now blocks like an
+    unreadable policy, with the reason on stderr."""
+    good = tmp_path / "p.json"
+    good.write_text(json.dumps({"role": "student", "offline": True}))
+    p = _run_hook(good, "not json {")
+    assert p.returncode == 2
+    assert "BLOCKED" in p.stderr and "event" in p.stderr
+    # the normal shapes keep working: a legal event on a legal policy passes
+    ok = _run_hook(good, json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}}))
+    assert ok.returncode == 0 and ok.stderr == ""

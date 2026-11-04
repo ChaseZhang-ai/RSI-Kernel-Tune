@@ -20,6 +20,8 @@ from peregrine_kernel.loop.parse import (
 
 from test_loop_driver import FakeBackend, _ctx
 
+REPO = Path(__file__).resolve().parents[1]
+
 
 # --- BUG-T5C-01: _save_ref_struct_table's OSError log lost the destination ---
 
@@ -124,3 +126,55 @@ def test_quarantine_unique_names_stay_flat(tmp_path):
     (kb / "sm100" / "oddity.md").write_text("body\n", encoding="utf-8")
     _quarantine_leaky_kb(ctx, ["sm100/oddity.md:1: banned narrative"])
     assert (tmp_path / "repo" / "kb_quarantine" / "oddity.md").is_file()
+
+
+# --- BUG-SEED-33: the seeders read/write without a fixed encoding -------------
+
+_SEED_C_LOCALE_SNIPPET = """
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+sys.path.insert(0, {src!r})
+from peregrine_kernel.loop.driver import _seed_pricing_toolkits, _seed_sass_tools
+
+
+class _Be:
+    def commit(self, msg):
+        pass
+
+
+ws = Path({ws!r})
+_seed_pricing_toolkits(ws, _Be())          # first seeding: writes the modules
+_seed_pricing_toolkits(ws, _Be())          # second: reads them back (no-op)
+recon = ws / "recon"
+ctx = SimpleNamespace(recon_dir=recon, oracle_mode="blackbox")
+_seed_sass_tools(ctx, _Be())               # the recon-side seeder, same defect
+print("SEEDED")
+"""
+
+
+def test_seeding_survives_a_non_utf8_locale(tmp_path):
+    """Observed: the seeding functions read/wrote every vendored module with the
+    locale-preferred codec. All 13 PRICING_SEEDED_MODULES (and the recon set)
+    carry non-ASCII UTF-8 bytes, so under LC_ALL=C the ASCII codec raised
+    UnicodeDecodeError on the first vendor read — the loop died at its first
+    step, before any GPU job was bought. Reads AND writes pin
+    encoding="utf-8" now (the write side mattered on the read-back: a file the
+    same call had just written could not be re-read under the same locale)."""
+    import os
+    import subprocess
+    import sys
+
+    env = dict(os.environ)
+    env.update(LC_ALL="C", LANG="C", PYTHONUTF8="0", PYTHONCOERCECLOCALE="0",
+               PYTHONPATH=str(REPO / "src"))
+    env.pop("PYTHONIOENCODING", None)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    code = _SEED_C_LOCALE_SNIPPET.format(src=str(REPO / "src"), ws=str(ws))
+    r = subprocess.run([sys.executable, "-c", code], env=env,
+                       capture_output=True, text=True, timeout=180)
+    assert r.returncode == 0, r.stderr
+    assert "SEEDED" in r.stdout
+    assert (ws / "notes" / "orch_tools.py").is_file()
+    assert (ws / "recon" / "notes" / "stall_tools.py").is_file()

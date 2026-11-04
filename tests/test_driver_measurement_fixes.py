@@ -1,7 +1,7 @@
 """Regression tests for the measurement-fix batch on loop/driver.py.
 
-Ported from the ForgeKernel fix wave (audit-r2-2026-11-05): each test names the
-fix it pins (same numbering as the fix list). The fixtures reuse
+Ported from the archived fix wave of audit-r2-2026-11-05: each test names the
+ledger item it pins (same numbering as the fix list). The fixtures reuse
 test_loop_driver.py's FakeBackend/_ctx, so the whole file runs without a GPU.
 """
 

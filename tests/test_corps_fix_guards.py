@@ -97,3 +97,76 @@ def test_preflight_accepts_a_workspace_with_harmless_root_files(tmp_path, capsys
     assert cli._harness_guard_preflight(card, ws, "kernel.py", be, resuming=False,
                                         dry_run=False) == 0
     assert "identical to the workspace" in capsys.readouterr().out
+
+
+# --- BUG-T2C-01: the monitor hook stays ahead of the workspace on PYTHONPATH ----------
+
+def _rendered_gpu_entry(tmp_path):
+    from peregrine_kernel.cardkit import render_gpu_entry
+    script = render_gpu_entry(name="t", suite="unit", arch="90")
+    (tmp_path / "gpu_entry.sh").write_text(script)
+    export_line = next(l for l in script.splitlines() if l.startswith("export PYTHONPATH="))
+    return export_line
+
+
+def test_gpu_entry_keeps_the_hook_directory_ahead_of_the_workspace(tmp_path):
+    export_line = _rendered_gpu_entry(tmp_path)
+    ws, hook, other = tmp_path / "ws", tmp_path / "hook", tmp_path / "other"
+    out = subprocess.run(
+        ["bash", "-c", f'WORKSPACE={ws}; PK_MON_HOOK_DIR={hook}; PYTHONPATH={other}; '
+                       f'{export_line}; printf \'%s\\n\' "$PYTHONPATH"'],
+        capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    order = out.stdout.strip().split(":")
+    assert order.index(str(hook)) < order.index(str(ws))
+
+
+def test_a_tree_root_sitecustomize_does_not_take_the_hooks_place(tmp_path):
+    """The sitecustomize import goes to the first sys.path directory that has one: with
+    the entry's export re-ordering PYTHONPATH, that must stay the hook, not a shadow
+    the student left at the tree root."""
+    export_line = _rendered_gpu_entry(tmp_path)
+    ws, hook = tmp_path / "ws", tmp_path / "hook"
+    (ws / "eval").mkdir(parents=True)
+    hook.mkdir()
+    (ws / "sitecustomize.py").write_text(
+        "import os\nos.environ['STUDENT_SHADOW_RAN'] = '1'\n")
+    (hook / "sitecustomize.py").write_text(
+        "import os\nos.environ['PK_HOOK_RAN'] = '1'\n")
+    (ws / "eval" / "probe.py").write_text(
+        "import os\n"
+        "print('HOOK=' + os.environ.get('PK_HOOK_RAN', 'unset'),\n"
+        "      'SHADOW=' + os.environ.get('STUDENT_SHADOW_RAN', 'unset'))\n")
+    # PYTHONPATH is what .pk_monitor/run.py hands the entry: the hook directory first
+    out = subprocess.run(
+        ["bash", "-c", f'WORKSPACE={ws}; PK_MON_HOOK_DIR={hook}; PYTHONPATH={hook}; '
+                       f'{export_line}; cd {ws} && python3 eval/probe.py'],
+        capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert "HOOK=1" in out.stdout, out.stdout
+    assert "SHADOW=unset" in out.stdout, \
+        "the student's tree-root sitecustomize ran instead of the hook"
+
+
+def test_the_monitor_runner_hands_the_hook_dir_to_the_entry(tmp_path, monkeypatch):
+    import importlib.util
+    from peregrine_kernel import monitor
+    run_path = Path(monitor.__file__).resolve().parent / "runtime" / "run.py"
+    spec = importlib.util.spec_from_file_location("_t2c01_pk_mon_run", run_path)
+    mon_run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mon_run)
+    captured = {}
+
+    class FakeCompleted:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        captured["env"] = kwargs["env"]
+        return FakeCompleted()
+
+    monkeypatch.setattr(mon_run.subprocess, "run", fake_run)
+    mon_run._run_task("gpu_entry.sh", "correctness", "base", str(tmp_path / "out"), 120, None)
+    assert captured["env"]["PK_MON_HOOK_DIR"] == mon_run.HOOK_DIR
+    assert captured["env"]["PYTHONPATH"].split(":")[0] == mon_run.HOOK_DIR

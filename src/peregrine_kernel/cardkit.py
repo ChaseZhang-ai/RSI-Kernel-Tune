@@ -107,7 +107,13 @@ if [ -f "$SOL_ENV" ]; then set +u; source "$SOL_ENV"; set -u; fi
 export PATH=/usr/local/cuda/bin:${{PATH}}
 WORKSPACE="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
 cd "$WORKSPACE"
-export PYTHONPATH="$WORKSPACE:$WORKSPACE/eval:${{PYTHONPATH:-}}"
+# The correctness monitor's hook directory (PK_MON_HOOK_DIR, set by .pk_monitor/run.py,
+# which also puts it first on the inherited PYTHONPATH) must stay AHEAD of the tree:
+# Python imports sitecustomize from the first sys.path directory that has one, so a
+# tree-root sitecustomize.py would otherwise take the hook's place and the monitor
+# would judge an unwitnessed run. Unset -- every job that is not a monitor run -- this
+# export is exactly what it always was.
+export PYTHONPATH="${{PK_MON_HOOK_DIR:+$PK_MON_HOOK_DIR:}}$WORKSPACE:$WORKSPACE/eval:${{PYTHONPATH:-}}"
 export PYTHONUNBUFFERED=1
 export CUTE_DSL_ARCH="${{CUTE_DSL_ARCH:-{arch}}}"
 

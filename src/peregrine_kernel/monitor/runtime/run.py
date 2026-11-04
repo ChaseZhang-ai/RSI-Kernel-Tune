@@ -121,6 +121,11 @@ def _run_task(entry: str, task: str, profile: str, out_dir: str, timeout_s: floa
     if kernel:
         env["PK_MON_KERNEL"] = kernel
     env["PYTHONPATH"] = HOOK_DIR + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    # and pin it: the entry script re-exports PYTHONPATH ahead of the workspace tree,
+    # so the hook's directory also rides PK_MON_HOOK_DIR for gpu_entry to put back in
+    # front -- Python imports sitecustomize from the first sys.path directory that has
+    # one, and a tree-root sitecustomize.py must never take the hook's place.
+    env["PK_MON_HOOK_DIR"] = HOOK_DIR
     env["TASK_TIMEOUT"] = str(max(60, int(timeout_s)))
     t0 = time.time()
     timed_out = False

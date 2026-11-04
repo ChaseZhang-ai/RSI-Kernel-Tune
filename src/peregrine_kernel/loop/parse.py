@@ -104,8 +104,14 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     # probe scripts for one batched job. Parsed AFTER PROBE_REQUEST (an
     # explicit single-script request always wins) and before the record
     # fields — the manifest is a meta-side vocabulary; a student turn is not
-    # expected to carry it, and a stray echo falls through to the ordinary
-    # shapes exactly like a stray RECON_REQUEST does.
+    # expected to carry it. Any hit parses as ProbeRequest(manifest=True):
+    # there is NO fall-through to the record shapes here (the caller-side
+    # allow_recon gate a stray RECON_REQUEST gets does not exist for the
+    # manifest). The student face is guarded one level up instead — the
+    # driver's manifest branch refuses the shape, tells the student the
+    # manifest is not available to it, and re-prompts (loop/driver.py, the
+    # `isinstance(turn, ProbeRequest) and turn.manifest` branch) — so an
+    # echoed manifest never reaches a GPU job.
     manifest = re.search(r"PROBE-MANIFEST:\s*(\S+)", text)
     if manifest:
         return ProbeRequest(path=_clean_path(manifest.group(1)), manifest=True)

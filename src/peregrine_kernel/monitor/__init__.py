@@ -198,12 +198,20 @@ def classify(result: dict | None) -> dict:
     if base is None:
         add("warn", "base", "the base run is missing — nothing to compare the other profiles with")
     else:
+        hook = base.get("hook") or {}
         if base.get("card_pass") is not True:
             why = ("no eval verdict" + (" (timed out)" if base.get("timed_out") else
                                         f" (rc={base.get('rc')})")
                    if base.get("card_pass") is None else "the card's judge FAILS")
             add("alarm", "base", f"on the card's own inputs: {why}")
-        if not (base.get("hook") or {}).get("calls"):
+        if hook.get("processes") == 0:
+            # the runner saw no hook file at all: sitecustomize never reached any
+            # process, so every call/output check below is void. Saying so beats the
+            # old "the bench does not import the kernel as a module" guess.
+            add("warn", "-", "the monitor hook never ran (sitecustomize injected it into 0 "
+                             "processes) — no kernel call was watched, so the per-profile "
+                             "input/output checks are void; only the card's verdicts stand")
+        elif not hook.get("calls"):
             add("info", "base", "no kernel call was observed (the bench does not import the "
                                 "kernel as a module) — output checks unavailable; the card's "
                                 "verdicts under each profile still count")

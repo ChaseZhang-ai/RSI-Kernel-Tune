@@ -96,11 +96,22 @@ def _hook_files(d: str) -> list[dict]:
 
 def _merge_hooks(hooks: list[dict]) -> dict:
     """One summary per profile run: the process(es) that imported the kernel carry
-    its calls; every process contributes what it reshaped and any hook error."""
+    its calls; every process contributes what it reshaped and any hook error.
+
+    Each call is tagged with the pid of the process that recorded it, and the
+    per-process call index is renumbered so (fn, i) stays unique across processes:
+    every process counts its own calls from 0, and two workers calling the same
+    kernel function must not overwrite each other's record when the summary is
+    keyed by (fn, i) — or pair base against profile — downstream."""
     calls, errors, kmods = [], [], []
     perturbed = reseeded = unrecorded = 0
+    nth: dict = {}
     for h in hooks:
-        calls.extend(h.get("calls") or [])
+        for c in h.get("calls") or []:
+            fn = c.get("fn")
+            i = nth.get(fn, 0)
+            nth[fn] = i + 1
+            calls.append({**c, "pid": h.get("pid"), "i": i})
         errors.extend(h.get("errors") or [])
         perturbed += int(h.get("perturbed") or 0)
         reseeded += int(h.get("reseeded") or 0)

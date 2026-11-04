@@ -382,3 +382,53 @@ def test_dump_stays_silent_when_it_succeeds(tmp_path, capsys):
     hook._dump()
     assert (out / f"hook-{os.getpid()}.json").is_file()
     assert capsys.readouterr().err == ""
+
+
+# --- BUG-SEED-42: two processes calling the same kernel do not overwrite each other ---
+
+
+def _load_runner_module():
+    """The job-side runner (stdlib-only), standalone."""
+    path = Path(monitor.__file__).parent / "runtime" / "run.py"
+    spec = importlib.util.spec_from_file_location("pk_monitor_runner_lifecycle", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_merge_hooks_keeps_same_named_calls_from_two_processes():
+    """Every process counts its own calls from 0, so two workers' first call to the
+    same kernel function both carry i=0 — one with NaN outputs, one clean. The merge
+    tags each record with its pid and renumbers so the (fn, i) dedup key collides no
+    more: both records survive instead of the second silently overwriting the first."""
+    runner = _load_runner_module()
+    hooks = [{"pid": 11, "calls": [{"fn": "kernel", "i": 0,
+                                    "outputs": [{"slot": "ret0", "nan": 5, "abs_sum": 1.0}]}]},
+             {"pid": 22, "calls": [{"fn": "kernel", "i": 0,
+                                    "outputs": [{"slot": "ret0", "nan": 0, "abs_sum": 3.0}]}]}]
+    merged = runner._merge_hooks(hooks)
+    assert merged["processes"] == 2
+    assert [(c["pid"], c["fn"], c["i"]) for c in merged["calls"]] == [
+        (11, "kernel", 0), (22, "kernel", 1)]
+    calls = monitor._calls({"hook": merged})     # the classification's per-key view
+    assert len(calls) == 2
+    assert [sum(int(o.get("nan") or 0) for o in c["outputs"]) for c in calls.values()] == [5, 0]
+
+
+def test_classify_still_pairs_base_against_profile_after_the_merge():
+    """The renumbering must not break the cross-profile pairing: a NaN the seed run's
+    kernel produces that the base's same call did not is still an alarm, and the
+    profile with an unchanged signature is still not applicable."""
+    runner = _load_runner_module()
+    base = {"profile": "base", "card_pass": True,
+            "hook": runner._merge_hooks([{"pid": 11, "calls": [
+                {"fn": "kernel", "i": 0, "in_sums": [1.0],
+                 "outputs": [{"slot": "ret0", "nan": 0, "abs_sum": 2.0}]}]}])}
+    seed = {"profile": "seed1", "card_pass": True,
+            "hook": {**runner._merge_hooks([{"pid": 12, "calls": [
+                {"fn": "kernel", "i": 0, "in_sums": [9.0],
+                 "outputs": [{"slot": "ret0", "nan": 7, "abs_sum": 2.0}]}]}])}}
+    v = monitor.classify({"complete": True, "profiles": [base, seed]})
+    assert v["status"] == "alarm"
+    assert any(f["profile"] == "seed1" and "produces 7 NaN" in f["what"]
+               for f in v["findings"])

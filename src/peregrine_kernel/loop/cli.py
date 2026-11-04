@@ -1177,6 +1177,26 @@ def _resolve_ref_spec(cfg: dict) -> dict:
     return spec
 
 
+# The ref-spec keys that only DESCRIBE a reference measured somewhere else. None of
+# them declares a measurement: a spec carrying only these is a target-ms-style run
+# without a second window, however full the spec looks (BUG-C3-02).
+_REF_LABEL_KEYS = ("ref_ncu_cmd", "ref_name", "ref_shape", "ref_hardware")
+
+
+def _ref_spec_declared(spec: dict) -> bool:
+    """Whether ``spec`` declares an actual way to measure a reference.
+
+    The action keys count — ``ref_cmd`` / ``ref_mode`` / ``submit_op``, the keys the
+    rest of this file reads (the dry-run line and the no-target error do the same).
+    The label keys never do: a label-only card (a name, a shape, a hardware tag, an
+    NCU command) is not a declared reference, and reading it as one made
+    _window_preflight refuse fresh starts over a contract nothing needs and told the
+    driver a ref rides the student job. Any other non-label key counts too, so an
+    unrecognized declaration reads loud here rather than silently degrading the run
+    to target-ms-only."""
+    return any(v and k not in _REF_LABEL_KEYS for k, v in spec.items())
+
+
 def _ref_rides_job(spec: dict) -> bool:
     """Whether the declared ref can be timed inside the student eval job.
 
@@ -1187,7 +1207,8 @@ def _ref_rides_job(spec: dict) -> bool:
     (the driver degrades to the absolute median, but the misjudgment also skips
     the fresh ref re-anchor that runs without an in-job ref rely on).
     """
-    return bool(spec) and not spec.get("ref_mode") and not spec.get("submit_op")
+    return (_ref_spec_declared(spec)
+            and not spec.get("ref_mode") and not spec.get("submit_op"))
 
 
 def _precision_preflight(op_dir: Path, contract: str, defaulted: bool, *, resuming: bool,
@@ -1863,9 +1884,9 @@ def _arm_has_reference(cfg: dict) -> bool:
     reference window; a target-ms-only run defines none.
     """
     loop = cfg.get("loop", {})
-    return bool(_resolve_ref_spec(cfg) or _arch_ref_spec(cfg)
-                or loop.get("arch_ref_ms") is not None
-                or loop.get("arch_ref_device_ms") is not None)
+    return (_ref_spec_declared(_resolve_ref_spec(cfg)) or _arch_ref_spec(cfg)
+            or loop.get("arch_ref_ms") is not None
+            or loop.get("arch_ref_device_ms") is not None)
 
 
 def _window_preflight(op_dir: Path, cfg: dict, *, resuming: bool

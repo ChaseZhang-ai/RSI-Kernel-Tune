@@ -290,3 +290,33 @@ def test_retry_call_announces_retries_and_sleeps_only_between_them(monkeypatch, 
     assert sleeps == [10.0, 20.0]        # backoff between attempts, none after the last
     out = capsys.readouterr().out
     assert "attempt 2/3" in out and "attempt 3/3" in out
+
+
+# -- BUG-C3-02: the ref predicates count only action keys, never labels -----------------------
+
+
+def test_label_only_ref_declaration_is_not_a_reference():
+    """_resolve_ref_spec collects the label keys (ref_ncu_cmd / ref_name / ref_shape /
+    ref_hardware) beside the action keys, and both ref predicates used to test the
+    whole dict with bool(): a card that only DESCRIBED its reference (its name, shape,
+    hardware, NCU command) read as declaring one. _window_preflight then refused a
+    fresh start over a window contract nothing needs, and the driver was told a ref
+    rides the student job. Only the action keys (ref_cmd / ref_mode / submit_op)
+    count — the same keys the rest of the file already reads."""
+    from peregrine_kernel.loop.cli import (_arm_has_reference, _ref_rides_job,
+                                           _resolve_ref_spec)
+
+    label_only = {"loop": {"ref_name": "cuDNN", "ref_shape": "B=8 N=4096",
+                           "ref_hardware": "H100", "ref_ncu_cmd": "ncu --set full"}}
+    assert _resolve_ref_spec(label_only)          # the spec itself still carries the labels
+    assert not _ref_rides_job(_resolve_ref_spec(label_only))
+    assert not _arm_has_reference(label_only)
+    assert _resolve_ref_spec({}) == {}            # and an empty loop stays empty
+
+    acted = {"loop": {**label_only["loop"], "ref_cmd": "python3 eval/measure_target.py"}}
+    assert _ref_rides_job(_resolve_ref_spec(acted))     # a plain ref_cmd rides the job
+    assert _arm_has_reference(acted)
+    via_tree = {"loop": {**label_only["loop"], "ref_mode": "faref",
+                         "ref_submit_op": "_ref_tree"}}
+    assert not _ref_rides_job(_resolve_ref_spec(via_tree))   # a separate tree never rides
+    assert _arm_has_reference(via_tree)

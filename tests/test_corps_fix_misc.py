@@ -108,3 +108,63 @@ def test_seed27_chain_from_a_suffixed_task_continues_forward_numbering(chain):
     assert (root / "tasks" / "rmsnorm-g4" / "reference" / "kernel.py").read_text() == KERNEL
     assert ran == [first.resolve(), root / "tasks" / "rmsnorm-g4"]
     assert not (root / "tasks" / "rmsnorm-g2").exists()
+
+
+# --- BUG-SEED-36: creation sites validate the task/operator name ----------------------
+
+from peregrine_kernel import launch  # noqa: E402
+from peregrine_kernel import scaffold as scaffold_mod  # noqa: E402
+from peregrine_kernel.task import check_new_task_name  # noqa: E402
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize("bad", ["../../deep-escape", "../escape", "a/b", "..", ".",
+                                 "", "_private", "run", "init", "status"])
+def test_seed36_check_new_task_name_rejects_traversal_reserved_and_invalid_names(bad):
+    with pytest.raises(ValueError):
+        check_new_task_name(bad)
+
+
+@pytest.mark.parametrize("good", ["rmsnorm", "demo-op", "op_2"])
+def test_seed36_check_new_task_name_accepts_normal_names(good):
+    check_new_task_name(good)  # must not raise
+
+
+def test_seed36_new_operator_rejects_a_traversal_name(tmp_path):
+    before = set(tmp_path.iterdir()) if tmp_path.exists() else set()
+    with pytest.raises(ValueError, match="not a task name"):
+        scaffold_mod.new_operator("../../deep-escape", base_dir=tmp_path,
+                                  templates_root=REPO_ROOT)
+    assert set(tmp_path.iterdir()) == before          # nothing created anywhere
+
+
+def test_seed36_new_operator_accepts_a_normal_name(tmp_path):
+    created = scaffold_mod.new_operator("demo-op", base_dir=tmp_path,
+                                        templates_root=REPO_ROOT)
+    assert created and (tmp_path / "operators" / "demo-op" / "README.md").is_file()
+
+
+def test_seed36_cmd_init_rejects_a_traversal_name(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)
+    rc = launch.cmd_init(["../../deep-escape"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "not a task name" in err
+    assert not (tmp_path.parent / "deep-escape").exists()
+    assert not (tmp_path / "tasks" / ".." / "deep-escape").exists()
+
+
+def test_seed36_cmd_init_accepts_a_normal_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)
+    (tmp_path / "tasks" / "_template").mkdir(parents=True)
+    (tmp_path / "tasks" / "_template" / "task.toml").write_text("[task]\n")
+    rc = launch.cmd_init(["demo-op"])
+    assert rc == 0
+    assert (tmp_path / "tasks" / "demo-op" / "task.toml").is_file()
+
+
+def test_seed36_scaffold_cli_reports_a_bad_name_readably(capsys):
+    rc = scaffold_mod.main(["../escape"])
+    assert rc == 2
+    assert "not a task name" in capsys.readouterr().out

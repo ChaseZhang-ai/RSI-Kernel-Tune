@@ -79,6 +79,11 @@ def new_operator(
 
     ``templates_root``: where ``src/peregrine_kernel/card_template`` and ``meta/`` are read from when that
     is not ``base_dir`` (a run directory holds trees, not templates)."""
+    # The name is joined into a path below: an unchecked "../../deep-escape" used to
+    # scaffold outside operators/ entirely, and a reserved name created here could
+    # never load back. Same rules as the task load side (BUG-SEED-36).
+    from peregrine_kernel.task import check_new_task_name
+    check_new_task_name(op)
     base = Path(base_dir) if base_dir is not None else _repo_root()
     op_dir = base / "operators" / op
     if op_dir.exists():
@@ -136,7 +141,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-git", action="store_true", help="skip git init + initial commit")
     args = p.parse_args(argv)
 
-    created = new_operator(args.op, kernel_file=args.kernel_file, base_dir=args.base_dir)
+    try:
+        created = new_operator(args.op, kernel_file=args.kernel_file, base_dir=args.base_dir)
+    except ValueError as e:
+        print(f"[new] {e}")
+        return 2
     base = Path(args.base_dir) if args.base_dir else _repo_root()
     op_dir = base / "operators" / args.op
 

@@ -48,7 +48,7 @@ from peregrine_kernel.localenv import MachineError, load_machine
 from peregrine_kernel.paths import OPERATORS_ENV, repo_root
 from peregrine_kernel.runs import RunError, new_run, open_run
 from peregrine_kernel.task import (MODE_BLACKBOX, MODE_GENERATE, MODE_SOURCE,
-                              TaskError, load_task)
+                              TaskError, check_new_task_name, load_task)
 
 TASKS_DIR = "tasks"
 TEMPLATE_TASK = "_template"
@@ -100,6 +100,14 @@ def cmd_init(argv) -> int:
                                 description="Create tasks/<op>/ from tasks/_template/.")
     p.add_argument("op")
     args = p.parse_args(argv)
+    # BUG-SEED-36: the name used to be joined into the path unchecked, so
+    # `peregrine init ../../deep-escape` escaped tasks/ and a reserved name
+    # could be created but never loaded. Validate against the load side's rules.
+    try:
+        check_new_task_name(args.op)
+    except ValueError as e:
+        sys.stderr.write(f"[peregrine] {e}\n")
+        return 2
     d = repo_root() / TASKS_DIR / args.op
     if d.exists():
         sys.stderr.write(f"[peregrine] {d} already exists\n")
@@ -148,6 +156,12 @@ def new_kernels_task(argv) -> int:
                    help="JSON object: the campaign point's axes, from the kernel docstring's "
                         "frozen contract (the tool scaffolds; it does not guess the contract)")
     args = p.parse_args(argv)
+    # same path-escape guard as cmd_init (BUG-SEED-36)
+    try:
+        check_new_task_name(args.op)
+    except ValueError as e:
+        sys.stderr.write(f"[peregrine] {e}\n")
+        return 2
     d = repo_root() / TASKS_DIR / args.op
     if d.exists():
         sys.stderr.write(f"[peregrine] {d} already exists\n")

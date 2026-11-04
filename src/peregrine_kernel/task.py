@@ -94,6 +94,31 @@ MODE_GENERATE = "generate"   # no reference: a /goal session writes one, then so
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # `peregrine <name> ...` dispatches these as commands, so no task (operator tree) may be one.
 RESERVED_NAMES = frozenset({"init", "new", "run", "status", "harvest", "export"})
+
+
+def check_new_task_name(name: str) -> None:
+    """Validate a NEW task/operator directory name at its creation site.
+
+    The creation commands used to join the name into a path unchecked:
+    ``peregrine init ../../deep-escape`` escaped ``tasks/`` entirely, and a reserved
+    name (``run``, ``status``, ...) could be created but never loaded back. The rules
+    are the load side's own (``_NAME_RE`` / ``RESERVED_NAMES``) plus an explicit
+    path-safety guard, so everything this accepts also loads: a single path component
+    of letters, digits, '_', '.' and '-' that does not start with '_' and is not one
+    of peregrine's own command names. Raises ValueError with a readable message.
+    """
+    if not isinstance(name, str) or not name \
+            or not _NAME_RE.match(name) or name.startswith("_") \
+            or "/" in name or "\\" in name or name in (".", ".."):
+        raise ValueError(
+            f"{name!r} is not a task name: it must be a single path component of "
+            f"letters, digits, '_', '.' and '-', not starting with '_' (no path "
+            f"separators, no '.'/'..' component) — refusing to create it")
+    if name in RESERVED_NAMES:
+        raise ValueError(f"{name!r} is one of peregrine's own commands; "
+                         f"name the task otherwise")
+
+
 _ENTRY_RE = re.compile(r"^(?P<file>[^:]+\.py):(?P<fn>[A-Za-z_][A-Za-z0-9_]*)$")
 # A deny_modules entry: an import name or a distribution name ("flash_attn", "flash-attn-4").
 _MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")

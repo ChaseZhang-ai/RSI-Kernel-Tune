@@ -195,6 +195,20 @@ def classify(result: dict | None) -> dict:
                          f"the rest never ran")
     for s in result.get("skipped") or []:
         add("info", s.get("profile", "?"), f"not run: {s.get('why')}")
+    # The hook reports how many processes it ran in (run.py counts the
+    # hook-<pid>.json files). Zero while a profile DID run means the sitecustomize
+    # injection failed somewhere: the output / input checks never executed at all.
+    # That is a finding of its own — not the "bench does not import the kernel"
+    # story a merely-empty calls list used to be mistaken for. Records written
+    # before run.py counted processes carry no verdict either way.
+    dead = [r.get("profile", "?") for r in result.get("profiles") or []
+            if (r.get("hook") or {}).get("processes") == 0]
+    if dead:
+        add("warn", "-", f"the monitor hook never ran (processes=0 in {len(dead)} of "
+                         f"{len(recs)} profile(s): {', '.join(dead[:6])}) — sitecustomize "
+                         f"did not load the hook into the bench process, so NaN watching "
+                         f"and input-shift detection did not execute; the card's verdicts "
+                         f"under each profile still count")
     if base is None:
         add("warn", "base", "the base run is missing — nothing to compare the other profiles with")
     else:
@@ -204,9 +218,12 @@ def classify(result: dict | None) -> dict:
                    if base.get("card_pass") is None else "the card's judge FAILS")
             add("alarm", "base", f"on the card's own inputs: {why}")
         if not (base.get("hook") or {}).get("calls"):
-            add("info", "base", "no kernel call was observed (the bench does not import the "
-                                "kernel as a module) — output checks unavailable; the card's "
-                                "verdicts under each profile still count")
+            # only when the hook itself was alive: with processes==0 the dead-hook
+            # finding above already says why nothing was seen
+            if (base.get("hook") or {}).get("processes") != 0:
+                add("info", "base", "no kernel call was observed (the bench does not import "
+                                    "the kernel as a module) — output checks unavailable; the "
+                                    "card's verdicts under each profile still count")
         for (fn, i), c in _calls(base).items():
             nan = _nonfinite(c.get("outputs") or [], "nan")
             if nan and base.get("card_pass") is True:

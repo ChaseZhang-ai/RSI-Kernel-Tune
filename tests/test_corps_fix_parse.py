@@ -6,7 +6,8 @@ the perf JSON scan must respect string literals, and a torn trajectory line must
 not sink the run's whole history."""
 import json
 
-from peregrine_kernel.inner.results import parse_correctness  # noqa: F401  (used by later waves)
+from peregrine_kernel.inner.results import (_first_json_with_key,
+                                            parse_correctness)
 from peregrine_kernel.inner.trajectory import (IterationRecord, _DIFF_SIG,
                                                constant_output_flag)
 from peregrine_kernel.loop.parse import _float_list, detect_plateau, parse_eval
@@ -142,3 +143,37 @@ def test_identical_scientific_diffs_still_fire_constant_output():
     flag = constant_output_flag(recs)
     assert flag is not None and flag["kind"] == "constant_output"
     assert flag["signature"] == ["1.5e-05"]
+
+
+# --- BUG-SEED-28: "0/M FAILED" contradicted its own counter (passed=False with --
+# fails=0), and the hand-rolled brace count returned None for any JSON whose
+# string values contained a closing brace.
+
+def test_zero_failed_summary_trusts_its_count():
+    r = parse_correctness("  PASS  case_a\n0/3 FAILED")
+    assert r["passed"] is True
+    assert r["fails"] == 0
+    assert [c["name"] for c in r["cases"]] == ["case_a"]
+
+
+def test_failed_summary_with_failures_still_fails():
+    r = parse_correctness("  PASS  case_a\n  FAIL  case_b\n1/2 FAILED")
+    assert r["passed"] is False
+    assert r["fails"] == 1
+
+
+def test_json_scan_respects_string_literals():
+    # a literal '}' inside a string value used to end the brace count early and
+    # return None for otherwise clean input
+    text = '{"note": "a literal } brace", "performance": {"bwd_median_ms": 2.5}}'
+    obj = _first_json_with_key(text, "performance")
+    assert obj is not None and obj["performance"] == {"bwd_median_ms": 2.5}
+    assert _first_json_with_key('{"performance": {"esc \\" quote": 1}}',
+                                "performance") == {"performance": {'esc " quote': 1}}
+
+
+def test_json_scan_still_finds_the_plain_block():
+    assert _first_json_with_key('{"performance": {"x": 1}}',
+                                "performance") == {"performance": {"x": 1}}
+    assert _first_json_with_key("no json at all", "performance") is None
+    assert _first_json_with_key('{"other": {"a": 1}}', "performance") is None

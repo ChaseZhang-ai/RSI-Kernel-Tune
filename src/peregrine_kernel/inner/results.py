@@ -22,8 +22,11 @@ def parse_correctness(stdout: str) -> dict:
     all_pass = _ALL_PASS_RE.search(stdout)
     failed = _FAILED_RE.search(stdout)
     if failed:
+        # "N/M FAILED" is a count: trust the parsed number. "0/M FAILED" used to
+        # read passed=False with fails=0 — a verdict the line's own counter
+        # contradicts (zero counted failures is not a failure).
         fails = int(failed.group(1))
-        passed = False
+        passed = fails == 0
     elif all_pass:
         fails = 0
         passed = True
@@ -56,20 +59,19 @@ def parse_perf(stdout: str) -> dict:
 
 
 def _first_json_with_key(text: str, key: str) -> dict | None:
-    """Scan for a top-level JSON object containing `key` (handles one-line dumps)."""
+    """Scan for a top-level JSON object containing `key` (handles one-line dumps).
+
+    Each ``{`` is decoded from with json.JSONDecoder.raw_decode rather than a
+    hand-rolled brace count: a character counter cannot tell a closing brace
+    inside a string literal from a structural one, so a JSON value containing
+    ``"}"`` used to cut every candidate region short and return None for input
+    that was otherwise clean."""
+    dec = json.JSONDecoder()
     for start in (i for i, ch in enumerate(text) if ch == "{"):
-        depth = 0
-        for end in range(start, len(text)):
-            if text[end] == "{":
-                depth += 1
-            elif text[end] == "}":
-                depth -= 1
-                if depth == 0:
-                    try:
-                        obj = json.loads(text[start:end + 1])
-                    except json.JSONDecodeError:
-                        break
-                    if isinstance(obj, dict) and key in obj:
-                        return obj
-                    break
+        try:
+            obj, _end = dec.raw_decode(text, start)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and key in obj:
+            return obj
     return None

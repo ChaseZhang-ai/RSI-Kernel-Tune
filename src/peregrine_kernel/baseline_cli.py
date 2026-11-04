@@ -183,12 +183,23 @@ def parse_ref_stdout(text: str) -> dict:
 
 def _submit_cluster(op: str) -> str:
     """The machine this op's jobs run on ("local" or the ssh host), for stamping
-    baseline provenance. "" when the submit config is unreadable — an unstamped
-    baseline is merely unguarded, not wrong."""
+    baseline provenance.
+
+    "" when the submit config is absent — an unstamped baseline is merely unguarded,
+    not wrong. A PRESENT but broken config degrades to "" as well, but loudly: the
+    stderr warning keeps a real configuration error distinguishable from an absent
+    config instead of silently dropping the cluster stamp (BUG-SEED-40; the old
+    ``except Exception`` also swallowed code bugs as ""). Anything else propagates."""
     try:
         from peregrine_kernel.submit.config import load_config
         return load_config(op).cluster
-    except Exception:
+    except FileNotFoundError:
+        return ""
+    except (OSError, ValueError) as e:
+        # TOMLDecodeError is a ValueError subclass: an unparseable or semantically
+        # broken submit config must not read the same as a missing one.
+        sys.stderr.write(f"[baseline] submit config for {op} is broken, archiving "
+                         f"without a cluster stamp: {type(e).__name__}: {e}\n")
         return ""
 
 

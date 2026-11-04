@@ -277,3 +277,46 @@ def test_seed39_nested_entered_does_not_close_the_outer_tee(tmp_path):
             pass
         assert isinstance(sys.stdout, launch._Tee) and not sys.stdout._file.closed
     assert sys.stdout is sys.__stdout__ or not isinstance(sys.stdout, launch._Tee)
+
+
+# --- BUG-SEED-40: a broken submit config is reported, not silently unstamped ----------
+
+from peregrine_kernel import baseline_cli  # noqa: E402
+
+
+def _patch_load_config(monkeypatch, effect):
+    import peregrine_kernel.submit.config as submit_config
+    monkeypatch.setattr(submit_config, "load_config", effect)
+
+
+def test_seed40_a_broken_submit_config_warns_on_stderr(tmp_path, monkeypatch, capsys):
+    def broken(op):
+        raise ValueError("invalid [repo] delivery 'carrier-pigeon'")
+
+    _patch_load_config(monkeypatch, broken)
+    assert baseline_cli._submit_cluster("demo-op") == ""
+    err = capsys.readouterr().err
+    assert "submit config for demo-op is broken" in err and "ValueError" in err
+
+
+def test_seed40_a_missing_submit_config_stays_silent(tmp_path, monkeypatch, capsys):
+    def absent(op):
+        raise FileNotFoundError("missing submit config")
+
+    _patch_load_config(monkeypatch, absent)
+    assert baseline_cli._submit_cluster("demo-op") == ""
+    assert capsys.readouterr().err == ""
+
+
+def test_seed40_a_code_bug_is_no_longer_swallowed(tmp_path, monkeypatch):
+    def renamed(op):
+        raise AttributeError("module has no attribute 'load_confg'")
+
+    _patch_load_config(monkeypatch, renamed)
+    with pytest.raises(AttributeError):
+        baseline_cli._submit_cluster("demo-op")
+
+
+def test_seed40_a_working_config_still_stamps_the_cluster(tmp_path, monkeypatch):
+    _patch_load_config(monkeypatch, lambda op: _NS(cluster="b200-1"))
+    assert baseline_cli._submit_cluster("demo-op") == "b200-1"

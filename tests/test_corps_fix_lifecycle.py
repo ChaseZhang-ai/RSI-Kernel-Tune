@@ -89,3 +89,48 @@ def test_a_target_stop_without_any_confirmation_is_not_done(repo, monkeypatch):
     assert _start(task_dir) == 2
     rec = list_runs()[0].record()
     assert rec["status"] == "stopped" and rec["stop"] == "target" and rec["target_met"] is False
+
+
+# --- BUG-SEED-14: a hook that never injected is reported, not misattributed -----------
+
+
+def test_classify_reports_a_hook_that_never_injected():
+    """Zero hook-<pid>.json files means sitecustomize never ran: the input reshaping and
+    the output checks did not execute, so the verdict is a warn naming the injection —
+    not an ok that explains the silence as a bench that never imports the kernel."""
+    result = {"complete": True, "profiles": [
+        {"profile": "base", "card_pass": True, "hook": {"processes": 0, "calls": []}},
+        {"profile": "seed1", "card_pass": True, "hook": {"processes": 0, "calls": []}},
+    ]}
+    v = monitor.classify(result)
+    assert v["status"] == "warn"
+    assert v["ran"] == [] and v["not_applicable"] == []
+    whats = [f["what"] for f in v["findings"]]
+    assert sum("did not inject" in w for w in whats) == 2
+    assert not any("does not import the kernel" in w for w in whats)
+    assert not any("did not change" in w for w in whats)
+
+
+def test_classify_reports_one_profile_the_hook_never_injected():
+    """A profile whose bench ran but whose hook did not inject is dropped from the
+    counted profiles and named, while the injected base stays counted."""
+    result = {"complete": True, "profiles": [
+        {"profile": "base", "card_pass": True,
+         "hook": {"processes": 1, "calls": [{"fn": "kernel", "i": 0, "outputs": []}]}},
+        {"profile": "seed1", "card_pass": True, "hook": {"processes": 0, "calls": []}},
+    ]}
+    v = monitor.classify(result)
+    assert v["status"] == "warn" and v["ran"] == ["base"]
+    assert any(f["profile"] == "seed1" and f["severity"] == "warn"
+               and "did not inject" in f["what"] for f in v["findings"])
+
+
+def test_classify_keeps_the_old_reading_for_records_without_a_process_count():
+    """Records from before the runner counted its hook files carry no ``processes``:
+    a call-less base stays the ordinary info finding, not an injection failure."""
+    result = {"complete": True, "profiles": [
+        {"profile": "base", "card_pass": True, "hook": {"calls": []}},
+    ]}
+    v = monitor.classify(result)
+    assert v["status"] == "ok" and v["ran"] == ["base"]
+    assert any("no kernel call was observed" in f["what"] for f in v["findings"])

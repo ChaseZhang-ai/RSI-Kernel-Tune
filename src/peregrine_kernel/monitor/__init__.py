@@ -169,6 +169,15 @@ def _by_slot(outputs: list[dict]) -> dict:
     return {o.get("slot", k): o for k, o in enumerate(outputs)}
 
 
+def _not_injected(rec: dict | None) -> bool:
+    """The monitor hook never ran in this profile's bench: zero ``hook-<pid>.json``
+    files means sitecustomize never loaded, so the inputs were not reshaped and the
+    kernel's outputs were not watched. Records from before the runner counted its
+    hook files carry no ``processes`` and stay on the old reading."""
+    hook = (rec or {}).get("hook") or {}
+    return hook.get("processes") == 0 and not hook.get("calls")
+
+
 def _rel(a: float | None, b: float | None) -> float:
     if a is None or b is None:
         return 0.0
@@ -204,9 +213,15 @@ def classify(result: dict | None) -> dict:
                    if base.get("card_pass") is None else "the card's judge FAILS")
             add("alarm", "base", f"on the card's own inputs: {why}")
         if not (base.get("hook") or {}).get("calls"):
-            add("info", "base", "no kernel call was observed (the bench does not import the "
-                                "kernel as a module) — output checks unavailable; the card's "
-                                "verdicts under each profile still count")
+            if (base.get("hook") or {}).get("processes") == 0:
+                add("warn", "base", "the monitor hook did not inject — sitecustomize never "
+                                    "ran (0 hook-<pid>.json files): the inputs were not "
+                                    "reshaped and the kernel's outputs were not watched; "
+                                    "only the card's own verdicts count")
+            else:
+                add("info", "base", "no kernel call was observed (the bench does not import the "
+                                    "kernel as a module) — output checks unavailable; the card's "
+                                    "verdicts under each profile still count")
         for (fn, i), c in _calls(base).items():
             nan = _nonfinite(c.get("outputs") or [], "nan")
             if nan and base.get("card_pass") is True:
@@ -216,11 +231,18 @@ def classify(result: dict | None) -> dict:
     base_calls = _calls(base) if base else {}
     for prof, rec in recs.items():
         if prof == "base":
-            ran.append(prof)
+            if not _not_injected(rec):
+                ran.append(prof)
             continue
         hook = rec.get("hook") or {}
         verdict = rec.get("card_pass")
         desc = PROFILE_DESC.get(prof, prof)
+        if _not_injected(rec):
+            add("warn", prof, "the monitor hook did not inject — sitecustomize never ran "
+                              "(0 hook-<pid>.json files): the inputs were not reshaped and "
+                              "the kernel's outputs were not watched; only the card's own "
+                              "verdicts count")
+            continue
         # argument positions the kernel writes, in either run: outputs, not inputs
         written = _written(base, rec)
         base_sig = _in_sig(base, written) if base else None

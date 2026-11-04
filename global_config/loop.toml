@@ -133,3 +133,22 @@ reference_hours = 8         # writing a reference when the task has none
 # telemetry to evidence/kbmenu_hits.jsonl (aggregated at harvest), null/noop
 # levers stamp PRICED_NULL onto the milestone lines citing them, and each
 # pricing job banks a lever x workload row in evidence/lever_shape_matrix.json.
+# --- WP20: measure-side defense accounting ------------------------------------
+# Read on the CARD layer ([loop] in operators/<op>/loop.toml, driver
+# _wp20_apply_cfg; the same closed-vocabulary rule as WP12/WP8 above). All three
+# are accounting or re-measurement switches — zero gate semantics:
+#   [loop] gate_degraded_ratio = 0.5   # unavailable precision rows beyond this share
+#                                      # of the block's rows mark the eval
+#                                      # `gate_degraded` (the gate went quietly blind)
+#   [loop] judge_edge_recheck  = true  # the first correctness FAIL whose
+#                                      # corr_margin_ratio sits in (0.9, 1.1) buys one
+#                                      # fresh-draw re-eval, judged by the unchanged
+#                                      # protocol; false restores the bare judgment
+#   [loop] board_span_guard    = true  # the paired reference's own mirror spread
+#                                      # beyond 2x the kernel's marks the row
+#                                      # board_span_unstable (report-only; the name
+#                                      # is the WP23 seam's grep anchor)
+# The eval-side sentinels (stream span / timer identity / thread-and-child census,
+# eval/benchkit.py; attack fixtures under tests/redteam/ only — contract C16) need
+# no configuration: they are always on, and any env failure degrades to `unknown`
+# without convicting.

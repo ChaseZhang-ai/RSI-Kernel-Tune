@@ -36,10 +36,13 @@ from test_wp11_throughput import _WP11_TELEMETRY
 # field-by-field identity keeps pinning exactly the merge-base fields.
 # WP15: the confirmation accounting (confirm jobs/readings, best se/confidence).
 # WP14: the per-shape ledger (per_shape_ratios/per_shape_best, C8's schema).
+# WP20: the measure-side defense accounting (readings, never verdicts).
 _WP15_FIELDS = ("best_low_confidence", "best_standard_error",
                 "confirm_jobs", "confirm_readings")
 _WP14_FIELDS = ("per_shape_ratios", "per_shape_best")
-_STRIP_FIELDS = _WP11_TELEMETRY + _WP15_FIELDS + _WP14_FIELDS
+_WP20_FIELDS = ("board_span_unstable", "corr_margin_ratio", "fresh_recheck_form",
+                "gate_degraded", "judge_edge_recheck")
+_STRIP_FIELDS = _WP11_TELEMETRY + _WP15_FIELDS + _WP14_FIELDS + _WP20_FIELDS
 
 import pytest
 

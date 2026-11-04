@@ -809,7 +809,10 @@ class RealBackend:
 
     def _retry_call(self, fn, what: str):
         """Retry a subprocess.CompletedProcess-returning call on non-zero rc / OS error,
-        with a short backoff: a git or local hiccup clears in seconds."""
+        with a short backoff: a git or local hiccup clears in seconds. The backoff runs
+        between attempts only — sleeping after the last failure just hung the submit —
+        and every retry is announced, so a caller reading the run log can tell a
+        retrying call from a stalled one."""
         last = ""
         for attempt in range(1, self.git_retries + 1):
             try:
@@ -820,7 +823,10 @@ class RealBackend:
                 if getattr(proc, "returncode", 0) == 0:
                     return proc
                 last = f"rc={proc.returncode} {getattr(proc, 'stderr', '')[-200:].strip()!r}"
-            time.sleep(self.git_retry_sleep * attempt)  # transient backoff
+            if attempt < self.git_retries:  # no sleep after the last failure
+                print(f"[loop] {what} failed ({last}); retrying — attempt "
+                      f"{attempt + 1}/{self.git_retries}", flush=True)
+                time.sleep(self.git_retry_sleep * attempt)  # transient backoff
         raise BackendError(f"{what} failed after {self.git_retries} attempts: {last}")
 
     def _git(self, *args: str, what: str) -> None:

@@ -260,3 +260,33 @@ def test_a_poll_timeout_counts_toward_giving_the_job_up(monkeypatch, tmp_path):
     with pytest.raises(cli.BackendError, match="job 655001"):
         be.submit_gpu("br", "all")
     assert n["submits"] == 2                              # only the 1st and this submit ran
+
+
+# -- BUG-SEED-48: _retry_call announces retries and sleeps only between them ------------------
+
+
+def test_retry_call_announces_retries_and_sleeps_only_between_them(monkeypatch, capsys):
+    """_retry_call slept after EVERY failed attempt, including the last one: a submit
+    failing three times hung for 3x600s + 600s of pointless backoff (~31 minutes) with
+    nothing in the run log to say why. The backoff belongs between attempts only, and
+    each retry is announced where the loop can see it.
+
+    Ported from the R1 archive
+    (test_retry_call_announces_retries_and_sleeps_only_between_them)."""
+    from peregrine_kernel.loop.driver import BackendError
+
+    be = cli.RealBackend("op", None, None, "n", "e", git_retries=3, git_retry_sleep=10.0)
+    sleeps: list = []
+    monkeypatch.setattr(cli.time, "sleep", sleeps.append)
+    calls = {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        return _Proc(1, stderr="boom")
+
+    with pytest.raises(BackendError, match="after 3 attempts"):
+        be._retry_call(fn, what="forge submit")
+    assert calls["n"] == 3
+    assert sleeps == [10.0, 20.0]        # backoff between attempts, none after the last
+    out = capsys.readouterr().out
+    assert "attempt 2/3" in out and "attempt 3/3" in out

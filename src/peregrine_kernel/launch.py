@@ -656,11 +656,19 @@ def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
 def kb_changes() -> list[str]:
     """Knowledge-base entries this machine's runs certified and nobody has committed yet."""
     try:
-        out = subprocess.run(["git", "-C", str(repo_root()), "status", "--porcelain", "--",
-                              *KB_DIRS], capture_output=True, text=True, timeout=30).stdout
-    except (OSError, subprocess.SubprocessError):
+        p = subprocess.run(["git", "-C", str(repo_root()), "status", "--porcelain", "--",
+                            *KB_DIRS], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        _say(f"knowledge-base status unknown (git failed: {e})")
         return []
-    return [line[3:] for line in out.splitlines() if line.strip()]
+    # BUG-SEED-38: a non-zero exit used to read as empty stdout == "no changes", so a
+    # report could silently drop the whole KB section. Git failing is not "nothing to
+    # report": say so, loudly.
+    if p.returncode != 0:
+        _say(f"knowledge-base status unknown (git exit {p.returncode}: "
+             f"{(p.stderr or '').strip()[:200]})")
+        return []
+    return [line[3:] for line in p.stdout.splitlines() if line.strip()]
 
 
 def confirmation(run, task) -> dict | None:

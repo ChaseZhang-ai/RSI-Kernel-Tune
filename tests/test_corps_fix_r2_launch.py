@@ -177,3 +177,39 @@ def test_new_kernels_task_refuses_an_illegal_or_reserved_name(tmp_path, monkeypa
         assert launch.new_kernels_task(
             [bad, "--from-kernels", "--axes", '{"n": 8}']) == 2, bad
     assert list(tmp_path.rglob("*")) == [tmp_path / "tasks"]
+
+
+# -- BUG-SEED-38: git failures around committing and reporting are loud ----------------------
+
+
+def test_commit_loudly_refuses_when_git_status_fails(tmp_path, monkeypatch):
+    tree = tmp_path / "card"
+    tree.mkdir()
+    subprocess.run(["git", "-C", str(tree), "init", "-q", "-b", "main"], check=True,
+                   capture_output=True)
+    real_run = subprocess.run
+
+    def fake_run(cmd, **kw):
+        if "status" in cmd and "--porcelain" in cmd:
+            # what a broken git prints: empty stdout, non-zero rc -- not "nothing to do"
+            return subprocess.CompletedProcess(cmd, 128, stdout="",
+                                               stderr="fatal: not a git repository")
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(taskcard.subprocess, "run", fake_run)
+    (tree / "f.txt").write_text("x")
+    with pytest.raises(subprocess.CalledProcessError):
+        taskcard._commit(tree, "test")
+
+
+def test_kb_changes_warn_instead_of_staying_silent(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)
+
+    def fake_run(cmd, **kw):
+        return subprocess.CompletedProcess(cmd, 128, stdout="",
+                                           stderr="fatal: not a git repository")
+
+    monkeypatch.setattr(launch.subprocess, "run", fake_run)
+    assert launch.kb_changes() == []
+    out = capsys.readouterr().out
+    assert "[peregrine]" in out and "knowledge-base" in out

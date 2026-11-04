@@ -517,3 +517,20 @@ def test_readme_and_packager_state_the_boundary() -> None:
     readme = (REPO / "scripts" / "eval-export" / "README.md").read_text(encoding="utf-8")
     assert "Manual, opt-in, human-run, offline" in readme
     assert "src/peregrine_kernel" in readme
+
+
+def test_a_bad_import_timeout_env_falls_back_to_the_default(pack, tmp_path, monkeypatch) -> None:
+    """PK_EVAL_EXPORT_IMPORT_TIMEOUT is an operator knob: a mis-typed value falls
+    back to the default like every env knob -- a raw ValueError must not escape
+    the import probe and break the packager's exit-2 refusal contract with a
+    bare traceback."""
+    work = tmp_path / "scratch"
+    work.mkdir()
+    (work / "kernel.py").write_text("def run(x):\n    return x\n", encoding="utf-8")
+    for bad in ("abc", "", "300s"):
+        monkeypatch.setenv("PK_EVAL_EXPORT_IMPORT_TIMEOUT", bad)
+        report = pack.Report()
+        pack.preflight_compile(b"def run(x):\n    return x\n", "kernel.py", work, report)
+        assert not report.failed, report.stages
+        assert report.stages and report.stages[-1]["stage"] == "compile", report.stages
+        assert report.stages[-1]["status"] == "PASS", report.stages

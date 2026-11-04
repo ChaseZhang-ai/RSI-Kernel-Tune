@@ -133,6 +133,19 @@ def test_the_source_door_flags_stay_open_in_a_notes_file_text(tmp_path):
     assert "GUARD-PASSED" in res.stdout
 
 
+def test_the_strings_tool_is_banned_but_the_word_f_strings_is_not(tmp_path):
+    """`\\bstrings\\b` counted a hyphen as a word boundary, so a probe that merely said
+    "f-strings" was refused. The binutils tool stays banned; the adjective does not."""
+    res = run_guard(tmp_path, "python3 notes/fmt.py",
+                    notes={"fmt.py": "# builds its row labels from f-strings\n"
+                                     "print(f'{1:_^{w}}')\n"})
+    assert res.returncode == 0, (res.returncode, res.stdout, res.stderr)
+    assert "GUARD-PASSED" in res.stdout
+    res = run_guard(tmp_path, "strings closed/ref.enc | head")
+    assert res.returncode == 3
+    assert "BLACKBOX-GUARD REFUSED" in res.stdout
+
+
 def test_attribute_chain_bypasses_are_refused(tmp_path):
     """The source-introspection net used to stop at getsource/linecache: every one of
     these reached the reference's source in a real run and passed. A function object's

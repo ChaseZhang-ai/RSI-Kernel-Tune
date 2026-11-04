@@ -52,13 +52,19 @@
 # What a task's own reference is called is task-specific; set BLACKBOX_EXTRA to add
 # its module/blob names. Everything below is common to every sealed reference.
 #
+# `strings` is listed as `(^|[^-])strings\b`, not `\bstrings\b`: \b counts a hyphen as
+# a boundary, so the old spelling matched inside "f-strings" and refused ordinary
+# probes that only mention them. The `(^|[^-])` guard keeps the binutils tool banned
+# (`strings closed/ref.enc`, or the word after a space) while an adjective hyphenates
+# away.
+#
 # NOT on this list, deliberately: tempfile / mkdtemp / tarfile. The unsealer uses
 # them, but they are stdlib and a profiling probe legitimately needs a temp file for
 # its .ncu-rep — banning them refuses ordinary NCU probes for the line
 # `import tempfile` while protecting nothing, since what actually guards the
 # unsealed tree is its `fkref` prefix plus the blob, the key, the module object and
 # the source-introspection helpers, all still listed here.
-BLACKBOX_FORBID_BASE='closed/|\.enc\b|_REF_KEY|keystream|unseal|decrypt|fkref|closed_ref|ref_payload|_REF_DIR|_REF_PATH|_SRC_PATH|_module\(\)|linecache|getsource|getsourcefile|inspect\.getfile|inspect\.getmodule|sys\.modules\s*\.\s*get|sys\.modules\[|__code__|co_filename|__globals__|get_instructions|getattr\s*\(\s*sys\s*,|_COMPILE_CACHE|py_compile|\bdis\.|print-source[= ]+(cuda|all|sass,cuda|cuda,sass)|import-source|--source-folders|find / .*-name|find /tmp|ls .*/tmp|mit-han-lab|kernel-design-agents|NVlabs|mlsys2026|contest-solution|benchmark-solution|\bstrings\b|xxd|hexdump|base64 -d'
+BLACKBOX_FORBID_BASE='closed/|\.enc\b|_REF_KEY|keystream|unseal|decrypt|fkref|closed_ref|ref_payload|_REF_DIR|_REF_PATH|_SRC_PATH|_module\(\)|linecache|getsource|getsourcefile|inspect\.getfile|inspect\.getmodule|sys\.modules\s*\.\s*get|sys\.modules\[|__code__|co_filename|__globals__|get_instructions|getattr\s*\(\s*sys\s*,|_COMPILE_CACHE|py_compile|\bdis\.|print-source[= ]+(cuda|all|sass,cuda|cuda,sass)|import-source|--source-folders|find / .*-name|find /tmp|ls .*/tmp|mit-han-lab|kernel-design-agents|NVlabs|mlsys2026|contest-solution|benchmark-solution|(^|[^-])strings\b|xxd|hexdump|base64 -d'
 
 # Refused only in the probe COMMAND string, never in the notes/ file scan. `--set full`
 # and `--page source` are the same door `--print-source cuda` is — NCU's own path to

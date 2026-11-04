@@ -19,8 +19,8 @@ One section per fix, in ledger order:
 * BUG-SEED-17 — agent-policy command findings are deduped on (source, text), so a
   second (teacher) command is checked instead of being dropped wholesale.
 
-The BUG-SEED-10/18/19/21/48 cases are ported from the R1 archive
-(audit-r2-2026-11-05/forgekernel-untracked-tests/test_cli_submit_fixes.py), adapted
+The BUG-SEED-10/18/19/21/48 cases are ported from the R1 audit archive
+(audit-r2-2026-11-05, its untracked test tree, test_cli_submit_fixes.py), adapted
 to this tree's names and semantics.
 """
 
@@ -75,7 +75,7 @@ def test_an_interrupted_agent_turn_ends_the_whole_session(monkeypatch, tmp_path)
     ends that whole group: nothing outlives the loop.
 
     Ported from the R1 archive (test_an_interrupted_agent_turn_ends_the_whole_session);
-    ``forgekernel`` -> ``peregrine_kernel``."""
+    the archived import path becomes ``peregrine_kernel``."""
     marker = "pk-agent-turn-probe-2917"
     ended: list = []
     real_end = cli._end_process_group

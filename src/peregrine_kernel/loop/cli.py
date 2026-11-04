@@ -276,7 +276,9 @@ class RealBackend:
 
     # A job the card's gpu_entry refused to time because its declared clock lock did
     # not hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER) is never returned to a caller:
-    # submit_gpu resubmits it up to this many times, then stops with
+    # submit_gpu submits up to this many times IN TOTAL (so clock_lock_retries - 1
+    # resubmissions -- this counter names total submits, unlike lost_retries, which
+    # names resubmissions after the first job), then stops with
     # ClockLockRefusedError (nothing is charged). The state rarely clears by waiting:
     # a GPU that would not lock its clocks kept refusing — a few retries rule out a
     # one-off; the machine needs a look.
@@ -501,8 +503,9 @@ class RealBackend:
         Such a job judged and timed nothing: handed back, parse_eval reads "no eval
         JSON" as a correctness FAIL, the driver records a REVERT and spends an
         iteration, and a meta tool spends an attempt — on the machine, not the payload.
-        So it is resubmitted here, up to ``clock_lock_retries`` times in a row; past
-        that the submit stops with ClockLockRefusedError — a NoRunError, which no caller
+        So it is resubmitted here, up to ``clock_lock_retries`` submits in total (a
+        first submit plus ``clock_lock_retries - 1`` resubmissions); past that the
+        submit stops with ClockLockRefusedError — a NoRunError, which no caller
         charges.
         """
         refusals = 0

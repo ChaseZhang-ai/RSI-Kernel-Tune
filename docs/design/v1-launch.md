@@ -4,7 +4,7 @@
 > archive note, WP25)**: this document is the historical record of the V1 upstream design. Its
 > leaderboard-related sections and links were made obsolete by WP24's deboarding — the framework's
 > positioning converged on "a pure AI kernel-optimization framework", and the leaderboard-facing
-> machinery (`forge init --leaderboard`, board cards, SOL scores, `leaderboard.py` renamed to
+> machinery (`peregrine init --leaderboard`, board cards, SOL scores, `leaderboard.py` renamed to
 > `cardkit.py`/`benchkit.py`) was deleted or renamed; the body is preserved as archived and does
 > not follow the code.
 
@@ -42,7 +42,7 @@
 tasks/<op>/                      written by the user, in git
   task.toml  description.md  shapes.json  [reference/]
         │
-        │  forge new tasks/<op>; forge run .artifacts/<op>_<id>
+        │  peregrine new tasks/<op>; peregrine run .artifacts/<op>_<id>
         ▼
 .artifacts/<op>_<id>/                  written by the harness, not in git
   ① snapshot the task definition
@@ -256,10 +256,10 @@ reference's sealed artifacts and key, other run directories. The user can only a
 
 ### 4.1 Leaderboard tasks
 
-`forge init <op> --leaderboard flashinfer-bench|sol-execbench …` turns one problem of a public
+`peregrine init <op> --leaderboard flashinfer-bench|sol-execbench …` turns one problem of a public
 leaderboard into `tasks/<op>/`. The judge, the input generation and the timing basis of such a task
 **come from the board itself** (pinned to an upstream commit) instead of steps 1–4 above, and after the
-run `forge export` exports a solution JSON in the board's format. Each workload on the board is one
+run `peregrine export` exports a solution JSON in the board's format. Each workload on the board is one
 shape here, and the input groups **follow the board's evaluation protocol exactly** (the number of
 groups, the data, the tolerance all as the board has them, not completed to 3); choosing several
 workloads makes a multi-shape task. Everything else (the reference, the target, the agents, the budget,
@@ -327,7 +327,7 @@ used up, or the teacher judges the target unreachable and the reachability check
 ```
 
 - A new run = a new directory; it inherits nothing from any earlier run.
-- Resuming: run `forge run .artifacts/<op>_<id>` again; the steps already done are skipped, and the loop
+- Resuming: run `peregrine run .artifacts/<op>_<id>` again; the steps already done are skipped, and the loop
   resumes from its own records; the task definition is the snapshot's.
 
 ---
@@ -363,18 +363,18 @@ ANTHROPIC_API_KEY=...
 ## 10. The command line
 
 ```
-forge init <op>                    # copy tasks/_template/ to tasks/<op>/
-forge init <op> --leaderboard …    # a task from one problem of a public leaderboard (§4.1)
-forge new tasks/<op> [--dry-run]   # create a run (.artifacts/<op>_<id>/); --dry-run only checks and prints the plan
-forge run .artifacts/<op>_<id>     # run it; a run that has started continues where it stopped
-forge status [.artifacts/<op>_<id>] # progress (every run when omitted)
-forge harvest .artifacts/<op>_<id> # the end-of-run knowledge-base write-up of a stopped run
-forge export .artifacts/<op>_<id>  # the best kernel: a leaderboard task's as the board's solution JSON, any other task's as its source
+peregrine init <op>                    # copy tasks/_template/ to tasks/<op>/
+peregrine init <op> --leaderboard …    # a task from one problem of a public leaderboard (§4.1)
+peregrine new tasks/<op> [--dry-run]   # create a run (.artifacts/<op>_<id>/); --dry-run only checks and prints the plan
+peregrine run .artifacts/<op>_<id>     # run it; a run that has started continues where it stopped
+peregrine status [.artifacts/<op>_<id>] # progress (every run when omitted)
+peregrine harvest .artifacts/<op>_<id> # the end-of-run knowledge-base write-up of a stopped run
+peregrine export .artifacts/<op>_<id>  # the best kernel: a leaderboard task's as the board's solution JSON, any other task's as its source
 ```
 
-`forge new` takes only `--dry-run`, and `forge run` only the run directory; everything about the
-problem comes from `task.toml`. `forge run` exits 0 when the run ends at its target and 2 on any other
-stop.
+`peregrine new` takes only `--dry-run`, and `peregrine run` only the run directory; everything about the
+problem comes from `task.toml`. `peregrine run` exits 0 when the final confirmation meets the target (and
+the correctness monitor raised no alarm on that kernel), and 2 otherwise.
 
 ---
 
@@ -388,7 +388,7 @@ python scripts/self_evolve.py tasks/<op> [--step 1.05] [--max-gen N]
 
 Each generation:
 
-1. `forge new` + `forge run`, then read the confirmed best kernel and its speedup over the reference;
+1. `peregrine new` + `peregrine run`, then read the confirmed best kernel and its speedup over the reference;
 2. stop when there is no confirmed best kernel, or its gain over the reference is within the noise
    floor: the spread of the generation's same-job confirmation ratios ((max - min) / min), never
    below 1.5% (the loop's plateau margin);
@@ -425,8 +425,8 @@ harness's job (§3.4), not the script's.
 
 | Module | Before | Now |
 |---|---|---|
-| `scaffold.py` / `forge init` | built a standalone git repository under `operators/<op>/` with copies of the eval template, the job entry and the prompts | `forge init` creates the three template files of `tasks/<op>/`; eval, entry and prompts belong to the harness (`taskcard.py` generates the operator trees inside the run directory); scaffold remains for leaderboard problems and hand-made trees |
-| `loop/cli.py` | 43 arguments + about 50 `loop.toml` keys, filled in by the user | `forge run` reads `task.toml`, creates the run directory, generates `loop.toml` and calls the loop with fixed arguments |
+| `scaffold.py` / `peregrine init` | built a standalone git repository under `operators/<op>/` with copies of the eval template, the job entry and the prompts | `peregrine init` creates the three template files of `tasks/<op>/`; eval, entry and prompts belong to the harness (`taskcard.py` generates the operator trees inside the run directory); scaffold remains for leaderboard problems and hand-made trees |
+| `loop/cli.py` | 43 arguments + about 50 `loop.toml` keys, filled in by the user | `peregrine run` reads `task.toml`, creates the run directory, generates `loop.toml` and calls the loop with fixed arguments |
 | `baseline.py` / `baseline_cli.py` | two references, measured once and cached forever in the operator repository | one reference, measured on every run, stored in the run directory |
 | `loop/goal_ref.py` | three settings: auto / always / off | only auto for ordinary tasks; its products land in the run directory |
 | new: the judge step (`judge.py`) | -- | the teacher writes the PyTorch judge and the input generation; compared with the reference, frozen, tolerance set |
@@ -475,16 +475,16 @@ Trade-offs made in implementation, and where the result departs from the text ab
    `scripts/claude-goal.sh`. A /goal session needs tmux.
 8. **Self-evolution**: `scripts/self_evolve.py`. Only `cutedsl` tasks for now (the next generation's
    reference is sealed as Python source).
-9. **Leaderboard tasks**: `forge init <op> --leaderboard …` generates the card (and the recon tree of a
+9. **Leaderboard tasks**: `peregrine init <op> --leaderboard …` generates the card (and the recon tree of a
    sealed reference) with the existing generator, freezes it under `tasks/<op>/leaderboard/`, and
-   `task.toml` points at it with a `[leaderboard]` table; `forge run` skips writing and calibrating a
+   `task.toml` points at it with a `[leaderboard]` table; `peregrine run` skips writing and calibrating a
    judge, and takes the loop configuration from the card's own suggestion (`loop.toml.example`), filled
    in with this run's hardware, deny list and NCU availability; a leaderboard task never has /goal write
    a reference first.
 10. **`[task].arch` is not checked against the machine**: it decides the compile target
     (`CUTE_DSL_ARCH`) and the KB directory, but the harness does not check that the GPU machine's GPU is
     of that architecture.
-11. **`--check-workload` remains for leaderboard tasks**: `forge init --leaderboard` passes it through
+11. **`--check-workload` remains for leaderboard tasks**: `peregrine init --leaderboard` passes it through
     to the card generator, and those workloads are judged for correctness only, never timed. Ordinary
     tasks have no such concept.
 12. **Measured on B200** (three GPU jobs): calibration, the reference self-check, judging and paired
@@ -494,19 +494,19 @@ Trade-offs made in implementation, and where the result departs from the text ab
     safetensors package); local delivery marks the directory as safe when calling git inside a
     container.
 13. **A real-agent end-to-end run** (RMSNorm, prefill 8192×4096 + decode 64×4096, bf16, source mode,
-    `hours = 1`, a remote B200, ssh delivery): one `forge run` went through writing the judge (static
+    `hours = 1`, a remote B200, ssh delivery): one `peregrine run` went through writing the judge (static
     checks passed on the first round) → calibration (the tolerance landed on the bf16 floor) → the NCU
     probe → the reference baseline → 9 teacher reconnaissance jobs → milestone v1 → a single fused kernel
     in the student's round 0 → KEEP → confirmation on the same GPU at 5.24× (the 1.2× target reached,
     stop) → the correctness monitor → the report, in 84 minutes in all. It led to: the report writes the
-    best kernel into the run directory's `best/`, and `forge export` emits the kernel source for an
+    best kernel into the run directory's `best/`, and `peregrine export` emits the kernel source for an
     ordinary task. Also from that run: `hours` counts from the end of the reference baseline, so it
     includes the teacher's reconnaissance (44 minutes this time) — now stated where the budget is
     configured; the reference was measured 3 times as the architecture reference and 3 more as the ref
     baseline — the loop now reuses the first reading; the correctness monitor's stress profiles had no
     effect on task trees (the judge's `make_inputs` was not counted as bench code, and the kernel loaded
     by file path never reached the hook) — both fixed. Still open: without CuTe DSL installed on the
-    machine that runs `forge`, the student cannot read the DSL source (this did not stop it from writing
+    machine that runs `peregrine`, the student cannot read the DSL source (this did not stop it from writing
     a working kernel here).
 14. **The execution layer**: jobs are recorded by `forgekernel.submit.jobs` (one detached runner per
     job, the log and the verdict under `operators/<op>/.jobs/<id>/`); a lost runner is resubmitted, and
@@ -519,14 +519,14 @@ Trade-offs made in implementation, and where the result departs from the text ab
 
 ## Appendix A: where the old settings went
 
-The tables below describe the user surface at the level of `forge run`. The lower-level
-`forge <op> loop` still accepts the arguments that still exist, for hand-made operator trees.
+The tables below describe the user surface at the level of `peregrine run`. The lower-level
+`peregrine <op> loop` still accepts the arguments that still exist, for hand-made operator trees.
 
-### A.1 `forge <op> loop` arguments
+### A.1 `peregrine <op> loop` arguments
 
 | Argument | Where it went |
 |---|---|
-| `op`, `--workspace`, `--milestone` | decided by `forge new tasks/<op>` and the run directory |
+| `op`, `--workspace`, `--milestone` | decided by `peregrine new tasks/<op>` and the run directory |
 | `--oracle`, `--oracle-mode`, `--no-oracle` | `[reference].source` / `blackbox`; ordinary tasks have no "no distillation" mode |
 | `--ref-from-goal` | automatic |
 | `--ref-from-goal-hours` | `[budget].reference_hours` (default 8) |
@@ -540,8 +540,8 @@ The tables below describe the user surface at the level of `forge run`. The lowe
 | `--allow-host-bound-ref`, `--allow-200k-window`, `--allow-preexisting-artifacts`, `--allow-dirty-kb`, `--skip-kb-lint`, `--allow-undeclared-window`, `--allow-single-workload` | off the launch surface (on resume the harness passes `--allow-preexisting-artifacts` and `--allow-dirty-kb` itself) |
 | `--skip-chain-contract-check` | removed (composite operators are out) |
 | arguments for internal infrastructure | removed |
-| `--harvest-only` | became `forge harvest .artifacts/<op>_<id>`: the end-of-run knowledge-base write-up of a stopped run |
-| `--dry-run` | kept, on `forge new` |
+| `--harvest-only` | became `peregrine harvest .artifacts/<op>_<id>`: the end-of-run knowledge-base write-up of a stopped run |
+| `--dry-run` | kept, on `peregrine new` |
 
 ### A.2 `loop.toml [loop]`
 
@@ -559,7 +559,7 @@ The tables below describe the user surface at the level of `forge run`. The lowe
 | `watermark_margin`, `reanchor_band`, `timeline_probe`, `stall_pricing`, `orch_census`, `reuse_unchanged_reading`, `reprice_on_new_best`, `reprice_min_gain_pct`, `reopen_requires_price`, `reopen_max_fruitless`, `reopen_in_place`, `ref_price_pm_interval`, `lever_pricing_rounds`, `lever_pricing_max_levers`, `infeasible_min_diagnoses`, `declared_gate_close`, `confirm_jobs`, `correctness_monitor`, `correctness_monitor_profiles`, `kb_lint_oracle_tokens`, `job_env_preflight`, `harness_guard` | fixed defaults |
 | `agent_allow_write`, keys for internal infrastructure | removed |
 
-`loop.toml` itself still exists: `forge run` generates it for every run; the user neither writes nor
+`loop.toml` itself still exists: `peregrine run` generates it for every run; the user neither writes nor
 edits it.
 
 ### A.3 `submit.toml` and `window.toml`
@@ -569,6 +569,6 @@ edits it.
 | `submit.toml [job]` (an internal cluster's job parameters) | removed; only the job timeout remains, set by the harness |
 | `submit.toml [repo]` (delivery, branch, entry script) | not written by the user; the delivery comes from `FK_DELIVERY`, and the code tree and entry are managed by the harness |
 | `submit.toml [env]` | derived from `[task].arch`, or written into `REMOTE_ENV_FILE` |
-| `submit.toml` as a whole | generated by `forge run` from `local.env` on every launch; the user neither writes nor edits it |
+| `submit.toml` as a whole | generated by `peregrine run` from `local.env` on every launch; the user neither writes nor edits it |
 | `window.toml` | derived and generated by the harness; the user neither writes nor edits it |
 | environment variables of internal infrastructure | removed |

@@ -15,6 +15,7 @@ and T2C-02 (the ssh extract step is bounded and rides the transport channel).
 """
 import hashlib
 import json as _json
+import shutil
 import subprocess
 import sys
 import time
@@ -233,3 +234,90 @@ def test_a_poll_that_never_reaches_terminal_counts_toward_giving_up(monkeypatch,
     with pytest.raises(BackendError, match="terminal state"):
         be.submit_gpu("br", "all")
     assert calls.count("submit") == 1
+
+
+# --- BUG-SEED-19: a failed harness overlay build is never silently fail-open ---------
+
+from test_harness_guard import _backend, _card, _commit, _git, _tree  # noqa: E402
+from test_loop_driver import EVAL, FakeBackend, NCU, REC, _ctx  # noqa: E402
+
+from peregrine_kernel.loop.driver import run_inner_iteration  # noqa: E402
+from peregrine_kernel.inner.trajectory import load_records  # noqa: E402
+
+
+def _overlay_backend(ws, card):
+    be = _backend(ws, card)
+    base = be.head()
+    return be, base
+
+
+def test_an_unreadable_card_file_marks_the_overlay_failed(tmp_path):
+    card, ws = _card(tmp_path)
+    be, base = _overlay_backend(ws, card)
+    (card / "eval" / "bench.py").chmod(0o000)
+    try:
+        be._with_job_env(base)
+        assert "cannot read the card's" in be.last_overlay_failure
+    finally:
+        (card / "eval" / "bench.py").chmod(0o644)
+    be._with_job_env(base)
+    assert be.last_overlay_failure == ""        # the next push reports only itself
+
+
+def test_a_card_that_stopped_being_a_repository_marks_the_overlay_failed(tmp_path):
+    card, ws = _card(tmp_path)
+    be, base = _overlay_backend(ws, card)
+    shutil.rmtree(card / ".git")
+    be._with_job_env(base)
+    assert "no longer a git repository" in be.last_overlay_failure
+
+
+def test_a_card_that_tracks_no_harness_is_config_not_failure(tmp_path):
+    """The pinned legitimate case: a card with no tracked harness overlays nothing and
+    records no failure (the preflight warned at launch; there is no judge to overlay)."""
+    card, ws = _card(tmp_path)
+    be, base = _overlay_backend(ws, card)
+    _git(card, "rm", "-q", "-r", "--cached", "gpu_entry.sh", "eval", "ref_bin")
+    _git(card, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "untrack")
+    sha = be._with_job_env(base)
+    assert be.last_overlay_failure == ""
+    assert {"gpu_entry.sh", "eval/bench.py"} <= _tree(ws, sha)
+
+
+def test_a_failing_overlay_commit_marks_the_overlay_failed(tmp_path):
+    card, ws = _card(tmp_path)
+    (ws / "eval" / "bench.py").write_text("student judge\n")
+    head = _commit(ws, "student")
+    be = _backend(ws, card)
+    be._commit_overlay = lambda ref, changes: (_ for _ in ()).throw(
+        BackendError("git commit-tree failed (test)"))
+    sha = be._with_job_env(head)
+    assert sha == head                          # the raw tree rides, as before
+    assert "could not overlay the card's files" in be.last_overlay_failure
+
+
+def test_the_gate_refuses_a_reading_from_an_overlaid_failed_job(tmp_path):
+    """An eval whose push could not overlay the card's harness ran the lineage's own
+    judge: the row is a REVERT that names the overlay failure, never a KEEP."""
+    class OverlayFailedBackend(FakeBackend):
+        def push_branch(self, branch):
+            self.calls.append(("push", branch))
+            self.last_overlay_failure = "the card vanished mid-run (test)"
+
+    be = OverlayFailedBackend([REC("D1.1", 0)], [EVAL(2.4), NCU])
+    ctx = _ctx(tmp_path, be)
+    ctx.ncu_on_revert = False
+    rec = run_inner_iteration(ctx, 1, metric_before=2.5, last_good_ref="sha0", green=True)
+    assert rec.verdict == "REVERT" and rec.correctness is False
+    assert "harness overlay failed" in rec.error and "not judgeable" in rec.error
+    rows = load_records(ctx.status_path)
+    assert rows[-1].verdict == "REVERT" and "harness overlay failed" in rows[-1].error
+
+
+def test_the_gate_still_keeps_a_healthy_overlay_reading(tmp_path):
+    """No failure flag, no refusal: the normal path is untouched."""
+    be = FakeBackend([REC("D1.1", 0)], [EVAL(2.4), NCU])
+    ctx = _ctx(tmp_path, be)
+    ctx.ncu_on_revert = False
+    rec = run_inner_iteration(ctx, 1, metric_before=2.5, last_good_ref="sha0", green=True)
+    assert rec.verdict == "KEEP" and rec.correctness is True

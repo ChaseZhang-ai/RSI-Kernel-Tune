@@ -334,6 +334,11 @@ class RealBackend:
         # harness (it is the student's).
         self.harness_card: Path | None = None
         self.kernel_file = ""
+        # Why the last overlay build (_with_job_env) fell back to the tree's own
+        # harness, or "" when it did not: the gate refuses a reading whose job may
+        # have been judged by the lineage instead of the card (the driver reads this
+        # right after the eval). Cleared on every overlay attempt.
+        self.last_overlay_failure = ""
         self.last_mode = ""  # the gpu_entry mode of last_job_id (its closing line names the task)
         self.poll_timeout_s = poll_timeout_s  # per-job poll bound
         self.last_job_id = ""  # set by submit_gpu; provenance for whoever records results
@@ -957,17 +962,32 @@ class RealBackend:
         if self.harness_card is not None:
             card = harness_guard.card_harness_files(self.harness_card, self.kernel_file)
             tree = harness_guard.tree_harness_files(self.workspace, ref, self.kernel_file)
-            if card is None or tree is None:
-                print(f"[loop] harness overlay: cannot list the harness of the card "
-                      f"{self.harness_card} or of {ref[:10]} — this job runs the tree's own "
-                      f"copies", flush=True)
+            if card is None:
+                # A card that lists nothing may legitimately track no harness (the
+                # preflight warned and the operator went on) — or it was readable at
+                # launch and is gone now. Only the latter is a failure: recorded in
+                # last_overlay_failure, the gate refuses what such a job read.
+                if not harness_guard.is_git_repo(self.harness_card):
+                    self.last_overlay_failure = (f"the card {self.harness_card} is no "
+                                                 f"longer a git repository")
+                    print(f"[loop] harness overlay: {self.last_overlay_failure} — this "
+                          f"job runs the tree's own copies", flush=True)
+                else:
+                    print(f"[loop] harness overlay: the card {self.harness_card} tracks "
+                          f"no harness — this job runs the tree's own copies", flush=True)
+            elif tree is None:
+                self.last_overlay_failure = f"git cannot list the harness of {ref[:10]}"
+                print(f"[loop] harness overlay: {self.last_overlay_failure} — this job "
+                      f"runs the tree's own copies", flush=True)
             else:
                 for path, src in card.items():
                     try:
                         want.setdefault(path, src.read_bytes())
                     except OSError as e:
-                        print(f"[loop] harness overlay: cannot read the card's {src} ({e})",
-                              flush=True)
+                        self.last_overlay_failure = f"cannot read the card's {src} ({e})"
+                        print(f"[loop] harness overlay: {self.last_overlay_failure} — "
+                              f"this job would run a half card, half lineage judge; the "
+                              f"reading is refused", flush=True)
                 drop = [p for p in sorted(tree) if p not in card and p not in want]
         return want, drop
 
@@ -987,7 +1007,12 @@ class RealBackend:
         The same channel keeps the judge the card's: a student edit to eval/ or
         gpu_entry.sh never reaches a job (loop/harness_guard.py). One child commit built
         from a temporary index, bytes for bytes (binary blobs and sealed references
-        included): working tree, index and HEAD are never touched."""
+        included): working tree, index and HEAD are never touched.
+
+        A build that fails pushes ``ref`` as it is and records why in
+        ``last_overlay_failure``: the tree's own copies ride, and the gate refuses
+        what such a job read rather than score it under an unverified judge."""
+        self.last_overlay_failure = ""   # each push reports only its own failure
         want, drop = self._overlay_wanted(ref)
         ws = self.workspace
         tree = harness_guard.tree_harness_files(ws, ref, "") or {}
@@ -1013,6 +1038,7 @@ class RealBackend:
         except (OSError, BackendError) as e:
             print(f"[loop] job-env: could not overlay the card's files ({e}) — this job "
                   f"runs the tree's own copies", flush=True)
+            self.last_overlay_failure = f"could not overlay the card's files ({e})"
             sha, changes = ref, []
         changed = [p for p, _, _ in changes]
         key = ",".join(changed)

@@ -3942,6 +3942,16 @@ def run_inner_iteration(
     ev = parse_eval(eval_log)
     ev = _enforce_single_ref(ctx, ev)
     ev = _enforce_prep_contract(ctx, ev)
+    # --- SEED-19: a harness overlay build that failed (the card unreadable, the
+    # overlay commit refused) left this job on the lineage's own gpu_entry.sh/eval —
+    # the one thing the harness guard exists to prevent, reached by accident. Same
+    # posture as the lane guard below: the reading is invalid (correctness=False, the
+    # reason is the error) rather than silently scored under an unverified judge.
+    overlay_failure = str(getattr(be, "last_overlay_failure", "") or "")
+    if overlay_failure:
+        ev = EvalResult(correctness=False, error=(
+            "harness overlay failed (" + overlay_failure + ") — the job ran the "
+            "lineage's own judge, so the reading is not judgeable here"))
     # --- M3: cross-lane contamination guard (docs/industrial-lane.md §3). The
     # lane is a run-level fact; an eval stamped for the OTHER lane means the
     # harness state is confused (a hand-edited card, a mixed job stream) and

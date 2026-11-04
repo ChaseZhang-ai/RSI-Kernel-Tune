@@ -7,7 +7,12 @@ docstring names the finding; one test per audit item.
 
 import json
 
-from peregrine_kernel.loop.parse import parse_eval, parse_probe_verdict
+from peregrine_kernel.inner.trajectory import IterationRecord
+from peregrine_kernel.loop.parse import (
+    _gate_ratio,
+    parse_eval,
+    resolvable_diff,
+)
 
 
 # --- SEED-47 [P2]: the numeric FAIL's tensor names come from the bench JSON ------
@@ -35,3 +40,29 @@ def test_numeric_fail_keeps_the_attention_tensor_names():
     ev = parse_eval(log)
     assert "dq: max_diff=3.1" in ev.error
     assert "dk: bad dk" in ev.error
+
+
+# --- P3-2 [P3]: _gate_ratio rejects non-finite ratios at the entry ---------------
+
+
+def _rec(it, ms=2.0, vs_ref=None, vs_dev=None):
+    return IterationRecord(iter=it, decision_id="D", change="c", correctness=True,
+                           verdict="KEEP", bwd_median_ms=ms, device_median_ms=ms,
+                           vs_ref=vs_ref, vs_ref_device=vs_dev)
+
+
+def test_gate_ratio_rejects_non_finite_ratios():
+    """P3-2: a NaN/inf ratio is not a sample — it would pin max(ratios)/the
+    median and poison every residual of the resolution estimate."""
+    assert _gate_ratio(_rec(0, vs_dev=float("nan")), "device") is None
+    assert _gate_ratio(_rec(0, vs_dev=float("inf")), "device") is None
+    assert _gate_ratio(_rec(0, vs_ref=float("nan")), "e2e") is None
+    assert _gate_ratio(_rec(0, vs_dev=1.02), "device") == 1.02   # finite: untouched
+
+
+def test_non_finite_ratio_does_not_widen_the_resolution_band():
+    """P3-2, end to end: a poisoned ratio reads as absent, so the estimator sees
+    only the finite history (here: too few finite samples -> the cap fallback,
+    not a NaN-driven number)."""
+    recs = [_rec(0, vs_dev=float("nan"))]
+    assert resolvable_diff(recs, "device") == resolvable_diff([], "device")

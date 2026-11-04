@@ -1050,12 +1050,17 @@ def _gate_ratio(rec, gate_window: str) -> float | None:
     """The record's in-job paired ratio in the gate window, or None. vs_ref_device
     is a same-job reading (ref and student timed back-to-back), so node speed
     cancels and what remains is measurement spread — the quantity the resolution
-    estimate needs."""
+    estimate needs. A non-finite ratio (the JSON dialect can carry a NaN/Infinity
+    literal) is a missing reading, never a sample: it would pin ``max(ratios)`` /
+    the median and poison every residual (entry hygiene; SEED-22's rule at this
+    estimator's door — the estimate's own semantics are untouched)."""
     if gate_window == GATE_WINDOW_DEVICE:
         v = getattr(rec, "vs_ref_device", None)
     else:
         v = getattr(rec, "vs_ref", None)
-    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        return None
+    return float(v)
 
 
 def _mad_sigma(values) -> float | None:

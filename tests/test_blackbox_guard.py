@@ -245,3 +245,56 @@ def test_every_driver_seeded_tool_passes_the_guard(tmp_path):
                      notes={**notes, "r01_census.py": "import sass_tools\n"})
     assert res.returncode == 0, (res.stdout, res.stderr)
     assert "GUARD-PASSED" in res.stdout
+
+
+# --- the scan itself must not fail open -------------------------------------------------
+#
+# grep that cannot run exits 2, which reads exactly like "no match": a BLACKBOX_EXTRA
+# token with a regex syntax error used to silence the guard for the whole job — every
+# probe passed, the base tokens never fired once.
+
+def test_a_broken_extra_refuses_to_arm(tmp_path):
+    """An EXTRA that is not a valid extended regex must stop the guard from arming at
+    source time — the sourcing job dies before a single probe runs (fail-closed),
+    instead of passing everything silently (fail-open)."""
+    res = run_guard(tmp_path, "nvidia-smi", extra="kda_gdn(")
+    assert res.returncode == 3, (res.returncode, res.stdout, res.stderr)
+    assert "does not compile" in res.stderr
+    assert "GUARD-PASSED" not in res.stdout
+
+
+def test_a_broken_extra_fails_closed_even_when_the_source_status_is_ignored(tmp_path):
+    """A caller that swallows the source failure (`source ... || true`) still gets a
+    guard function that refuses every probe — never one that scans nothing."""
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    script = (
+        "set -euo pipefail\n"
+        f'W={tmp_path}\n'
+        "BLACKBOX_EXTRA='kda_gdn('\n"
+        f'source {SCRIPT} || true\n'
+        'blackbox_guard "cat closed/ref.enc"\n'
+        'echo GUARD-PASSED\n'
+    )
+    res = subprocess.run(["bash", "-c", script, "bash", "cat closed/ref.enc"],
+                         capture_output=True, text=True)
+    assert res.returncode == 3, (res.returncode, res.stdout, res.stderr)
+    assert "BLACKBOX-GUARD REFUSED" in res.stdout
+    assert "GUARD-PASSED" not in res.stdout
+
+
+def test_an_unreadable_notes_file_refuses_instead_of_passing(tmp_path):
+    """A notes scan that cannot run (grep exits 2 on a file it cannot read) used to be
+    swallowed by `|| true` into "no notes hit". It must refuse: a scan that did not
+    run is not a clean scan."""
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    probe = notes_dir / "probe.py"
+    probe.write_text("import sass_tools\n")
+    probe.chmod(0o000)
+    try:
+        res = run_guard(tmp_path, "nvidia-smi")
+    finally:
+        probe.chmod(0o644)          # let tmp_path cleanup work under a non-root user
+    assert res.returncode == 3, (res.returncode, res.stdout, res.stderr)
+    assert "notes scan" in res.stdout and "GUARD-PASSED" not in res.stdout

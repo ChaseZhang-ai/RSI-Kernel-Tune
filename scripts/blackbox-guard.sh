@@ -117,8 +117,21 @@ blackbox_guard() {
 
     if printf '%s' "$cmd" | grep -qE "$pattern"; then why="cmd string"; fi
     if [ "${#files[@]}" -gt 0 ]; then
-        hit=$(grep -lE "$pattern" "${files[@]}" 2>/dev/null | head -3 | tr '\n' ' ' || true)
-        [ -n "$hit" ] && why="${why:+$why; }notes: $hit"
+        # grep that cannot run at all (a file it cannot read) exits 2 — which reads
+        # exactly like "no match". The source-time compile check below keeps a broken
+        # pattern from ever reaching this line; an rc>=2 that still happens must refuse,
+        # not ride the `|| true` (which is only for the empty-glob/pipefail story above)
+        # into a clean scan of a dirty tree.
+        local scan_rc=0 raw_hits=""
+        raw_hits=$(grep -lE "$pattern" "${files[@]}" 2>/dev/null) || scan_rc=$?
+        if [ "$scan_rc" -ge 2 ]; then
+            echo "BLACKBOX-GUARD REFUSED (the notes scan itself failed, grep exit $scan_rc): a scan that could not run must not read as a clean one — fix the tree (unreadable notes/ file?) and resend"
+            exit 3
+        fi
+        if [ -n "$raw_hits" ]; then
+            hit=$(printf '%s\n' "$raw_hits" | head -3 | tr '\n' ' ')
+            why="${why:+$why; }notes: $hit"
+        fi
     fi
     [ -n "$why" ] || return 0
 
@@ -138,3 +151,26 @@ blackbox_guard() {
     echo "BLACKBOX-GUARD REFUSED ($why; matched: $hits): this run treats the reference as a closed binary — do not read, locate or unseal the reference kernel source (closed/, the key, the temp tree it is compiled from, the unsealed module object, its module names, getsource / linecache / sys.modules on it), do not fetch its upstream repository, and do not ask NCU for line-resolved source (--print-source sass only; cuobjdump -sass on the JIT cubin is fine). Drive the reference only through the tree's ref runner (make_inputs / ref_runner / bench / ncu). Introspecting the CuTe DSL package itself (cutlass.__file__, importlib.metadata, its .py sources) is fine. Rewrite the probe without the matched tokens and resend.${extra_hint}"
     exit 3
 }
+
+# An EXTRA token with a regex syntax error (an unbalanced paren, a dangling bracket)
+# makes every scan's grep exit 2 — which reads exactly like "no match", so the guard
+# would pass EVERYTHING for the whole job (fail-open; observed with a run's
+# BLACKBOX_EXTRA). Compile the merged pattern once, HERE, while sourcing: a bad one
+# refuses to load, and the function is replaced by one that refuses every probe, so a
+# caller that ignores this file's exit status still fails closed instead of open.
+_bb_pattern="$(blackbox_forbid_pattern)"
+if printf '' | grep -E "$_bb_pattern" >/dev/null 2>&1; then
+    _bb_rc=0
+else
+    _bb_rc=$?
+fi
+if [ "$_bb_rc" -eq 2 ]; then
+    echo "BLACKBOX-GUARD ERROR: the scan pattern does not compile as an extended regex${BLACKBOX_EXTRA:+ (BLACKBOX_EXTRA=\"$BLACKBOX_EXTRA\")} — refusing to arm. Every BLACKBOX_EXTRA token must be a valid ERE; fix it and restart the job." >&2
+    blackbox_guard() {
+        echo "BLACKBOX-GUARD REFUSED (the scan pattern does not compile — BLACKBOX_EXTRA is a broken extended regex): the guard cannot scan, so nothing runs past it. Fix BLACKBOX_EXTRA and restart the job."
+        exit 3
+    }
+    unset -f blackbox_forbid_pattern blackbox_extra_collisions
+    return 3 2>/dev/null || exit 3
+fi
+unset _bb_pattern _bb_rc

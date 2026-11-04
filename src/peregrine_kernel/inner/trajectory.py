@@ -619,6 +619,12 @@ def build_digest(records: list[IterationRecord], target: dict,
             achieved["aggregate"] = f"geomean over {best.n_workloads} workloads"
             achieved["workloads"] = [{k: v for k, v in w.items()
                                       if "readings" not in k} for w in best.workloads]
+        # WP1 telemetry: the measurement condition of the best, beside its number —
+        # the SM clock the reading was taken at (a cross-job comparison checks this
+        # first, and a best set on a downclocked draw is a different beast).
+        sm = (best.gpu_state or {}).get("sm_clock_mhz")
+        if isinstance(sm, (int, float)) and not isinstance(sm, bool):
+            achieved["sm_clock_mhz"] = sm
         # WP15 (objective statistic row, contract C8's new-name family): the best
         # is min-of-draws — this says how wide its luck is, so a later gain is
         # judged against the bar WITH its error, not against the bare number.
@@ -656,6 +662,7 @@ def build_digest(records: list[IterationRecord], target: dict,
                    **({"device_median_ms": r.device_median_ms}
                       if r.device_median_ms is not None else {}),
                    **({"cluster": r.cluster} if r.cluster else {}),
+                   "clock_drift": r.clock_drift,
                    "verdict": r.verdict}
                   for r in records],
         # metric_before is the gate-window best at entry (the driver writes it that

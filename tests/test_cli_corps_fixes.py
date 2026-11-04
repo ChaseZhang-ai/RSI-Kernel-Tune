@@ -153,3 +153,60 @@ def test_clock_lock_budget_is_a_total_of_clock_lock_retries_submits(monkeypatch,
     assert len(seen) == be.clock_lock_retries == 3   # 3 submits in total, not 3 resubmits
     out = capsys.readouterr().out
     assert "resubmitting (1/3)" in out and "resubmitting (2/3)" in out
+
+
+# -- BUG-SEED-19: an overlay build failure leaves a structured trace --------------------------
+
+
+def test_an_overlay_build_failure_is_recorded_as_a_structured_trace(monkeypatch, tmp_path,
+                                                                    capsys):
+    """A card whose overlay cannot be built (a git hiccup, an unreadable card file)
+    degrades the job to the tree's own copies — fail-open, on purpose. But the failure
+    used to leave one log line and then fall into the dedup'd announce branch, which
+    could read "the tree's copies match the card — no overlay": a lie that hides the
+    one job that did NOT run the card's judge. The failure now carries a WARNING line
+    and a structured record beside the in-flight file in the workspace's git dir.
+
+    Ported from the R1 archive
+    (test_an_overlay_build_failure_is_recorded_as_a_structured_trace), adapted per
+    the R2 ledger: the failure is injected through harness_guard.blob_sha (OSError)."""
+    from peregrine_kernel.loop import harness_guard
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    subprocess.run(["git", "-C", str(ws), "init", "-q"], check=True, capture_output=True)
+    be = cli.RealBackend("op", ws, None, "n", "e")
+    monkeypatch.setattr(be, "_overlay_wanted",
+                        lambda ref: ({"gpu_entry.sh": b"#!/bin/bash\n"}, []))
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(harness_guard, "blob_sha", boom)
+    sha = be._with_job_env("abc1234")
+    assert sha == "abc1234"                               # fail-open: the job still runs
+    out = capsys.readouterr().out
+    assert "WARNING" in out and "the tree's own copies" in out
+    assert "the tree's copies match the card" not in out  # no misleading success line
+    lines = (ws / ".git" / cli.RealBackend.overlay_fallback_file).read_text().splitlines()
+    rec = json.loads(lines[-1])
+    assert rec["ref"] == "abc1234" and "disk full" in rec["error"]
+    assert "tree's own copies" in rec["note"]
+
+
+def test_an_unreadable_card_file_never_reads_as_no_overlay_needed(tmp_path, capsys):
+    """The same fail-open one level down: _overlay_wanted that cannot read the card's
+    file degraded silently, and an empty overlay then announced "the tree's copies
+    match the card". A degraded run must say WARNING and leave the record."""
+    ws = tmp_path / "ws"
+    (ws / ".git").mkdir(parents=True)
+    be = cli.RealBackend("op", ws, None, "n", "e")
+    be.job_env_files = {"gpu_entry.sh": tmp_path / "card" / "missing.sh"}  # unreadable
+    sha = be._with_job_env("abc1234")
+    assert sha == "abc1234"                               # still fail-open
+    out = capsys.readouterr().out
+    assert "WARNING" in out and "cannot read the card's" in out
+    assert "the tree's copies match the card" not in out
+    rec = json.loads((ws / ".git" / cli.RealBackend.overlay_fallback_file)
+                     .read_text().splitlines()[-1])
+    assert rec["ref"] == "abc1234" and "missing.sh" in rec["error"]

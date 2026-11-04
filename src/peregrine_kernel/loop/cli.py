@@ -274,6 +274,13 @@ class RealBackend:
 
     inflight_file = "pk-inflight.json"
 
+    # Structured trace of overlays that degraded to the tree's own copies
+    # (BUG-SEED-19), one JSON line per affected job: a fail-open overlay failure
+    # must be distinguishable from "identical, no overlay needed" after the fact,
+    # not only in the run log. Lives in the workspace's git dir beside the
+    # in-flight record: it survives every reset and can never ride a job's tree.
+    overlay_fallback_file = "pk-overlay-fallbacks.jsonl"
+
     # A job the card's gpu_entry refused to time because its declared clock lock did
     # not hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER) is never returned to a caller:
     # submit_gpu spends at most this many submits IN TOTAL on it (the first plus
@@ -331,6 +338,9 @@ class RealBackend:
         # sha this backend pushes for a job (see _with_job_env). Empty = off.
         self.job_env_files: dict[str, Path] = {}
         self._job_env_announced: dict[str, str] = {}
+        # Why the last overlay degraded to the tree's own copies ("" = it did not):
+        # a job that did not run the card's judge must be visible, not silent.
+        self._overlay_degraded = ""
         # [loop] harness_guard (loop/harness_guard.py): the card whose tracked harness
         # files (gpu_entry.sh, eval/, ref_bin/, .gitattributes) every job tree carries
         # instead of the lineage's; None = no harness overlay. kernel_file is never
@@ -919,23 +929,22 @@ class RealBackend:
             try:
                 want[path] = src.read_bytes()
             except OSError as e:
-                print(f"[loop] job-env: cannot read the card's {src} ({e}) — {path} rides "
-                      f"the tree's own copy", flush=True)
+                self._overlay_degraded = (f"cannot read the card's {src} ({e}); {path} "
+                                          f"is missing from the overlay")
         drop: list = []
         if self.harness_card is not None:
             card = harness_guard.card_harness_files(self.harness_card, self.kernel_file)
             tree = harness_guard.tree_harness_files(self.workspace, ref, self.kernel_file)
             if card is None or tree is None:
-                print(f"[loop] harness overlay: cannot list the harness of the card "
-                      f"{self.harness_card} or of {ref[:10]} — this job runs the tree's own "
-                      f"copies", flush=True)
+                self._overlay_degraded = (f"cannot list the harness of the card "
+                                          f"{self.harness_card} or of {ref[:10]}")
             else:
                 for path, src in card.items():
                     try:
                         want.setdefault(path, src.read_bytes())
                     except OSError as e:
-                        print(f"[loop] harness overlay: cannot read the card's {src} ({e})",
-                              flush=True)
+                        self._overlay_degraded = (f"cannot read the card's {src} ({e}); "
+                                                  f"{path} is missing from the overlay")
                 drop = [p for p in sorted(tree) if p not in card and p not in want]
         return want, drop
 
@@ -956,6 +965,7 @@ class RealBackend:
         gpu_entry.sh never reaches a job (loop/harness_guard.py). One child commit built
         from a temporary index, bytes for bytes (binary blobs and sealed references
         included): working tree, index and HEAD are never touched."""
+        self._overlay_degraded = ""
         want, drop = self._overlay_wanted(ref)
         ws = self.workspace
         tree = harness_guard.tree_harness_files(ws, ref, "") or {}
@@ -979,9 +989,17 @@ class RealBackend:
             if changes:
                 sha = self._commit_overlay(ref, changes)
         except (OSError, BackendError) as e:
-            print(f"[loop] job-env: could not overlay the card's files ({e}) — this job "
-                  f"runs the tree's own copies", flush=True)
+            self._overlay_degraded = f"could not overlay the card's files ({e})"
             sha, changes = ref, []
+        if self._overlay_degraded:
+            # BUG-SEED-19: a degraded overlay must never fall through to the dedup'd
+            # announce branch, where an empty change set read as "the tree's copies
+            # match the card — no overlay" and hid the one job that did not run the
+            # card's judge. Say WARNING and leave a structured trace instead.
+            print(f"[loop] WARNING: job-env: {self._overlay_degraded} — the affected "
+                  f"files run the tree's own copies", flush=True)
+            self._note_overlay_fallback(ref, self._overlay_degraded)
+            return sha
         changed = [p for p, _, _ in changes]
         key = ",".join(changed)
         if self._job_env_announced.get("last") != key:
@@ -994,6 +1012,21 @@ class RealBackend:
                 print("[loop] job-env: the tree's copies match the card — no overlay",
                       flush=True)
         return sha
+
+    def _note_overlay_fallback(self, ref: str, error: str) -> None:
+        """Append one structured line about an overlay that degraded to the tree's own
+        copies (BUG-SEED-19). Best-effort: a workspace that is not a git checkout (or
+        an unwritable git dir) keeps the run-log WARNING as the only trace."""
+        gd = self.workspace / ".git"
+        if not gd.is_dir():
+            return
+        rec = {"ref": ref, "error": error[:300],
+               "note": "the overlay failed; the job ran the tree's own copies"}
+        try:
+            with (gd / self.overlay_fallback_file).open("a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
+        except OSError:
+            pass
 
     def _commit_overlay(self, ref: str, changes: list) -> str:
         """A child commit of ``ref`` carrying ``changes`` [(path, mode, blob) | (path,

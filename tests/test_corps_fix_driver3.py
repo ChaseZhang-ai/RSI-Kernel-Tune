@@ -319,3 +319,110 @@ def test_verdict_probe_no_verdict_line_feedback_keeps_the_sermon(tmp_path):
     feedback = _verdict_probe_feedback("notes/probe_x.py", pv, "some output", 1, 3)
     assert "pre-register" in feedback
     assert "the probe job never ran" not in feedback
+
+
+# --- BUG-SEED-32: the role exposure tables had no overwrite guard -------------
+
+
+def _ref_role_block(samples, tensor=88.0):
+    """A FULL ref role block whose ROLE row carries ``samples`` — the account
+    size the overwrite guard reads off the banked evidence."""
+    core = ('ROLE-JSON: {"duration_ns": 843424, "resolved_pct": 99.5, '
+            '"roles": {"mma-consumer": {"exposed_ns": 70847, "exposed_pct": 8.4, '
+            '"regions": 3, "share_pct": 70.0, "stalls": {"dispatch": 47.0}}}, '
+            f'"tensor_active": {tensor}, "tensor_source": "pm-plateau"}}')
+    return ("=== ROLE EXPOSURE BEGIN ===\n"
+            f"[join] 900 sampled PCs onto 12 regions; 99.5% of {samples} stall samples resolved\n"
+            f"[tensor] active={tensor}% source=pm-plateau duration_ns=843424 exposed_frac=0.120\n"
+            f"ROLE label=mma-consumer regions=3 samples={samples} share=70.0 "
+            f"exposed_pct=8.4 exposed_ns=70847 stalls=dispatch:47\n"
+            + core + "\n"
+            "=== ROLE EXPOSURE END ===\n"
+            f"ROLE-OK roles=1 samples={samples} resolved=99.5 tensor={tensor}\n")
+
+
+def test_ref_role_table_keeps_the_bigger_banked_full_account(tmp_path):
+    """Observed: the ref side only guarded partial-not-downgrading-FULL; a FULL
+    block overwrote the banked account unconditionally — the dossier's own
+    incident (a bystander kernel's blocks replacing the main kernel's banked
+    dossier) applied to the role table verbatim. A later FULL table built from
+    strictly fewer stall samples is now refused; an equal-or-larger account
+    still supersedes."""
+    from peregrine_kernel.loop.driver import _save_ref_role_exposure
+
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    ctx.evidence_dir = tmp_path / "evidence"
+    _save_ref_role_exposure(ctx, _ref_role_block(20000))
+    banked = tmp_path / "evidence" / "ref_role_exposure.txt"
+    assert "samples=20000" in banked.read_text(encoding="utf-8")
+    # a later probe log's FULL table with fewer samples must not replace it
+    _save_ref_role_exposure(ctx, _ref_role_block(4000))
+    assert "samples=20000" in banked.read_text(encoding="utf-8")
+    assert "samples=4000" not in banked.read_text(encoding="utf-8")
+    # an equal-or-larger account still supersedes (same rule as the dossier's)
+    _save_ref_role_exposure(ctx, _ref_role_block(30000))
+    assert "samples=30000" in banked.read_text(encoding="utf-8")
+
+
+def test_student_role_tables_split_head_and_best(tmp_path):
+    """Observed: one fixed file name for both priced trees — head != best priced
+    best first (writing its account), then HEAD, whose table overwrote the best
+    tree's in student_role_exposure.txt while the diagnose prompt still rendered
+    the best tree's table from the same step: evidence file and prompt table
+    contradicted each other, and a PARTIAL HEAD table replaced a FULL best one.
+    The names now follow the dossiers' head/best split."""
+    from peregrine_kernel.loop.driver import (
+        _STUDENT_BEST_ORCH_DOSSIER_NAME,
+        _STUDENT_ORCH_DOSSIER_NAME,
+        _STUDENT_ROLE_EXPOSURE_BEST_NAME,
+        _STUDENT_ROLE_EXPOSURE_NAME,
+        _run_stall_pricing,
+    )
+    from test_loop_driver import _ROLE_CORE_STU, _STALL_LOG_OK, _role_block, \
+        _role_block_partial
+
+    be = FakeBackend([], [_STALL_LOG_OK + _role_block(_ROLE_CORE_STU),
+                          _STALL_LOG_OK + _role_block_partial()])
+    ctx = _ctx(tmp_path, be)
+    ctx.stall_pricing = True
+    ctx.evidence_dir = tmp_path
+    # the exact sequence _price_student_trees runs when head != best
+    _, _, _, best_roles = _run_stall_pricing(
+        ctx, ref="sha-best",
+        bank_as=(_STUDENT_BEST_ORCH_DOSSIER_NAME,), label="best")
+    _, _, _, head_roles = _run_stall_pricing(
+        ctx, ref="sha-head",
+        bank_as=(_STUDENT_ORCH_DOSSIER_NAME,), label="head")
+    assert best_roles is not None and head_roles is not None
+    assert best_roles != head_roles
+    assert (tmp_path / _STUDENT_ROLE_EXPOSURE_BEST_NAME).read_text(
+        encoding="utf-8") == best_roles
+    assert (tmp_path / _STUDENT_ROLE_EXPOSURE_NAME).read_text(
+        encoding="utf-8") == head_roles
+
+
+def test_student_role_tables_coincident_head_and_best_bank_both_names(tmp_path):
+    """One job prices both trees when they coincide: both bank names carry the
+    same table (student_role_exposure.txt keeps its historical content)."""
+    from peregrine_kernel.loop.driver import (
+        _STUDENT_BEST_ORCH_DOSSIER_NAME,
+        _STUDENT_ORCH_DOSSIER_NAME,
+        _STUDENT_ROLE_EXPOSURE_BEST_NAME,
+        _STUDENT_ROLE_EXPOSURE_NAME,
+        _run_stall_pricing,
+    )
+    from test_loop_driver import _ROLE_CORE_STU, _STALL_LOG_OK, _role_block
+
+    be = FakeBackend([], [_STALL_LOG_OK + _role_block(_ROLE_CORE_STU)])
+    ctx = _ctx(tmp_path, be)
+    ctx.stall_pricing = True
+    ctx.evidence_dir = tmp_path
+    _, _, _, roles = _run_stall_pricing(
+        ctx, ref="sha-same",
+        bank_as=(_STUDENT_BEST_ORCH_DOSSIER_NAME, _STUDENT_ORCH_DOSSIER_NAME),
+        label="best")
+    assert roles is not None
+    assert (tmp_path / _STUDENT_ROLE_EXPOSURE_NAME).read_text(
+        encoding="utf-8") == roles
+    assert (tmp_path / _STUDENT_ROLE_EXPOSURE_BEST_NAME).read_text(
+        encoding="utf-8") == roles

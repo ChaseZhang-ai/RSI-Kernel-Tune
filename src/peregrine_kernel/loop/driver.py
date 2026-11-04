@@ -15330,10 +15330,25 @@ _ROLE_WAIVED = re.compile(r"^ROLE-WAIVED:\s*\S", re.M)
 _ROLE_BLOCK_RE = re.compile(
     r"=== ROLE EXPOSURE BEGIN ===\n(.*?)\n=== ROLE EXPOSURE END ===", re.S)
 _REF_ROLE_EXPOSURE_NAME = "ref_role_exposure.txt"
-_STUDENT_ROLE_EXPOSURE_NAME = "student_role_exposure.txt"
+_STUDENT_ROLE_EXPOSURE_NAME = "student_role_exposure.txt"          # tree under judgment (HEAD)
+_STUDENT_ROLE_EXPOSURE_BEST_NAME = "student_role_exposure_best.txt"  # best-so-far KEEP
 _REF_PRICE_JOB_LOG_NAME = "ref_price_job.log"   # the ref pricing attempts: see _REF_PRICE_MARKER_NAMES
 _STUDENT_ORCH_DOSSIER_NAME = "student_orch_dossier.txt"        # tree under judgment (HEAD)
 _STUDENT_BEST_ORCH_DOSSIER_NAME = "student_orch_dossier_best.txt"  # best-so-far KEEP
+
+
+def _student_role_bank_names(bank_as: "tuple[str, ...]") -> "tuple[str, ...]":
+    """The role-exposure files one _run_stall_pricing call banks, derived from
+    the dossier names its caller asked for: the tree under judgment's table
+    rides _STUDENT_ORCH_DOSSIER_NAME's bank, the best-so-far tree's rides
+    _STUDENT_BEST_ORCH_DOSSIER_NAME's — the same head/best split the dossiers
+    use (one job prices both trees only when they coincide)."""
+    names = []
+    if _STUDENT_ORCH_DOSSIER_NAME in bank_as:
+        names.append(_STUDENT_ROLE_EXPOSURE_NAME)
+    if _STUDENT_BEST_ORCH_DOSSIER_NAME in bank_as:
+        names.append(_STUDENT_ROLE_EXPOSURE_BEST_NAME)
+    return tuple(names)
 
 
 def _orch_summary(dossier_text: str | None) -> dict | None:
@@ -16119,6 +16134,7 @@ def _read_ref_struct_table(ctx: LoopContext) -> str | None:
 EVIDENCE_FILE_NAMES = (
     _REF_STALL_LEDGER_NAME, _REF_SEGMENT_LEDGER_NAME, _REF_ORCH_DOSSIER_NAME,
     _REF_ROLE_EXPOSURE_NAME, _REF_PM_TIMELINE_NAME, _STUDENT_ROLE_EXPOSURE_NAME,
+    _STUDENT_ROLE_EXPOSURE_BEST_NAME,
     _STUDENT_ORCH_DOSSIER_NAME, _STUDENT_BEST_ORCH_DOSSIER_NAME,
     # the attempt markers: inherited, they would silence a fresh run's ref pricing
     "ref_price_job.log", "ref_price_job.2.log", "ref_price_job.3.log")
@@ -16326,7 +16342,8 @@ def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
 
     A partial table (no tensor term) is banked only where no full one is: a
     later --set-source probe must not downgrade the account a pricing job
-    delivered."""
+    delivered. And a later FULL table must not replace a banked FULL account
+    built from strictly more stall samples — see the guard below."""
     ev = _evidence_dir(ctx, create=True)
     if ev is None:
         return
@@ -16334,14 +16351,46 @@ def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
     if pick is None:
         return
     block, full = pick
-    if not full and _ref_overlap_banked(ctx):
+    kept_text = _read_ref_role_exposure(ctx)
+    banked_full = _ref_overlap_banked(ctx)
+    if not full and banked_full:
         return
     dst = ev / _REF_ROLE_EXPOSURE_NAME
+    # Same guard as _save_ref_orch_dossier, which once banked a bystander
+    # kernel's dossier over the main kernel's (9112 -> 6232 instrs) off one
+    # probe: a later probe log's FULL table must not replace a banked FULL
+    # account built from strictly more stall samples — an aux kernel's blocks
+    # (or a shorter re-probe of the same kernel) would swap the run's
+    # reference-side overlap account under it. Same preference _pick_role_block
+    # applies within one log: the account from more samples wins across logs
+    # too; an equal-or-larger new account still supersedes.
+    kept_samples = _role_block_samples(kept_text)
+    new_samples = _role_block_samples(block)
+    if full and banked_full and kept_samples > new_samples:
+        _log(f"meta/recon: ref role table kept the banked account "
+             f"({kept_samples} stall samples) over this log's smaller one "
+             f"({new_samples})")
+        return
     try:
         dst.write_text(block)
     except OSError as e:
         _log(f"meta/recon: could not persist {_REF_ROLE_EXPOSURE_NAME} "
              f"to {dst}: {e}")
+
+
+_ROLE_ROW_SAMPLES_RE = re.compile(r"^ROLE label=\S+ .*?\bsamples=(\d+)", re.M)
+
+
+def _role_block_samples(block: "str | None") -> int:
+    """The stall samples behind a banked role block: the ROLE rows' ``samples=``
+    counts summed. The ROLE-JSON core carries stall MIXES (percentages) rather
+    than counts, and the verdict line that names the total is not part of the
+    banked block — the ROLE rows are. 0 when no row is readable (the guard then
+    never holds the banked file)."""
+    try:
+        return sum(int(m.group(1)) for m in _ROLE_ROW_SAMPLES_RE.finditer(block or ""))
+    except ValueError:
+        return 0
 
 
 def _pick_role_block(log: str) -> "tuple[str, bool] | None":
@@ -17297,14 +17346,19 @@ def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
         _log(f"meta/stall-price[{label}]: role exposure "
              f"{'OK' if full else 'PARTIAL (no tensor term — PM sections missing)'} @ "
              f"{ref[:10] if ref else '?'}")
-        if (ev := _evidence_dir(ctx, create=True)) is not None and (
-                _STUDENT_ORCH_DOSSIER_NAME in bank_as
-                or _STUDENT_BEST_ORCH_DOSSIER_NAME in bank_as):
-            try:
-                (ev / _STUDENT_ROLE_EXPOSURE_NAME).write_text(roles)
-            except OSError as e:
-                _log(f"meta/stall-price[{label}]: could not persist "
-                     f"{_STUDENT_ROLE_EXPOSURE_NAME}: {e}")
+        if (ev := _evidence_dir(ctx, create=True)) is not None:
+            # bank_as names the tree this pricing job priced (the same split
+            # the dossiers use): with head != best, the HEAD job's table used
+            # to overwrite the best tree's account under the one fixed name —
+            # contradicting the best-tree table the diagnose prompt renders
+            # from the same step, and letting a PARTIAL table replace a FULL
+            # one. Each tree's account lands under its own name.
+            for roles_name in _student_role_bank_names(bank_as):
+                try:
+                    (ev / roles_name).write_text(roles)
+                except OSError as e:
+                    _log(f"meta/stall-price[{label}]: could not persist "
+                         f"{roles_name}: {e}")
     dossier = None
     dm = _ORCH_DOSSIER_RE.search(log)
     # Banked on a parsable summary, NOT on the trailing ORCH-OK line: the

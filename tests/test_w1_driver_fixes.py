@@ -10,7 +10,7 @@ import json
 
 from test_loop_driver import FakeBackend, _ctx
 
-from peregrine_kernel.inner.trajectory import IterationRecord
+from peregrine_kernel.inner.trajectory import IterationRecord, append_record
 from peregrine_kernel.loop import driver
 from peregrine_kernel.loop.driver import MetaResult
 
@@ -175,3 +175,61 @@ def test_w1_drv_07_expired_session_memo_is_rebought(tmp_path, monkeypatch):
     driver._paired_reanchor(ctx, best=1.85, gap=0.05)
     assert buy.bought == 1, "a memo past the TTL must not answer any more"
     assert ctx.reanchor_note != "stale session note"
+
+
+# ---------------------------------------------------------------------------
+# W1-DRV-08: the restart rebuilder in _reanchor_memo only recognised
+# confirmed_gap records — a parity hit the previous session had already paid
+# for (verdict "target": median same-job ratio at or over the equivalence
+# line, persisted in reanchor.jsonl) was not rebuilt, so after a restart the
+# same-best gate in _paired_reanchor re-bought run_best_confirmation(jobs=2)
+# for a question the audit trail had already answered.
+# ---------------------------------------------------------------------------
+
+
+def _persisted_parity_hit(best_sha, med=1.2, eq=1.0, ts=0.0) -> dict:
+    return {"ts": ts, "best_ms": 1.85, "best_sha": best_sha,
+            "gap_vs_absolute_target": 0.05, "estimator": "paired-in-job",
+            "equivalence_ratio": eq, "median_ratio": med, "cluster": "",
+            "student_jobs": ["j1", "j2"], "verdict": "target"}
+
+
+def test_w1_drv_08_parity_hit_rebuilt_after_restart_answers_the_gate(tmp_path, monkeypatch):
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    append_record(ctx.status_path, _keep_rec(1.55, "sha-par"))   # the best sha
+    (tmp_path / "reanchor.jsonl").write_text(
+        json.dumps(_persisted_parity_hit("sha-par")) + "\n", encoding="utf-8")
+    buy = _BuyRecorder()
+    monkeypatch.setattr(driver, "run_best_confirmation", buy)
+    record = driver._paired_reanchor(ctx, best=1.85, gap=0.05)
+    assert buy.bought == 0, "the parity question was answered and paid for already"
+    assert record is not None and record["verdict"] == "target"
+    assert record["student_jobs"] == ["j1", "j2"]
+
+
+def test_w1_drv_08_stale_parity_hit_is_not_rebuilt(tmp_path, monkeypatch):
+    """The rebuild obeys the same bounds as confirmed_gap: a stale entry must
+    not answer — the gate re-buys the check."""
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    append_record(ctx.status_path, _keep_rec(1.55, "sha-par"))
+    stale = ctx.now() - driver._FALSE_WIN_MEMO_TTL_S - 60.0
+    (tmp_path / "reanchor.jsonl").write_text(
+        json.dumps(_persisted_parity_hit("sha-par", ts=stale)) + "\n", encoding="utf-8")
+    buy = _BuyRecorder()
+    monkeypatch.setattr(driver, "run_best_confirmation", buy)
+    driver._paired_reanchor(ctx, best=1.85, gap=0.05)
+    assert buy.bought == 1
+
+
+def test_w1_drv_08_below_equivalence_record_is_not_rebuilt(tmp_path, monkeypatch):
+    """A record whose median ratio does not meet its own equivalence line is
+    not a parity hit — the gate must not take it for one."""
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    append_record(ctx.status_path, _keep_rec(1.55, "sha-par"))
+    (tmp_path / "reanchor.jsonl").write_text(
+        json.dumps(_persisted_parity_hit("sha-par", med=0.9, eq=1.0)) + "\n",
+        encoding="utf-8")
+    buy = _BuyRecorder()
+    monkeypatch.setattr(driver, "run_best_confirmation", buy)
+    driver._paired_reanchor(ctx, best=1.85, gap=0.05)
+    assert buy.bought == 1

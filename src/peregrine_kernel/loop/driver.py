@@ -12973,7 +12973,7 @@ def _reanchor_memo(ctx: LoopContext) -> "tuple[float, str] | None":
         except (OSError, ValueError):
             return None
         for rec in reversed(lines):
-            if (rec.get("verdict") == "confirmed_gap"
+            if not (rec.get("verdict") in ("confirmed_gap", "target")
                     and rec.get("best_ms") and rec.get("median_ratio")
                     and rec.get("equivalence_ratio")
                     # a same-card re-measure does not travel across machines
@@ -12984,6 +12984,24 @@ def _reanchor_memo(ctx: LoopContext) -> "tuple[float, str] | None":
                     # nobody is on any more; an un-dated entry counts as stale
                     and rec.get("ts") is not None
                     and 0 <= ctx.now() - float(rec["ts"]) < _FALSE_WIN_MEMO_TTL_S):
+                continue
+            if rec.get("verdict") == "target":
+                # W1-DRV-08: a parity hit the previous session already paid for
+                # is rebuilt into the paired memo (the decision gate's own
+                # currency), so the same-best gate after a restart answers from
+                # the audit trail instead of re-buying the 2-job confirmation.
+                # Ratio semantics stay with the gate: it re-reads
+                # median_ratio >= equivalence_ratio when it answers.
+                if (rec.get("best_sha") and rec["best_sha"] not in ctx.paired_memo
+                        and float(rec["median_ratio"]) >= float(rec["equivalence_ratio"])):
+                    ctx.paired_memo[rec["best_sha"]] = {
+                        "ts": float(rec["ts"]), "cluster": rec.get("cluster", ""),
+                        "median_ratio": float(rec["median_ratio"]),
+                        "equivalence_ratio": float(rec["equivalence_ratio"]),
+                        "iter": rec.get("iter"), "jobs": rec.get("student_jobs") or [],
+                        "verdict": "target", "rebuilt": True}
+                continue
+            if rec.get("verdict") == "confirmed_gap":
                 eq, med = rec["equivalence_ratio"], rec["median_ratio"]
                 residual = rec.get("paired_residual", eq / med - 1.0)
                 # the paired-residual memo reads off the same record (both memos

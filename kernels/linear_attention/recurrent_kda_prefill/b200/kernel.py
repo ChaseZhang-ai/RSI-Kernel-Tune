@@ -252,7 +252,7 @@ Levers, with the arm that ships:
          they are outside this decision, whose subject is segment A's fp32 `S_stored`
          writeback, and the drain-after-arrive form is the one the KB entry
          `tcgen05_fence_release_acquire_handoff` carries as a reading rather than a
-         recipe (its 坑 3 — uncertified).
+         recipe (its pit 3 — uncertified).
   D1.4   register tiers 120 / 40 / 32 / 64 x 5 = 512, the whole of what the 64 Ki file
          allows at 1024 threads, after three cuts of the lever: 168 / 48 x 7 (M0),
          112 / 40 / 32 / 64 x 5 = 504, then 80 / 40 / 32 / 72 x 5 = 512 — which the
@@ -668,7 +668,7 @@ that the v tile starts on a 1 KB boundary (which its 256 B row pitch needed when
 unswizzled, and which D2.1's `ldsm` needs now that it is SW128 — the swizzle is attached
 to the face's own base, so the face has to be at least as aligned as the swizzle's
 period).  The v row of the table is now the SW128 face q / k / g land into, which is
-D0.8's own "替代 atom 见 D2.1" spent: same offset, same 8 KB, same logical
+D0.8's own "for the alternate atom see D2.1" spent: same offset, same 8 KB, same logical
 [32 tok x 128 v], only the byte permutation inside the face differs.  Every face's
 SIZE, the stage pitch and the total are the declared ones.  Advisory: `bankconf_ld`
 10 113 006 against the reference's 6 783 430 x 1.5 = 10 175 145 (inside by 0.6%);
@@ -1282,7 +1282,7 @@ scalar_sts_in_loop 21}, `loops` {copy-producer 25, mma-consumer 2}, `mbar_objs` 
   DEFERRED  architecture recheck, fifth term: `spill_ld_sectors` 15 924 544 against
         <= 133 920 (118.9x).  Carried from the M0 gate row above and re-read here
         unchanged; the milestone lifts this exact line to the M2 gate in D2.5's cost
-        paragraph ("本条把该线提回 M2 gate"), so the routing below is the milestone's
+        paragraph ("this entry moves the line back to the M2 gate"), so the routing below is the milestone's
         own.
         Reachable, and the series is measured in two accounts.  Prep-side: 3 552 at
         ca0e82b on this same topology and tier vector -> 5 178 816 (D0.13 v2) ->
@@ -1384,7 +1384,7 @@ D2.1 — segment B's v read is a matrix atom, and the v face is swizzled to matc
 
 Of the decision's two spellings only one is affordable here.  The prep-side spelling
 (prep writes a second, transposed [128 V x 32 tok] copy of v) costs 8 KB per stage and
-says so: "级数须降到 4，走 D2.3 联合定档".  D2.3's scan ran and docked at NSTAGE = 5,
+says so: "the stage count must drop to 4; go through D2.3's joint staging decision".  D2.3's scan ran and docked at NSTAGE = 5,
 where the tail spare is 2 560 B, so that arm has no budget and the atom arm is what
 ships.  Nothing is spent: `SMEM_TOTAL` stays 229 888 B, the face map is unchanged, the
 ring, the barrier table, the issue order, every wait target and arrival count, the
@@ -1392,7 +1392,7 @@ register tiers, the TMEM column map and the 62 timeline stations are untouched.
 
 What moves is not one instruction but a fragment shape, and that is why four things move
 together.  `tcgen05.ld.32x32b` hands a lane 32 CONSECUTIVE TMEM columns; no matrix atom
-produces that (hw_kb smem_exchange_face_matrix_atoms_ldsm_mt_stsm_sw128, 站 A: 片形决定
+produces that (hw_kb smem_exchange_face_matrix_atoms_ldsm_mt_stsm_sw128, station A: the fragment shape decides
 atom).  `Ld16x256b` hands back the `mma.m16n8` C fragment, which is bit-for-bit the
 shape the transposed `ldmatrix` scatters.  So the pass goes from
 
@@ -1431,7 +1431,7 @@ of the `Ld16x256b` fragment still names the A operand's column order (a t2r/r2t 
 cancels its own permutation, so only a read-back through the shipped path is evidence);
 that a (V, tok) view of a face whose row is TWO SW128 atoms is partitionable at all (it
 is — a mode SWAP of the nested ((64, 2), 32) layout with the swizzle left on the pointer,
-not the flat relabel that entry's 坑 3 forbids); that the runtime stage origin's
+not the flat relabel that entry's pit 3 forbids); that the runtime stage origin's
 `align<1>` is re-stated before the recast (`_face_base`, or every `ldsm` is rejected at
 lowering); and that the plain face is a legal fallback.
 
@@ -1472,7 +1472,7 @@ mbarriers; register tiers 120 / 40 / 32 / 64 x 5 = 512; chunk 32 tokens; D0.12's
 segment live sets (segment A <= 128 words, prep <= 48 words); 62 timeline stations.
 
 EXECUTABLE CHANGE IN THIS ROW — one line, `_f32_face`'s `.align(MAT_ALIGN)`, which is
-D2.5 (a)'s 「run 起点 16 B 对齐」 clause finally being true of the pointer and not only
+D2.5 (a)'s "16 B alignment at the run origin" clause finally being true of the pointer and not only
 of the address.  `ptr + <runtime offset>` carries `align<1>` (the same law the M1 memory
 note records for the matrix atoms), `recast_ptr` only PROPAGATES alignment, and a 4-byte
 element on a pointer that claims one byte cannot be touched by a 32-bit access: the
@@ -1506,7 +1506,7 @@ D2.4, lever by lever, with where it lives on this tree:
   The prologue's `range_constexpr(nseq)` table publication and `range_constexpr(NSTAGE)`
   barrier-init sweep are NOT in this package: they are out-of-loop, once-per-CTA code
   owned by D0.16 and D0.10, and the milestone re-routed the prologue account to D0.16
-  by name ("rolled 只压静态条数，单 warp 串行的运行量一条不少").
+  by name ("the rolled form compresses only the static entries; the single-warp serial workload loses not one").
 
 D2.5, lever by lever:
   (a) segment A's carry and decay are vector broadcasts — `_lds_v4` (rung B of the
@@ -1555,7 +1555,7 @@ copy-producer 26 / mma-consumer 2 — inside D2.4's [26, 52] band and equal to t
 reference's 26; `merge` `scalar_sts_in_loop` 21 and `shfl_in_loop` 48, inside the
 terminal gate's 112 / 96; `mbar_objs` 57, `mbar_tiers` {CONST: 57} with
 `mbar_unresolved` 22 and `rings` empty.  That last one is D2.4's DESCRIPTIVE clause
-(「卷宗 mbar_tiers 应出现 THREAD 层」) reading against the package, and the reading is
+(the dossier's "mbar_tiers should appear at the THREAD tier") reading against the package, and the reading is
 recorded rather than chased: the 57 CONST entries are the prologue's `mbarrier_init`
 sweep, which is constexpr by construction (`_MB_RINGS` x `range_constexpr(NSTAGE)`,
 once per CTA, outside every role loop), while the runtime-addressed waits and arrives
@@ -1638,8 +1638,8 @@ STS.U8 1; LDSM 58, STSM 16, LDTM 11, STTM 8, SHFL 48, LDL 44, STL 44.
   FAIL  **performance line**: `device_median_ms` 0.52386 against <= 0.3521 (1.4878x);
         paired `vs_ref_device` 0.7056 against >= 1.05, i.e. 1.4172x the reference's own
         0.36964 ms measured in the same job.
-        Not INFEASIBLE, and the §6 clause is explicit about why: "同资源包络下参照实测
-        达标的指标不构成 INFEASIBLE 依据".  The reference reaches 0.36964 ms inside the
+        Not INFEASIBLE, and the §6 clause is explicit about why: "metrics the reference measurably achieves under the same resource
+        envelope do not constitute grounds for INFEASIBLE".  The reference reaches 0.36964 ms inside the
         identical envelope — same shape, grid 148 x 1 x 1, block 1024 x 1 x 1, no
         cluster, 221 696 B dynamic smem, regs_per_thread 64 — so this line may not be
         declared infeasible, and it is not deferred either: the deferral's third
@@ -1649,8 +1649,8 @@ STS.U8 1; LDSM 58, STSM 16, LDTM 11, STTM 8, SHFL 48, LDL 44, STL 44.
         milestone-named lever [MEASURED, this lineage's own evals]: 2.51122 (pre-reopen
         M1 gate) -> 0.94208 (D2.4) -> 0.67091 (D2.5 + D0.14) -> 0.55174 (v2 prep +
         D0.16) -> 0.52386 (D2.1, then the D2.4+D2.5 re-do), a factor of 4.79.  The
-        milestone's own post-D2.5 estimate was "剩余 ≈ 0.73 ms，仍 2.07x target，须在
-        新 best 树上重新定价再开决策"; the tree is 28.2% below that estimate and the
+        milestone's own post-D2.5 estimate was "≈ 0.73 ms remaining, still 2.07x the target; re-price on the
+        new best tree before reopening decisions"; the tree is 28.2% below that estimate and the
         residue is 1.49x rather than 2.07x, but the decision that would price it was
         explicitly not pre-opened.
         Where the residue sits [MEASURED, timeline table @ac93ccc]: WG0's chunk period
@@ -1663,10 +1663,10 @@ STS.U8 1; LDSM 58, STSM 16, LDTM 11, STTM 8, SHFL 48, LDL 44, STL 44.
         5 718-5 954, `prep.passB` 5 292-5 380, `prep.p13` 5 036-5 266 — all classified
         wait.  Two thirds of the chain's period is not arithmetic and the ring's pacer
         is the prep side, which is exactly the residue D0.13 v2's own reachability note
-        parks at 「缺口 1.81x 中链束只占 1.07x，其余全在 prep_wait + prep 争用」.
+        parks at "of the 1.81x gap the mid-chain bundle accounts for only 1.07x; the rest sits in prep_wait + prep contention".
         Routed to meta: closing this line needs a decision the graph does not contain,
-        and §6's 拓扑冻结 clause names the disposition — "若某上限只能靠改拓扑突破 ->
-        那是 M0 写错了，由 meta 回补，student 输出 EXHAUSTED".
+        and §6's topology-freeze clause names the disposition — "if some ceiling can only be broken by changing the topology ->
+        M0 was written wrong; the meta repairs it and the student outputs EXHAUSTED".
 
   FAIL  **mechanism line** `tensor_pct` 15.13 against >= 16 (0.9456 of the line; M0's
         relaxed form >= 12 passes).  Not INFEASIBLE (reference 17.58 in the same
@@ -1703,7 +1703,7 @@ STS.U8 1; LDSM 58, STSM 16, LDTM 11, STTM 8, SHFL 48, LDL 44, STL 44.
   FAIL  **MIO mechanism line** `[VERIFY: ncu-direct]` (D2.5): `bankconf_st` 4 123 533
         against <= 2 570 000 (1.6045x the line, 2.4082x the reference's 1 712 295,
         conflict type).  Not INFEASIBLE (reference in envelope), no receiver left.
-        The line was written to intercept "device 变好但 pass 5 仍是 STS.U16", and that
+        The line was written to intercept "the device got better but pass 5 is still STS.U16", and that
         specific mechanism is closed by the access-atom line above: after D2.5 (b) the
         kernel holds no sub-word shared store at all except one byte store outside both
         regions, and the whole shared-store population is 6 `STS` + 12 `STS.64` + 7
@@ -2064,7 +2064,7 @@ settles on part 1's body:
          is back at 2048, `OFF_GST` / `GST_PART` / `_sts_v4f_pred` / the two predicated
          `STS.128` in pass A / `tl` / pass B's three-arm gate leg are all gone, and pass
          B re-derives the gate on all four tokens as the decision's base form says it
-         may ("每 (t,k) 的 sigmoid 共算 2 次，是本形态的代价上限").  What the rung was
+         may ("each (t,k)'s sigmoid is computed twice in total — the cost ceiling of this shape").  What the rung was
          worth at full reach is `abl_gate_once` +2.93%, an ablation CEILING for the
          four-of-four form; two of four is at most about half of that, and the smem the
          face map has left (4 KB against the 16 KB four-of-four needs) is what capped
@@ -2226,7 +2226,7 @@ is.
 
 Both forms stay in the source behind `BUILD_SHARED` (True = v4 and ships, False = v3),
 which is the same-job paired A/B switch the declared step package asks each step to ship
-("每步同 job 配对 A/B：v3 / 新形态各留一个 trace-time 档，同一 job 内各跑一遍") and also
+("per-step same-job paired A/B: keep one trace-time slot each for v3 / the new shape, run each once inside the same job") and also
 the pre-registered falsification clause's way back: if part 1's paired median comes in
 under +1.5% or the five rounds do not agree in sign, the bit goes to False and the
 construction is v3 again.  The tier brackets P1 / P1' and P2's zero-block publisher and
@@ -2275,7 +2275,7 @@ altogether:
     32-47, i.e. two TMEM subpartitions and therefore two warps' reach [MEASURED, probe
     notes/probe_d014v4_p2map.py E3/E4].  At M = 128 it is NonInterleaved, row m sits on
     datapath m, and the whole 32 x 32 is inside warp 8's own 32 datapaths.  The
-    decision names the substitution ("DSL 拒绝 M64 则改发 M128"); the 96 over-read A rows
+    decision names the substitution ("if the DSL rejects M64, issue M128 instead"); the 96 over-read A rows
     land on the stage's own following faces and their product rows are never read.
   * The one thing part 2 had to invent: TMEM hands a warp ONE DATAPATH PER LANE, which
     is not an `mma.sync` C fragment (four lanes per row), and no member of the
@@ -2648,7 +2648,7 @@ Segments B and D3 are NOT moved onto the same form (they keep the blocking
 `fence_view_async_tmem_store` in front of their `Delta` / `D3-ready` arrivals): they are
 outside this decision's subject, their consumers are the immediately following G2 / G4'
 rather than a reader several hundred cycles away, and the drain-after-arrive form is
-uncertified per the KB entry's 坑 3 — the one package that did extend it to those two
+uncertified per the KB entry's pit 3 — the one package that did extend it to those two
 handoffs is the +0.05% reading quoted under D1.2.
 
 D1.4 (prep dispatch reading A/B and the prep register gear).  Tiers unchanged at
@@ -2962,7 +2962,7 @@ per-lane `LDS.U16`, with both TMEM ends moved into the same fragment family
 (`Ld16x256b(x4)` read-back, `St16x128b(x4)` packed writeback) and NO `SHFL`
 reconciliation, the v-side tiled copy being derived from the read-back's by
 `make_tiled_copy_D`.  Trigger re-read: the decision opens its SECOND spelling (prep
-writes a transposed [V x tok] copy, +8 KB per stage, "级数须降到 4，走 D2.3 联合定档")
+writes a transposed [V x tok] copy, +8 KB per stage, "the stage count must drop to 4; go through D2.3's joint staging decision")
 only when WG0's segment B share runs above its segment A share.  On this tree segment A
 is WG0's largest segment at 1 257 of 4 584 cycle and segment B is not in WG0's top
 three, so the trigger is the wrong way round and the second spelling stays shut — which
@@ -3011,11 +3011,11 @@ iteration-65 patch edited, so it is re-argued from the ground up rather than re-
       it names: prep is cheap here because D0.13 v3 and D0.14 v4 part 1 cut its work,
       NOT because construction left prep.
   (3) The registered candidate does not open, on its own terms.  It is conditioned on
-      D0.14 v4 part 2 LANDING ("part 2 落地后才定价"), and part 2 did not land: it was
+      D0.14 v4 part 2 LANDING ("price only after part 2 lands"), and part 2 did not land: it was
       built, measured at 0.52456 ms against part 1's 0.38427 (-36.5%) and withdrawn, so
       this tree ships `AW_CHAIN = False` with the 32 x 32 construction still inside the
       five prep warpgroups (`BUILD_SHARED = True`).  The candidate's own premise
-      ("构造离开 prep 后每 item 的 prep 工作只剩逐元素段") is false here — the prep rows'
+      ("once construction leaves prep, each item's remaining prep work is only the elementwise section") is false here — the prep rows'
       third-largest segment is `p1` at 2 088 - 2 134 cycle, which IS construction — and
       its second half (the freed group folded into a construction / chain-head prefetch
       role) is a role change, which D2.3's own text puts outside M2.
@@ -3844,7 +3844,7 @@ ADJUDICATION, line by line.
         +0.73% pending a safety proof.  Their ceilings sum to the order of the 3.93%
         residue, which is why the line is RED rather than INFEASIBLE-by-arithmetic; what
         it lacks is a node in the graph that owns them.
-    The terminal verdict is the M2 terminal row's to take (the phase order's 终裁
+    The terminal verdict is the M2 terminal row's to take (the phase order's final adjudication
     station, the next row), on its own binding sample; this row states the reading and
     supplies the comparison, and does not re-anchor the line, re-read it against an
     earlier tree, or defer it again.
@@ -3869,8 +3869,8 @@ ADJUDICATION, line by line.
     which is what a lever-only M1 node is required to leave behind.
     `spill_ld_sectors <= 133 920`: reads 8 768 704 = 65.5x the line.  Recorded, not
     adjudicated here — the iteration-59 terminal verdict re-judged this line ADVISORY and
-    moved it off the M1 compliance list onto the M2 gate's advisory list ("从 M1 架构符合
-    线提回", D2.5 cost column), where it is read without adjudicating and its price is
+    moved it off the M1 compliance list onto the M2 gate's advisory list ("moved back from the M1 architecture-compliance
+    line", the D2.5 cost column), where it is read without adjudicating and its price is
     registered as D0.13 cost-column candidate (f) (`abl_prep_chain_consts` +2.45% cold
     traffic).  D1.1 does not move it: the count and `spill_st_sectors` 416 672 are
     bit-identical to iterations 74 - 76, even though the change lives in
@@ -3996,7 +3996,7 @@ only be collected by moving the leg, not by prefetching it (`l2hot` +0.010%).  S
     one is block 59-or-later of a 64-block chain.  The CTA's last chain has no successor;
     its identity is clamped in range and loaded anyway (into `S[1-p]`, which nothing reads
     after that chain) rather than paying a branch.
- 5. **`state-free[0/1]`** (D0.10's conditional pair, the "装入者 ≠ 读出者" row).  In part 2
+ 5. **`state-free[0/1]`** (D0.10's conditional pair, the "the loader is not the reader" row).  In part 2
     the read-out is still WG0's, so the WAR edge on `S[p]` is cross-role: WG1 writes chain
     c+1 into the columns WG0's `_state_store` of chain c-1 read, and nothing in the ring
     orders those.  WG0 arrives once per chain behind its read-out rendezvous; WG1 waits
@@ -4087,8 +4087,8 @@ package's adjudication row (iteration 80's set, closing)
 -------------------------------------------------------------------------------------
 Parts 1-3 moved the objects and then the two legs; part 4 owns the instrumentation the
 mechanism lines are read off, re-reads them, and is the row the package's benefit is
-priced on (§2's `part k of 4` declaration: "收益在 part 2、part 3 兑现，part 4 完工时按
-累计读数一次判", retention line >= +1.5% on the M2-gate same-job paired `vs_ref_device`
+priced on (§2's `part k of 4` declaration: "the gains are realized in parts 2 and 3, judged once against the
+ cumulative readings when part 4 completes", retention line >= +1.5% on the M2-gate same-job paired `vs_ref_device`
 against best 88b6996db8's 1.0094).  No mechanism goes on the machine here, and outside
 the stations the executable text is the part-3 text: one arithmetic statement hoisted
 above a station call (`ci = base_ci + i`, a pure add on values already live) and nothing
@@ -4163,8 +4163,7 @@ input, and the rest of the reopened M0 set is re-anchored on the restored tree i
 same row with zero executable change
 -------------------------------------------------------------------------------------
 The reopen's pre-registered falsification, quoted from §2's step-package declaration:
-「§5.1 四 draw 任一变红，或 part 4 累计同 job 配对中位 < +1.5% / 五轮不同号 ⇒ 撤回到
-best 88b6996db8 的 D0.15 形态，链边界转 §6 终裁的 INFEASIBLE 输入」.  Correctness never
+"if any of section 5.1's four draws goes red, or part 4's cumulative same-job paired median < +1.5% / five rounds disagree => withdraw to the D0.15 shape of best 88b6996db8; the chain boundary becomes section 6 final-adjudication INFEASIBLE input".  Correctness never
 went red — all four parts passed §5.1's four draws on both tensors.  The cumulative
 reading is what fired, and it fired on the wrong side by more than twice the retention
 line's own width:
@@ -4218,7 +4217,7 @@ would have saved.  The move did not convert the leg's price at 0.6-1.0; it re-pa
 leg on the receiving warpgroup AND kept a residue on the giving one.
 
 WHY, stated as the measurement and not as a theory.  The package's own cost column
-pre-registered exactly one unmodelled item — "WG1 分片装载对其 epilogue 周期的扰动尚无读数"
+pre-registered exactly one unmodelled item — "there is as yet no reading of WG1's tiled loads perturbing its epilogue cycles"
 — and named the two register clauses it was relying on: part 2's D0.7 line "the load
 leg's ~24-word slice working set rides under `REG_EPI = 40` on top of the epilogue's own
 peak, so no tier is re-cut", part 3's "the read-out slice's 16 fp32 + 8 bf16 words
@@ -4313,7 +4312,7 @@ reproducible by checking out any one of them; nothing dormant, nothing placehold
 the `[PLACEHOLDER]` ledger stays empty — this row is not a conservative stand-in for a
 form still owed, it is the end state D0.15's own falsification clause designates.
 
-§6 INFEASIBLE INPUT (the clause's second half: 「链边界转 §6 终裁的 INFEASIBLE 输入」).
+§6 INFEASIBLE INPUT (the clause's second half: "the chain boundary becomes section 6 final-adjudication INFEASIBLE input").
 Registered here with the per-indicator reference comparison §6 requires, so the M2
 terminal row can close it without re-deriving anything:
   * the line it bears on: the +4.05% gap from best 0.36646 ms to `target_ms` 0.3521, of
@@ -4391,7 +4390,7 @@ the tree each was last measured on:
     the background by the v-load warp and published through the single prologue mbarrier
     `MB_PLANPUB` before the first chain ends.  The patch's edit to this decision is its
     registration of the chain-boundary excess as a pricing candidate for a later design
-    round with 「本补丁不开，不要在本条里施工」 on it; that candidate is what the reopen
+    round with "this patch is not opened; do not build inside this entry" on it; that candidate is what the reopen
     spent and what this row closes, and the plan warp is back at the warp (e3) was
     measured on (`PLAN_WARP = 8`).
 
@@ -4551,8 +4550,8 @@ ADJUDICATION, line by line.
         to the one static base.  Decision-level companion (probe class, ledger only, not
         adjudicating): `wg0.prep_wait` median <= 200 cycle against best 101 [MEASURED].
   PASS  mechanism line (3)'s D0.16 half (the prologue's out-of-loop SHFL population, the
-        part of line (3) D0.16 owns as named receiver — "序幕的 out-of-loop SHFL (751 条
-        @d871924ba6) 归 D0.16 的机制验证线 ⑤, 不在本线"): the census reads `merge`
+        part of line (3) D0.16 owns as named receiver — "the prologue's out-of-loop SHFLs (751 entries
+        @d871924ba6) belong to D0.16's mechanism-verification line 5, not this line"): the census reads `merge`
         {scalar_sts_in_loop 35, shfl_in_loop 48} with the `shfl_out_of_loop` term ABSENT
         — 751 -> 0, against a reference 1.  D0.16 (a) - (e) retired the whole population
         and the plan warp is back at the warp (e3) was measured on (`PLAN_WARP = 8`).
@@ -4639,7 +4638,7 @@ as advisory); `bankconf_ld` 1 993 719 = 0.294x of the reference's 6 783 430.
 `host_bound_ratio` 0.261 against the reference's 0.144: the student's host enqueue is
 0.09558 ms against a 0.36667 ms device window, so the e2e figure carries a fixed launch
 cost the device window does not; both sides stay far below 0.85.  The device line itself
-is not an M0 line ("不设绝对性能线") and is not adjudicated here: 0.36667 ms with paired
+is not an M0 line ("no absolute performance line is set") and is not adjudicated here: 0.36667 ms with paired
 `vs_ref_device` 1.0078 is recorded for the M1 station, which is the first gate that
 carries `target_ms`.
 
@@ -4750,7 +4749,7 @@ fence or the drain sits.  Segments B and D3 are NOT moved onto the same form (th
 the blocking `fence_view_async_tmem_store` in front of their `Delta` / `D3-ready`
 arrivals): they are outside this decision's subject, their consumers are the immediately
 following G2 / G4' rather than a reader several hundred cycles away, and the
-drain-after-arrive form is uncertified for them per the KB entry's 坑 3 — the one package
+drain-after-arrive form is uncertified for them per the KB entry's pit 3 — the one package
 that did extend it to those two handoffs is the +0.05% reading quoted under D1.2.
 
 D1.4 (prep dispatch reading A/B and the prep register gear).  Tiers unchanged at
@@ -5189,7 +5188,7 @@ PACK_COLS = SEG_COLS // 2
 # D0.14 v4 part 2, the CONDITIONAL form, and the trace-time arm that selects it.
 # Opened by pre-registered trigger (a): part 1's same-job paired A/B read +2.545%
 # median with 5/5 rounds positive, span +2.243..+2.605% [MEASURED, probe
-# notes/probe_d014v4_p2aw.py stage `pair`] — positive, above the +1.5%留用 line and
+# notes/probe_d014v4_p2aw.py stage `pair`] — positive, above the +1.5% retention line and
 # below the +6.5% to-parity residual, i.e. part 1 does not recover the whole residual.
 #
 # `AW_CHAIN = True` is part 2: the two K = 128 products (`A = k' k''^T` and
@@ -5209,7 +5208,7 @@ PACK_COLS = SEG_COLS // 2
 # different warps' reach, and warp 8 is one warp.  At M = 128 the layout is
 # NonInterleaved by the same rule (all 128 datapaths occupied), row m lands on datapath
 # m, and the live 32 x 32 is entirely inside warp 8's own 32 datapaths.  The decision
-# names this substitution as structurally equivalent ("DSL 拒绝 M64 则改发 M128");
+# names this substitution as structurally equivalent ("if the DSL rejects M64, issue M128 instead");
 # what it costs is 96 over-read A rows per instruction, which land on the stage's own
 # following faces (in bounds, never consumed) and cannot reach the live rows because a
 # UMMA row is a function of its own A row alone.
@@ -5629,7 +5628,7 @@ SEGA_RELEASE_FENCE = True
 # D2.1 — segment B's v read atom, as a trace-time tier.  Not a local substitution of one
 # load for another: the fragment `ldmatrix.x4.trans` scatters is not the fragment
 # `tcgen05.ld.32x32b` hands back (hw_kb smem_exchange_face_matrix_atoms_ldsm_mt_stsm_sw128,
-# 站 A: "片形决定 atom" — `Ld32x32b` gives one lane 32 CONSECUTIVE columns and has no
+# station A: "the fragment shape decides the atom" — `Ld32x32b` gives one lane 32 CONSECUTIVE columns and has no
 # matrix-atom partner at all; `Ld16x256b` gives the `mma.m16n8` C fragment, which is
 # bit-for-bit the shape the transposed `ldmatrix` scatters).  So the tier moves four
 # things together and they stand or fall together:
@@ -5650,7 +5649,7 @@ SEGA_RELEASE_FENCE = True
 # that would spend exactly the MIO cycles the scalar form spends, i.e. the lever would
 # read as null for a reason that has nothing to do with the atom.  Same offset, same
 # 8 KB, same logical [32 tok x 128 v]; only the byte permutation inside the face moves,
-# which is D0.8's "swizzle 是 atom 契约内的模式选择" and the "替代 atom 见 D2.1" its own
+# which is D0.8's "the swizzle is a pattern choice inside the atom's contract" and the "for the alternate atom see D2.1" of its own
 # v row carries.  The milestone's other spelling of D2.1 — prep transposing v into a
 # [V x tok] face — is NOT shipped: it costs 8 KB per stage, which at D2.3's docked
 # NSTAGE = 5 does not exist (2 560 B of tail spare).
@@ -5668,7 +5667,7 @@ SEGA_RELEASE_FENCE = True
 # permutation, so only a read-back through the shipped path is evidence; (J2) that a
 # (V, tok) view of a face whose row is TWO SW128 atoms is partitionable at all (it is —
 # the view is a mode SWAP of the nested ((64, 2), 32) layout with the swizzle left on the
-# pointer, not a flat relabel, which that KB entry's 坑 3 forbids); (J3) alignment (the
+# pointer, not a flat relabel, which that KB entry's pit 3 forbids); (J3) alignment (the
 # stage origin is runtime, so the pointer carries `align<1>` and every `ldsm` through it
 # is rejected at lowering unless the 16 B bound is re-stated first — `_face_base`);
 # (J4) that the unswizzled face is a legal fallback, answered by the third arm.
@@ -5676,7 +5675,7 @@ SEGB_MATRIX = True
 
 # D0.13 — WHICH of the two pass forms the element-wise segment runs, as a trace-time
 # tier, so v2 and v3 can be A/B'd in one job (the decision's declared step package asks
-# for exactly that: "每步同 job A/B（v2 / v3 留一个 trace-time 档）").  The row map, the
+# for exactly that: "per-step same-job A/B (keep one trace-time slot each for v2 / v3)").  The row map, the
 # single cross-warp exchange, every smem face and every wait target are the SAME in both
 # arms — only the split of the per-(t, k) factor between the two passes moves.
 #
@@ -5723,8 +5722,8 @@ PREP_SPLIT = True
 
 # D0.14 — WHICH block grid the 32 x 32 construction runs, as a trace-time tier, so v3
 # and v4 part 1 can be A/B'd in one job (the decision's declared step package asks for
-# exactly that: "每步同 job 配对 A/B：v3 / 新形态各留一个 trace-time 档，同一 job 内各跑
-# 一遍").  Every face, offset, size, atom family, segment, rendezvous and wait target is
+# exactly that: "per-step same-job paired A/B: keep one trace-time slot each for v3 / the new
+# shape, run each once inside the same job").  Every face, offset, size, atom family, segment, rendezvous and wait target is
 # the SAME in both arms — only WHICH 16 x 16 blocks get built, on which warp, and which
 # MMA the W chain rides move.  P2 and P3 are the same code either way (both arms put
 # `A`'s (0, 0) on warp 0, (1, 1) on warp 1 and (1, 0) on warp 2), which is why the tier
@@ -6634,7 +6633,7 @@ def _f32_face(base, off, n):
     are read by ordinary `LDS`, never by a TMA descriptor or an MMA descriptor.
 
     `.align` for the same reason `_face_base` needs it, and the reason is D2.5 (a)'s
-    「run 起点 16 B 对齐」 clause: `off` holds a RUNTIME stage index, and `ptr + <dynamic
+    "16 B alignment at the run origin" clause: `off` holds a RUNTIME stage index, and `ptr + <dynamic
     offset>` forgets what it cannot prove — the sum carries `align<1>`, `recast_ptr`
     only PROPAGATES alignment, and a 4-byte element on a pointer that claims one byte
     cannot be touched by a 32-bit access.  The compiler therefore open-codes every
@@ -6781,7 +6780,7 @@ def _tile_crd(t, k0, k1):
     a flat k is deliberate: it is the half (4 KB block) that the address depends on,
     and writing it out keeps the two call sites from disagreeing about which way a
     flat index would linearise.  v2's element-wise segment no longer goes through a
-    coordinate at all; D0.14's P5 still does, for the runtime k origin of its B片.
+    coordinate at all; D0.14's P5 still does, for the runtime k origin of its B fragment.
     """
     return (t, 0, (k0, k1), 0)
 
@@ -6853,7 +6852,7 @@ def _bf_hi(w):
 def _pack_bf16x2(lo, hi):
     """Two f32 -> one packed bf16x2 word, RNE.  `cvt.rn.bf16x2.f32 d, a, b` puts `a`
     in the HIGH half, so the operands are written `$0, $2, $1` (hw_kb
-    cvt_f32x2_bf16x2_pack_into_r2t_fragment, gotcha "半序")."""
+    cvt_f32x2_bf16x2_pack_into_r2t_fragment, gotcha "partial order")."""
     return cutlass.Int32(llvm.inline_asm(
         T.i32(),
         [cutlass.Float32(lo).ir_value(), cutlass.Float32(hi).ir_value()],
@@ -7375,7 +7374,7 @@ def _blk32_mm(hmma, tcA, tcB, acc, fa, fb, rb, cb, lane):
 # path needs the transposed member on the read side and `stmatrix` on the write side —
 # and the write side has to land on the byte map the G4' descriptor will read, which is
 # a canonical `make_smem_layout_b` face, not a face this kernel lays out.  Both of those
-# are silent when wrong (hw_kb smem_exchange... gotcha 2: "成员选错是静默的"), and
+# are silent when wrong (hw_kb smem_exchange... gotcha 2: "choosing the wrong member is silent"), and
 # neither has a GPU verdict in this lineage yet.  So the transfers between a fragment
 # and those faces go through CuTe's OWN partition of an identity tensor — the same
 # `idC` discipline the KB prescribes for cross-warp exchange — which names the (m, k)
@@ -7444,12 +7443,12 @@ def _v_face(ring, stage):
 def _v_face_t(ring, stage):
     """D2.1: the SAME bytes as a [128 V x 32 tok] tensor — v is the contiguous mode, so
     this is the "m contiguous -> transposed member" case of hw_kb
-    smem_exchange_face_matrix_atoms_ldsm_mt_stsm_sw128's 站 A, and what reads it is
+    smem_exchange_face_matrix_atoms_ldsm_mt_stsm_sw128's station A, and what reads it is
     `LDSM.16.MT88.4`.
 
     A mode SWAP of the landing layout and not a flat relabel: the SW128 face's v mode is
     nested ((64, 2)) because the row is TWO 128 B swizzle atoms wide, and it stays nested
-    here — a face wider than one atom has no legal flat view (that entry's 坑 3).  The
+    here — a face wider than one atom has no legal flat view (that entry's pit 3).  The
     swizzle rides on the POINTER either way, and `_face_base` re-states the 16 B bound the
     matrix atom checks on the pointer (the stage origin is a runtime value, so `ring +
     off` carries `align<1>` and the `ldsm` would be rejected at lowering).
@@ -8120,7 +8119,7 @@ def _w16_scalar(sW, blay_o, w16, idC, rb, cb):
 # column j).  An `mma.sync` C fragment is the opposite shape (FOUR lanes per row: lane L
 # holds rows L/4 and L/4+8 at columns 2*(L%4) and +1), and no member of the
 # `tcgen05.ld` family produces it — which is exactly the case the decision's fetch
-# clause reserves its alternate form for ("只在 C 片形态被 DSL 拒绝时用").
+# clause reserves its alternate form for ("used only when the C-fragment shape is rejected by the DSL").
 #
 # What it names as that alternate — one row per thread plus per-row `shfl` broadcast
 # forward substitution, ~1k SHFL + 1k FFMA against a 2.5-3k cycle window — is not what
@@ -8782,7 +8781,7 @@ def _bar_wait_epi(bar, phase):
 #   G4'  D[V, k|o] = sum_j  Y^T[V, j] * B160[k|o, j]   N = 160, K = 32,  B MN-major
 #
 # G4' ships as D0.6's N=128 + N=32 PAIR over the same A, not as the single N=160
-# group — the milestone calls that pair "永久合法形态，不是占位", and it is the form
+# group — the milestone calls that pair "a permanently legal shape, not a placeholder", and it is the form
 # whose two faces the library will lay out for us.  The reason to take it is that the
 # single N=160 face is not a canonical layout at all: `make_smem_layout_b` picks its
 # swizzle atom from the major-mode size, and 160 bf16 = 2560 bits is not a multiple of
@@ -9048,7 +9047,7 @@ def _state_load(tmem_ptr, t2r, r2t, tidx, mS0, seq, head, sCar):
 #     instruction immediate and the runtime part is one IADD per chunk;
 #   * `has_side_effects=True` + `~{memory}` on the read: without them the load is a
 #     pure function of its address and may be hoisted above the barrier that published
-#     the bytes (hw_kb: "向量读的 PTX 逃生通道必须带副作用标记");
+#     the bytes (hw_kb: "the PTX escape hatch for vector reads must carry side-effect markers");
 #   * the whole two-step chain in ONE asm block (hw_kb packed_f32x2_chain_single_asm:
 #     a split chain kills NVVM with no diagnostic once it is called from a loop body,
 #     and this body is a real runtime loop).
@@ -9152,8 +9151,8 @@ def _lds_f32(addr):
     D2.7 reads the decay face as the FIRST shared access after `wait prep-done[s]`, and
     a plain DSL load of a shared address is a pure function of that address — nothing
     in the `try_wait` spin above it clobbers memory, so nothing stops it from being
-    hoisted over the wait that publishes the bytes (hw_kb: 「向量读的 PTX 逃生通道必须
-    带副作用标记」, and the same argument holds for the scalar read).
+    hoisted over the wait that publishes the bytes (hw_kb: "the PTX escape hatch for vector reads must
+    carry side-effect markers", and the same argument holds for the scalar read).
     """
     return cutlass.Float32(llvm.inline_asm(
         T.f32(), [cutlass.Int32(addr).ir_value()],
@@ -10794,7 +10793,7 @@ def _kda_kernel(
                             # any later TMA read through — and the fence is EVERY
                             # writer's, not the lead's: it orders the issuing thread's
                             # own stores, so a fence on one warp says nothing about the
-                            # other three (hw_kb smem_exchange... gotcha 6, "所有写者
+                            # other three (hw_kb smem_exchange... gotcha 6, "all writers
                             # fence_proxy + barrier").  Hence fence, then barrier, then
                             # arrive.
                             #

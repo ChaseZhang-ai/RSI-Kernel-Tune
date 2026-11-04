@@ -311,7 +311,7 @@ def test_a_keep_slower_than_the_best_is_booked_and_rendered(tmp_path):
               {"kind": "variant", "name": "ring_lane", "decisions": ["D2.3"]}]
     block = _drv._wp4_remove_candidates_block(load_records(ctx.status_path), levers)
     assert "REMOVE_CANDIDATES: D2.3 Δ+10.34% @cl-a" in block
-    assert "lever 候选: ring" in block
+    assert "lever candidates: ring" in block
     assert "ring_lane" not in block          # a subset row is not a lever candidate
     assert "no automatic revert" in block    # the red line, said where it is read
 

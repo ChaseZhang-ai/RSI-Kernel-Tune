@@ -499,7 +499,7 @@ class LoopContext:
     # confirm_budget_per_iter). Confirmation jobs ride the existing budget
     # exemption (they never compete with iterations for wall-clock).
     confirm_budget_per_iter: int = 1
-    # WP15 (甲G3): the gpu_entry MODE confirmation jobs submit. The default is
+    # WP15 (A-G3): the gpu_entry MODE confirmation jobs submit. The default is
     # the historical "all" (correctness + timing — what every confirmation has
     # always bought). A card whose eval entry carries a cheaper gate-only mode
     # (correctness short-circuit + gate-window timing; the 3-5x confirmation
@@ -927,7 +927,7 @@ class LoopContext:
     # iteration record, stamped onto that record as teacher_s.
     wp11_teacher_pending_s: float = 0.0
     wp11_teacher_measured: bool = False
-    # WP19 (task 8, 乙B9): the run-level buckets the per-iteration fields never
+    # WP19 (task 8, B-B9): the run-level buckets the per-iteration fields never
     # covered — the recon/distill teacher turns (outside the iteration
     # structure) and the pricing/timeline/confirm job spans. Stdout-only: the
     # run-end composition table prints them; no record field, no gate input.
@@ -2946,7 +2946,7 @@ def _merged_profile_segment_s(log: str) -> float | None:
     """The merged job's profile-segment wall clock, as the entry script echoed
     it at the segment boundary (WP11 task 4; `$SECONDS` resolution = 1 s).
     Absent line -> None: an older card, a failed segment, or a log that never
-    reached the boundary — the caller falls back to its previous口径."""
+    reached the boundary — the caller falls back to its previous basis."""
     m = _MERGED_PROFILE_SEG_RE.search(log)
     return float(m.group(1)) if m else None
 
@@ -2979,7 +2979,7 @@ def _wp11_teacher_timed(ctx: LoopContext, fn, *args, bucket: str | None = None, 
     iteration record (WP11 task 4). Only the inner loop's teacher turns (diagnose,
     patch) are charged: distill / recon run outside the iteration structure.
 
-    WP19 (task 8, 乙B9): ``bucket`` names a run-level accumulator instead
+    WP19 (task 8, B-B9): ``bucket`` names a run-level accumulator instead
     (wp11_teacher_recon_s / wp11_teacher_distill_s) — those turns sit outside
     any iteration record, so their wall clock prints in the run-end
     composition table and touches no record field."""
@@ -2997,7 +2997,7 @@ def _wp11_teacher_timed(ctx: LoopContext, fn, *args, bucket: str | None = None, 
 
 
 def _wp11_job_timed(ctx: LoopContext, bucket: str, fn, *args, **kwargs):
-    """WP19 (task 8, 乙B9): one GPU job's submit+poll span into a run-level
+    """WP19 (task 8, B-B9): one GPU job's submit+poll span into a run-level
     bucket (pricing / timeline / confirm) — stdout-only telemetry."""
     t0 = ctx.now()
     try:
@@ -3145,7 +3145,7 @@ def _wp11_wallclock_summary(ctx: LoopContext) -> None:
          f"reads this; shares over the {overall:.1f}s of measured buckets):")
     for line in rows:
         _log(line)
-    # WP19 (task 8, 乙B9): the run-level buckets the per-iteration fields never
+    # WP19 (task 8, B-B9): the run-level buckets the per-iteration fields never
     # covered (recon / distill / lever-design teacher turns; pricing / timeline /
     # confirm job spans) + the constant-calibration suggestion they imply
     extra = [("teacher_recon", ctx.wp11_teacher_recon_s),
@@ -3468,7 +3468,7 @@ def _harness_hygiene(ctx: LoopContext, iter_no: int) -> None:
 
 
 def _ast_preflight_warn(ctx: LoopContext, iter_no: int) -> None:
-    """WP19 (task 1 附, 乙B6): a python kernel that does not parse fails in-job
+    """WP19 (task 1 addendum, B-B6): a python kernel that does not parse fails in-job
     anyway; this pre-submit parse only says so one round-trip earlier. WARN
     only — never a verdict, never a gate (a false positive must not kill a
     good REVERT, and the eval job stays the single failure judge). CUDA-mode
@@ -3548,7 +3548,7 @@ def run_inner_iteration(
     except Exception:  # noqa: BLE001 — lineage is bookkeeping, never a precondition
         base_sha = ""
     # --- WP16: a revival audit line when this delivery re-bases on a pooled
-    # runner-up tree — 复活必重验 rides the delivery's own full gate (see
+    # runner-up tree — revival-always-re-verifies rides the delivery's own full gate (see
     # _revival_note); the pool-empty state logs nothing.
     try:
         if note := _revival_note(ctx, base_sha, load_records(ctx.status_path)):
@@ -3840,7 +3840,7 @@ def run_inner_iteration(
     # kill switch is off; otherwise the two-job path, byte-for-byte as before.
     # Wall-clock telemetry (task 4) times BOTH paths at the same boundaries:
     # the eval job's submit->terminal wall, the NCU job's, and the GPU-queue
-    # wait the job's own log reports. eval_job_s口径: the EVAL job's wall on
+    # wait the job's own log reports. eval_job_s basis: the EVAL job's wall on
     # the two-job path, the WHOLE merged job's wall (eval + profile segments)
     # on the merged path — the profile segment's own share is recovered from
     # the entry script's segment echo into ncu_job_s, so the two buckets do
@@ -3895,7 +3895,7 @@ def run_inner_iteration(
             profiler = _profiler_from_log(eval_log)
             # the entry script echoes the profile segment's own wall at the
             # boundary; that (not the ≈0 parse wall) is the honest NCU bucket.
-            # Absent echo -> the previous口径 (parse wall), documented as such.
+            # Absent echo -> the previous basis (parse wall), documented as such.
             ncu_job_s = _merged_profile_segment_s(eval_log)
             if ncu_job_s is None:
                 ncu_job_s = ctx.now() - ncu_t0   # parse wall only; the job already ran
@@ -4128,7 +4128,7 @@ def run_inner_iteration(
             _reprice_cited_levers(ctx, rec)
         except (BackendError, OSError, ValueError) as e:
             _log(f"iter {iter_no}: price-check skipped ({e})")
-        # --- WP16 (甲G12): winners the milestone never cited used to die
+        # --- WP16 (A-G12): winners the milestone never cited used to die
         # silently on the new tree — an EXPIRED verdict in the revision store
         # says so, once, where the teacher already reads.
         try:
@@ -6453,8 +6453,10 @@ def _landable_line(stack: dict | None, table: list) -> str:
         (lv.get("priced_on") for lv in table if lv.get("priced_on")), ""))
     return (f"LANDABLE: all-pos levers={','.join(members)} expected={_fmt_pct(pos)} "
             f"(floor={floor:.2f}%) priced_on={tree}"
-            " —— teacher 可用一个 milestone patch 把这些 lever 合并为单一决策行落地；"
-            "学生按 rung 一次交付（普通 bundle 交付，标准 eval gate 判定）。\n")
+            " — the teacher can land these levers as one merged decision line with a single "
+            "milestone patch; "
+            "the student delivers once per rung (ordinary bundle delivery, judged by the "
+            "standard eval gate).\n")
 
 
 def _lever_price_block(table: list, specs: "list | None" = None) -> str:
@@ -6554,7 +6556,7 @@ def _lever_price_block(table: list, specs: "list | None" = None) -> str:
 
 
 def _lever_edges_block(specs: list, table: list) -> str:
-    """WP16 (甲G17): the lever coupling graph the teacher wrote on the recipes
+    """WP16 (A-G17): the lever coupling graph the teacher wrote on the recipes
     (`requires` / `conflicts`), rendered as an edge table inside the existing
     price block, with the delivery advice the edges imply — re-price and land a
     lever's prerequisites first; mutually exclusive levers ride separate
@@ -6723,7 +6725,7 @@ def _run_lever_pricing(ctx: LoopContext, priced: "PricedTrees", bindings: dict,
                 spec_path.unlink()
             except OSError:
                 pass
-            # WP19 (task 8, 乙B9): the lever-design turn's wall clock lands in
+            # WP19 (task 8, B-B9): the lever-design turn's wall clock lands in
             # its run-end bucket (stdout only — no record field)
             out = _wp11_teacher_timed(
                 ctx, _agent_turn,
@@ -7206,7 +7208,7 @@ def _run_sweep_request(ctx: LoopContext, be, iter_no: int, path: str) -> str:
     # student's file (the hash above stays the milestone's)
     spec = dict(submitted)
     if spec.get("halving") and spec.get("axes") and not spec.get("variants"):
-        # --- WP16 (乙A4): a range recipe is expanded HERE — the student's
+        # --- WP16 (B-A4): a range recipe is expanded HERE — the student's
         # hash-checked file stays the milestone's, the transient spec carries
         # the points.
         expanded = _expand_sweep_axes(spec)
@@ -7470,7 +7472,7 @@ def _wp4_remove_candidates_block(records: list, known_levers: list) -> str:
     lines = []
     for did, (_it, d, wl) in sorted(latest.items(), key=lambda kv: -kv[1][1]):
         levers = sorted(attributed.get(did, ()))
-        tail = "lever 候选: " + ", ".join(levers) if levers else "no priced lever"
+        tail = "lever candidates: " + ", ".join(levers) if levers else "no priced lever"
         lines.append(f"REMOVE_CANDIDATES: {did} Δ{_fmt_pct(d)} @{wl or 'home'} ({tail})")
     return ("\n## Slow decisions (kept above the best — prior only, relaxed-revert stands)\n"
             + "\n".join(lines) + "\n"
@@ -7635,7 +7637,7 @@ def _parse_stagnation_override(text: str) -> str | None:
 # runner-up pool, the arch graveyard) is teacher-side information; reviving any
 # stored tree rides the ordinary gated delivery, so the full re-verification
 # suite (watermark / clock-drift / fresh-recheck) applies on every revival — a
-# revived reading is never taken on trust (red line ③-②, 复活必重验). The
+# revived reading is never taken on trust (red line ③-②, revival always re-verifies). The
 # compounding pool (loop/lever_pool.py — the ONE implementation, the driver is
 # its only writer and job runner) is pressure routing only: an empty pool
 # regresses to the pre-WP16 behavior byte for byte (red line ③-⑤).
@@ -7860,7 +7862,7 @@ def _book_combo_null(ctx: LoopContext, pool_rows: list, bundle_delta_pct: "float
                                        outcome=lever_pool.POOL_STATUS_COMBO_NULL))
 
 
-# --- WP16: pattern search (乙A3) -------------------------------------------------
+# --- WP16: pattern search (B-A3) -------------------------------------------------
 #
 # The parameter-level local optimum's first ACTIVE escape. At a STAGNATION or
 # phase-exhaustion trigger, the driver walks a shrink grid over ≤ 2 numeric
@@ -8245,13 +8247,13 @@ def _restart_target_lines(ctx: LoopContext, records) -> str:
         f"and NCU are already paid).\n"
         "- Re-basing the run on that tree is a legal structural answer here: point the "
         "milestone patch at it and the student delivers on top of it.\n"
-        "- 复活必重验 (red line ③-②): the revived node re-passes the full suite with its "
+        "- Revival always re-verifies (red line ③-②): the revived node re-passes the full suite with its "
         "next gated delivery — watermark / clock-drift / fresh-recheck apply as to any "
         "delivery — before any of its readings re-enter best, plateau or pricing.\n")
 
 
 def _revival_note(ctx: LoopContext, base_sha: str, records) -> str:
-    """WP16 (复活必重验): the audit line for a delivery that re-bases on a
+    """WP16 (revival always re-verifies): the audit line for a delivery that re-bases on a
     pooled runner-up tree. The revival itself is the teacher's milestone patch
     and the student's ordinary delivery — no separate pass exists, so the
     marker's whole job is to say WHERE the re-verification happens: the
@@ -8271,7 +8273,7 @@ def _revival_note(ctx: LoopContext, base_sha: str, records) -> str:
             f"(watermark / clock-drift / fresh-recheck apply as always)")
 
 
-# --- WP16: reprice coverage (甲G12) + climb streak -------------------------------
+# --- WP16: reprice coverage (A-G12) + climb streak -------------------------------
 
 def _climb_streak(records, gate_window: str) -> int:
     """Consecutive newest-first evaluated KEEP rows each gaining in [1%, 3%] —
@@ -8297,7 +8299,7 @@ def _climb_streak(records, gate_window: str) -> int:
 
 
 def _mark_expired_levers(ctx: LoopContext, rec) -> None:
-    """WP16 (甲G12): a WINNING lever the milestone does not cite used to die
+    """WP16 (A-G12): a WINNING lever the milestone does not cite used to die
     silently on a new best — its positive price was read on a tree the run
     left, nothing re-measured it, and no rendering said so. The revision store
     already has the teacher's ear (the Price-tag review block): an `expired`
@@ -8361,7 +8363,7 @@ def _mark_expired_levers(ctx: LoopContext, rec) -> None:
          f"block carries them")
 
 
-# --- WP16: MC prescreen noise defense (乙A6) -------------------------------------
+# --- WP16: MC prescreen noise defense (B-A6) -------------------------------------
 
 def _mc_top2_gap_pct(rows: list) -> "tuple[str, str, float] | None":
     """(winner, runner_up, gap_pct) off an mc_prescreen row table: the two
@@ -8377,7 +8379,7 @@ def _mc_top2_gap_pct(rows: list) -> "tuple[str, str, float] | None":
     return w, ru, 100.0 * (rums - wms) / wms
 
 
-# --- WP16: floor_progress advisory (丙) ------------------------------------------
+# --- WP16: floor_progress advisory (C) ------------------------------------------
 
 def _floor_progress_line(ctx: LoopContext, records) -> str:
     """``floor_progress = floor_ms / best_ms`` — THIS run's parsed analytic
@@ -8395,7 +8397,7 @@ def _floor_progress_line(ctx: LoopContext, records) -> str:
             f"{best:.6g} ms) — report-only advisory; no stop or verdict reads it")
 
 
-# --- WP16: ARCH_PROBE graveyard helpers (甲G16+丙) --------------------------------
+# --- WP16: ARCH_PROBE graveyard helpers (A-G16+C) --------------------------------
 
 def _arch_recipe_meta(ctx: LoopContext, path: str) -> dict:
     """The candidate recipe's lineage fields, read tolerant: ``hybrid_of`` (the
@@ -8825,7 +8827,7 @@ def _mc_write_variant_archive(ctx: LoopContext, iter_no: int, sources: dict) -> 
 
 def _mc_revote(ctx: LoopContext, be, iter_no: int, did: str,
                variants: list) -> "tuple[list, str | None, str | None] | None":
-    """WP16 (乙A6): the near-tie defense's extra prescreen — the top-2
+    """WP16 (B-A6): the near-tie defense's extra prescreen — the top-2
     variants re-timed at ``_MC_ROUNDS + 1`` interleaved rounds, one more job in
     the confirm-budget class (the same authorization the watermark-band
     confirmations ride). Returns (rows, winner, fail), or None when the job
@@ -9005,7 +9007,7 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
         workload = shapes[0] if shapes else ""
     except Exception:  # noqa: BLE001 — a card that cannot name workloads times all of it
         workload = ""
-    # --- WP14 (MC-DISPATCH, 乙A14): a decision whose line declares shape-keyed
+    # --- WP14 (MC-DISPATCH, B-A14): a decision whose line declares shape-keyed
     # value ranges (`per_shape:`) is prescreened PER WORKLOAD — the structure
     # dispatch case (a structural fork deeper than any lever-value fork, the
     # teacher's opt-in). One prescreen job per workload (the toolkit's own
@@ -9042,7 +9044,7 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
         except OSError:
             pass
     rows, winner, fail = parse_mc_results(log)
-    # --- WP16 (乙A6): the prescreen noise defense. A prescreen is 2 interleaved
+    # --- WP16 (B-A6): the prescreen noise defense. A prescreen is 2 interleaved
     # rounds — a winner and runner-up inside the run's resolution band may be
     # noise twins, and the dice-rolled loser of that pair costs a full eval +
     # NCU + the iteration. When the two best timed survivors sit inside the
@@ -10418,7 +10420,7 @@ def _reprice_cited_levers(ctx: LoopContext, rec) -> list:
         return []
     if not rec.sha:
         return []
-    # --- WP16 (甲G12): the climb streak. A run taking several 1-3% KEEP steps
+    # --- WP16 (A-G12): the climb streak. A run taking several 1-3% KEEP steps
     # moves the best under the re-price gate's radar — each skip reads "within
     # reprice_min_gain_pct of the lever's tree" while the tree walks away step
     # by step. Enough consecutive sub-gate steps stand the gate down for this
@@ -11748,7 +11750,7 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 if ctx.phase_close.get("stage") == "gate-failed"
                 else f"awaiting its {exhaustion['gate']} row, not asking again"))
         exhaustion = None
-    # --- WP16: pattern search (乙A3) — the active escape either trigger arms.
+    # --- WP16: pattern search (B-A3) — the active escape either trigger arms.
     # Readings only; the winner is a LANDABLE row and landing stays teacher →
     # student patch → full gate (contract C9).
     ps_block = ""
@@ -16779,8 +16781,8 @@ _REF_PRICE_MARKER_NAMES = ("ref_price_job.log", "ref_price_job.2.log", "ref_pric
 #
 # The parent generation's best tree IS the child's reference (verbatim copy),
 # so its sha-stamped census (carry/ref_census.md) is a byte-identity prior for
-# the child's ref-side readings. The rule (红线追加②: 读数复用是加速不是省
-# 测量): the prior is adopted only after ONE cheap confirmation job re-times
+# the child's ref-side readings. The rule (red-line addendum ②: reading reuse is
+# acceleration, not measurement-skipping): the prior is adopted only after ONE cheap confirmation job re-times
 # the reference and lands within _REF_RECONCILE_BAND of the carried reading;
 # a mismatch REFUTES the carry and the full census suite runs as always; no
 # carry (or a sha mismatch — the byte-identity failed) is the baseline path,
@@ -16893,7 +16895,7 @@ def _adopt_carry_ref_census(ctx: LoopContext, census: dict) -> bool:
         return False
     _bank_evidence(ctx, "carry-adopted ref census")
     _log("ref-price/carry: the carried census is banked — one confirmation job "
-         "replaced the census suite (读数复用是加速不是省测量: the confirmation "
+         "replaced the census suite (reading reuse is acceleration, not measurement-skipping: the confirmation "
          "re-measured the ref; the census rides the byte-identity)")
     return True
 
@@ -17777,7 +17779,7 @@ def _run_arch_probes(ctx: LoopContext) -> None:
             # --- WP9 (C4): pin the run's candidate architecture to the measured
             # winner — `{CANDIDATE}` rendered "(not pinned)" in every prompt since
             # the binding existed (nobody assigned it). The probe winner IS the
-            # machine-readable "recon 选定的候选架构": the freeze follows it
+            # machine-readable "the candidate architecture recon settled on": the freeze follows it
             # (distill_blackbox_prompt's own rule), so re-distills and later
             # teacher turns read the pinned name instead of re-deriving it.
             winner = Path(win).stem
@@ -17885,7 +17887,7 @@ def _wp14_declaration_violations(ctx: LoopContext, text: str,
     Authoring (``baseline`` None): every regime/per_shape declaration is held —
     a regime family that is not a pure shape-axis function, is not mutually
     exclusive, or does not cover every workload makes the freeze invalid
-    (覆盖失败 = 冻结无效); a per_shape key that names neither a workload of the
+    (coverage failure = freeze invalid); a per_shape key that names neither a workload of the
     card nor a parseable shape-axis predicate is a typo'd dispatch. Patch mode:
     only declarations the patch ADDED (matched by their full line) — the same
     grandfathering the gate-line hygiene follows, so a pre-rule milestone is
@@ -17962,8 +17964,8 @@ def _wp14_shape_ledger_block(ctx: LoopContext, records: list) -> str:
 
 
 def _wp14_regime_label_line(ctx: LoopContext, text: str | None = None) -> str:
-    """The regime labels of the lever price block (contract C10 lever-价格块
-    regime 标签): which regime each per-workload column belongs to. '' when the
+    """The regime labels of the lever price block (contract C10 lever-price-block
+    regime labels): which regime each per-workload column belongs to. '' when the
     milestone carries no regime lines (byte-identical pre-WP14)."""
     rmap = _wp14_regime_map(ctx, text)
     if not rmap:
@@ -18828,9 +18830,9 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
         # --- WP9 ---: [loop] floor_stop (opt-in, default off) — the weak-ref/absent-ref
         # companion of the target stop (see _floor_stop_check).
         if (floor_stop := _floor_stop_check(ctx, best_before, meta_steps)) is not None:
-            # WP19 (task 8, 乙N-B15): the floor_stop exit prints the same
+            # WP19 (task 8, B-N-B15): the floor_stop exit prints the same
             # composition table every other exit prints — the run's wall-clock
-            #构成 must be readable at whichever door it left through
+            # composition must be readable at whichever door it left through
             _wp11_wallclock_summary(ctx)
             return floor_stop
         # Before spending the meta budget on a gap-driven diagnosis, make sure the

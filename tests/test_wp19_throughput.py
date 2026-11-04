@@ -1,18 +1,20 @@
-"""WP19 过程提速三代: build-cache key narrowing, probe batch manifest, the
+"""WP19 process speedup, third generation: build-cache key narrowing, probe batch manifest, the
 background measurement lane, student/teacher context bounding, the merged
 teacher-validation bounce, session resume, meta-collection merging and the
 cross-generation reading carry.
 
-零行为变化纪律的验收面在这里（契约 C11/C12/C13/C15 全部默认关或默认不变）：
-test_wp19_switches_off_matches_baseline_records 用对照基线（origin/main =
-19e885b，WP24 后布局）语义逐字段钉住主循环输出；所有 WP19 开关在默认态下
-本测试必须原样通过——这是回归，不是承诺。
+The zero-behavior-change acceptance surface lives here (contracts C11/C12/C13/C15
+all default OFF or default-unchanged): test_wp19_switches_off_matches_baseline_records
+pins the main loop's output field by field against baseline semantics (origin/main =
+19e885b, the post-WP24 layout); with every WP19 switch in its default state this file
+must pass exactly as before — that is a regression pin, not a promise.
 
-黄金记录的再生成方法（供独立审查者复核）：checkout origin/main，把本文件的
-_baseline_scenario / _meta_scenario 两个 helper（只调用基线就有的
-run_inner_iteration / run_meta_step / FakeBackend / _ctx）拷进任意测试运行，
-打印 json.dumps(rows, sort_keys=True, default=repr)，与下方 _GOLDEN_* 常量
-逐字节对比——一致即证明黄金取自基线。
+How to regenerate the golden records (for independent review): check out origin/main,
+copy this file's _baseline_scenario / _meta_scenario helpers (they only call
+run_inner_iteration / run_meta_step / FakeBackend / _ctx, which the baseline already
+has) into any test run, print json.dumps(rows, sort_keys=True, default=repr), and
+compare byte for byte with the _GOLDEN_* constants below — equality proves the golden
+was taken from the baseline.
 """
 
 from __future__ import annotations
@@ -97,9 +99,10 @@ def _strip(record: dict) -> dict:
 
 
 def test_wp19_switches_off_matches_baseline_records(tmp_path):
-    # 默认态逐字段对照：内循环（KEEP+REVERT）与 meta 步（诊断+补丁）两条场景，
-    # 记录字段与黄金（基线 @19e885b 语义）一一对应。黄金的取材与再生成方法见
-    # 模块 docstring。
+    # Default-state field-by-field comparison: the inner-loop (KEEP+REVERT) and
+    # meta-step (diagnose+patch) scenarios, records matching the golden (baseline
+    # @19e885b semantics) one for one. See the module docstring for how the golden
+    # was taken and how to regenerate it.
     rows = [_strip(r) for r in _baseline_scenario(tmp_path)]
     assert len(rows) == 2
     keep, revert = rows
@@ -296,7 +299,7 @@ def _key_of(tree: Path, script: Path, **env) -> str:
 
 
 def test_narrowed_key_comment_hit_and_header_miss(tmp_path):
-    # C11 硬验收：改注释必命中（key 不变），改头文件必 miss（key 变）
+    # C11 hard acceptance: a comment change must HIT (key unchanged), a header change must MISS (key changes)
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
     narrow = {"PK_BUILD_CACHE_KEY_NARROW": 1}
@@ -325,10 +328,12 @@ def test_narrowed_key_comment_hit_and_header_miss(tmp_path):
 
 
 def test_narrowed_key_off_by_default_is_the_whole_tree_key(tmp_path):
-    # 默认态：PK_BUILD_CACHE_KEY_NARROW 未设时 key 与旧路径逐字节一致（整树 sha）。
-    # 整树 key 的输入是 PK_TREE_SHA256（runner 对每次 commit 重算）：注释改动
-    # 意味着新 commit、新 tree sha、新 key——旧语义必然 miss；窄化语义下注释
-    # 不进 key，同一编译内容跨 commit 命中。
+    # Default state: with PK_BUILD_CACHE_KEY_NARROW unset the key is byte-identical
+    # to the old path (whole-tree sha). The whole-tree key's input is PK_TREE_SHA256
+    # (recomputed by the runner on every commit): a comment change means a new commit,
+    # a new tree sha, a new key — the old semantics necessarily miss; under the
+    # narrowed semantics comments are not in the key, so the same compiled content
+    # hits across commits.
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
     k0 = _key_of(tree, script, PK_BUILD_CACHE_KEY_NARROW=1)   # narrowed, original content
@@ -345,7 +350,7 @@ def test_narrowed_key_off_by_default_is_the_whole_tree_key(tmp_path):
 
 
 def test_narrowed_key_walk_trouble_falls_back(tmp_path):
-    # C11：任何异常回退整树 key——不可解析 include / 非 .cu / 缺 builder 文件
+    # C11: any anomaly falls back to the whole-tree key — unparseable include / non-.cu / missing builder file
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
     k_off = _key_of(tree, script)
@@ -370,7 +375,7 @@ def test_narrowed_key_walk_trouble_falls_back(tmp_path):
 
 
 def test_narrowed_key_cache_roundtrip_across_trees(tmp_path):
-    # 提纯价值本身：同一编译内容、不同树（不同 PK_TREE_SHA256）-> HIT 免构建
+    # The narrowing value itself: same compiled content, different tree (different PK_TREE_SHA256) -> HIT, no rebuild
     import subprocess
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
@@ -418,7 +423,7 @@ fi
     assert "BUILT" in r3.stdout                  # a tampered entry is a fresh build
 
 
-# --- task 1 附 (甲G24/乙B7): the inputs manifest memo --------------------------
+# --- task 1 addendum (A-G24/B-B7): the inputs manifest memo --------------------------
 
 def _b7_op(tmp_path: Path, n: int = 2) -> tuple[Path, "direct.SubmitConfig"]:
     import subprocess as sp
@@ -440,7 +445,7 @@ def _b7_op(tmp_path: Path, n: int = 2) -> tuple[Path, "direct.SubmitConfig"]:
 
 
 def test_b7_manifest_memo_hit_and_mtime_miss(tmp_path):
-    # 命中：同一文件第二次同步不再全量读源（mtime/size 未变 → 用 memo 的 sha）
+    # Hit: the second sync of the same file no longer reads the whole source (mtime/size unchanged -> the memo's sha is used)
     d, cfg = _b7_op(tmp_path, n=4)
     store = tmp_path / "store"
     m1 = direct.sync_inputs_to_store(cfg, store)
@@ -464,7 +469,7 @@ def test_b7_manifest_memo_hit_and_mtime_miss(tmp_path):
     assert m2 == m1
     # the sampled recheck (idx 0) reads one store entry; the SOURCES are all memoized
     assert reads["n"] == 1, f"expected 1 sampled store read, got {reads['n']}"
-    # mtime 变更 → miss：重算源 sha 并刷新 memo
+    # mtime change -> miss: recompute the source sha and refresh the memo
     g = d / "eval" / "problem" / "inputs" / "s1" / "g1.safetensors"
     st = g.stat()
     import os as _os
@@ -481,7 +486,7 @@ def test_b7_manifest_memo_hit_and_mtime_miss(tmp_path):
 
 
 def test_b7_sampled_recheck_captures_corruption(tmp_path):
-    # 损坏注入 → 抽样复核捕获（idx 0 恒为抽样位）
+    # Corruption injected -> caught by the sampled recheck (idx 0 is always a sampled slot)
     d, cfg = _b7_op(tmp_path, n=4)
     store = tmp_path / "store"
     m1 = direct.sync_inputs_to_store(cfg, store)
@@ -490,8 +495,9 @@ def test_b7_sampled_recheck_captures_corruption(tmp_path):
     m2 = direct.sync_inputs_to_store(cfg, store)
     assert m2 == m1
     assert (store / sha0).read_text(encoding="utf-8") != "corrupted\n"   # re-copied
-    # restore 仍逐字节校验（安全网原样）：篡改一个非抽样位的 store 条目，
-    # 预检放行、restore 的哈希复核抓住并使整个 job 回退全量 archive
+    # restore still verifies byte for byte (safety net unchanged): tampering with a
+    # non-sampled store entry passes the precheck but restore's hash recheck catches
+    # it and makes the whole job fall back to the full archive
     sha3 = m1[3]["sha256"]
     (store / sha3).write_text("corrupted\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="input store hash mismatch"):
@@ -499,7 +505,7 @@ def test_b7_sampled_recheck_captures_corruption(tmp_path):
 
 
 def test_b7_manifest_corrupt_falls_back_to_full_hash(tmp_path):
-    # manifest 损坏 → 全量重算（memo 永不是正确性单点）
+    # Corrupt manifest -> full recompute (the memo is never a correctness single point)
     d, cfg = _b7_op(tmp_path, n=2)
     store = tmp_path / "store"
     m1 = direct.sync_inputs_to_store(cfg, store)
@@ -521,7 +527,7 @@ def test_b7_manifest_corrupt_falls_back_to_full_hash(tmp_path):
     assert reads["n"] == 3               # 2 sources re-hashed + 1 sampled store recheck
 
 
-# --- task 1 附 (乙B6): fail-fast ------------------------------------------------
+# --- task 1 addendum (B-B6): fail-fast ------------------------------------------------
 
 def test_b6_rendered_template_carries_preflight_and_valid_bash(tmp_path):
     import subprocess
@@ -821,7 +827,7 @@ def test_t2_student_manifest_is_not_a_new_submit_surface(tmp_path, capsys):
 
 
 def test_t2_default_state_leaves_existing_probes_alone(tmp_path):
-    # 默认不强制回归钉：普通 PROBE_REQUEST 仍是单脚本单 job
+    # No forced regression pin by default: an ordinary PROBE_REQUEST is still one script, one job
     be = FakeBackend(
         ["PROBE_REQUEST: p.py\n", REC("D2.3", 2.6)],
         ["PROBE PASS max_diff=0.1\n", EVAL(2.6), NCU])
@@ -959,7 +965,7 @@ def test_t5_gate_flags_bounce_once_then_accept(tmp_path):
 
 
 def test_t5_merged_blocks_are_the_same_text(tmp_path):
-    # 弹回文本只重组不新增：each block's wording is exactly the standing one
+    # The bounce text only recombines, never adds: each block's wording is exactly the standing one
     bad = "cause_class: R1\ndeficient_locus: D1.1\nreopen_price: none\n"
     good = "cause_class: R2\ndeficient_locus: M1\nreachability: closed\n"
     ctx, be = _t5_ctx(tmp_path, [bad, good])
@@ -1460,7 +1466,7 @@ def test_t6_capability_verification_recorded():
     assert "FLAGS-OK" in r.stdout or "PASS" in r.stdout
 
 
-# --- task 7: cross-generation carry扩件 + the ref-reading reconciliation --------
+# --- task 7: cross-generation carry extension + the ref-reading reconciliation --------
 
 def _t7_census_text(ms=2.34, sha=None):
     src = "def run(x):\n    return x\n"
@@ -1496,7 +1502,7 @@ def test_t7_census_parse_roundtrip():
 
 
 def test_t7_reconcile_three_states():
-    # 三态：带吻合采纳 / 失配回退 / 无 carry 现状
+    # Three states: adopt on agreement / fall back on mismatch / no-carry status quo
     assert driver.reconcile_carried_ref_reading(2.34, 2.35) == "adopt"     # 0.43% < 3%
     assert driver.reconcile_carried_ref_reading(2.34, 2.34 * 1.05) == "refute"
     assert driver.reconcile_carried_ref_reading(2.34, 2.34 * 0.95) == "refute"
@@ -1584,7 +1590,7 @@ def test_t7_reconcile_refute_runs_full_suite(tmp_path, monkeypatch):
 
 
 def test_t7_no_carry_is_byte_identical_baseline(tmp_path):
-    # 无 carry 现状: without a carry census the ref pricing path runs untouched
+    # No-carry status quo: without a carry census the ref pricing path runs untouched
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.ref_price_dir = None                        # the baseline early return
     driver._ensure_ref_pricing(ctx)                 # must not raise, must not log carry
@@ -1663,7 +1669,7 @@ def test_t7_self_evolve_writes_seven_artifacts(tmp_path, monkeypatch):
 # --- task 8: the small items bundle ---------------------------------------------
 
 def test_t8_floor_stop_exit_prints_the_composition(tmp_path, capsys, monkeypatch):
-    # 乙N-B15: the floor_stop door prints the same wall-clock table as the others
+    # B-N-B15: the floor_stop door prints the same wall-clock table as the others
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record as _ar
@@ -1679,7 +1685,7 @@ def test_t8_floor_stop_exit_prints_the_composition(tmp_path, capsys, monkeypatch
 
 
 def test_t8_run_level_buckets_print_and_calibrate(tmp_path, capsys):
-    # 乙B9: the recon/distill/lever + pricing/timeline/confirm buckets print;
+    # B-B9: the recon/distill/lever + pricing/timeline/confirm buckets print;
     # the calibration suggestion is output, never applied
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
@@ -1713,7 +1719,7 @@ def test_t8_teacher_bucket_lands_outside_records(tmp_path):
 
 
 def test_t8_prewarm_runs_without_the_build_cache(tmp_path):
-    # 丙T6: the prewarm is decoupled — it runs with PK_BUILD_CACHE unset
+    # C-T6: the prewarm is decoupled — it runs with PK_BUILD_CACHE unset
     import subprocess
     tree = tmp_path / "tree"
     (tree / "eval" / "problem").mkdir(parents=True)
@@ -1742,7 +1748,7 @@ echo "RC=$rc OUT=[$out]"
 
 
 def test_t8_ssh_lzma_preset_is_3():
-    # 乙B10: the ssh delivery compresses at preset 3 (transparent to the host)
+    # B-B10: the ssh delivery compresses at preset 3 (transparent to the host)
     import inspect
     src = inspect.getsource(direct)
     assert "lzma.compress(payload, preset=3)" in src

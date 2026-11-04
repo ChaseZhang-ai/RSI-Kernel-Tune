@@ -120,7 +120,7 @@ from cutlass.cute.runtime import from_dlpack
 #     device_median 0.20561 ms at vs_ref_device 1.0458 (paired, same job).
 #
 # THE ONE RED LINE — `bankconf_st` 81562.5 vs the 40000 cut.  What the
-# milestone's two remedies (§7 row "bankconf_st 高") ask for is already in
+# milestone's two remedies (§7 row "bankconf_st high") ask for is already in
 # place on this tree, and the line's calibration anchor does not reproduce:
 #
 #   (a) the face IS SW128.  `O_STAGE_INTER = False`, and the O staging landing
@@ -309,10 +309,10 @@ ROWMAX_GROUPS = 4
 #   the only FMNMX tree in the kernel and put it in that same prologue, next
 #   to S(0), so the prologue is now the one place with slack for 32 short
 #   independent scalar loads and no slack for one 8-instruction warp-collective
-#   block whose lanes all rendezvous.  The dial is D1.3(c)'s own ("Q 片段装载
-#   改宽字读" is the lever, the A/B is the adjudication) and D0.5's Q row
-#   licenses either width explicitly ("DSL 生成 LDS.64/128 或 LDSM 皆可 —
-#   验收轴是 mma_a_reg, 不是 LDS 宽度"), so the destination fragment, the
+#   block whose lanes all rendezvous.  The dial is D1.3(c)'s own ("widening the Q-fragment
+#   load to wider reads" is the lever, the A/B is the adjudication) and D0.5's Q row
+#   licenses either width explicitly ("the DSL may generate LDS.64/128 or LDSM —
+#   the acceptance axis is mma_a_reg, not the LDS width"), so the destination fragment, the
 #   tiling and `[SOURCE: RS]` are untouched: only the atom changes.
 #   WHAT THIS COSTS: the pre-v3 census says the scalar form carries 5 LDL +
 #   5 STL of per-thread address state.  Those sit in the TILE PROLOGUE, not in
@@ -529,7 +529,7 @@ UNIFORM_TILE = True          # per-tile scalars of the persistent loop
 # 17.9k -> 94.0k (reference 9.7k) and `tensor_pct` 75.84 -> 70.98
 # [MEASURED, ablation o-sw128 @ M0-gate iter 6 best tree].  D0.15 therefore
 # fixes **O staging face = SW128** and puts K_INTER in the §4 forbidden table;
-# D0.6's "布局偏移自选" is re-read as ruling only the base offsets and D0.5's
+# D0.6's "layout offsets are yours to choose" is re-read as ruling only the base offsets and D0.5's
 # "stmatrix or vectorised STS" as ruling only the write atom — neither rules
 # the face.  The r2 rung above is withdrawn by this row: `O_STAGE_INTER` goes
 # True -> False, the epilogue stmatrix destination view, the O staging landing
@@ -773,7 +773,7 @@ SPIN_BODY_WAITS = True
 # Every paired read is inside the duplicate's own floor, i.e. the probe harness
 # prices the pair NULL on device time; tensor_pct is not a probe reading, so
 # the pair is delivered here in the milestone's form (harvest depth 1) and the
-# 证伪条款 of D2.1 (device does not fall AND tensor_pct does not rise ->
+# falsification clause of D2.1 (device does not fall AND tensor_pct does not rise ->
 # withdraw, do not retry) is adjudicated on the driver's paired eval + NCU.
 CROSS_TILE_PROLOGUE = True
 XTILE_S0 = True

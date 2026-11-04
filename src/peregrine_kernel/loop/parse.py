@@ -398,7 +398,7 @@ def _last_json_object(text: str) -> dict | None:
 
 
 CORRECTNESS_FAIL_TOP_K = 3
-"""How many of a numeric FAIL's worst check rows ride the feedback (WP15, 甲G6:
+"""How many of a numeric FAIL's worst check rows ride the feedback (WP15, A-G6:
 the aggregate max_abs alone sent agents re-rounding the whole kernel when one
 output on one input group carried the failure; the worst-k rows name the
 locus)."""
@@ -413,7 +413,7 @@ carries."""
 
 
 def _correctness_fail_detail(corr_obj: dict) -> str:
-    """Top-k worst rows of a numeric FAIL (WP15 甲G6): element-level rows when
+    """Top-k worst rows of a numeric FAIL (WP15 A-G6): element-level rows when
     the bench emitted them (the reserved seam above), else the per-(group,
     output) check rows ranked by normalized error with the tolerance each
     needed — the failing locus and the gap, not one aggregate number."""

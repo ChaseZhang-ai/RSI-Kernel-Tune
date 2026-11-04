@@ -426,7 +426,7 @@ def test_kb_lint_scans_candidates_md_clean():
 
 
 def test_priors_library_carries_no_code_bodies():
-    """The 花括号 spot-check as a standing test: a decisions-only library has no
+    """The curly-brace spot-check as a standing test: a decisions-only library has no
     braces (markdown aside) and no def/class lines — prose decision maps."""
     for f in sorted((REPO / "priors").rglob("*.md")):
         text = f.read_text(encoding="utf-8")

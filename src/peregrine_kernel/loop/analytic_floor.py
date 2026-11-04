@@ -304,7 +304,7 @@ def _conv_flops(axes: dict, assumptions: list[str]) -> int | None:
 
 _BWD_NAME_RE = re.compile(r"bwd|backward|wgrad|dgrad|grad", re.I)
 _BWD_FACTOR = 2.0
-"""WP15 (丙WP15-T5 / 乙F5): the backward-chain factor. An attention bwd kernel
+"""WP15 (C-WP15-T5 / B-F5): the backward-chain factor. An attention bwd kernel
 does the fwd score+AV chain AGAIN (recompute for the softmax backward) plus the
 two backward matmuls — ~2.5x the fwd work in practice; a conv wgrad pays the
 im2col MACs of the forward pass plus its own gradient GEMM. Charging the plain

@@ -863,7 +863,7 @@ def parse_milestone_dag(text: str) -> list[Decision]:
 # --- WP14: shape-regime decision-channel protocol ------------------------------
 #
 # Two shape-keyed declaration forms a §3 decision line may carry (meta_milestone
-# "WP14 词汇段"), both machine-checked here. Everything below is NEW code on new
+# "WP14 vocabulary section"), both machine-checked here. Everything below is NEW code on new
 # names: the existing parser/validator surfaces are untouched, and a milestone
 # that carries neither form validates exactly as before.
 #
@@ -995,7 +995,7 @@ def regime_coverage(predicates: list[tuple[str, str]],
         if not hits:
             v.append(f"regime coverage failed: workload `{wl}` matches no regime "
                      f"predicate — the family must cover every workload "
-                     f"(覆盖失败 = 冻结无效)")
+                     f"(coverage failure = freeze invalid)")
         elif len(hits) > 1:
             v.append(f"regime predicates are not mutually exclusive: workload `{wl}` "
                      f"matches {', '.join(sorted(hits))}")

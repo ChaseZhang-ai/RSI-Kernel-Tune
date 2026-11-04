@@ -182,7 +182,7 @@ class IterationRecord:
     # buys no job). Coexists with the WP1/WP2/WP4 field additions by the same
     # append-only rule: load_records drops unknown keys of older files.
     #
-    # Merged-job口径 (WP11 rework note): on the default merged path eval_job_s
+    # Merged-job basis (WP11 rework note): on the default merged path eval_job_s
     # carries the WHOLE merged job's wall (eval segment + profile segment — the
     # two share one unpack/build, so a per-segment split of it would be
     # fiction), and ncu_job_s carries the profile segment's own wall as the
@@ -232,8 +232,8 @@ class IterationRecord:
     # --- WP14 (shape-regime decision channel) ------------------------------------
     # The per-shape ledger (contract C8: THIS is the schema's single definition —
     # every consumer reads these fields, only trajectory.py defines them). A group
-    # card's gate reading is a geomean over workloads of one kernel, so "小 shape
-    # 结构 A、大 shape 结构 B" is a combination the aggregate can never name: the
+    # card's gate reading is a geomean over workloads of one kernel, so "structure A on
+    # small shapes, structure B on large shapes" is a combination the aggregate can never name: the
     # ledger gives each workload its own measured history.
     # per_shape_ratios: this row's per-workload vs-reference ratios keyed by the
     # workload's name ({workload: ratio}), the same-job currency the pricing table

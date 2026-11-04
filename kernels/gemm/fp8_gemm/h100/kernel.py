@@ -416,7 +416,7 @@ from cutlass.utils import LayoutEnum
 # block 384, kernel_count 1.
 #
 # (i) swizzle mode and STSM member selection (hw_kb tma_store_epilogue §3
-#     "r2s 三层构造顺序固定" / cfrag_epilogue_stmatrix 机制 B).  The single
+#     "the r2s three-layer construction order is fixed" / cfrag_epilogue_stmatrix mechanism B).  The single
 #     LayoutEnum C_LAYOUT = ROW_MAJOR (mC is [M, N] row-major, i.e. n-major
 #     C) drives all four call sites, and they are consistent by construction
 #     rather than by hand:
@@ -432,7 +432,7 @@ from cutlass.utils import LayoutEnum
 #          elem_ty_acc=Float32) -- the 16-bit output width selects
 #          StMatrix8x8x16bOp(is_m_major_c(), 4), i.e. the x4 member; the
 #          non-16-bit fall-back is CopyUniversalOp (scalar store), which is
-#          the "机制 B 缺失" form the KB's trigger section names.
+#          the "mechanism B missing" form the KB's trigger section names.
 #       3. StMatrix8x8x16bOp(C_LAYOUT.is_m_major_c(), 4) in the C-atom that
 #          carries the value grouping -- same member, same transpose flag
 #          (False for n-major C, so no transposing STSM variant).
@@ -768,7 +768,7 @@ def fp8_gemm_kernel(
                 # D2.1: the whole tile-index chain is warp-invariant (it is fed
                 # by bidx and the loop counter only), so mark it at the seed and
                 # it stays on the uniform datapath -- these are the TMA
-                # coordinates, i.e. exactly the "TMA 坐标" clause.
+                # coordinates, i.e. exactly the "TMA coordinates" clause.
                 ctile = cute.arch.make_warp_uniform(
                     cluster_id + it * NUM_CLUSTERS)
                 # D3.2 grouped rasterisation, group = RAST_GROUP: with

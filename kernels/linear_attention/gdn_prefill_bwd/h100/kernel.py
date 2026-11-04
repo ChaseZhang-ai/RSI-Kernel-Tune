@@ -98,7 +98,7 @@ checklist line is answered in this file:
                           stage 3/4's row dots 4x16 -> 8x8; WG1's in-chunk
                           exclusive scan of r 64 chained broadcast `LDS` -> a
                           5-step `shfl.sync.idx` Kogge-Stone scan plus a
-                          butterfly carry) were sized against the D0.12 段式
+                          butterfly carry) were sized against the D0.12 section style
                           live-set budget and the unchanged 32/160/144/176
                           `setmaxnreg` quota
   smem_dynamic            unchanged from the M0 gate: no slot was deepened and
@@ -146,7 +146,7 @@ M2 / D2.2 -- the two auxiliary kernels, on the two knobs the decision names.
 
   look-ahead     `NWARM` goes 2 -> 1.  It is the warm-up depth of K2's forward
                  scan AND the look-ahead depth of K3's dh recurrence, which
-                 D0.4 requires to move together (同边纪律: one decay bound
+                 D0.4 requires to move together (same-side discipline: one decay bound
                  backs both).  K2 drops from 18 trips to 17 per interior
                  segment; K3 drops from two trips to one, i.e. half the
                  kernel.  The bound is written out at NWARM's definition.
@@ -164,12 +164,12 @@ M2 / D2.2 -- the two auxiliary kernels, on the two knobs the decision names.
                  elementwise work, both groups are issued before either is
                  reaped, so `wait_group(1)` takes the first while the second
                  flies and the first's elementwise + STSM publish is the
-                 covered段 (K2's B and U halves, K3's dvn and W halves).  The
+                 covered section (K2's B and U halves, K3's dvn and W halves).  The
                  ladder's only cost is the second f32 accumulator's liveness,
                  32 registers inside the unchanged 32/160x3 `setmaxnreg`
                  quota; the merges cost nothing.
   NOT done       the decision's third item, double-buffering K2's h_c TMA
-                 store, is its own 次项 and the timeline says so: on the
+                 store, is its own sub-term and the timeline says so: on the
                  iter-17 table K2's chunk period was 6449 cycles of which the
                  `hc.store.drain` segment was not in the top three (the drain
                  sits three stages downstream of the issue and is already
@@ -257,7 +257,7 @@ GVA = H_V // H_QK            # 2 v-heads per qk-head
 NWARM = 1                    # D0.3/D0.4 warm-up / look-ahead chunks
 # D2.2 cut this from 2 to 1.  Both users (K2's warm-up scan, K3's look-ahead dh
 # recurrence) rest on the SAME decay bound and so must move together (D0.4's
-# 同边纪律); one constant is what enforces that.  The bound: everything older
+# same-side discipline); one constant is what enforces that.  The bound: everything older
 # than the warm-up enters through a transition operator of norm <= exp(sum g)
 # over the warm-up interval (milestone 1.3), and g = log(alpha) with
 # alpha ~ U(0,1) (eval/oracle.py make_inputs) has mean -1 and variance 1 per
@@ -570,7 +570,7 @@ def _build_k1():
         # ---- WGMMA K @ K^T -> f32 accumulator (64 x 64) --------------------
         # The A/B descriptors ride the WARPGROUP-scope slice `get_slice(0)`;
         # only the accumulator and the C-coordinates are per-thread (hw_kb
-        # `wgmma_desc_uniform` 坑 3).  `wgmma.mma_async` reads its two 64-bit
+        # `wgmma_desc_uniform` pit 3).  `wgmma.mma_async` reads its two 64-bit
         # matrix descriptors out of the uniform file (`desc[UR*]`), and a
         # `tidx`-derived slice coordinate is exactly what stops ptxas proving
         # them warp-invariant -- they then get computed in per-thread
@@ -975,7 +975,7 @@ def _build_k2():
     # needs only its TMA bookkeeping, so handing its surplus to the consumers
     # raises every consumer to the largest quota the pool allows:
     # 128*32 + 384*160 = 65536 conserves it exactly (`warp_specialization`
-    # 坑 4 / 坑 8; over-subscribing does not fail to compile -- the consumers
+    # pit 4 / pit 8; over-subscribing does not fail to compile -- the consumers
     # hang on `.inc` forever).
     PROD_REGS, CONS_REGS = 32, 160
     REG_DEC, REG_INC = _reg_ops()
@@ -1031,8 +1031,8 @@ def _build_k2():
 
         The narrowing reads the accumulator THROUGH the store atom's retile and
         converts element by element straight into the 16-bit fragment, with no
-        f32 staging copy of the accumulator (D0.12 段B: "打包/精度转换必须终结
-        上游 f32 累加器的活跃区 —— 转换后不得保留其 f32 副本").  WG0 is the case
+        f32 staging copy of the accumulator (D0.12 section B: "packing/precision conversion must terminate
+        the upstream f32 accumulator's live range — after the conversion no f32 copy may survive").  WG0 is the case
         that makes the difference: its accumulator IS the segment-resident
         state, so a full f32 copy of the quadrant being published adds 32
         registers on top of the 128 that stay live across the call.
@@ -1055,7 +1055,7 @@ def _build_k2():
         same TiledMma, so this is the mapping notes/probe_m0_d016_ldsm.py
         verified on the GPU (R1 on a TMA-landed slot, R4 on an STSM-written
         one).  Returns bf16; call sites convert per element on use, so no f32
-        copy of the tile is ever materialised (D0.12 段B).
+        copy of the tile is ever materialised (D0.12 section B).
         """
         r = ALLOC(cshp, BF16)
         cute.copy(l2r_, thr_l.partition_S(sT[(None, None, slot)]),
@@ -1091,7 +1091,7 @@ def _build_k2():
         """Put ONE WGMMA SS chain into the group that is currently open.
 
         No fence, no `commit_group`, no wait -- the inner half of the two-level
-        issue helper hw_kb `wgmma_deferred_wait` 坑 11 asks for, and what lets
+        issue helper hw_kb `wgmma_deferred_wait` pit 11 asks for, and what lets
         several chains share one group and one drain (D1.1, brought over to K2
         by D2.2).
 
@@ -1102,7 +1102,7 @@ def _build_k2():
 
         The A/B descriptors are built on the WARPGROUP-scope slice
         `get_slice(0)`, never on the per-thread slice (hw_kb
-        `wgmma_desc_uniform` 坑 3).  `wgmma.mma_async` reads its two 64-bit
+        `wgmma_desc_uniform` pit 3).  `wgmma.mma_async` reads its two 64-bit
         matrix descriptors from the uniform register file (`desc[UR*]`), and
         ptxas can only leave them there if it can prove they are
         warp-invariant; a `tidx`-derived slice coordinate breaks that proof,
@@ -1110,7 +1110,7 @@ def _build_k2():
         with `R2UR` ahead of every issue -- 2 dwords x its whole live range
         charged to the `setmaxnreg` quota, for every chain in flight.  Only
         `partition_C` (the accumulator) and the STSM partitions are
-        per-thread.  A fresh atom per call site is mandatory (坑 4).
+        per-thread.  A fresh atom per call site is mandatory (pit 4).
         """
         wgm = mma.get_slice(0)
         at = cute.make_mma_atom(mma.op)
@@ -1185,9 +1185,9 @@ def _build_k2():
 
         # ---- role split -----------------------------------------------------
         # the dec/inc is the first statement of its branch, with no barrier
-        # between branch and quota (`warp_specialization` 坑 5), and everything
+        # between branch and quota (`warp_specialization` pit 5), and everything
         # shared sits ABOVE the branch so that the prologue is compiled against
-        # the 128-register entry quota rather than the producer's 32 (坑 11).
+        # the 128-register entry quota rather than the producer's 32 (pit 11).
         if wid >= 12:
             REG_DEC(PROD_REGS)
             # producer: ONE warp issues the 5 TMA boxes of each chunk
@@ -1239,7 +1239,7 @@ def _build_k2():
                 sFace[(None, None, 0)]))[:3])
             # D0.16's read side.  Same rule as the STSM slice: the tiled copy is
             # sliced by the WARPGROUP thread number, never by lane and never by
-            # `tidx` (`ldmatrix_stmatrix` 坑 5), so that `thr_l`'s fragment index
+            # `tidx` (`ldmatrix_stmatrix` pit 5), so that `thr_l`'s fragment index
             # agrees element for element with `cS`.
             thr_l = l2r.get_slice(tw)
             cshp = thr_c.partition_shape_C((TILE, TILE))
@@ -1284,11 +1284,11 @@ def _build_k2():
                     # contracts over d_k = 128 = two 64-wide tiles; both target
                     # the SAME accumulator with nothing between them, so they
                     # share one group and one drain (hw_kb `wgmma_deferred_wait`
-                    # 坑 11) instead of fencing/committing/draining twice.  The
+                    # pit 11) instead of fencing/committing/draining twice.  The
                     # two N halves are INDEPENDENT accumulators, so both groups
                     # are issued before either is reaped: `wait_group(1)` takes
                     # half 0 while half 1 flies, and half 0's LDSM + 32 FFMA +
-                    # STSM publish is the covered段 (坑 12's sign condition --
+                    # STSM publish is the covered section (pit 12's sign condition --
                     # straight-line, no blocking wait and no stage release in
                     # it).  Cost: the second f32 accumulator is live across the
                     # first half's elementwise, +32 registers on WG1's 160.
@@ -1327,7 +1327,7 @@ def _build_k2():
                 # Python for the truthiness of a traced value)
                 if wid >= 8:
                     glast = sGc[gbase + C - 1]
-                    # D1.1's ladder again, and here the covered段 is already
+                    # D1.1's ladder again, and here the covered section is already
                     # written: the two U = A @ B chains are independent
                     # accumulators and the Kd face does not depend on either,
                     # so both groups go out first and the Kd shaping (two
@@ -1522,8 +1522,8 @@ def _build_k3():
     BAR_CONS = 1              # NamedBarrier over the 384 consumer threads
     LOG2E = 1.4426950408889634
     SCALE = _SCALE            # baked at build time (see `_compiled`)
-    # Same per-role register accounting as K2 (D0.11's "dh 所在 WG 必须 >= 128 +
-    # 工作集"): WG0 holds the 128x128 f32 dh in 128 registers/thread across the
+    # Same per-role register accounting as K2 (D0.11's "the WG holding dh must have >= 128 +
+    # working set"): WG0 holds the 128x128 f32 dh in 128 registers/thread across the
     # whole trip loop, so the 128-register entry quota cannot also hold the
     # pack fragment and the stage's addressing.  The producer's surplus goes to
     # the consumers; 128*32 + 384*160 = 65536 conserves the pool exactly.
@@ -1554,7 +1554,7 @@ def _build_k3():
         """f32 C-fragment -> bf16 -> STSM x4 into face `slot` of `sF`.
 
         No f32 staging copy of the accumulator is made on the way through
-        (D0.12 段B): the narrowing reads it through the store atom's retile
+        (D0.12 section B): the narrowing reads it through the store atom's retile
         straight into the 16-bit fragment, which for WG0 -- whose accumulator
         is the resident dh -- is the difference between fitting and spilling.
         """
@@ -1603,7 +1603,7 @@ def _build_k3():
         """Put ONE WGMMA SS chain into the group that is currently open.
 
         No fence, no `commit_group`, no wait -- the inner half of the two-level
-        issue helper hw_kb `wgmma_deferred_wait` 坑 11 asks for, and what lets
+        issue helper hw_kb `wgmma_deferred_wait` pit 11 asks for, and what lets
         several chains share one group and one drain (D1.1, brought over to K3
         by D2.2).
 
@@ -1613,7 +1613,7 @@ def _build_k3():
 
         The A/B descriptors are built on the WARPGROUP-scope slice
         `get_slice(0)`, never on the per-thread slice (hw_kb
-        `wgmma_desc_uniform` 坑 3).  `wgmma.mma_async` reads its two 64-bit
+        `wgmma_desc_uniform` pit 3).  `wgmma.mma_async` reads its two 64-bit
         matrix descriptors from the uniform register file (`desc[UR*]`), and
         ptxas can only leave them there if it can prove they are
         warp-invariant; a `tidx`-derived slice coordinate breaks that proof,
@@ -1621,7 +1621,7 @@ def _build_k3():
         with `R2UR` ahead of every issue -- 2 dwords x its whole live range
         charged to the `setmaxnreg` quota, for every chain in flight.  Only
         `partition_C` (the accumulator) and the STSM partitions are
-        per-thread.  A fresh atom per call site is mandatory (坑 4).
+        per-thread.  A fresh atom per call site is mandatory (pit 4).
         """
         wgm = mma.get_slice(0)
         at = cute.make_mma_atom(mma.op)
@@ -1694,7 +1694,7 @@ def _build_k3():
 
         # ---- role split -----------------------------------------------------
         # the dec/inc is the first statement of its branch (`warp_specialization`
-        # 坑 5) and the shared prologue above stays on the entry quota (坑 11)
+        # pit 5) and the shared prologue above stays on the entry quota (pit 11)
         if wid >= 12:
             REG_DEC(PROD_REGS)
             # producer: ONE warp issues the 7 TMA boxes of each trip
@@ -1746,7 +1746,7 @@ def _build_k3():
                 sFace[(None, None, 0)]))[:3])
             # D0.16's read side, sliced by the WARPGROUP thread number so that
             # `thr_l`'s fragment index agrees element for element with `cS`
-            # (`ldmatrix_stmatrix` 坑 5).
+            # (`ldmatrix_stmatrix` pit 5).
             thr_l = l2r.get_slice(tw)
             cshp = thr_c.partition_shape_C((TILE, TILE))
 
@@ -1787,7 +1787,7 @@ def _build_k3():
                     acc = ALLOC(cS.shape, F32)
                     # both halves of the 128-deep q.k contraction target the
                     # same accumulator with nothing between them, so one fence,
-                    # one group, one drain (D1.1 / 坑 11, D2.2 brings it here)
+                    # one group, one drain (D1.1 / pit 11, D2.2 brings it here)
                     warpgroup.fence()
                     for mh in cutlass.range_constexpr(2):
                         link(mma_kk, acc,
@@ -1869,7 +1869,7 @@ def _build_k3():
                         # shape (see the Kb comment in stage (a)).  The two
                         # halves are independent accumulators and Qg depends on
                         # neither, so both groups go out first and the Qg
-                        # shaping is the covered段.
+                        # shaping is the covered section.
                         accW = [ALLOC(cS.shape, F32) for _ in range(2)]
                         for mh in cutlass.range_constexpr(2):
                             warpgroup.fence()
@@ -1899,7 +1899,7 @@ def _build_k3():
                     # committed and drained on its own, so no k-block could
                     # issue while another was in flight.  The two chains of a
                     # quadrant target the SAME accumulator with nothing between
-                    # them, so they share a group and a drain (坑 11), and the
+                    # them, so they share a group and a drain (pit 11), and the
                     # four quadrants ride D1.1's depth-1 ladder on top --
                     # exactly the shape K4's WG0 stage 5 already carries.  Free
                     # in registers: the accumulators are trip-resident either
@@ -2143,7 +2143,7 @@ def _build_k4():
     # 2 nor part 3 moves it).  Part 2 added five quantities (Bm, U, -dv, Ms,
     # -Mv, Kg) and part 3 the three output staging pairs WITHOUT adding a face:
     # each takes a slot whose occupant is already dead, which is the reuse D0.8
-    # allows inside the 8 KB granule ("生命期错开可复用同一块").  Lifetimes, by
+    # allows inside the 8 KB granule ("staggered lifetimes may reuse the same block").  Lifetimes, by
     # the five consumer stages of a chunk (`>>` = a D0.14 store staging use,
     # which lasts from the STSM to the `wait_group` a few instructions later):
     #
@@ -2183,8 +2183,8 @@ def _build_k4():
     FNDV, FMV = FBM, FSQ                      # the lifetime-disjoint aliases
     BAR_WG0, BAR_WG1, BAR_WG2 = 2, 3, 4       # one per consumer WG, 128 wide
     # ---- D0.10's cross-WG handoff: one full/empty mbarrier pair per exchange
-    # quantity (hw_kb `wg_exchange_face_mbarrier`).  The contract is "跨 WG 一律
-    # mbarrier"; NamedBarrier is allowed only for WG-INTERNAL段间同步, never at
+    # quantity (hw_kb `wg_exchange_face_mbarrier`).  The contract is "across WGs always an
+    # mbarrier"; NamedBarrier is allowed only for WG-internal inter-section synchronization, never at
     # CTA width.  Each edge below is one row of D0.9's consumption ledger, with
     # the ALIASED lifetimes of a slot carrying their own pair (a slot's second
     # occupant has a different producer/consumer set than its first, so one
@@ -2290,7 +2290,7 @@ def _build_k4():
                (LF_AV, 1), (LE_AV, 256),       # A+v:  WG1 s1/s3 + dq staging,
                                                #       WG2 s2
                (LF_H, 1), (LE_H, 384))         # h_c:  WG0 s5, WG1 s1/s4, WG2 s5
-    # D0.8's 1 KB scalar block, 256 f32 (the "行和交接" row it provisions):
+    # D0.8's 1 KB scalar block, 256 f32 (the "row-sum handoff" row it provisions):
     #   [0, 64)     r_i    = <q_i, dq_i> - <v_i, dv_i>   (WG1)
     #   [64, 128)   dbeta_i                              (WG1)
     #   [128, 132)  WG0's four per-warp partials of <dh_in, h>
@@ -2302,19 +2302,19 @@ def _build_k4():
     # ---- D0.12's per-segment live-set budget, role by role.  The three
     # consumer roles do NOT have the same working set, so they must not get the
     # same quota: D0.5 leaves the split to the student with one binding
-    # constraint -- "dh 所在 WG 必须 >= 128 + 工作集" -- and WG0 carries 128
+    # constraint -- "the WG holding dh must have >= 128 + working set" -- and WG0 carries 128
     # registers of resident dh (D0.11) at EVERY program point of its loop, the
     # publish of stage 1 included, so 160 is the floor its quota may take at
     # all.
     #
-    # `cfrag_fused_pack_liveness` 机制 3 accounting at each role's peak point
+    # `cfrag_fused_pack_liveness` mechanism 3 accounting at each role's peak point
     # (A_resident + A_flight + pack + W, the pack being the bf16 fragment alone
     # -- see `publish`):
     #   WG0  stage 1  128 (dh) + 16 (pack)          + W
     #   WG1  stage 3   32 (du) + 16 (pack) + 4 rows + W
     #   WG2  stage 5   32 (a)  + 32 (ah)  + 16 pack + W
     # The quotas are multiples of 8 and conserve the pool exactly
-    # (`warp_specialization` 坑 4 / 坑 8): 128*(32 + 160 + 144 + 176) = 65536.
+    # (`warp_specialization` pit 4 / pit 8): 128*(32 + 160 + 144 + 176) = 65536.
     # Over-subscribing this sum does not fail to compile -- every consumer
     # hangs on its `.inc` forever.
     #
@@ -2340,12 +2340,12 @@ def _build_k4():
     #
     # What remains at this split is WG0's 25 slots, and their source is
     # structural rather than a quota: D0.16's h_c ledger row asks for the psi
-    # inner product to read h_c 分块流式 (a sub-tile at a time) and `ldsm_c`
+    # inner product to read h_c streamed block by block (a sub-tile at a time) and `ldsm_c`
     # brings the whole 64x64 quadrant in as one 16-register fragment, which sits
     # on top of the 128 resident ones; the stage-1 pack fragment is the same
-    # shape on the same 128.  That is D0.12's 让位阶梯 and not this commit.
+    # shape on the same 128.  That is D0.12's yield ladder and not this commit.
     #
-    # `W` above is the NON-accumulator working set D0.12 段账 caps (<= 32 for
+    # `W` above is the NON-accumulator working set D0.12 section ledger caps (<= 32 for
     # WG0, <= 115 for WG2).  The WGMMA operand descriptors are NOT part of it:
     # `wgmma.mma_async` takes them from the uniform file, so they cost the
     # per-thread quota nothing -- PROVIDED the slice coordinate they are built
@@ -2355,7 +2355,7 @@ def _build_k4():
     # stage 5 alone holds six chains' worth, and every role's container set
     # sits close enough to its quota that the tax evicts a whole accumulator
     # array rather than the descriptors themselves (`wgmma_desc_uniform`
-    # 两种失败形态, 形态 2).
+    # both failure shapes, shape 2).
     PROD_REGS = 32
     WG0_REGS, WG1_REGS, WG2_REGS = 160, 144, 176
     REG_DEC, REG_INC = _reg_ops()
@@ -2482,10 +2482,10 @@ def _build_k4():
 
         The narrowing reads the accumulator THROUGH the store atom's retile and
         converts element by element straight into the 16-bit fragment: no f32
-        staging copy of the accumulator is made (D0.12 段B, "打包/精度转换必须
-        终结上游 f32 累加器的活跃区 —— 转换后不得保留其 f32 副本").  Where the
+        staging copy of the accumulator is made (D0.12 section B, "packing/precision conversion must
+        terminate the upstream f32 accumulator's live range — after the conversion no f32 copy may survive").  Where the
         upstream accumulator dies at the pack this is only a tidier spelling of
-        the same allocation (`cfrag_fused_pack_liveness` 机制 1: ptxas splits a
+        the same allocation (`cfrag_fused_pack_liveness` mechanism 1: ptxas splits a
         staging fragment's live range into the dead half anyway).  Where it does
         NOT die it is the difference between fitting and spilling, and WG0 is
         exactly that case: its accumulator is the segment-resident dh, so a full
@@ -2574,7 +2574,7 @@ def _build_k4():
         STSM-written one) in notes/probe_m0_d016_ldsm.py.
 
         Returns a bf16 fragment; every call site converts per element on use,
-        so no f32 copy of the tile is ever materialised (D0.12 段B).
+        so no f32 copy of the tile is ever materialised (D0.12 section B).
         """
         r = ALLOC(cshp, BF16)
         cute.copy(l2r_, thr_l.partition_S(sT[(None, None, slot)]),
@@ -2611,7 +2611,7 @@ def _build_k4():
         """Put ONE WGMMA SS chain into the group that is currently open.
 
         No fence, no `commit_group`, no wait -- this is the inner half of the
-        two-level issue helper hw_kb `wgmma_deferred_wait` 坑 11 asks for, and
+        two-level issue helper hw_kb `wgmma_deferred_wait` pit 11 asks for, and
         it is what lets several chains share one group and one drain (D1.1).
 
         Semantics of every call site in this file:  acc[m, n] (+)= sum_k
@@ -2621,7 +2621,7 @@ def _build_k4():
 
         The A/B descriptors are built on the WARPGROUP-scope slice
         `get_slice(0)`, never on the per-thread slice (hw_kb
-        `wgmma_desc_uniform` 坑 3).  `wgmma.mma_async` reads its two 64-bit
+        `wgmma_desc_uniform` pit 3).  `wgmma.mma_async` reads its two 64-bit
         matrix descriptors from the uniform register file (`desc[UR*]`), and
         ptxas can only leave them there if it can prove they are
         warp-invariant; a `tidx`-derived slice coordinate breaks that proof,
@@ -2629,7 +2629,7 @@ def _build_k4():
         with `R2UR` ahead of every issue -- 2 dwords x its whole live range
         charged to the `setmaxnreg` quota, for every chain in flight.  Only
         `partition_C` (the accumulator) and the STSM partitions are
-        per-thread.  A fresh atom per call site is mandatory (坑 4).
+        per-thread.  A fresh atom per call site is mandatory (pit 4).
         """
         wgm = mma.get_slice(0)
         at = cute.make_mma_atom(mma.op)
@@ -2830,7 +2830,7 @@ def _build_k4():
                 sFace[(None, None, 0)]))[:3])
             # D0.16's read side.  Same rule as the STSM slice: the tiled copy
             # is sliced by the WARPGROUP thread number, never by lane and never
-            # by `tidx` (`ldmatrix_stmatrix` 坑 5), so that `thr_l`'s fragment
+            # by `tidx` (`ldmatrix_stmatrix` pit 5), so that `thr_l`'s fragment
             # index agrees element for element with `cS`.
             thr_l = l2r.get_slice(tw)
             cshp = thr_c.partition_shape_C((TILE, TILE))
@@ -2852,8 +2852,8 @@ def _build_k4():
             # afford.  Everything shared sits ABOVE the branch, where it is
             # compiled against the 128-register entry quota, because a budget
             # move hoisted ahead of the shared prologue forces that prologue
-            # into the reduced quota (`warp_specialization` 坑 11); and there is
-            # no barrier between branch and `.inc` (坑 5).
+            # into the reduced quota (`warp_specialization` pit 11); and there is
+            # no barrier between branch and `.inc` (pit 5).
             if wid < 4:
                 REG_INC(WG0_REGS)
                 # ================= WG0: the dh owner (D0.11) ================
@@ -2894,7 +2894,7 @@ def _build_k4():
                     # -- (1) publish dh for WG1's dU and WG2's dk ------------
                     # the slot's previous readers are the PREVIOUS chunk's WG1
                     # s2 and WG2 s5 (this is the one edge the milestone calls
-                    # "等上轮"), so the write waits their empty at 1 - ph; a
+                    # "wait one round"), so the write waits their empty at 1 - ph; a
                     # fresh barrier satisfies parity 1 at once
                     _xw(bX, XE_DH, 1 - ph)
                     for j in cutlass.range_constexpr(4):
@@ -2927,16 +2927,16 @@ def _build_k4():
                     _seg("k4.chunk.land.end", t)
                     dec = _exp(glast)
                     # D1.5 / `ew_segment_latency_schedule` §(d).  The psi dot
-                    # is the only serial chain inside the段 D1.1's depth-1
+                    # is the only serial chain inside the section D1.1's depth-1
                     # ladder covers, and as ONE rolling accumulator its in-
                     # flight width was 1: 32 dependent FFMA per quadrant, the
                     # same order as the eight WGMMA the shadow is made of, so
-                    # the段 did not fit inside its own cover.  Four independent
-                    # partial sums (the KB's 正例 shape -- one value per group,
+                    # the section did not fit inside its own cover.  Four independent
+                    # partial sums (the KB's positive-example shape -- one value per group,
                     # merged once at the end) cut the chain to 8 FFMA.  The
                     # price is three registers on top of WG0's 128 resident dh:
                     # the LDSM fragment and the pack fragment are unchanged, so
-                    # D0.12's 段C non-accumulator account moves by exactly
+                    # D0.12's section C non-accumulator account moves by exactly
                     # those three and stays inside its <= 32.
                     ps0, ps1 = F32(0.0), F32(0.0)
                     ps2, ps3 = F32(0.0), F32(0.0)
@@ -2945,14 +2945,14 @@ def _build_k4():
                     # every program point of this loop either way, so letting
                     # quadrant j fly across quadrant j-1's psi pass adds no
                     # live value at all (`sH` is born and dies inside the
-                    # covered段, exactly as it did at depth 0, and a chain's
+                    # covered section, exactly as it did at depth 0, and a chain's
                     # descriptors are dead the moment its last k-block issues).
-                    # The covered段 is straight-line LDSM + 32 FFMA with no
+                    # The covered section is straight-line LDSM + 32 FFMA with no
                     # blocking wait and no stage release in it -- hw_kb
-                    # `wgmma_deferred_wait` 坑 12's sign condition, not 坑 10's.
+                    # `wgmma_deferred_wait` pit 12's sign condition, not pit 10's.
                     # Both chains of a quadrant target the SAME accumulator and
                     # nothing runs between them, so they also share one group
-                    # and one drain (坑 11): 8 groups/chunk -> 4.
+                    # and one drain (pit 11): 8 groups/chunk -> 4.
                     for j in cutlass.range_constexpr(4):
                         for i in cutlass.range_constexpr(cute.size(cS)):
                             accD[j][i] = accD[j][i] * dec
@@ -3070,7 +3070,7 @@ def _build_k4():
                     eg0, eg1 = _exp(g0), _exp(g1)
                     for nh in cutlass.range_constexpr(2):
                         acc = ALLOC(cS.shape, F32)
-                        # D1.1 / hw_kb 坑 11: the two mh halves accumulate into
+                        # D1.1 / hw_kb pit 11: the two mh halves accumulate into
                         # the SAME register file and nothing runs between them,
                         # so they are one group and one drain, not two.
                         warpgroup.fence()
@@ -3386,13 +3386,13 @@ def _build_k4():
                     # times over, three times a chunk.  Cost per thread per
                     # chunk: 2 row `LDS` + 16 column `LDS` (bit 1 of the index
                     # picks the row, probe R2) + 32 FADD + 32 MUFU -- the
-                    # reference's own段-1 shape.  The exponent is NOT split into
+                    # reference's own section-1 shape.  The exponent is NOT split into
                     # e^{G_i} e^{-G_j} (D0.16 forbids it: |sum g| reaches tens
                     # and either factor alone can overflow); above the diagonal
                     # the difference IS positive and its exp may be inf, which
                     # is why the mask is SELECTED rather than multiplied in.
                     # 32 f32 registers live from here to stage 4, inside the
-                    # 16-32 D0.12 段账 allows; stage 5's two accumulators come
+                    # 16-32 D0.12 section ledger allows; stage 5's two accumulators come
                     # after its last use.
                     m0, m1 = cS[0][0], cS[2][0]
                     g0 = sGc[gbase + m0]
@@ -3541,7 +3541,7 @@ def _build_k4():
                         # three groups, not six: the six chains of this half
                         # split into runs that share an accumulator with no
                         # register traffic in between, and each run is one
-                        # group and one drain (hw_kb 坑 11).  `ah` keeps its own
+                        # group and one drain (hw_kb pit 11).  `ah` keeps its own
                         # group at depth 0 rather than flying across the run
                         # above it -- a ladder there would hold a second 32-f32
                         # accumulator live through three chains, and WG2 is the

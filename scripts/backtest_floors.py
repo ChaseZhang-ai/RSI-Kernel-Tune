@@ -22,7 +22,7 @@ matched to the results table's hardware (H100 rows price at the sm90 peaks, B200
 rows at the sm100 peaks); this box's RTX 3060 has no comparable results and
 never participates.
 
-``--from-run <op_dir>`` (WP15, 丙WP15-T5/乙F5 — the no-data fix): auto-fills
+``--from-run <op_dir>`` (WP15, C-WP15-T5/B-F5 — the no-data fix): auto-fills
 ``best_ms`` from a run's own finish confirmation. A run directory (the card's
 operator tree) carries ``best_confirmation.json`` (the settled median over its
 independent confirmation jobs) and ``eval/problem/problem.json`` (the frozen

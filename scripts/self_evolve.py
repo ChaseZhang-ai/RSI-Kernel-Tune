@@ -64,7 +64,7 @@ def noise_floor(best: dict) -> float:
 
 
 def _floor_progress_text(task, best: dict) -> str | None:
-    """WP16 (丙): the ``floor_progress = floor_ms / best_ms`` advisory line for
+    """WP16 (C): the ``floor_progress = floor_ms / best_ms`` advisory line for
     one generation — the card's parsed analytic floor (WP9's floor_for, the
     single source; a card without a problem.json yields None and no line is
     printed). Report-only: nothing downstream reads it."""
@@ -120,14 +120,14 @@ _CARRY_MILESTONE = "milestone.md"
 _CARRY_LEVERS = "levers.json"
 _CARRY_ARCH_PROBE = "arch_probe.md"
 _CARRY_FALSIFIED = "falsified.md"
-# WP19 (task 7, 乙B8): the carry grows from four artifacts to seven — probes/,
+# WP19 (task 7, B-B8): the carry grows from four artifacts to seven — probes/,
 # ref_census.md (the parent best tree's SASS/NCU census, sha-stamped) and
 # tools.md. The census is what the next generation's reference-pricing
 # reconciliation consumes: the child's reference IS the parent's best kernel
 # verbatim, so a census whose header sha matches the child's reference kernel
 # byte-for-byte is a valid prior for the child's ref-side readings — adopted
 # only after one confirmation job re-measures the ref within the band, never
-# on the carry alone (读数复用是加速不是省测量).
+# on the carry alone (reading reuse is acceleration, not measurement-skipping).
 _CARRY_REF_CENSUS = "ref_census.md"
 _CARRY_PROBES = "probes"
 _CARRY_TOOLS = "tools.md"

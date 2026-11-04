@@ -1,6 +1,6 @@
 """WP14: the shape-regime decision channel (two phases).
 
-Phase 1 (甲G1+乙A5): the per-shape ledger — each workload of a group card gets
+Phase 1 (A-G1+B-A5): the per-shape ledger — each workload of a group card gets
 its own measured history (``per_shape_ratios`` / ``per_shape_best``, defined
 ONLY in inner/trajectory.py per contract C8) — and the size-dispatch narrow
 form: a decision line may declare shape-keyed lever value ranges
@@ -8,7 +8,7 @@ form: a decision line may declare shape-keyed lever value ranges
 per workload and the feedback reads per shape; the landing is always the
 student's runtime shape-dispatch code judged by the full eval gate.
 
-Phase 2 (丙WP14): M0-level per-regime topology vocabulary — a decision (an M0
+Phase 2 (C-WP14): M0-level per-regime topology vocabulary — a decision (an M0
 topology contract line included) may carry ``regime: <axis-predicate>``, a pure
 function of the problem's shape axes that the driver machine-checks for
 purity, mutual exclusion and coverage of every workload (a coverage failure
@@ -389,7 +389,7 @@ def test_dispatch_delivery_walks_the_standard_gate_path(tmp_path):
     assert "0.9000 ms" in block and "0.0980 ms" in block
 
 
-# --- MC-DISPATCH (乙A14): the per-shape structural prescreen ---------------------
+# --- MC-DISPATCH (B-A14): the per-shape structural prescreen ---------------------
 
 def test_mc_dispatch_per_shape_readings_and_no_mechanical_merge(tmp_path, monkeypatch):
     """The prescreen times each structural variant PER WORKLOAD; a variant that

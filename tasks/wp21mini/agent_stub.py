@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""WP21 mini 冒烟用 `claude -p` 替身 agent（stub）。
+"""A `claude -p` stand-in agent (stub) for the WP21 mini smoke.
 
-协议面与 scripts/agent-claude.sh 相同：prompt 走 stdin、回复走 stdout，退出码 0。
-角色按 prompt 标记判别；学生回合第一次写 kernel.cu + 记录块，之后 EXHAUSTED；
-教师回合给最小合法回复（patch 回合会真的在 milestone.md 上追加条目再报 patch 协议行）。
+Same protocol surface as scripts/agent-claude.sh: prompt on stdin, reply on stdout, exit code 0.
+The role is told from markers in the prompt; the student turn writes kernel.cu + a record
+block on its first call, then EXHAUSTED; the teacher turn gives the minimal legal reply (the
+patch turn really appends an entry to milestone.md before reporting the patch protocol line).
 
-只服务 tasks/wp21mini 冒烟（链路与数据流证据），不代表 agent 行为已验证——
-真 agent 冒烟需机器配置 agent 凭据（冒烟 defect 清单第 1 条）。
+Serves only the tasks/wp21mini smoke (chain and dataflow evidence); it does NOT mean agent
+behavior is verified — a real-agent smoke needs the machine to configure agent credentials
+(smoke defect list, item 1).
 """
 from __future__ import annotations
 
@@ -95,7 +97,7 @@ def main() -> int:
     state = load_state()
     out = ""
 
-    # 冒烟证据：把每次收到的提示词里的机制标记落盘（kbmenu 渲染命中、SOL 头行等）。
+    # Smoke evidence: persist the mechanism markers seen in each received prompt (kbmenu render hits, the SOL header line, etc.).
     markers = [m for m in ("KB-MENU", "KB-HINTS", "LEVER-MENU", "CALIBRATION",
                            "compute_sol_pct", "STAGNATION", "LEDGER")
                if m in prompt]
@@ -103,15 +105,15 @@ def main() -> int:
         with open(".wp21_stub_prompt_log.txt", "a") as fh:
             fh.write(f"markers={markers} len={len(prompt)}\n")
 
-    # 角色判别（标记取自各提示词/命令 brief 的题头与专有协议词）
+    # Role detection (markers from each prompt/command brief's headings and protocol-specific words)
     if "You are writing the correctness judge" in prompt:
-        # judge 回合：cwd=check/，写三件套
+        # judge turn: cwd=check/, writes the three-piece set
         write_judge_files()
         out = "judge: wrote definition.json, judge.py, groups.json for wp21mini.\n"
     elif "Initial distillation authoring step" in prompt:
-        # 蒸馏回合：milestone 落点=驱动提示词里的 {MILESTONE_PATH} 绝对路径绑定
-        # （loop/cli.py 默认 operators/<op>/milestone.md，而 agent cwd=ws/）；
-        # 双写 ws/milestone.md 兜底。
+        # distill turn: the milestone lands at the {MILESTONE_PATH} absolute path bound
+        # in the driver's prompt (loop/cli.py defaults to operators/<op>/milestone.md while
+        # the agent cwd=ws/); ws/milestone.md is written too as a fallback.
         import re as _re
         mm = _re.search(r"(/[^\s`']+/milestone\.md)", prompt)
         targets = ([Path(mm.group(1))] if mm
@@ -208,20 +210,20 @@ the smoke adds none of its own.
                "[PHASE: none] adjudications present; mechanism-verification lines in "
                "both gates.\n")
     elif "Mandatory M0 finish audit" in prompt:
-        # M0 审计：OK 关审计（枚举见 driver._CAUSE_ENUM_AUDIT）
+        # M0 audit: OK closes the audit (enum at driver._CAUSE_ENUM_AUDIT)
         out = ("cause_class: OK\n"
                "diagnosis: stub — milestone consistent with the smoke trajectory; "
                "no lever citations.\n")
     elif "Diagnosis step" in prompt:
-        # 平台诊断：合法枚举 G1-G5/R1/R2/INFEASIBLE；给 G1 + 无操作 prose
+        # Platform diagnose: legal enum G1-G5/R1/R2/INFEASIBLE; gives G1 + a no-op prose
         out = ("cause_class: G1\n"
                "reachability: floor_opt=0.0001 ms -> OPEN (the floor sits far inside the "
                "target; keep walking)\n"
                "diagnosis: stub — single-iteration smoke; no lever citations, "
                "no probe requests.\n")
     elif "Patch step" in prompt or "patch_class" in prompt:
-        # 补丁回合：追加到驱动提示词绑定的 milestone 绝对路径（patch gate 校验
-        # 那个文件被改过；cwd 是 ws，ctx.milestone 在 operators/<op>/）
+        # patch turn: append to the milestone absolute path bound in the driver's prompt
+        # (the patch gate verifies that file changed; cwd is ws, ctx.milestone sits in operators/<op>/)
         import re as _re
         mm = _re.search(r"(/[^\s`']+/milestone\.md)", prompt)
         ms = Path(mm.group(1)) if mm else Path("milestone.md")
@@ -236,7 +238,7 @@ the smoke adds none of its own.
     elif "RECON_REQUEST" in prompt and "student" not in prompt[:200].lower():
         out = "recon: stub — no requests.\n"
     else:
-        # 学生回合
+        # student turn
         state["student_turns"] += 1
         save_state(state)
         if state["student_turns"] == 1:
@@ -245,8 +247,9 @@ the smoke adds none of its own.
         else:
             out = "EXHAUSTED: wp21 mini smoke — one evaluated iteration is the budget.\n"
 
-    # 截断检测护栏：回复 <400 字符且无盘上痕迹会被判"网关截断"而免费重试
-    # （driver.TRUNCATION_MAX_CHARS）——stub 回统一垫足长度。
+    # Truncation-detection guard: a reply under 400 chars with no on-disk trace would be
+    # judged a "gateway truncation" and retried for free (driver.TRUNCATION_MAX_CHARS) —
+    # the stub pads every reply to a safe length.
     if len(out.strip()) < 400:
         out = out.rstrip("\n") + (
             "\n\n[wp21 stub context] This is a scripted stand-in agent for the WP21 mini "

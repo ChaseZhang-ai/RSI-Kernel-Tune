@@ -136,8 +136,8 @@ commit; that round moved no bucket.
 THIS round moves one, and it is R_launch: the alloc-to-issue prologue.  In the
 plain path that prologue was, every call, three permutes, four strided parity
 views of dx, six `from_dlpack` exports and the six-element argument list, then
-the compile key and the dict probe -- MILESTONE D0.17 B item 5 ("per-call 的
-python 侧参数打包") and item 3 ("每调用查询/重取 JIT 编译产物") verbatim, sitting
+the compile key and the dict probe -- MILESTONE D0.17 B item 5 ("the per-call
+python-side argument packing") and item 3 ("per-call lookup/re-fetch of the JIT-compiled artifact") verbatim, sitting
 in a window whose whole non-kernel content measures 83,652 ns.  The other five
 buckets are ruled out by construction rather than by preference: R_graph is 0
 (this path has no capture or replay), R_cache is 1 (the compile key carries no

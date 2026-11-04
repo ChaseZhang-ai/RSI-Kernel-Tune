@@ -1,7 +1,7 @@
 """Red-team matrix, stream injection (SOL category: stream injection), and the
 sentinel that closes it.
 
-The verified exposure (task 1's核查, this package): the timed windows bracket
+The verified exposure (task 1's verification, this package): the timed windows bracket
 the work with CUDA event pairs RECORDED ON THE TIMING STREAM (timing.py
 time_e2e / time_device). Work launched onto a side stream is unordered with
 those events — stop.record() completes as soon as the timing stream drains,

@@ -997,7 +997,7 @@ D0.5  part 4 of 4 -- the ROW-SCALAR access atoms and the STAGE COUNTS that
       (a) D1.2 DID take effect.  tensor_pct rose 47.84 -> 49.84 and MAIN fell
           2.1615 -> 2.0877 ms across exactly the commit that packed the
           converts, hoisted the row scalars 2->4 elements per load and put
-          exp2 on the fast path.  The "not risen => D1.2 未生效" branch of
+          exp2 on the fast path.  The "not risen => D1.2 did not take effect" branch of
           this gate line does not apply.
       (b) Elementwise instruction count is no longer what binds.  D1.3 dial b
           deletes 64 FFMA per lane per trip (16.5 trips per CTA) from segment
@@ -1157,7 +1157,7 @@ D0.5  part 4 of 4 -- the ROW-SCALAR access atoms and the STAGE COUNTS that
   D2.2  Q/dO stage count: candidate domain {2, 3}, ships at 2.
 
     The milestone's own cost line reads "+1 stage = +16 KiB sQ +16 KiB sdO
-    = 32 KiB, 195 KiB -> 227 KiB, 顶到 228 KiB 上限".  That arithmetic is
+    = 32 KiB, 195 KiB -> 227 KiB, pressed against the 228 KiB ceiling".  That arithmetic is
     one field short of the buffer list this kernel actually allocates.  The
     frozen field list is measured at 199680 B [MEASURED, probe rung `fit`:
     the stage-2 control struct reads exactly 199680 B and a kernel
@@ -1182,16 +1182,16 @@ D0.5  part 4 of 4 -- the ROW-SCALAR access atoms and the STAGE COUNTS that
     inadmissible one, and the DSL only reports it at launch
     (CUDA_ERROR_INVALID_VALUE).  Note how close the miss is: dropping the
     row scalars back to 2 slots would land on 232448 B, exactly the cap,
-    which is why the milestone's estimate read as "几乎没有空间" rather than
+    which is why the milestone's estimate read as "almost no room" rather than
     "over".  The dial stays at 2 and D2.2 is closed as excluded, which is
-    what the milestone asked of it ("扫它是为了排除，不是为了指望").
+    what the milestone asked of it ("scanned to rule out, not to count on").
 
   D2.3  exchange-surface swizzle mode: candidate domain {128B, 64B} x
         {sdS, sQ/sdO/sK/sV}, ships at 128B on both faces.
 
     Two atoms drive the entire exchange surface, so the domain is exactly
     four points and each is a single-token change (the milestone's cost line
-    -- "一个 LayoutEnum 同时驱动四处 ... 改一半不改另一半会静默算错" -- is
+    -- "one LayoutEnum drives four places at once ... changing half without the other silently computes wrong" -- is
     satisfied by construction here, because every downstream object is built
     from these two objects and nothing re-derives a swizzle independently):
 
@@ -1236,7 +1236,7 @@ D0.5  part 4 of 4 -- the ROW-SCALAR access atoms and the STAGE COUNTS that
     volume branch (gate line (1), `smem_wavefronts_st + _ld <= 1.1e8`) is
     clean, the diagnosis is conflict-type and the lever is this dial -- and
     it is then one token on `atom_bn` (sdS first, per the milestone's
-    "逐块试" order) or on `atom_hd`, with the admissibility of both already
+    "try block by block" order) or on `atom_hd`, with the admissibility of both already
     certified above so that re-open costs a price run and not a bring-up.
 
     The M2 decision list (D2.1, D2.2, D2.3) is complete after this row; the
@@ -1517,7 +1517,7 @@ D0.5  part 4 of 4 -- the ROW-SCALAR access atoms and the STAGE COUNTS that
 
   The instrument.  `aux_ms` is a TOTAL -- it says the auxiliary segment is
   over budget, never which launch is over.  D3.4's text authorises exactly
-  one way to split it ("同 job launch 消融，成本一整轮"): a cumulative launch
+  one way to split it ("same-job launch ablation, costing a full round"): a cumulative launch
   ablation of the SHIPPED kernel at the real shape, differences of adjacent
   rungs being the per-launch cost.  Rungs s0 = the host-side dk/dv fill only,
   s1 = + PRE, s2 = + MAIN, base = + the two POSTs.
@@ -2134,7 +2134,7 @@ def _make_flat_staging():
     """The ONE object pair that both write side and read side must share.
 
     Flat `(SLOT, NUM_WG)` f32 slots (linear stride, no swizzle, no quad
-    interleave) + a flat TV copy giving每 thread 4 contiguous f32 = one
+    interleave) + a flat TV copy giving each thread 4 contiguous f32 = one
     128-bit STS, warp-wide across 32 banks.  Returned as a pair so MAIN's
     flush sites and POST's read side cannot drift apart: byte order in the
     f32 workspace IS this TV's order, so any second spelling silently

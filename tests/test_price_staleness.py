@@ -194,7 +194,7 @@ def test_no_reprice_when_the_price_is_fresh_uncited_or_the_budget_is_short(tmp_p
     rec = run_inner_iteration(ctx, 1, metric_before=0.9)
     assert rec.sha == "sha1" and [c for c in be.calls if c[0] == "gpu"] == [("gpu", "all"), ("gpu", "ncu")]
     assert _revisions(ctx) == [] and _price_revision_note(ctx) == ""
-    # uncited: a stale table whose lever the milestone never cites — WP16 (甲G12)
+    # uncited: a stale table whose lever the milestone never cites — WP16 (A-G12)
     # marks the uncovered winner EXPIRED in the revision store instead of the old
     # silence (a re-price job is still not bought: no gpu call beyond eval+ncu)
     be = FakeBackend([REC("D2.3", 0.5)], [EVAL(0.5), NCU])

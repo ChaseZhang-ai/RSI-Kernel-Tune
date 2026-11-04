@@ -502,7 +502,7 @@ def test_build_priors_from_artifacts_turns_skeletons_into_priors(tmp_path):
         "kernel": "kernels/gemm/demo_gem/h100",
         "regime": "demo GEMM — published: +1.2% vs cuBLAS (Figure 3)"}), encoding="utf-8")
 
-    # WP23 (95-审查报告-WP18 F-3): the fill pass rides the same write gate as
+    # WP23 (review report 95, WP18 F-3): the fill pass rides the same write gate as
     # the skeleton pass — a dry run lists, --write lands
     text_before = prior.read_text(encoding="utf-8")
     assert bp.main(["--repo", str(root), "--from-artifacts"]) == 0

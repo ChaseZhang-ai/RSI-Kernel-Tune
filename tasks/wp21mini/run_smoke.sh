@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# WP21 mini 冒烟 runner：本机 3060 上的真 run（stub agent 替身），产链路与数据流证据。
+# The WP21 mini smoke runner: a real run on this machine's 3060 (stub-agent stand-in), producing chain and dataflow evidence.
 #
-# 通路：peregrine run 全包装（judge→card→seal→calibrate→NCU probe→loop.toml→workspace→
-# baseline→loop），agent 二进制经 PK_CLAUDE_BIN 换成 stub（scripts/agent-claude.sh 契约）。
-# 前置：无需 local.env（PK_* 环境变量优先）；~/venvs/ml（CUDA torch）作 job python。
-# GPU 独占：真跑必须以 ~/tools/bin/with-lock gpu 1800 -- 包裹调用本脚本（等待锁是正确行为）：
+# Path: the full peregrine run wrap (judge -> card -> seal -> calibrate -> NCU probe -> loop.toml ->
+# workspace -> baseline -> loop), with the agent binary swapped for the stub via PK_CLAUDE_BIN
+# (the scripts/agent-claude.sh contract).
+# Prerequisites: no local.env needed (PK_* env vars take precedence); ~/venvs/ml (CUDA torch)
+# serves as the job python.
+# GPU exclusivity: real runs must invoke this script wrapped in ~/tools/bin/with-lock gpu 1800 --
+# (waiting for the lock is the correct behavior):
 #   ~/tools/bin/with-lock gpu 1800 -- bash tasks/wp21mini/run_smoke.sh [<run_dir>]
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -13,19 +16,20 @@ RUN_DIR="${1:-}"
 
 cd "$REPO"
 
-# editable 安装劫持（~/venvs/forgekernel 指向 /home/zcz/forgeKernel/ForgeKernel）：
-# PYTHONPATH 把本 clone 的 src 压到最前，repo_root/hw_kb/.artifacts 全部落在 clone 内。
+# editable-install hijack (~/venvs/forgekernel points at /home/zcz/forgeKernel/ForgeKernel):
+# PYTHONPATH pushes this clone's src to the front, so repo_root/hw_kb/.artifacts all land
+# inside the clone.
 export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
-# job 侧 python3 = CUDA torch venv（job 继承驱动进程环境）；驱动本体用 peregrine_kernel venv。
+# job-side python3 = the CUDA torch venv (jobs inherit the driver process env); the driver itself runs on the peregrine_kernel venv.
 export PATH="$HOME/venvs/ml/bin:$PATH"
-export CUTLASS_DIR="$HOME/tools/cutlass"   # job-env 预检的头文件库（~/tools，header-only）
-# WSL 驱动库：torch cpp_extension 的 -lcuda 需要 libcuda.so 开发符号链接；
-# WSL 只提供 /usr/lib/wsl/lib/libcuda.so.1，经 LIBRARY_PATH 补一个软链目录。
+export CUTLASS_DIR="$HOME/tools/cutlass"   # the header library the job-env precheck wants (~/tools, header-only)
+# WSL driver library: torch cpp_extension's -lcuda needs a libcuda.so dev symlink;
+# WSL only ships /usr/lib/wsl/lib/libcuda.so.1, so LIBRARY_PATH gets a symlink dir.
 export LIBRARY_PATH="$HOME/tools/wsl-cuda-lib:${LIBRARY_PATH:-}"
 export PK_DELIVERY=local
 export PK_GPU=0
 export PK_AGENT_PY="$HOME/venvs/ml/bin/python3"
-# 全部 agent 回合（teacher/student/judge）走 stub（agent-claude.sh 的 PK_CLAUDE_BIN 逃逸口）
+# every agent turn (teacher/student/judge) goes through the stub (agent-claude.sh's PK_CLAUDE_BIN escape hatch)
 export PK_CLAUDE_BIN="$REPO/tasks/wp21mini/agent_stub.sh"
 
 if [ -z "$RUN_DIR" ]; then

@@ -508,7 +508,7 @@ def gpu_state_report(readings=None, *, query=None) -> dict:
     ``readings`` given. Nothing readable is reported as field-None with the
     reason in ``note`` — an absent verdict, never a failure.
 
-    WP15 (逐窗遥测): ``window_readings`` carries the ordered per-sample readings
+    WP15 (per-window telemetry): ``window_readings`` carries the ordered per-sample readings
     (bounded at the last 16) beside the means — the job-level mean hid a
     last-window downclock inside its average, and the driver's clock-band check
     reads the LAST window against the mean (report-only telemetry)."""

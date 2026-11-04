@@ -247,7 +247,7 @@ def _fill_status(text: str, anchored: int, total: int) -> str:
 def _run_from_artifacts(write: bool = False) -> int:
     """The WP18 fill pass: every skeleton whose artifacts landed gains its
     measured anchors. Filled / human files are never touched. Write gate =
-    the skeleton pass's own discipline (WP23, 95-审查报告-WP18 F-3): the
+    the skeleton pass's own discipline (WP23; review report 95, WP18 F-3): the
     default is a dry run that lists what would be anchored; --write lands
     the diff."""
     kernels = _kernels()

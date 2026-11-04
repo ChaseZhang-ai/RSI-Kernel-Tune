@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """WP16 dry-run: render every injected block the package adds, with fixture
-data, so the acceptance wording (COMBO-POOL 样例 / pattern search 读数表 /
-重启靶子行 / EXPIRED 行 / 耦合图边表) has concrete artifacts to eyeball.
+data, so the acceptance wording (the COMBO-POOL sample / the pattern search readings
+table / restart-target rows / EXPIRED rows / coupling-graph edges) has concrete artifacts to eyeball.
 Run: python dry_run_wp16.py (torch-free, no backend, no GPU)."""
 
 import sys
@@ -32,7 +32,7 @@ def main() -> int:
     print(lever_pool.combo_pool_block(rows, bundle={"all_pct": 0.2, "noise_pct": 0.5,
                                                     "null": True}))
 
-    # --- 2. the pattern search readings table (乙A3) -------------------------
+    # --- 2. the pattern search readings table (B-A3) -------------------------
     res = {"trigger": "stagnation", "decision_id": "D2.3", "best_sha": "0123456789abcdef",
            "stages_run": 3, "jobs": 3,
            "rows": [
@@ -67,7 +67,7 @@ def main() -> int:
     print(drv._restart_target_lines(ctx, recs))
     print("### (no #2 -> nothing; pool empty -> nothing)")
 
-    # --- 4. the EXPIRED price-tag review lines (甲G12) ------------------------
+    # --- 4. the EXPIRED price-tag review lines (A-G12) ------------------------
     rv = {"ts": 1762100000.0, "iter": 5, "lever": "win",
           "priced_on_before": "0123456789abcdef", "job_before": "812345",
           "before": {"add_pct": 2.0, "remove_pct": None, "delta_pct": None,
@@ -81,7 +81,7 @@ def main() -> int:
     print("\n### 4. EXPIRED row (rides the existing Price-tag review block)")
     print(drv._price_revision_teacher_block([rv]))
 
-    # --- 5. the coupling-graph edges inside the price block (甲G17) ----------
+    # --- 5. the coupling-graph edges inside the price block (A-G17) ----------
     table = [
         {"kind": "lever", "name": "tilenh8", "add_pct": 1.2, "remove_pct": -0.4,
          "cls": "independent", "spin_add_ns": 5.0, "spin_all_minus_ns": 1.0,

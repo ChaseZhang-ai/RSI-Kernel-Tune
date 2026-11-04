@@ -93,7 +93,7 @@ INPUTS_SYNC_MIN_BYTES = 1 << 20   # files at/above this ride the store (the tax 
 INPUTS_DIR_SEGMENT = "inputs"     # a path component: <...>/inputs/<...> is input-tensor territory
 INPUTS_STORE_ENV = "PK_INPUTS_STORE"
 INPUTS_SYNC_ENV = "PK_INPUTS_SYNC"
-# --- WP19 (task 1 附, 甲G24/乙B7): inputs manifest 降本 ------------------------
+# --- WP19 (task 1 addendum, A-G24/B-B7): inputs manifest cost cut ------------------------
 # Every job used to read every input file twice in full (the source-side sha,
 # then the store-side recheck) — GB-scale tensors, per job. The source-side
 # hash is now memoized in a manifest keyed by (path, size, mtime_ns): an
@@ -152,7 +152,7 @@ def _file_sha256(path: Path) -> str:
 def _inputs_manifest_entry(op_dir: Path, path: Path, memo: dict) -> dict | None:
     """One sync candidate: ``{path (in-tree), sha256, size}``, or None.
 
-    WP19 (task 1 附): the source-side hash is memoized by (size, mtime_ns) —
+    WP19 (task 1 addendum): the source-side hash is memoized by (size, mtime_ns) —
     an unchanged file is not re-read. A stat mismatch, a missing memo or ANY
     trouble falls back to the full hash (and refreshes the memo)."""
     try:
@@ -481,7 +481,7 @@ class DirectRunner:
                  tree_sha: str | None = None) -> str:
         # WP11 (task 3): the ssh delivery keeps the FULL archive — the input
         # store is a same-machine cache; cross-machine sync is not this package.
-        # WP19 (task 8, 乙B10): preset 6 -> 3 — the slowest lzma tier bought
+        # WP19 (task 8, B-B10): preset 6 -> 3 — the slowest lzma tier bought
         # nothing on tar archives (already-compressed tensors dominate), and the
         # compression CPU was per-job minutes on GB-scale inputs. Transparent
         # to the host: it still extracts `tar xJ`.

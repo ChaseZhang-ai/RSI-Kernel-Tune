@@ -629,7 +629,7 @@ pk_build_cache_prewarm() {
     # file cache (a user-level managed location outside this workspace) is warm
     # before the timed process. Best effort; a failure falls through — the task
     # imports the module itself either way.
-    # WP19 (task 8, 丙T6): the prewarm is a correctness-neutral warm-up, not a
+    # WP19 (task 8, C-T6): the prewarm is a correctness-neutral warm-up, not a
     # build-cache feature — it runs whether or not PK_BUILD_CACHE is on (its
     # old gate made the JIT warm-up a build-cache-only side effect).
     [ -f eval/problem/problem.json ] || [ -f problem.json ] || return 0
@@ -649,9 +649,9 @@ FKPRE
     return 0
 }'''
 
-# --- WP19 (task 1 附, 乙B6): the CUDA compile preflight (default OFF) ----------
+# --- WP19 (task 1 addendum, B-B6): the CUDA compile preflight (default OFF) ----------
 _WP19_PRECHECK_BLOCK = r'''cuda_compile_preflight() {
-    # WP19 (task 1 附, 乙B6): a CUDA kernel that cannot build used to pay the
+    # WP19 (task 1 addendum, B-B6): a CUDA kernel that cannot build used to pay the
     # full correctness+timing protocol before its compile error surfaced. This
     # pre-pass builds the kernel through the bench engine's own builder — the
     # exact flags and the same build directory the timed run reuses — under a

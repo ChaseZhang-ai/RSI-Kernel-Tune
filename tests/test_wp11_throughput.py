@@ -1,10 +1,12 @@
-"""WP11 过程提速包: merged eval+NCU job, content-addressed build cache, input
+"""WP11 process-speedup package: merged eval+NCU job, content-addressed build cache, input
 sync, wall-clock telemetry, eval-failure log tails, SPRT sequential early stop.
 
-零行为变化纪律的验收面在这里：merge_eval_ncu（kill switch）/ build_cache
-（submit 层 env，默认关）/ sprt_early_stop（默认关）全关时，主循环行为与基线
-一致——钉子是 test_switches_off_matches_baseline_records（对照 merge-base
-语义手写的逐字段 golden）加上 test_loop_driver 既有用例在全绿中原样通过。
+The zero-behavior-change acceptance surface lives here: with merge_eval_ncu
+(kill switch), build_cache (submit-layer env, default OFF) and sprt_early_stop
+(default OFF) all off, the main loop behaves exactly as the baseline — the pin is
+test_switches_off_matches_baseline_records (a hand-written field-by-field golden
+against merge-base semantics) plus the existing test_loop_driver cases passing
+unchanged.
 """
 
 from __future__ import annotations
@@ -242,7 +244,7 @@ def test_merged_mode_names_the_census_runner(tmp_path):
 def test_merged_profile_segment_wall_parses_and_falls_back(tmp_path):
     _merged_gpu_entry(tmp_path)
     # no echo lines (an older card's job, or a failed segment): the driver
-    # keeps the documented fallback口径 — under the fake clock that reads None
+    # keeps the documented fallback basis — under the fake clock that reads None
     be = FakeBackend([REC("D2.3", 2.6)],
                      [_merged_log(seg_echo=False)])
     ctx = _ctx(tmp_path, be)

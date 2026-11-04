@@ -157,5 +157,6 @@ loop/cli cluster's work):
 - (tip) reword of the ported file's docstring (brand-gate: the archived wave's
   project name is whitelisted nowhere outside attribution files) + this file.
 
-Full regression at the tip: see findings/fix-fixa.md (recorded after the final
-run; baseline before any change was 2692 passed, 0 failed, 493 s).
+Full regression at the tip: **2699 passed, 0 failed** (563 s; baseline before any
+change was 2692 passed, 0 failed, 493 s — the +7 are the ported tests; the two
+test_direct_delivery updates are rewrites, not additions).

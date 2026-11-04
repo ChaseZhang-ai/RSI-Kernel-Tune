@@ -330,11 +330,21 @@ def gpu_lock(gpu: str, log_file=None, poll_s: float = 30.0):
 
 
 def remote_tree(cfg: SubmitConfig) -> str:
-    """``<workdir>/<run>/<op>``: one tree per op and run, so concurrent runs on one host
-    never share a directory."""
+    """``<workdir>/<run>/<op>-<hash>``: one tree per op per clone, so concurrent
+    runs on one host never share a directory. The run segment is only a basename,
+    so two clones of the same name would still collide; the clone's absolute
+    path is hashed into the tree's name to keep them apart (stable for the same
+    clone, so re-delivery refreshes its own tree and _stop_cmd finds the same
+    one)."""
     op_dir = Path(cfg.op_dir)
-    run = op_dir.parents[1].name if len(op_dir.parents) > 1 else "repo"
-    return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}"
+    if len(op_dir.parents) > 1:
+        run = op_dir.parents[1].name
+        clone = str(op_dir.parents[1])
+    else:
+        run = "repo"
+        clone = str(op_dir)
+    token = hashlib.sha1(clone.encode()).hexdigest()[:8]
+    return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}-{token}"
 
 
 def _entry_argv(cfg: SubmitConfig, mode: str) -> list[str]:

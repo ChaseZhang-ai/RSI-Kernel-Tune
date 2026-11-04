@@ -205,3 +205,25 @@ def test_the_runner_records_a_lost_verdict_that_nothing_charges(tmp_path, monkey
     ds.jobs_dir(d).joinpath("9").mkdir(parents=True)
     ds.runner_main(SubmitConfig(branch="main", op_dir=str(d)), "9", "perf", "main")
     assert ds.job_status(d, "9")["status"] == ds.STATUS_LOST
+
+
+# -- BUG-SEED-20: two same-named clones on one host get different remote trees --
+
+def test_two_same_named_clones_get_different_remote_trees(tmp_path):
+    """Two clones both called ForgeKernel on one host must not resolve to one
+    remote directory (the old basename-only run id made one run's rm -rf reach
+    the other's tree). The clone's absolute path is hashed into the tree's
+    name; it stays stable for the same clone.
+
+    (Adapted from the upstream test, which hashed the run segment; here the
+    hash rides the tree's final segment instead, so the frozen
+    test_direct_delivery transport test's exact remote tree keeps matching.)"""
+    cfg_a, cfg_b = _ssh_op(tmp_path, "a"), _ssh_op(tmp_path, "b")
+    assert cfg_a.op_dir != cfg_b.op_dir
+    assert Path(cfg_a.op_dir).name == Path(cfg_b.op_dir).name          # same op name
+    assert Path(cfg_a.op_dir).parents[1].name == Path(cfg_b.op_dir).parents[1].name
+    tree_a, tree_b = direct.remote_tree(cfg_a), direct.remote_tree(cfg_b)
+    assert tree_a != tree_b
+    assert tree_a.startswith("/data/fk/ForgeKernel/")     # readable prefix kept
+    assert re.search(r"/op-[0-9a-f]{8}$", tree_a)        # the clone-path hash
+    assert direct.remote_tree(cfg_a) == tree_a            # stable across calls

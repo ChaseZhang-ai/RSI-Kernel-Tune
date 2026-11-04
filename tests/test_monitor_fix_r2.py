@@ -115,3 +115,32 @@ def test_dump_failure_is_recorded_and_reported_once(tmp_path, capsys):
     errs = hook._state["errors"]                        # but it is recorded now
     assert len(errs) == 2 and errs[0].startswith("dump:")
     assert capsys.readouterr().err.count("pk_monitor_hook") == 1   # said once
+
+
+# --- BUG-SEED-42: per-process calls do not overwrite each other -------------------
+def test_calls_from_two_processes_both_reach_the_findings():
+    # two processes both counted their first fwd call from 0: the NaN one is recorded
+    # FIRST, the clean one LAST — the old (fn, i) key let the clean record overwrite
+    # the NaN evidence
+    base = _p_rec("base", processes=2,
+                  calls=[_call(fn="fwd", i=0, pid=100, nan=3),
+                         _call(fn="fwd", i=0, pid=101, nan=0)])
+    v = monitor.classify({"complete": True, "profiles": [base]})
+    assert v["status"] == "warn" and "NaN" in v["findings"][0]["what"]
+    assert "3 NaN" in v["findings"][0]["what"]    # the poisoned record, not the clean one
+    base_calls = monitor._calls(base)
+    assert len(base_calls) == 2                   # both processes' records survive
+
+
+def test_cross_profile_call_join_ignores_pids():
+    # the pid only separates records inside one profile: base and its repeat ran in
+    # different processes, and their comparison must still happen
+    def rec(profile, pid, abs_sum):
+        return _p_rec(profile, processes=1, calls=[_call(pid=pid, abs_sum=abs_sum)])
+    res = {"complete": True, "profiles": [rec("base", 100, 10.0), rec("repeat", 200, 10.1)]}
+    v = monitor.classify(res)
+    assert v["status"] == "warn" and "race" in v["findings"][0]["what"]
+    # unchanged inputs across two different pids still read as "not applicable"
+    res = {"complete": True, "profiles": [rec("base", 100, 10.0), rec("amp", 200, 10.0)]}
+    v = monitor.classify(res)
+    assert v["not_applicable"] == ["amp"]

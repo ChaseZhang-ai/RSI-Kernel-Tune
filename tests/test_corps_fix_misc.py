@@ -91,7 +91,7 @@ def test_seed27_noise_floor_zero_ratio_raises_a_readable_error():
 
 
 def test_seed27_main_reports_ratio_zero_as_a_readable_error(chain, capsys):
-    root, ran, gains, _ = chain
+    root, ran, ran_runs, gains, _ = chain
     gains += [(1.3, [0.0, 1.02])]
     assert se.main([str(_task(root))]) == 2
     err = capsys.readouterr().err
@@ -101,7 +101,7 @@ def test_seed27_main_reports_ratio_zero_as_a_readable_error(chain, capsys):
 def test_seed27_chain_from_a_suffixed_task_continues_forward_numbering(chain):
     """Starting from rmsnorm-g3 the first jump must land on rmsnorm-g4, not on the
     ancestor rmsnorm-g2 that the bare generation counter produced."""
-    root, ran, gains, kb = chain
+    root, ran, ran_runs, gains, kb = chain
     gains += [1.3, 1.01]
     first = _task(root, name="rmsnorm-g3")
     assert se.main([str(first), "--max-gen", "4"]) == 0

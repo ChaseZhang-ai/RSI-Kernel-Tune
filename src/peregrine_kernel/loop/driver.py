@@ -32,6 +32,7 @@ import ast
 import shlex
 import statistics
 import time
+import traceback
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from collections import deque
@@ -1722,15 +1723,13 @@ def _write_student_digest(ctx: LoopContext) -> None:
         n = ctx.student_tail_lines or 50
         rows = digest.get("decisions", [])
         digest["decisions"] = rows[-n:] if len(rows) > n else rows
-        curve = digest.get("curve", [])
-        digest["curve"] = curve[-n:] if len(curve) > n else curve
-        regressions = digest.get("regressions", [])
-        digest["regressions"] = regressions[-n:] if len(regressions) > n else regressions
+        # (the curve/regressions tails once got trimmed here, but nothing below
+        # serializes them — the trim was dead and is gone)
         path = _student_digest_path(ctx)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(json.dumps({k: digest[k] for k in
-                                 ("sol", "target", "achieved", "flags")},
+                                 ("sol", "clock", "target", "achieved", "flags")},
                                 ensure_ascii=False) + "\n")
             for row in digest["decisions"]:
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -2108,7 +2107,11 @@ def _cluster_scale(ctx: LoopContext) -> float | None:
         return min(seen) / home
     anchors = _load_anchors(ctx)
     entry = anchors.get(cluster) or {}
-    if entry.get("ref_ms"):
+    # the anchor is only an anchor for its own window (the writer stamps
+    # window+home_ref_ms beside ref_ms): a device-window reading must not scale
+    # an e2e target or the reverse. Mismatched = no anchor here — the fresh
+    # re-measure / suspend channel below decides instead.
+    if entry.get("ref_ms") and entry.get("window") == ctx.gate_window:
         return float(entry["ref_ms"]) / home
     attempts = int(entry.get("attempts", 0))
     if ctx.reanchor_ref is None or attempts >= _REANCHOR_ATTEMPTS:
@@ -2318,9 +2321,14 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
     # WP1: the reading's SM clock vs the sitting best's — a >2% move is not one
     # measurement condition, and such a reading must not take the watermark on
     # its own. Readings without gpu_state telemetry are simply never flagged.
+    # the sitting best's telemetry comes from THIS cluster's rows only — an
+    # absolute comparison is same-cluster, and a foreign machine's faster best
+    # once supplied the reference clocks here (same window _best_ms and
+    # resolvable_diff read through _on_cluster above)
     clock_gap = _sm_clock_drift(ev.gpu_state,
-                                _best_keep_gpu_state(load_records(ctx.status_path),
-                                                     ctx.gate_window))
+                                _best_keep_gpu_state(_on_cluster(
+                                    load_records(ctx.status_path), ctx),
+                                    ctx.gate_window))
     drifted = clock_gap is not None and clock_gap > _CLOCK_DRIFT_BAND
     gain_pct = (metric_before - ms) / metric_before
     if ms < metric_before * (1 - margin):
@@ -2769,10 +2777,19 @@ def _run_meta_verdict_probe(ctx: LoopContext, be, probe_branch: str, path: str,
     """One single-script verdict probe on its own job (the pre-WP19 path).
 
     WP19 (task 2): extracted verbatim so the manifest's wholesale-failure
-    fallback runs exactly this — the old path is the fallback, not a copy."""
-    be.commit(f"meta-probe: {path}")
-    be.push_branch(probe_branch)
-    probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    fallback runs exactly this — the old path is the fallback, not a copy.
+
+    A backend failure in the commit/push/submit chain is the experiment's
+    environment failing, not an answer: it comes back as a no-verdict verdict
+    carrying "job failed (...)", the same contract the ablation probe has
+    always had — not as an exception that would terminate the whole run from
+    inside the meta step."""
+    try:
+        be.commit(f"meta-probe: {path}")
+        be.push_branch(probe_branch)
+        probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    except BackendError as e:
+        return ProbeVerdict(False, found=False, reason=f"job failed ({e})"), "", []
     # audit=False: these lines answer pre-registered hypotheses, and the
     # max_diff field carries the reading as printed. The certification
     # audit (error-norm ceiling, float-only) was downgrading a PASS with a
@@ -2791,6 +2808,22 @@ def _run_probe_manifest_batch(ctx: LoopContext, be, branch: str,
     no begin markers (the job never really ran — the caller falls back)."""
     log = be.submit_gpu(branch, _probe_batch_mode(paths))
     return _split_probe_batch_log(log, paths)
+
+
+def _run_probe_manifest_commit_batch(ctx: LoopContext, be, probe_branch: str,
+                                     mpath: str,
+                                     mpaths: list[str]) -> "tuple[list | None, str]":
+    """(batch, "") once the manifest's commit + push + batch job ran; (None,
+    "job failed (...)") when a backend side of that chain failed — a node/queue
+    hiccup is the experiment's environment failing, feedback to the teacher and
+    the step goes on (the ablation probe's contract), never an exception that
+    would kill the whole run from inside the meta step."""
+    try:
+        be.commit(f"meta-probe manifest: {mpath}")
+        be.push_branch(probe_branch)
+        return _run_probe_manifest_batch(ctx, be, probe_branch, mpaths), ""
+    except BackendError as e:
+        return None, f"job failed ({e})"
 
 
 def _verdict_probe_feedback(path: str, pv: ProbeVerdict, log: str,
@@ -2818,8 +2851,12 @@ def _verdict_probe_feedback(path: str, pv: ProbeVerdict, log: str,
         head += ("(The log has no `PROBE PASS/FAIL` verdict line — a verdict experiment must "
                  "pre-register a falsifiable criterion: print one line "
                  "`PROBE PASS/FAIL max_diff=<reading>` per hypothesis, so the script lands the "
-                 "verdict in the log instead of you interpreting it afterwards. Fix this next "
-                 "round.)\n")
+                 "verdict in the log instead of you interpreting it afterwards. Fix this "
+                 "next round.)\n")
+        # the reader may know more than "no verdict line" (a job that never ran,
+        # a cut archive): the reason rides below the verdict-line guidance
+        if pv.reason:
+            head += f"(driver note: {pv.reason})\n"
     elif pv.reason:
         head += f"(the driver's audit of the verdict line: {pv.reason})\n"
     return head + f"\n### Job log tail (your experiment's readings)\n```\n{tail}\n```\n"
@@ -3417,7 +3454,8 @@ def _keep_probe_across_reset(ctx: LoopContext, probe_path: str) -> str | None:
     survive the reset that ends the iteration, or the next student starts the
     apparatus from scratch (observed: five rounds lost to rig debugging)."""
     try:
-        return (ctx.workspace / probe_path).read_text()
+        return (ctx.workspace / probe_path).read_text(encoding="utf-8",
+                                                       errors="replace")
     except OSError:
         return None
 
@@ -3431,7 +3469,7 @@ def _restore_probe_after_reset(ctx: LoopContext, probe_path: str, text: str) -> 
     dst = ctx.workspace / probe_path
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
     except OSError as e:
         _log(f"could not keep {probe_path} across the reset: {e}")
 
@@ -3445,7 +3483,9 @@ def _restore_kept_probes(ctx: LoopContext) -> None:
         dst = ctx.workspace / path
         if dst.is_file():
             try:
-                same = dst.read_text() == text
+                # errors="replace": a probe with non-UTF-8 bytes must compare
+                # (and restore, below) instead of raising through the iteration
+                same = dst.read_text(encoding="utf-8", errors="replace") == text
             except OSError:
                 same = False
             if not same:
@@ -3455,7 +3495,7 @@ def _restore_kept_probes(ctx: LoopContext) -> None:
             continue
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(text)
+            dst.write_text(text, encoding="utf-8")
             _log(f"restored kept probe {path} into the workspace")
         except OSError as e:
             _log(f"could not restore kept probe {path}: {e}")
@@ -3787,9 +3827,15 @@ def run_inner_iteration(
         else:
             did, change = "unparseable", "(no parseable decision emitted)"
             err = f"no parseable decision from the student in {ctx.max_probe_rounds} rounds"
+        # correctness None: nothing was evaluated on this path (gate refusal,
+        # undelivered/blocked probe, unparseable output), so the lineage's green
+        # state is not moved — a False here dropped a never-evaluated workspace
+        # into scaffold mode (run_inner_iteration's read side) and kept it there
+        # across restarts (_green_on_resume), the same hole
+        # _harness_edit_revert's None documents for its un-evaluated REVERTs.
         rec = IterationRecord(
             iter=iter_no, decision_id=did, change=change,
-            correctness=False, verdict="REVERT", metric_before=metric_before,
+            correctness=None, verdict="REVERT", metric_before=metric_before,
             error=err, profiler={}, cluster=_active_cluster(ctx),
             memo_lane=ctx.memo_lane,   # M3: every row carries its lane
         )
@@ -4160,10 +4206,11 @@ def run_inner_iteration(
         _se_log = statistics.stdev(_logs) / (len(_logs) ** 0.5)
     # WP1: was this reading's SM clock >2% off the sitting best's at reading time?
     # Computed on the same comparison the confirmation just ran (the new row is not
-    # on file yet, so "best" is still the pre-iteration best).
+    # on file yet, so "best" is still the pre-iteration best) — same-cluster rows
+    # only, for the same reason the confirmation's own read above is.
     clock_drift = (_sm_clock_drift(
-        ev.gpu_state, _best_keep_gpu_state(load_records(ctx.status_path),
-                                           ctx.gate_window)) or 0.0) > _CLOCK_DRIFT_BAND
+        ev.gpu_state, _best_keep_gpu_state(_on_cluster(
+            load_records(ctx.status_path), ctx), ctx.gate_window)) or 0.0) > _CLOCK_DRIFT_BAND
     # WP14 per-shape ledger: this KEEP's per-workload ratios + the per-workload
     # historical best snapshot it inherits/advances (trajectory.py's single
     # definition; single-input benches get {} and the pre-WP14 fields stand).
@@ -4637,7 +4684,10 @@ def run_inner_loop(ctx: LoopContext, start_iter: int, *,
             _log(f"backend failed unrecoverably: {e}")
             return "backend_error"
         except Exception as e:  # unattended-run safety net: never crash, stop cleanly
-            _log(f"unexpected error, stopping cleanly: {e!r}")
+            # the traceback rides the log: a {e!r} line alone leaves the 2am
+            # operator (and the lost run's post-mortem) without a location
+            _log(f"unexpected error, stopping cleanly: {e!r}\n"
+                 f"{traceback.format_exc()}")
             return "error"
         if rec is None:
             return "exhausted"
@@ -5361,7 +5411,15 @@ def _quarantine_leaky_kb(ctx: LoopContext, findings: list[str]) -> None:
         src = kb_read_dir(ctx).parent / rel
         if src.is_file():
             qdir.mkdir(exist_ok=True)
-            dst = qdir / src.name
+            # the tree rides in the name: entries of the same file name from two
+            # trees (sm90/leak.md, sm100/leak.md) used to rename onto one
+            # destination, the second silently replacing the first. A residual
+            # collision (a root-level lookalike name) breaks the tie by number.
+            dst = qdir / rel.replace("/", "__")
+            seq = 1
+            while dst.exists():
+                dst = qdir / f"{dst.stem}__{seq}{dst.suffix}"
+                seq += 1
             src.rename(dst)
             _log(f"meta/kb: QUARANTINED leaky entry {rel} -> {dst} — review by hand")
 
@@ -5408,7 +5466,7 @@ def _detach_kb_probes(ctx: LoopContext, pre_head: str, probes: dict,
         dst = ctx.workspace / path
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(text)
+            dst.write_text(text, encoding="utf-8")
             kept.append(path)
         except OSError as e:
             _log(f"{what}: could not re-materialise {path}: {e}")
@@ -7220,12 +7278,12 @@ def _seed_sweep_toolkits(ctx: LoopContext, be) -> None:
     changed = []
     for name in modules:
         vendor = importlib.import_module(name)
-        text = Path(vendor.__file__).read_text()
+        text = Path(vendor.__file__).read_text(encoding="utf-8")
         dst = Path(ctx.workspace) / "notes" / Path(vendor.__file__).name
-        if dst.exists() and dst.read_text() == text:
+        if dst.exists() and dst.read_text(encoding="utf-8") == text:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(dst.name)
     if changed:
         be.commit(f"notes: vendor {', '.join(changed)} (driver-seeded sweep toolkit)")
@@ -8884,14 +8942,14 @@ def _mc_seed_toolkit(ctx: LoopContext, be) -> None:
     import importlib
     changed = []
     vendor = importlib.import_module("peregrine_kernel.skills.lever_pricing_run")
-    text = Path(vendor.__file__).read_text()
+    text = Path(vendor.__file__).read_text(encoding="utf-8")
     dst = Path(ctx.workspace) / "notes" / Path(vendor.__file__).name
-    if not (dst.exists() and dst.read_text() == text):
+    if not (dst.exists() and dst.read_text(encoding="utf-8") == text):
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(dst.name)
     dst = Path(ctx.workspace) / "notes" / "mc_prescreen.py"
-    if not (dst.exists() and dst.read_text() == _MC_PRESCREEN_SRC):
+    if not (dst.exists() and dst.read_text(encoding="utf-8") == _MC_PRESCREEN_SRC):
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(_MC_PRESCREEN_SRC, encoding="utf-8")
         changed.append("mc_prescreen.py")
@@ -12050,9 +12108,19 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 probe_rounds += 1
                 probes_run.extend(mpaths)
                 probe_branch = f"{ctx.branch_prefix}-metaprobe"
-                be.commit(f"meta-probe manifest: {turn.path}")
-                be.push_branch(probe_branch)
-                batch = _run_probe_manifest_batch(ctx, be, probe_branch, mpaths)
+                batch, batch_err = _run_probe_manifest_commit_batch(
+                    ctx, be, probe_branch, turn.path, mpaths)
+                if batch_err:
+                    _log(f"meta: probe manifest {turn.path} job failed "
+                         f"({batch_err}) — the step continues")
+                    diagnose_extra += (
+                        f"\n## Verdict experiment {probe_rounds}/"
+                        f"{ctx.max_verdict_probe_rounds}: `{turn.path}` (manifest) — "
+                        f"{batch_err}\n"
+                        "The GPU job did not run (a node/queue failure, not an "
+                        "experiment answer); send PROBE_REQUEST again, or give the "
+                        "final diagnosis from the evidence you have.\n")
+                    continue
                 if batch is None:
                     # the batch never really ran (markers missing): the
                     # per-script path is the fallback, verbatim
@@ -13884,7 +13952,10 @@ def _declared_construction(change: str) -> str | None:
     is still unknown, instead of buying a full eval that can only say
     "under construction"."""
     m = _pkg_decl(change)
-    if m and int(m.group(1)) < int(m.group(2)):
+    # 1 <= k < n, the same window _open_package_tail prices a package in: the
+    # contract's steps count from 1, so k=0 is malformed input — it must not
+    # defer a delivery's eval for free (the two readers once disagreed there).
+    if m and 1 <= int(m.group(1)) < int(m.group(2)):
         return f"part {m.group(1)} of {m.group(2)}"
     head = (change or "").split("\n", 1)[0]
     p = _PLACEHOLDER_TAG.search(head)
@@ -15877,13 +15948,13 @@ def _seed_sass_tools(ctx: LoopContext, rbe) -> None:
     # copy them in by hand). launch_tools: §1's cluster shape off the NCU
     # launch metrics, never off the grid shape.
     for vendor in map(importlib.import_module, RECON_SEEDED_MODULES):
-        text = Path(vendor.__file__).read_text()
+        text = Path(vendor.__file__).read_text(encoding="utf-8")
         name = Path(vendor.__file__).name
         dst = ctx.recon_dir / "notes" / name
-        if dst.exists() and dst.read_text() == text:
+        if dst.exists() and dst.read_text(encoding="utf-8") == text:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(name)
     # The closed-source run's in-job tripwire rides the same way, for the same
     # reason: the ref tree's gpu_entry.sh is what runs on the node, and the node
@@ -15894,11 +15965,11 @@ def _seed_sass_tools(ctx: LoopContext, rbe) -> None:
     if ctx.oracle_mode == "blackbox":
         src = _blackbox_guard_source()
         if src is not None:
-            text = src.read_text()
+            text = src.read_text(encoding="utf-8")
             dst = ctx.recon_dir / "notes" / BLACKBOX_GUARD_NAME
-            if not (dst.exists() and dst.read_text() == text):
+            if not (dst.exists() and dst.read_text(encoding="utf-8") == text):
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                dst.write_text(text)
+                dst.write_text(text, encoding="utf-8")
                 changed.append(BLACKBOX_GUARD_NAME)
         else:
             _log(f"meta/recon: {BLACKBOX_GUARD_NAME} not found beside this checkout "
@@ -16494,13 +16565,13 @@ def _seed_pricing_toolkits(root: Path, backend) -> None:
     import importlib
     changed = []
     for vendor in map(importlib.import_module, PRICING_SEEDED_MODULES):
-        text = Path(vendor.__file__).read_text()
+        text = Path(vendor.__file__).read_text(encoding="utf-8")
         name = Path(vendor.__file__).name
         dst = root / "notes" / name
-        if dst.exists() and dst.read_text() == text:
+        if dst.exists() and dst.read_text(encoding="utf-8") == text:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(name)
     if changed:
         backend.commit(f"notes: vendor {', '.join(changed)} (driver-seeded "

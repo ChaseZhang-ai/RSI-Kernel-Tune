@@ -10,7 +10,9 @@ import json
 
 from test_loop_driver import _ctx
 
+from peregrine_kernel.inner.trajectory import IterationRecord
 from peregrine_kernel.loop import driver
+from peregrine_kernel.loop.driver import MetaResult
 
 
 # ---------------------------------------------------------------------------
@@ -69,3 +71,46 @@ def test_w1_drv_02_missing_ablation_rounds_stays_absent(tmp_path, monkeypatch):
     path = _probe_spec(tmp_path, None)
     driver._run_ablation_probe(ctx, None, path, "fs-demo/probe")
     assert "ablation_rounds" not in captured
+
+
+def _keep_rec(ms, sha, cluster="") -> IterationRecord:
+    """A green KEEP row measured on ``cluster`` ("" = the run's own machine).
+    Both windows are set: the loop is device-gated by default."""
+    return IterationRecord(iter=0, decision_id="D1", change="c", correctness=True,
+                           verdict="KEEP", bwd_median_ms=ms, device_median_ms=ms,
+                           sha=sha, cluster=cluster)
+
+
+# ---------------------------------------------------------------------------
+# W1-DRV-06: _resolve_resume_in_place picked the in-place reopen checkpoint
+# with the plain _best_good_ref (best KEEP anywhere), while every other
+# checkpoint consumer uses the cluster-aware _best_good_ref_here variant.
+# After a resume on a different machine, a faster KEEP recorded there pinned
+# the reopen to a tree whose reading is not comparable on this cluster.
+# Assertions identify the pin target by record attribute, not by literal.
+# ---------------------------------------------------------------------------
+
+
+def test_w1_drv_06_reopen_pins_to_active_cluster_best(tmp_path):
+    ctx = _ctx(tmp_path, None)          # no backend: active cluster = home ("")
+    foreign = _keep_rec(1.0, "sha-a", cluster="gpu-b")   # faster, other machine
+    home = _keep_rec(2.0, "sha-b")                        # slower, this machine
+    meta = MetaResult(diagnosis="d", patch_class="structural",
+                      changed_entries=["D1"], resume_after=None,
+                      invalidated=["D1"], reopened=["D1"])
+    ref, reopened = driver._resolve_resume_in_place(ctx, meta, [foreign, home], "sha-base")
+    assert ref == home.sha and ref != foreign.sha   # the active-cluster best
+    assert reopened == ["D1"]
+
+
+def test_w1_drv_06_reopen_falls_back_to_global_best_without_home_keep(tmp_path):
+    """A foreign-cluster checkpoint is still a verified kernel: with no KEEP on
+    the active cluster at all, the anywhere-best is the only candidate."""
+    ctx = _ctx(tmp_path, None)
+    foreign = _keep_rec(1.0, "sha-a", cluster="gpu-b")
+    meta = MetaResult(diagnosis="d", patch_class="structural",
+                      changed_entries=["D1"], resume_after=None,
+                      invalidated=["D1"], reopened=["D1"])
+    ref, reopened = driver._resolve_resume_in_place(ctx, meta, [foreign], "sha-base")
+    assert ref == foreign.sha
+    assert reopened == ["D1"]

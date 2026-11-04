@@ -13836,7 +13836,9 @@ def _resolve_resume_in_place(ctx: LoopContext, meta: "MetaResult", records,
     if (not ctx.reopen_in_place or meta.patch_class not in ("structural", "split")
             or not meta.reopened):
         return _resolve_resume(ctx, meta, records, baseline_ref), []
-    best = _best_good_ref(records, ctx.gate_window)
+    # cluster-aware like every other checkpoint consumer: a faster KEEP recorded
+    # on another machine is not a comparable reading to reopen on
+    best = _best_good_ref_here(records, ctx)
     if best is None:
         return _resolve_resume(ctx, meta, records, baseline_ref), []
     return best, list(meta.reopened)

@@ -257,7 +257,9 @@ the smoke adds none of its own.
             "mechanisms under test are the eval/NCU job path, the trajectory records, the "
             "KB-MENU synthesis, the floor backtest --from-run channel and the wall-clock "
             "composition telemetry; the agent turns themselves are out of scope until this "
-            "machine has real agent credentials (see CHANGES-WP21.md defect list).\n")
+            "machine has real agent credentials (see the WP21 record's defect list — "
+            "the original CHANGES-WP21.md lives in git history, its English digest "
+            "in CHANGELOG.md).\n")
     sys.stdout.write(out + "\n")
     return 0
 

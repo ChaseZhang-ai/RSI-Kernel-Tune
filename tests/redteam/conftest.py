@@ -1,7 +1,9 @@
 """The red-team fixture root (contract C16).
 
 Everything under tests/redteam/ is a TEST ASSET: the attack techniques exist
-only here and in CHANGES-WP20.md — never in src/ student-visible paths, never
+only here and in the red-team CHANGES records (CHANGES-WP20R.md in the tree;
+the original CHANGES-WP20.md lives in git history) — never in src/
+student-visible paths, never
 in skills/prompts/KB surfaces. Every fixture's docstring names the defense that
 is expected to catch it (written before the attack) or records the known gap.
 

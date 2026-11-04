@@ -10,8 +10,9 @@
 #          narrowing exists for);
 #   job C  narrow OFF — the whole-tree key (different per commit) — the
 #          baseline miss-by-construction the T5 evidence needs.
-# The log lines this script greps are pasted into CHANGES-WP19.md as the
-# real-run evidence. Run under with-lock gpu:
+# The log lines this script greps are pasted into the WP19 delivery record as
+# the real-run evidence (the original CHANGES-WP19.md lives in git history; its
+# English digest is in CHANGELOG.md). Run under with-lock gpu:
 #   ~/tools/bin/with-lock gpu 1800 -- bash scripts/smoke_wp19.sh
 set -u
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

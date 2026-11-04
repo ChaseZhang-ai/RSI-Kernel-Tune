@@ -1,3 +1,6 @@
+# Copyright 2026 The Peregrine-Kernel Authors
+# SPDX-License-Identifier: Apache-2.0
+
 """Red-team matrix, the recon form of the seed-change family (attack 2b): a
 content-keyed replay cheat whose miss path RECOMPUTES HONESTLY — and the WP29
 replay probe that closes it.

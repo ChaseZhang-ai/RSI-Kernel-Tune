@@ -9,8 +9,8 @@ by WP25's Englishization adjudication and remain permanently recoverable from gi
 for gen 1 — see any pre-WP25 commit).
 
 Full-suite regression counts quoted per entry are the package's own acceptance evidence at
-its time; the tree's current state is 2586 tests green (WP23 integration, 2026-11-04,
-re-verified on the WP25 rename branch).
+its time; the tree's current state is 2692 tests green (the M3 lane-wiring merge, 2026-11-04,
+re-verified on the audit branch at `e18e67a`).
 
 ## Generation 1 — WP1–WP6 (baseline: upstream ForgeKernel @5030503, 1966 tests)
 
@@ -243,6 +243,81 @@ docs restructured; `CHANGELOG.md` (this file) and `docs/backlog.md` created; the
 tree made 100% English (the Chinese per-package history files were distilled here and
 removed — git history keeps them). See `CHANGES-WP25.md` for the full mapping tables,
 replacement counts and evidence.
+
+### WP20R — Red-team shrink (2601 passed on the branch; baseline 2594 at the WP25 merge)
+
+The red-team matrix's two fills plus its permanent boundary: attack 1c (shape-keyed
+cache) as a caught-form fixture; attack 2b (seed-change recon, the "recomputes
+honestly on a miss" replay cheat) verified empirically to escape every value layer
+and recorded as **open row G1** (`docs/wp20r-known-gaps.md` — a fixture asserts the
+documented behavior so the hole stays regression-visible). New
+`tests/test_redteam_asset_boundary.py` pins contract C16 permanently: technique
+markers never leave `tests/` + the CHANGES records, the matrix never skips, and it
+never shrinks below its delivery size. `CHANGES-WP20R.md` carries the
+attack → defense → status table (the paper's measurement-integrity material).
+
+### WP27 — External evaluation export (2615 passed on the branch; +21)
+
+The manual, opt-in, offline evaluation lane (the deboarded framework's only
+external-eval path): `scripts/eval-export/pack.py` packages an optimization
+deliverable + its task contract into the SOL-ExecBench / FlashInfer-Bench
+submission format — zero imports from `src/peregrine_kernel`, zero network I/O,
+run by a person by hand, in no automatic loop (pinned by `tests/test_eval_export.py`).
+`docs/external-eval.md` records the honest cost structure: the free tier is the
+*evaluation*, never the optimization loop (search needs interactive timing; a
+submission judge cannot be a timing oracle).
+
+### M1 — The industrial memo lane, design (docs only; branding green)
+
+`docs/industrial-lane.md`: the two-lane contract from the 2026-11-04 user
+adjudication. STRICT (default, byte for byte) keeps every anti-cheat check and is
+the only source of paper capability numbers; MEMO (opt-in, `task.toml
+[protocol] memo_lane`) is an industrial serving lane whose timed number is service
+latency over a repeating input stream, with correctness on unseen inputs as a hard
+gate. Honesty boundaries explicit: MEMO numbers carry their lane everywhere and are
+never a compute-speedup claim. The file is the implementation checklist M3 executed.
+
+### M2 — The memoization demo fixture (2638 passed on the branch; +16)
+
+`tests/fixtures/memo_demo.py`: the reference shape of a MEMO-lane deliverable —
+`MemoKernel`, a content-addressed cache (streamed single-pass sha256 per buffer)
+whose hit path never recomputes and whose miss path computes honestly; correctness
+on any input is the iron rule. `tests/test_memo_demo.py` pins hit/fallback
+correctness, key stability, the latency signature and the single-threaded limit.
+The module docstring states the lane contract: the same shape is cheating under
+STRICT (the WP29 probe exists to catch it) and legitimate only in its declared lane.
+
+### WP29 — The replay probe, the G1 fix (2618 passed on the branch; baseline 2601; user approved 2026-11-04)
+
+Closes G1 (the one measurement-surface package authorized under the freeze order):
+after ALL timing windows close, the bench draws an independent third input per
+timed group (seed +104729; judged +0, recheck +7919 — disjoint), burns in, and
+measures the honest-compute latency in the main timing's device-event protocol.
+`probe_median > PK_REPLAY_PROBE_RATIO (default 3.0) x judged_median` →
+`replay_probe: suspected` → a fresh_recheck-same suspicious REVERT carrying both
+latency numbers. `PK_REPLAY_PROBE=0` is byte-identical to pre-WP29 (golden-pinned);
+`unavailable` never convicts; `timing.py` byte-identical. GPU dual-verified on the
+3060: the recon fixture caught at x169.38, an honest kernel passes at x0.94.
+`docs/wp20r-known-gaps.md` G1 OPEN → CLOSED; the WP20R status table row 4 synced;
+backlog C5 closed ("do not re-propose").
+
+### M3 — The two-lane contract wired (2692 passed; baseline 2655 at the WP29 merge)
+
+`docs/industrial-lane.md` §6 executed file by file: `[protocol] memo_lane` (bool,
+default false — a non-bool is a `TaskError`); the card stamps `problem.memo_lane`
+and emits `PK_MEMO_LANE=1` on MEMO cards only (a STRICT card's submit.toml is
+byte-identical, golden-pinned); benchkit's MEMO branch never emits `fresh_recheck`
+and attaches the same fresh child's verdict as `memo_fallback` (a FAIL there is a
+hard correctness REVERT, not `suspicious`; no reading never convicts), skips the
+replay probe (a memoized parent legitimately sits far below its child's honest
+re-time) and stamps `lane: {"memo": true}` on the eval JSON only for MEMO cards;
+every `IterationRecord` carries `memo_lane`; the digest is single-lane — a mixed
+row set raises instead of juxtaposing cross-lane numbers; a MEMO-stamped eval
+surfacing in a STRICT run is refused as contamination; `self_evolve` inherits and
+stamps the lane, and a mismatching carry is dropped with a log line. STRICT
+byte-goldens re-verified on GPU (E1/E2); the same delivery passes clean as MEMO
+(E3) and is caught at x87.19 as STRICT (E4). Adjudication notes and the one
+procedural `_STRIP_FIELDS` registration are recorded in `CHANGES-M3.md` §4-5.
 
 <!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->

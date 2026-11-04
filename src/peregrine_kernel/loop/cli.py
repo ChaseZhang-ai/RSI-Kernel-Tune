@@ -548,9 +548,16 @@ class RealBackend:
         """WP19 (task 3): the lane's collection half — poll to terminal, fetch the
         log. A runner-lost or transport-failed lane job raises; the lane drops the
         reading rather than retrying into the agent-turn window it must vacate."""
-        status = poll_until_terminal(
-            lambda: self._job_status(job), job, poll_s=self.poll_s,
-            timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+        try:
+            status = poll_until_terminal(
+                lambda: self._job_status(job), job, poll_s=self.poll_s,
+                timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+        except BackendError:
+            # the gate path's rule: a poll that never reached a terminal state counts
+            # toward giving the record up, or the lane re-adopts it forever
+            if self._note_inflight_log_failure(job) >= _INFLIGHT_LOG_ATTEMPTS:
+                self._clear_inflight()
+            raise
         if status in _LOST:
             self._clear_inflight()
             raise RunnerLostError(f"lane job {job} lost its runner without a verdict")
@@ -603,9 +610,21 @@ class RealBackend:
             # in every gate it anchors); it is not recoverable from the logs this returns
             self.last_job_id = job
             self.last_mode = mode
-            status = poll_until_terminal(
-                lambda: self._job_status(job), job, poll_s=self.poll_s,
-                timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+            try:
+                status = poll_until_terminal(
+                    lambda: self._job_status(job), job, poll_s=self.poll_s,
+                    timeout_s=self.poll_timeout_s, now=time.time, sleep=time.sleep)
+            except BackendError:
+                # A poll that never reached a terminal state counts like a log that
+                # never arrived: raised bare, the record would sit here and be
+                # re-adopted by every restart, each paying another full poll timeout
+                # before giving the same answer — never giving up.
+                if self._note_inflight_log_failure(job) >= _INFLIGHT_LOG_ATTEMPTS:
+                    print(f"[loop] job {job}: no outcome after {_INFLIGHT_LOG_ATTEMPTS} "
+                          f"attempts — giving the job up rather than re-adopting a dead "
+                          f"one", flush=True)
+                    self._clear_inflight()
+                raise
             if status in _LOST:
                 self._clear_inflight()  # a lost job is gone; never re-adopt it
                 lost += 1
@@ -685,11 +704,12 @@ class RealBackend:
         return proc.stdout.strip() if proc.returncode == 0 else ""
 
     def _note_inflight_log_failure(self, job: str) -> int:
-        """Count one failed attempt to read ``job``'s log; return the new count.
+        """Count one failed attempt to collect ``job``'s outcome — a log that would not
+        arrive, or a poll that never reached a terminal state; return the new count.
 
         Lives in the record itself, so the count survives the process — the misses
         that matter are spread across guard restarts, which is exactly when an
-        unreadable job would otherwise be re-adopted forever.
+        uncollectable job would otherwise be re-adopted forever.
         """
         path = self._inflight_path()
         if path is None:

@@ -195,3 +195,41 @@ def test_a_call_that_ran_to_its_own_timeout_is_not_retried(monkeypatch):
     with pytest.raises(BackendError, match="timed out"):
         be._retry_call(fn, what="submit all")
     assert calls == [1] and sleeps == []
+
+
+# --- BUG-SEED-21: a poll that never reaches a terminal state counts toward give-up ---
+
+def test_a_poll_that_never_reaches_terminal_counts_toward_giving_up(monkeypatch, tmp_path):
+    """A poll timeout used to raise before the give-up counting: the record sat there
+    and every restart re-adopted the same job, each paying another full poll timeout.
+    The misses now count, and the record is let go once retrying is clearly futile."""
+    ws = tmp_path / "ws"
+    (ws / ".git").mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+
+    def fake_forge(op, verb, *a, **k):
+        calls.append(verb)
+        if verb == "submit":
+            return type("P", (), {"returncode": 0, "stdout": "[submit] job=7\n"})()
+        if verb == "status":
+            return type("P", (), {"returncode": 0,
+                                  "stdout": '{"id": 7, "status": "Running"}\n'})()
+        return type("P", (), {"returncode": 0, "stdout": ""})()
+
+    monkeypatch.setattr(cli, "_forge", fake_forge)
+    be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0, poll_timeout_s=0.5)
+    monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
+    rec_path = ws / ".git" / "pk-inflight.json"
+    rec_path.write_text(_json.dumps({"job": "7", "branch": "br", "mode": "all",
+                                     "sha": "abc"}))
+    for attempt in range(1, cli._INFLIGHT_LOG_ATTEMPTS + 1):
+        with pytest.raises(BackendError, match="terminal state"):
+            be.submit_gpu("br", "all")
+        if attempt < cli._INFLIGHT_LOG_ATTEMPTS:
+            assert _json.loads(rec_path.read_text())["log_failures"] == attempt
+    assert not rec_path.exists(), "a job that never reports is adopted forever"
+    # the record is gone: the next submit is a real resubmission, not another adoption
+    with pytest.raises(BackendError, match="terminal state"):
+        be.submit_gpu("br", "all")
+    assert calls.count("submit") == 1

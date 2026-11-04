@@ -431,7 +431,14 @@ def problem_from_card(problem_json: dict, workload: dict | None = None,
     (nothing is provable). The card's ``hw_arch`` (loop.toml kb_arch) supplies the
     arch when the caller has it."""
     definition = problem_json.get("definition") or {}
+    if not isinstance(definition, dict):
+        definition = {}
     wl = workload or problem_json.get("workload") or {}
+    if not isinstance(wl, dict):
+        # a malformed problem.json (a non-table workload) is a card without a
+        # usable workload: the "no analytic floor" degradation, never an
+        # AttributeError escaping the callers' (OSError, ValueError) net
+        wl = {}
     axes = wl.get("axes") or {}
     if not axes:
         return None

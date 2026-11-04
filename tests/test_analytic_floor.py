@@ -294,6 +294,30 @@ def test_problem_from_card_without_axes_is_none() -> None:
     assert af.problem_from_card({"definition": {"inputs": {}}, "workload": {}}) is None
 
 
+def test_problem_from_card_degrades_a_non_dict_workload_to_none() -> None:
+    # a malformed problem.json (a non-table workload) is a card without a usable
+    # workload: the "no analytic floor" degradation -- never an AttributeError
+    # escaping the callers' (OSError, ValueError) net (driver _analytic_floor_ms,
+    # floor_from_op_dir)
+    assert af.problem_from_card({"definition": {"inputs": {}}, "workload": ["n"]}) is None
+    assert af.problem_from_card({"definition": {"inputs": {}}, "workload": 4}) is None
+    # the same guard covers a non-table definition: the tensors resolve to none of it
+    p = af.problem_from_card({"definition": ["not", "a", "table"],
+                              "workload": {"axes": {"n": 4}}})
+    assert p is not None and p["inputs"] == [] and p["outputs"] == []
+
+
+def test_floor_from_op_dir_tolerates_a_malformed_problem_json(tmp_path) -> None:
+    # the run-level read path: a malformed workload yields no floor (the caller
+    # renders "no analytic floor"), not a stopped run
+    d = tmp_path / "op"
+    (d / "eval" / "problem").mkdir(parents=True)
+    (d / "eval" / "problem" / "problem.json").write_text(
+        '{"definition": {"inputs": {}}, "workload": ["not", "a", "dict"]}',
+        encoding="utf-8")
+    assert af.floor_from_op_dir(d, arch="") is None
+
+
 def test_peak_table_rows_document_the_backtest_hardware() -> None:
     peaks = af.peak_table()
     assert peaks["sm100"]["bw"] == 8000e9 and peaks["sm100"]["flops"]["fp16"] == 2250e12

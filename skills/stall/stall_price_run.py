@@ -354,7 +354,13 @@ def main(argv=None) -> int:
     pm = "--pm" in recipe
     pm_interval = PM_INTERVAL
     if "--pm-interval" in recipe:
-        pm_interval = int(recipe[recipe.index("--pm-interval") + 1])
+        i = recipe.index("--pm-interval")
+        if i + 1 >= len(recipe):
+            # the verdict travels in the line, not the exit code — and a bare
+            # IndexError traceback is neither
+            print("STALL-FAIL reason=bad-args (--pm-interval given without a value)")
+            return 0
+        pm_interval = int(recipe[i + 1])
     if "--workload" in recipe:
         # one workload of a group card (the driver prices the card's meta_workloads one
         # job each): the launch target's ncu_window follows the variable, which every

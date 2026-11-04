@@ -90,3 +90,19 @@ def test_timeout_run_still_returns_124_on_expiry_and_zero_on_clean_exit():
          sys.executable, "-c", "pass"],
         capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+# --- W1-LIF-06: a recipe flag with no value is a FAIL verdict, not a traceback ----------
+
+@pytest.mark.parametrize("script,flag,verdict", [
+    ("skills/timeline/pm_timeline_run.py", "--interval", "PMTL-FAIL reason=bad-args"),
+    ("skills/stall/stall_price_run.py", "--pm-interval", "STALL-FAIL reason=bad-args"),
+])
+def test_a_trailing_recipe_flag_without_a_value_is_a_fail_verdict(script, flag, verdict):
+    """Both scripts state "the verdict travels in the line, not the exit code"; a
+    `--interval` / `--pm-interval` given last used to die on a bare IndexError
+    traceback instead."""
+    r = subprocess.run([sys.executable, str(REPO / script), flag],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+    assert verdict in r.stdout
+    assert "Traceback" not in r.stderr
+    assert "IndexError" not in r.stderr

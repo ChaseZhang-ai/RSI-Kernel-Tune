@@ -41,7 +41,13 @@ def main(argv=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     interval = INTERVAL
     if "--interval" in args:
-        interval = int(args[args.index("--interval") + 1])
+        i = args.index("--interval")
+        if i + 1 >= len(args):
+            # the verdict travels in the line, not the exit code — and a bare
+            # IndexError traceback is neither
+            print("PMTL-FAIL reason=bad-args (--interval given without a value)")
+            return 0
+        interval = int(args[i + 1])
 
     cmd = build_cmd(interval)
     # a GPU machine keeps /tmp across jobs: a collection that produces nothing must

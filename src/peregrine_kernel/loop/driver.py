@@ -16032,10 +16032,11 @@ def _save_ref_struct_table(ctx: LoopContext, log: str) -> None:
                   log, re.S)
     if m is None:
         return
+    dst = ctx.recon_path.parent / _REF_STRUCT_TABLE_NAME
     try:
-        (ctx.recon_path.parent / _REF_STRUCT_TABLE_NAME).write_text(m.group(1))
+        dst.write_text(m.group(1))
     except OSError as e:
-        _log(f"meta/recon: could not persist {_REF_STRUCT_TABLE_NAME} to {e}")
+        _log(f"meta/recon: could not persist {_REF_STRUCT_TABLE_NAME} to {dst}: {e}")
 
 
 def _read_ref_struct_table(ctx: LoopContext) -> str | None:

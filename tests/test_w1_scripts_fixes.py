@@ -197,3 +197,22 @@ def test_a_natural_chain_break_still_exits_zero(tmp_path, monkeypatch):
     root, state = _evolve(tmp_path, monkeypatch)
     state["gains"] += [1.30, None]        # gen 2 completes without a confirmed best
     assert SE.main([str(_gen_task(root)), "--max-gen", "4"]) == 0
+# --- P3-13: a broken --from-json archive is a clean error, not a traceback --------------
+
+def test_from_json_with_a_broken_archive_is_a_clean_error(tmp_path, monkeypatch, capsys):
+    from peregrine_kernel.baseline_cli import main
+
+    ops = tmp_path / "operators" / "someop"
+    ops.mkdir(parents=True)
+    monkeypatch.setenv("PEREGRINE_OPERATORS_DIR", str(tmp_path / "operators"))
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    rc = main(["someop", "--from-json", str(bad)])
+    out = capsys.readouterr()
+    assert rc == 4, (rc, out.out, out.err)
+    assert "[baseline] error" in out.err and "bad.json" in out.err
+    assert "Traceback" not in out.err
+    missing = tmp_path / "nope.json"
+    rc = main(["someop", "--from-json", str(missing)])
+    out = capsys.readouterr()
+    assert rc == 4 and "Traceback" not in out.err

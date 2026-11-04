@@ -7,7 +7,8 @@ not sink the run's whole history."""
 import json
 
 from peregrine_kernel.inner.results import parse_correctness  # noqa: F401  (used by later waves)
-from peregrine_kernel.inner.trajectory import IterationRecord
+from peregrine_kernel.inner.trajectory import (IterationRecord, _DIFF_SIG,
+                                               constant_output_flag)
 from peregrine_kernel.loop.parse import _float_list, detect_plateau, parse_eval
 
 
@@ -104,3 +105,40 @@ def test_scalar_eval_readings_reject_garbage_without_raising():
     ev = parse_eval(_eval_text(device_median_ms="fast", bwd_median_ms=[1.0]))
     assert ev.device_median_ms is None
     assert ev.bwd_median_ms is None
+
+
+# --- BUG-SEED-25: the diff signature truncated scientific notation to the ------
+# mantissa, so distinct small-diff FAILs read as one bit-identical signature and
+# falsely fired the constant-output diagnosis.
+
+def _fail_rec(it, err):
+    return IterationRecord(iter=it, decision_id=f"d{it}", change="c",
+                           correctness=False, verdict="REVERT", error=err)
+
+
+def test_diff_signature_keeps_the_exponent():
+    assert _DIFF_SIG.findall("max_diff=1.5e-05") == ["1.5e-05"]
+    assert _DIFF_SIG.findall("max_diff=1.5e-07") == ["1.5e-07"]
+    assert _DIFF_SIG.findall("max_diff=1.5E+02 exceeds 1e-2") == ["1.5E+02"]
+    # plain decimals, inf and nan signatures unchanged
+    assert _DIFF_SIG.findall("max_diff=4.28") == ["4.28"]
+    assert _DIFF_SIG.findall("max_diff=inf") == ["inf"]
+    assert _DIFF_SIG.findall("max_diff=nan") == ["nan"]
+
+
+def test_distinct_scientific_diffs_do_not_fire_constant_output():
+    # three distinct FAILs whose mantissas agree: a real numeric bug that moves
+    # (1.5e-05 -> 1.5e-07 -> 1.5e-09) must not read as "the output never changes"
+    recs = [_fail_rec(1, "FAIL: max_diff=1.5e-05 exceeds 1e-2"),
+            _fail_rec(2, "FAIL: max_diff=1.5e-07 exceeds 1e-2"),
+            _fail_rec(3, "FAIL: max_diff=1.5e-09 exceeds 1e-2")]
+    assert constant_output_flag(recs) is None
+
+
+def test_identical_scientific_diffs_still_fire_constant_output():
+    recs = [_fail_rec(1, "FAIL: max_diff=1.5e-05 exceeds 1e-2"),
+            _fail_rec(2, "FAIL: max_diff=1.5e-05 exceeds 1e-2"),
+            _fail_rec(3, "FAIL: max_diff=1.5e-05 exceeds 1e-2")]
+    flag = constant_output_flag(recs)
+    assert flag is not None and flag["kind"] == "constant_output"
+    assert flag["signature"] == ["1.5e-05"]

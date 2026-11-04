@@ -432,7 +432,12 @@ def load_records(path: str | Path) -> list[IterationRecord]:
 # in a row landing on 4.504025/7.560892/7.823140 to the last digit is not a
 # numeric bug, and no one — student, meta, or log reader — was told (observed on
 # an MHA bwd run: four such iterations were only diagnosed by hand afterwards).
-_DIFF_SIG = re.compile(r"max_diff=([0-9]+\.[0-9]+|inf|nan)")
+# The numeric branch carries the optional exponent as part of the signature:
+# small-diff kernels print `max_diff=1.5e-05` / `max_diff=1.5e-07`, and a
+# mantissa-only capture truncated every such value to "1.5" — three distinct
+# FAILs read as one bit-identical signature and falsely fired the
+# constant-output diagnosis below.
+_DIFF_SIG = re.compile(r"max_diff=([0-9]+\.[0-9]+(?:[eE][+-]?[0-9]+)?|inf|nan)")
 CONSTANT_OUTPUT_MIN_REPEATS = 3
 
 

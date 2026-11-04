@@ -40,14 +40,19 @@ from test_wp11_throughput import _WP11_TELEMETRY
 # WP14: the per-shape ledger (per_shape_ratios/per_shape_best, C8's schema).
 # WP20: the measure-side defense accounting (readings, never verdicts).
 # WP29: the replay probe's evidence block on the REVERT it caused (the G1 fix).
+# M3: the two-lane contract (docs/industrial-lane.md §6.6) — the lane stamp on
+# every row (dataclass default False = STRICT: the merge-base value, unchanged)
+# and the MEMO fallback verdict block (default None). Defaults only: the golden
+# constants and every merge-base field's pinned value are untouched.
 _WP15_FIELDS = ("best_low_confidence", "best_standard_error",
                 "confirm_jobs", "confirm_readings")
 _WP14_FIELDS = ("per_shape_ratios", "per_shape_best")
 _WP20_FIELDS = ("board_span_unstable", "corr_margin_ratio", "fresh_recheck_form",
                 "gate_degraded", "judge_edge_recheck")
 _WP29_FIELDS = ("replay_probe",)
+_M3_FIELDS = ("memo_lane", "memo_fallback")
 _STRIP_FIELDS = _WP11_TELEMETRY + _WP15_FIELDS + _WP14_FIELDS + _WP20_FIELDS \
-    + _WP29_FIELDS
+    + _WP29_FIELDS + _M3_FIELDS
 
 import pytest
 

@@ -609,6 +609,11 @@ def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
         argv += ["--target-ms", repr(task.target.ms)]
     else:
         argv += ["--equivalence-ratio", repr(task.target.ratio)]
+    if task.protocol.memo_lane:
+        # M3 (docs/industrial-lane.md §6.5): the task snapshot pins the lane; the
+        # launcher re-read it (load_task above) and passes it to the loop like
+        # every other task key. A run never changes lanes.
+        argv.append("--memo-lane")
     if resuming:
         argv += ["--allow-preexisting-artifacts", "--allow-dirty-kb"]
     if harvest_only:
@@ -672,7 +677,16 @@ def best_of(run, task) -> dict | None:
 
 def write_report(run, task, rc: int) -> Path:
     rec = run.record()
+    # M3 (docs/industrial-lane.md §6.6): every report carries its lane. The lane
+    # also bounds what the speedup line may be read as — a MEMO number is service
+    # latency over the task's repeating input stream, never a compute-speedup
+    # claim, and STRICT remains the only source of paper capability numbers.
+    lane = "memo" if task.protocol.memo_lane else "strict"
     lines = [f"# {run.name}", "", f"- task: {task.name} ({task.mode} mode)",
+             f"- lane: {lane}"
+             + (" — service latency over the task's repeating input stream; the "
+                "speedup below is not a compute-speedup claim and is never comparable "
+                "with STRICT numbers" if lane == "memo" else ""),
              f"- status: {rec.get('status')} (stop: {rec.get('stop') or 'unknown'}, "
              f"loop exit {rc})"]
     if rec.get("target_met") and rec.get("stop") != STOP_TARGET:
@@ -715,9 +729,19 @@ def cmd_export(argv) -> int:
     if best is None or not best.get("kernel"):
         sys.stderr.write("[peregrine] the run has no confirmed best kernel to export yet\n")
         return 2
+    # M3 (docs/industrial-lane.md §6.6): the export's provenance note carries the
+    # lane. stdout stays the kernel source, byte-clean — the note rides stderr
+    # (and the --out confirmation line). A MEMO export is service latency over
+    # its task's repeating input stream: never quote it as a compute speedup.
+    lane = "memo" if task.protocol.memo_lane else "strict"
+    note = (f"[peregrine] export lane: {lane}"
+            + (" — service latency over the task's repeating input stream; not a "
+               "compute-speedup claim, never comparable with STRICT numbers"
+               if lane == "memo" else "") + "\n")
+    sys.stderr.write(note)
     if args.out:
         Path(args.out).write_text(best["kernel"], encoding="utf-8")
-        _say(f"wrote {args.out} (the best kernel, {best['sha'][:12]})")
+        _say(f"wrote {args.out} (the best kernel, {best['sha'][:12]}, lane {lane})")
     else:
         sys.stdout.write(best["kernel"])
     return 0

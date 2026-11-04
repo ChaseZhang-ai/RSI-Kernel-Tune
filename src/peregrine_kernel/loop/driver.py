@@ -69,6 +69,7 @@ from peregrine_kernel.window_contract import PERF_WORKLOADS
 from peregrine_kernel.loop.parse import (
     describe_workload_readings,
     ENTRY_DONE_RE,
+    EvalResult,
     Exhausted,
     JOB_END_KILLED,
     ProbeRequest,
@@ -248,6 +249,13 @@ class LoopContext:
     # in this same window; the CLI derives it that way and refuses a device gate
     # over a baseline that never measured the device window.
     gate_window: str = GATE_WINDOW_DEFAULT
+    # M3, the two-lane contract (docs/industrial-lane.md §6.5): the task's lane,
+    # read from the loaded task snapshot's [protocol] memo_lane (launch re-reads
+    # <run>/task/ like every other task key and passes it here). False = STRICT
+    # (the default; every run before M3 and every task without the key). The lane
+    # is a run-level fact: every IterationRecord carries it, the briefs' contract
+    # paragraph and the carry check read it, and the lanes' numbers never mix.
+    memo_lane: bool = False
     meta_status_path: Path | None = None  # meta-loop trajectory (meta agent's memory)
     fresh_recipe: str | None = None  # a just-certified KB recipe to point the student at
     # In-place reopening of structural / split patches: keep the best green tree
@@ -1483,6 +1491,11 @@ def _student_prompt(ctx: LoopContext, iter_no: int, probe_feedback: str = "") ->
         # Standing: the contract does not change between turns, and the rebuild
         # launches must stay recognisable for the whole run to be priced.
         extra += note
+    if note := _memo_lane_note(ctx):
+        # M3: the MEMO lane's contract paragraph, standing for the whole run (the
+        # lane never changes mid-run). STRICT runs render nothing here — their
+        # prompts stay byte-identical to pre-M3.
+        extra += note
     if probe_feedback:
         extra += probe_feedback
     bindings = _bindings(ctx)
@@ -1496,6 +1509,28 @@ def _student_prompt(ctx: LoopContext, iter_no: int, probe_feedback: str = "") ->
         digest = str(_student_digest_path(ctx))
         bindings = {**bindings, "{STATUS_JSONL}": digest, "{TRAJECTORY_PATH}": digest}
     return render_prompt(_meta_prompt(ctx, "student_prompt.md"), bindings, extra)
+
+
+def _memo_lane_note(ctx: LoopContext) -> str:
+    """M3 (docs/industrial-lane.md §6.5): the MEMO lane's contract paragraph for
+    the student prompt — one short injection block, standing for the whole run.
+    It says what is legal in this lane (memoization on repeated content), what
+    is never legal (a broken miss path: a fresh draw must be answered
+    correctly), and what the numbers mean (service latency, never comparable
+    with STRICT). All the anti-fraud discipline text is untouched; STRICT runs
+    render no memo text at all."""
+    if not ctx.memo_lane:
+        return ""
+    return (
+        "\n## Lane contract (MEMO — the industrial lane)\n"
+        "- This run's contract is service latency over this task's repeating input stream: "
+        "recognizing an input seen before by value and returning the parked correct answer "
+        "is legal here.\n"
+        "- The cache's miss path must compute honestly: a fresh input the timed stream never "
+        "showed will be fed to the kernel after timing and must be answered correctly — a "
+        "wrong answer there is a hard REVERT in every lane.\n"
+        "- This lane's numbers are never comparable with STRICT-lane numbers and never a "
+        "compute-speedup claim; STRICT remains the only source of paper capability numbers.\n")
 
 
 def _student_digest_path(ctx: LoopContext) -> Path:
@@ -3521,6 +3556,7 @@ def _harness_edit_revert(ctx: LoopContext, iter_no: int, record, sha: str, base_
         iter=iter_no, decision_id=record.decision_id, change=record.change,
         correctness=None, verdict="REVERT", metric_before=metric_before,
         error=err, profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
+        memo_lane=ctx.memo_lane,   # M3: every row carries its lane
     )
     _wp18_kb_usage_flow(ctx, rec)
     append_record(ctx.status_path, rec)
@@ -3755,6 +3791,7 @@ def run_inner_iteration(
             iter=iter_no, decision_id=did, change=change,
             correctness=False, verdict="REVERT", metric_before=metric_before,
             error=err, profiler={}, cluster=_active_cluster(ctx),
+            memo_lane=ctx.memo_lane,   # M3: every row carries its lane
         )
         _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
@@ -3796,6 +3833,7 @@ def run_inner_iteration(
             iter=iter_no, decision_id=record.decision_id, change=record.change,
             correctness=None, verdict="NEUTRAL", metric_before=metric_before, sha=sha,
             cluster=_active_cluster(ctx), base_sha=base_sha,
+            memo_lane=ctx.memo_lane,   # M3: every row carries its lane
         )
         _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
@@ -3858,6 +3896,20 @@ def run_inner_iteration(
     ev = parse_eval(eval_log)
     ev = _enforce_single_ref(ctx, ev)
     ev = _enforce_prep_contract(ctx, ev)
+    # --- M3: cross-lane contamination guard (docs/industrial-lane.md §3). The
+    # lane is a run-level fact; an eval stamped for the OTHER lane means the
+    # harness state is confused (a hand-edited card, a mixed job stream) and
+    # the reading is not judgeable here — refuse it loudly rather than judge
+    # cross-lane numbers. The workload_scope precedent's posture: the reading
+    # is invalid (correctness=False, the reason is the error). The reverse
+    # direction (a run without a stamp in its evals) is a pre-M3 card resumed
+    # under the new harness — degraded provenance, not contamination — so only
+    # the memo-stamped-in-a-strict-run direction is refused.
+    if (getattr(ev, "lane", None) or {}).get("memo") and not ctx.memo_lane:
+        ev = EvalResult(correctness=False, error=(
+            "lane contamination: the eval JSON carries the MEMO lane stamp but this "
+            "run is STRICT — the reading is not judgeable here "
+            "(docs/industrial-lane.md §3)"))
     precision = _precision_reading(ctx, ev, iter_no)
     cluster = _active_cluster(ctx)
     if cluster != entry_cluster:
@@ -3964,6 +4016,7 @@ def run_inner_iteration(
                 corr_margin_ratio=ev.corr_margin_ratio,   # WP20: the judge's edge the REVERT sat on
                 gate_degraded=ev.gate_degraded,           # WP20: the gate's own visibility
                 gpu_state=ev.gpu_state or {},   # WP1 telemetry: objective, rides every eval
+                memo_lane=ctx.memo_lane,        # M3: every row carries its lane
                 **_wp11_wallclock_fields(ctx, agent_s=wp11_agent_s, eval_s=eval_job_s,
                                          ncu_s=ncu_job_s, queue_s=queue_wait_s),
                 variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
@@ -4008,6 +4061,7 @@ def run_inner_iteration(
                                        # disagreed with itself — a different fail form than a
                                        # cache replay (both REVERT; the record says which)
             gpu_state=ev.gpu_state or {},
+            memo_lane=ctx.memo_lane,   # M3: every row carries its lane
             suspicious=True,      # WP9: the reward-hack marker
             variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
         )
@@ -4047,7 +4101,47 @@ def run_inner_iteration(
             prep=ev.prep or {}, precision=precision,
             per_shape_ratios=_ps_ratios, per_shape_best=_ps_best,
             replay_probe=rp, gpu_state=ev.gpu_state or {},
+            memo_lane=ctx.memo_lane,
             suspicious=True,                   # the reward-hack marker, fresh_recheck-same
+            variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
+        )
+        _wp18_kb_usage_flow(ctx, rec)
+        append_record(ctx.status_path, rec)
+        return rec
+    # --- M3: the MEMO lane's unseen-input hard gate (docs/industrial-lane.md
+    # §6.5), parallel to the WP9 fresh-recheck FAIL path above (STRICT-only).
+    # The bench re-ran the correctness protocol in a fresh process after ALL
+    # timing windows closed, on a shifted-seed draw the timed stream never
+    # showed, and the cache's miss path answered it incorrectly: the honest
+    # fallback is broken — wrong on unseen inputs is disqualifying in any lane.
+    # Hard REVERT, correctness=False, NOT marked suspicious (replaying timed
+    # content is legal in this lane; what failed is plain correctness), and the
+    # block rides the row as the evidence face. pass=None above never reaches
+    # here and never convicts (the WP9 posture, kept verbatim).
+    if (mf := getattr(ev, "memo_fallback", None)) and mf.get("pass") is False:
+        mode = mf.get("mode", "?")
+        detail = (f"memo_fallback FAIL (mode={mode}): the cache's miss path answered a "
+                  f"fresh draw incorrectly — the honest fallback is broken")
+        _log(f"iter {iter_no}: {record.decision_id} REVERT ({detail})")
+        # --- WP16: pooled trees carry named branches across this reset.
+        try:
+            _preserve_runner_up_trees(ctx, be, load_records(ctx.status_path))
+        except (BackendError, OSError, ValueError) as e:
+            _log(f"iter {iter_no}: runner-up preservation skipped ({e})")
+        if last_good_ref:
+            be.reset(last_good_ref)
+        _ps_ratios, _ps_best = per_shape_ledger(
+            load_records(ctx.status_path), ev.workloads, iter_no, improve=False,
+            gate_window=ctx.gate_window)
+        rec = IterationRecord(
+            iter=iter_no, decision_id=record.decision_id, change=record.change,
+            correctness=False, verdict="REVERT", metric_before=metric_before,
+            error=detail, profiler=profiler, cluster=cluster,
+            orch_summary=orch_summary, base_sha=base_sha, kernels=kernels,
+            prep=ev.prep or {}, precision=precision,
+            per_shape_ratios=_ps_ratios, per_shape_best=_ps_best,
+            memo_fallback=mf, gpu_state=ev.gpu_state or {},
+            memo_lane=ctx.memo_lane,
             variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
         )
         _wp18_kb_usage_flow(ctx, rec)
@@ -4111,6 +4205,12 @@ def run_inner_iteration(
         **_wp11_wallclock_fields(ctx, agent_s=wp11_agent_s, eval_s=eval_job_s,
                                  ncu_s=ncu_job_s, queue_s=queue_wait_s),
         variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
+        # M3: the row carries its lane, and (MEMO rows) the fallback verdict as
+        # it stood — pass=None rides as a no-reading (the WP9 posture: the
+        # digest flags the unverified fallback; it never silently looks
+        # verified). STRICT rows carry None (absent = strict).
+        memo_lane=ctx.memo_lane,
+        memo_fallback=getattr(ev, "memo_fallback", None),
     )
     _wp4_note_regression(ctx, rec, iter_no, cluster)   # WP4: slow-decision bookkeeping (prior only)
     _wp18_kb_usage_flow(ctx, rec)
@@ -8982,6 +9082,7 @@ def _mc_deliver_per_shape(ctx: LoopContext, be, iter_no: int, record, base_sha: 
               f"({why})",
         profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
         variant_timings=timings or None,
+        memo_lane=ctx.memo_lane,   # M3: every row carries its lane
     )
     append_record(ctx.status_path, rec)
     return {"rows": timings, "winner": None, "revert": rec, "git_moved": True}
@@ -9151,6 +9252,7 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
             error=f"multi-candidate: no variant passed the prescreen ({why})",
             profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
             variant_timings=timings or None,
+            memo_lane=ctx.memo_lane,   # M3: every row carries its lane
         )
         _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
@@ -13645,7 +13747,8 @@ def _note_reopen(ctx: LoopContext, meta: "MetaResult", ref: str) -> None:
     records = load_records(ctx.status_path)
     append_record(ctx.status_path, IterationRecord(
         iter=len(records), decision_id="REOPEN", change=change,
-        correctness=None, verdict="NEUTRAL", sha=""))
+        correctness=None, verdict="NEUTRAL", sha="",
+        memo_lane=ctx.memo_lane))
     ctx.reopen_note = (
         f"- **Reopened in place (REOPEN)**: the previous meta step's patch changed `{changed}`. "
         f"The workspace was **not** rolled back; it is still the best KEEP tree so far "
@@ -14038,7 +14141,8 @@ def _judge_patch(ctx: LoopContext, pending: _PendingPatch) -> str:
                     f"tree restored to {pending.good_ref[:10]}; the earlier KEEP rows for "
                     f"[{', '.join(pending.reopened)}] stand again, the reopened segment's "
                     f"rows are void."),
-            correctness=None, verdict="NEUTRAL", sha=""))
+            correctness=None, verdict="NEUTRAL", sha="",
+            memo_lane=ctx.memo_lane))
         ctx.reopen_note = ""
     # The workspace is back on the pre-patch good tree: nothing the reverted patch
     # invalidated is rolled back any more, so its standing note must not survive into
@@ -18155,11 +18259,42 @@ def _prior_art_binding(ctx: LoopContext) -> str:
     return "\n\n".join(parts)
 
 
+_CARRY_LANE_DROPPED: set[str] = set()
+"""carry directories whose lane mismatch was already logged once (a binding is
+rendered on every teacher turn; the refusal is standing, the log line is not)."""
+
+
+def _carry_lane(ctx: LoopContext, d: Path) -> bool:
+    """The carried generation's lane, from its machine-readable stamp (the
+    parent's lane as the top-level ``memo_lane`` key of ``carry/levers.json``;
+    scripts/self_evolve.py writes it). No stamp = a pre-M3 carry, whose parent
+    was necessarily STRICT."""
+    try:
+        levers = json.loads((d / "levers.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(levers, dict) or not isinstance(levers.get("memo_lane"), bool):
+        return False
+    return levers["memo_lane"]
+
+
 def _carry_binding(ctx: LoopContext) -> str:
     """{CARRY}: the parent generation's closing record, rendered with its
-    discipline line. A missing directory renders ``(none)``."""
+    discipline line. A missing directory renders ``(none)``. A carry whose lane
+    stamp mismatches this task's lane is dropped outright — lever prices and
+    ARCH_PROBE readings are priors over a measurement stream, and across lanes
+    the stream differs (docs/industrial-lane.md §6.7): the hand-edited case is
+    the one this defends, since a self_evolve chain inherits one lane."""
     d = Path(ctx.carry_dir) if (ctx.carry_dir or "").strip() else None
     if d is None or not d.is_dir():
+        return "(none)"
+    if _carry_lane(ctx, d) != ctx.memo_lane:
+        if str(d) not in _CARRY_LANE_DROPPED:
+            _CARRY_LANE_DROPPED.add(str(d))
+            carry_lane = "memo" if _carry_lane(ctx, d) else "strict"
+            _log(f"carry lane {carry_lane} != task lane "
+                 f"{'memo' if ctx.memo_lane else 'strict'} — carried prices not valid "
+                 f"here; starting without them")
         return "(none)"
 
     def _face(name: str, cap: int, what: str) -> str:

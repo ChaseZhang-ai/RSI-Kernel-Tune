@@ -102,7 +102,17 @@ def next_generation(task, best: dict, dest: Path, step: float, run=None, best_da
     (dest / "task.toml").write_text(dump_task_toml(cfg), encoding="utf-8")
     if run is not None:
         _write_carry(task, run, dest / "carry", best=best_data)
-    load_task(dest)                       # the new generation must be a valid task
+    child = load_task(dest)              # the new generation must be a valid task
+    # M3 (docs/industrial-lane.md §6.7): the lane inherits with the task.toml
+    # (read_task_toml -> dump_task_toml round-trips [protocol]); the explicit
+    # guard is the regression tripwire — one generation chain is one lane end to
+    # end, and a mismatch would be a wiring bug, not a lane change. Fail loudly.
+    if child.protocol.memo_lane != task.protocol.memo_lane:
+        raise ValueError(
+            f"the generation chain changed lanes ({task.dir.name} "
+            f"{'memo' if task.protocol.memo_lane else 'strict'} -> {dest.name} "
+            f"{'memo' if child.protocol.memo_lane else 'strict'}): a child inherits "
+            f"its parent's lane — a mismatch is a bug (docs/industrial-lane.md §6.7)")
     return dest
 
 
@@ -211,6 +221,19 @@ def _write_carry(task, run, dest: Path, best: dict | None = None) -> None:
     levers_path = run.ws / "notes" / "levers.json"
     if levers_path.is_file():
         levers = levers_path.read_text(encoding="utf-8", errors="replace")
+        # M3 (docs/industrial-lane.md §6.7): the carry's machine-readable lane
+        # stamp — the parent's lane as the top-level ``memo_lane`` key. Lever
+        # prices are priors over a measurement stream, and across lanes the
+        # stream differs; the stamp is what makes the carry auditable (the
+        # child's PRIOR-INPUT injection drops a mismatching carry). Unparseable
+        # lever text is left as it is: it was never a price table anyway.
+        try:
+            _levers_obj = json.loads(levers)
+        except ValueError:
+            _levers_obj = None
+        if isinstance(_levers_obj, dict):
+            _levers_obj["memo_lane"] = bool(task.protocol.memo_lane)
+            levers = json.dumps(_levers_obj, indent=1) + "\n"
     _put(_CARRY_LEVERS, levers, "the parent's last lever price table")
     stamp = ""
     if ms_text:

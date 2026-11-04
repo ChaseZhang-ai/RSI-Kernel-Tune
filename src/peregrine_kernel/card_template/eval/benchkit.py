@@ -76,6 +76,27 @@ import torch
 FRESH_SEED_ENV = "PK_FRESH_SEED"
 FRESH_RECHECK_ENV = "PK_FRESH_RECHECK"
 
+# --- M3: the two-lane contract (docs/industrial-lane.md §6.3) --------------------
+#
+# PK_MEMO_LANE=1 (taskcard's spelling, set from [protocol] memo_lane) runs this
+# card in the MEMO industrial lane: a content-addressed memoization layer in the
+# delivered kernel is legal there, the timed reading is service latency over the
+# task's repeating input stream, and the checks that exist BECAUSE replay was a
+# cheat (the WP9 fresh_recheck conviction, the WP29 replay probe) are off. What is
+# NEVER off is correctness: the judged protocol runs exactly as in STRICT, and the
+# fresh child still runs after all windows — attached as `memo_fallback` (the
+# unseen-input hard gate: the cache's miss path must compute honestly) instead of
+# `fresh_recheck`. Absent (the house pattern) or 0/off = STRICT, today's behavior
+# byte for byte. The flag is harness-side only: it is read here before the kernel
+# imports, and the fence refuses a kernel that reads the environment.
+MEMO_LANE_ENV = "PK_MEMO_LANE"
+
+
+def _memo_lane() -> bool:
+    """The lane switch: PK_MEMO_LANE=1 is the MEMO industrial lane; absent (the
+    house pattern: absent means off) or 0/off is STRICT."""
+    return os.environ.get(MEMO_LANE_ENV, "").strip().lower() not in ("", "0", "off")
+
 
 def _recheck_seed_shift() -> int:
     """The seed SHIFT a fresh-recheck child applies to the task's per-group
@@ -1237,6 +1258,10 @@ def apply_workload_scope(problem: dict, env=None) -> dict | None:
 
 
 def _emit(result: dict) -> None:
+    if _memo_lane():
+        # M3: every reading carries its lane. MEMO cards only — a STRICT eval JSON
+        # emits nothing here (absent = strict) and stays byte-identical.
+        result = {**result, "lane": {"memo": True}}
     if _SCOPE:
         result = {**result, "workload_scope": dict(_SCOPE)}
     if _RESUSAGE:
@@ -1328,7 +1353,10 @@ def _fresh_recheck_block(problem: dict) -> "dict | None":
     reported, never scored. A FAIL also buys the WP20 nondeterminism
     fingerprint (the same-seed double run): a kernel that disagrees with itself
     on identical content is a different fail form than a cache replay — the
-    record says which (both still REVERT)."""
+    record says which (both still REVERT). M3: the machinery is lane-shared —
+    on a MEMO card (PK_MEMO_LANE) the caller attaches this same block as
+    ``memo_fallback`` instead of ``fresh_recheck`` (docs/industrial-lane.md
+    §6.3); nothing here reads the lane."""
     if os.environ.get(FRESH_RECHECK_ENV):
         return None                      # a child never nests
     mode = _fresh_recheck_mode(problem)
@@ -1707,6 +1735,13 @@ def _maybe_replay_probe(result: dict, problem: dict, args, blocks: list) -> None
     the bench is byte-identical to pre-WP29 (no child spawn, no block)."""
     if os.environ.get(REPLAY_PROBE_CHILD_ENV):
         return                                # a probe child never probes
+    if _memo_lane():
+        # M3 (docs/industrial-lane.md §6.3): the probe is STRICT-side ammunition
+        # for G1. On a MEMO card a memoized parent legitimately sits far below
+        # the child's honest re-time — the lane's own metric, not an attack
+        # signature — so the gate skips before anything is spawned. Correctness
+        # there is policed by the judged protocol and the memo_fallback child.
+        return
     if not _replay_probe_enabled():
         return
     if args.impl != "kernel" or not (result.get("correctness") or {}).get("pass"):
@@ -2432,17 +2467,32 @@ def _maybe_fresh_recheck(result: dict, problem: dict, args) -> None:
     """The timing-fresh-input recheck (WP9), attached after ALL timing windows
     closed on a PASSING kernel the student wrote. A self-test (--impl ref) has
     nothing to recheck (the reference is the trusted side), and a correctness
-    FAIL never reaches timing."""
+    FAIL never reaches timing.
+
+    M3, the lane branch (docs/industrial-lane.md §6.3): STRICT keeps today's
+    path byte for byte. MEMO never emits `fresh_recheck` (the conviction its
+    FAIL carried does not apply to a legal cache) — the SAME fresh child runs
+    instead, its verdict attached as top-level `memo_fallback`: the unseen-input
+    hard gate (a wrong answer on the shifted-seed draw is a broken honest
+    fallback, and the driver REVERTs on it). Correctness is never negotiable in
+    either lane; only where an answer may come from on repeated content changes."""
     if args.impl != "kernel" or not (result.get("correctness") or {}).get("pass"):
         return
     if not (result.get("performance") or {}):
         return
     block = _fresh_recheck_block(problem)
-    if block is not None:
-        result["fresh_recheck"] = block
-        print(f"[bench] fresh recheck ({block['mode']}): "
+    if block is None:
+        return
+    if _memo_lane():
+        result["memo_fallback"] = block
+        print("[bench] memo fallback: "
               + ("PASS" if block.get("pass") is True else
                  "FAIL" if block.get("pass") is False else "no reading"))
+        return
+    result["fresh_recheck"] = block
+    print(f"[bench] fresh recheck ({block['mode']}): "
+          + ("PASS" if block.get("pass") is True else
+             "FAIL" if block.get("pass") is False else "no reading"))
 
 
 

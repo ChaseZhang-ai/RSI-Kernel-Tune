@@ -86,6 +86,9 @@ def card_problem(task, check, *, reference_impl: dict | None = None,
                               "of the output dtype's rounding"},
         "source": {"task": task.name, "upstream": "peregrine_kernel task",
                    "dataset": "the task's own shapes and input groups"},
+        # M3 (docs/industrial-lane.md §6.2): the lane rides the card as a stamp —
+        # problem.json is generated, so both lanes carry it; STRICT reads false.
+        "memo_lane": bool(task.protocol.memo_lane),
     }
     if len(workloads) > 1:
         out["group"] = [{"index": i, "name": w["uuid"], "workload": w}
@@ -245,6 +248,11 @@ def write_submit(tree: Path, task, machine, timeout: int = JOB_TIMEOUT_S) -> Pat
         "[env]", 'PYTHONUNBUFFERED = "1"',
         f'CUTE_DSL_ARCH = "{CUTE_ARCH.get(task.arch, task.arch + "a")}"',
     ]
+    # M3 (docs/industrial-lane.md §6.2): the lane reaches the card's jobs as job env.
+    # MEMO is explicit opt-in; STRICT adds no line, so a STRICT submit.toml stays
+    # byte-identical to the pre-M3 shape (absent = strict, the house pattern).
+    if task.protocol.memo_lane:
+        lines.append('PK_MEMO_LANE = "1"')
     p = Path(tree) / "submit.toml"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p

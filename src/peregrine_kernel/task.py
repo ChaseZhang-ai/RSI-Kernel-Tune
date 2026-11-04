@@ -109,7 +109,11 @@ _KEYS = {
                "floor_margin"},
     # WP24: [protocol] declares the measurement clock the card's jobs pin and verify
     # (MHz; a key left out = run at the GPU's own clocks). Absent table = unlocked.
-    "protocol": {"sm_clock_mhz", "mem_clock_mhz"},
+    # M3 (docs/industrial-lane.md §6.1): memo_lane — the two-lane contract. Absent or
+    # false = STRICT (the default; the academic measurement contract, byte for byte
+    # today's behavior). true = MEMO, the explicit opt-in industrial lane
+    # (PK_MEMO_LANE=1 on the card's jobs; a lane is never mixed and never defaulted into).
+    "protocol": {"sm_clock_mhz", "mem_clock_mhz", "memo_lane"},
     # WP8: [agent.teacher] prior_survey (a teacher-side SOTA survey before
     # recon/distill, writing notes/prior_art.md per skills/sota-survey/) and
     # prior_art (an offline dossier, resolved relative to the task directory).
@@ -176,10 +180,14 @@ class Target:
 
 # WP24: the measurement clock a task declares ([protocol] in task.toml), pinned and
 # verified by the generated card's gpu_entry.sh. Absent = run at the GPU's own clocks.
+# M3: memo_lane — the two-lane contract's task-level attribute (docs/industrial-lane.md):
+# False (absent) = STRICT, the default lane; True = MEMO, the explicit opt-in industrial
+# lane. One task is born into one lane; a run snapshots it and no run changes lanes.
 @dataclass(frozen=True)
 class Protocol:
     sm_clock_mhz: int | None = None
     mem_clock_mhz: int | None = None
+    memo_lane: bool = False
 
 
 @dataclass(frozen=True)
@@ -626,7 +634,8 @@ def _read_target(cfg: dict, problems: list[str]) -> Target:
 
 def _read_protocol(cfg: dict, problems: list[str]) -> Protocol:
     """[protocol]: the measurement clock the card's jobs pin (MHz; a key left out =
-    run at the GPU's own clocks). Positive integers only."""
+    run at the GPU's own clocks), and the lane (memo_lane; absent/false = STRICT).
+    Positive integers only for the clocks; memo_lane must be a real bool."""
     t = _table(cfg, "protocol", problems)
 
     def mhz(key: str) -> int | None:
@@ -638,7 +647,14 @@ def _read_protocol(cfg: dict, problems: list[str]) -> Protocol:
             return None
         return v
 
-    return Protocol(sm_clock_mhz=mhz("sm_clock_mhz"), mem_clock_mhz=mhz("mem_clock_mhz"))
+    # M3 (docs/industrial-lane.md §6.1): the lane is declared once, as a bool —
+    # "yes"/1 is a mistake, not a spelling of true (the prior_survey pattern).
+    memo_lane = t.get("memo_lane", False)
+    if not isinstance(memo_lane, bool):
+        problems.append(f"[protocol] memo_lane must be true or false, got {memo_lane!r}")
+        memo_lane = False
+    return Protocol(sm_clock_mhz=mhz("sm_clock_mhz"), mem_clock_mhz=mhz("mem_clock_mhz"),
+                    memo_lane=memo_lane)
 
 
 def _read_agent(agents: dict, role: str, problems: list[str]) -> AgentSpec:

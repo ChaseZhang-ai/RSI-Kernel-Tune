@@ -2775,10 +2775,19 @@ def _run_meta_verdict_probe(ctx: LoopContext, be, probe_branch: str, path: str,
     """One single-script verdict probe on its own job (the pre-WP19 path).
 
     WP19 (task 2): extracted verbatim so the manifest's wholesale-failure
-    fallback runs exactly this — the old path is the fallback, not a copy."""
-    be.commit(f"meta-probe: {path}")
-    be.push_branch(probe_branch)
-    probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    fallback runs exactly this — the old path is the fallback, not a copy.
+
+    A backend failure in the commit/push/submit chain is the experiment's
+    environment failing, not an answer: it comes back as a no-verdict verdict
+    carrying "job failed (...)", the same contract the ablation probe has
+    always had — not as an exception that would terminate the whole run from
+    inside the meta step."""
+    try:
+        be.commit(f"meta-probe: {path}")
+        be.push_branch(probe_branch)
+        probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    except BackendError as e:
+        return ProbeVerdict(False, found=False, reason=f"job failed ({e})"), "", []
     # audit=False: these lines answer pre-registered hypotheses, and the
     # max_diff field carries the reading as printed. The certification
     # audit (error-norm ceiling, float-only) was downgrading a PASS with a
@@ -2797,6 +2806,22 @@ def _run_probe_manifest_batch(ctx: LoopContext, be, branch: str,
     no begin markers (the job never really ran — the caller falls back)."""
     log = be.submit_gpu(branch, _probe_batch_mode(paths))
     return _split_probe_batch_log(log, paths)
+
+
+def _run_probe_manifest_commit_batch(ctx: LoopContext, be, probe_branch: str,
+                                     mpath: str,
+                                     mpaths: list[str]) -> "tuple[list | None, str]":
+    """(batch, "") once the manifest's commit + push + batch job ran; (None,
+    "job failed (...)") when a backend side of that chain failed — a node/queue
+    hiccup is the experiment's environment failing, feedback to the teacher and
+    the step goes on (the ablation probe's contract), never an exception that
+    would kill the whole run from inside the meta step."""
+    try:
+        be.commit(f"meta-probe manifest: {mpath}")
+        be.push_branch(probe_branch)
+        return _run_probe_manifest_batch(ctx, be, probe_branch, mpaths), ""
+    except BackendError as e:
+        return None, f"job failed ({e})"
 
 
 def _verdict_probe_feedback(path: str, pv: ProbeVerdict, log: str,
@@ -2824,8 +2849,12 @@ def _verdict_probe_feedback(path: str, pv: ProbeVerdict, log: str,
         head += ("(The log has no `PROBE PASS/FAIL` verdict line — a verdict experiment must "
                  "pre-register a falsifiable criterion: print one line "
                  "`PROBE PASS/FAIL max_diff=<reading>` per hypothesis, so the script lands the "
-                 "verdict in the log instead of you interpreting it afterwards. Fix this next "
-                 "round.)\n")
+                 "verdict in the log instead of you interpreting it afterwards. Fix this "
+                 "next round.)\n")
+        # the reader may know more than "no verdict line" (a job that never ran,
+        # a cut archive): the reason rides below the verdict-line guidance
+        if pv.reason:
+            head += f"(driver note: {pv.reason})\n"
     elif pv.reason:
         head += f"(the driver's audit of the verdict line: {pv.reason})\n"
     return head + f"\n### Job log tail (your experiment's readings)\n```\n{tail}\n```\n"
@@ -12069,9 +12098,19 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 probe_rounds += 1
                 probes_run.extend(mpaths)
                 probe_branch = f"{ctx.branch_prefix}-metaprobe"
-                be.commit(f"meta-probe manifest: {turn.path}")
-                be.push_branch(probe_branch)
-                batch = _run_probe_manifest_batch(ctx, be, probe_branch, mpaths)
+                batch, batch_err = _run_probe_manifest_commit_batch(
+                    ctx, be, probe_branch, turn.path, mpaths)
+                if batch_err:
+                    _log(f"meta: probe manifest {turn.path} job failed "
+                         f"({batch_err}) — the step continues")
+                    diagnose_extra += (
+                        f"\n## Verdict experiment {probe_rounds}/"
+                        f"{ctx.max_verdict_probe_rounds}: `{turn.path}` (manifest) — "
+                        f"{batch_err}\n"
+                        "The GPU job did not run (a node/queue failure, not an "
+                        "experiment answer); send PROBE_REQUEST again, or give the "
+                        "final diagnosis from the evidence you have.\n")
+                    continue
                 if batch is None:
                     # the batch never really ran (markers missing): the
                     # per-script path is the fallback, verbatim

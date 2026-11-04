@@ -186,3 +186,59 @@ def test_part_zero_of_n_is_not_a_construction_declaration():
     # unchanged shapes: finished and over-cap declarations never scaffolded
     assert drv._declared_construction("part 3 of 3: done") is None
     assert drv._declared_construction("[PLACEHOLDER: D0.9 -> register split]") is not None
+
+
+# --- BUG-SEED-35: a meta verdict probe's GPU hiccup is feedback, not a crash ----
+
+class _FailingCommitBackend(FakeBackend):
+    """A node whose git side just failed (disk full, lock left behind) — the
+    probe's commit/push/submit run must not terminate the whole meta step."""
+
+    def commit(self, message: str) -> str:
+        raise drv.BackendError("git lock held")
+
+
+def _probe_ctx(tmp_path):
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "p.py").write_text("print('experiment')\n", encoding="utf-8")
+    be = _FailingCommitBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    return ctx, be
+
+
+def test_meta_verdict_probe_backend_error_is_feedback_not_a_crash(tmp_path):
+    # The probe's commit/push/submit chain was bare: one BackendError from any
+    # of the three propagated out of the meta loop to the CLI and terminated an
+    # hours-long run over a transient GPU/node hiccup. The sibling ablation
+    # probe has always caught it into "job failed (...)" feedback — same here.
+    ctx, _be = _probe_ctx(tmp_path)
+    pv, log, readings = drv._run_meta_verdict_probe(ctx, ctx.backend,
+                                                    "fs-demo-metaprobe",
+                                                    "notes/p.py", 1)
+    assert pv.found is False and "job failed" in pv.reason
+    assert log == "" and readings == []
+    # the rendered feedback carries the failure to the teacher
+    feedback = drv._verdict_probe_feedback("notes/p.py", pv, log, 1, 3)
+    assert "job failed" in feedback
+
+
+def test_probe_manifest_backend_error_is_feedback_not_a_crash(tmp_path, monkeypatch):
+    # The manifest path's commit/push/batch chain was equally bare.
+    ctx, _be = _probe_ctx(tmp_path)
+    be_ok = FakeBackend([], [])
+    ran = {"batch": False}
+
+    def fake_batch(c, b, branch, paths):
+        ran["batch"] = True
+        return [["notes/p.py", "=== slice ==="]]
+
+    monkeypatch.setattr(drv, "_run_probe_manifest_batch", fake_batch)
+    batch, err = drv._run_probe_manifest_commit_batch(
+        ctx, be_ok, "fs-demo-metaprobe", "notes/p.py", ["notes/p.py"])
+    assert ran["batch"] and err == "" and batch == [["notes/p.py", "=== slice ==="]]
+
+    monkeypatch.setattr(drv, "_run_probe_manifest_batch",
+                        lambda *a, **k: (_ for _ in ()).throw(drv.BackendError("queue gone")))
+    batch, err = drv._run_probe_manifest_commit_batch(
+        ctx, be_ok, "fs-demo-metaprobe", "notes/p.py", ["notes/p.py"])
+    assert batch is None and "job failed" in err

@@ -119,10 +119,48 @@ def test_a_generation_without_a_best_ends_the_chain(chain):
     assert len(ran) == 1
 
 
-def test_an_existing_next_generation_is_not_overwritten(chain):
+def test_an_existing_next_generation_refuses_before_any_job(chain, capsys):
+    """The first generation's destination is known before any job is bought:
+    an existing one is refused up front (exit 2, nothing run, nothing
+    overwritten), never after a generation has run."""
     root, ran, gains, _ = chain
     gains += [1.3]
     first = _task(root)
     (root / "tasks" / "rmsnorm-g2").mkdir()
-    with pytest.raises(FileExistsError):
-        se.main([str(first)])
+    assert se.main([str(first)]) == 2
+    assert ran == []
+    assert (root / "tasks" / "rmsnorm-g2").is_dir()
+    assert "already exists" in capsys.readouterr().err
+
+
+def test_a_chain_started_from_a_generation_suffixed_task_refuses_before_any_job(chain, capsys):
+    """From tasks/<op>-g2 the first computed destination is the starting
+    directory itself: refuse up front instead of running the whole generation
+    and only then dying on its own directory."""
+    root, ran, gains, _ = chain
+    gains += [1.3]
+    start = _task(root, "rmsnorm-g2")
+    assert se.main([str(start)]) == 2
+    assert ran == []
+    assert "refusing" in capsys.readouterr().err
+
+
+def test_noise_floor_survives_a_zero_ratio():
+    """A 0 (or negative) confirmation reading makes the spread undefined: the
+    floor falls back to the minimum instead of dividing by zero."""
+    assert se.noise_floor({"ratios": [1.0, 0.0]}) == se.NOISE_FLOOR_MIN
+    assert se.noise_floor({"ratios": [0.0, 0.0]}) == se.NOISE_FLOOR_MIN
+    assert se.noise_floor({"ratios": [1.0, -1.0]}) == se.NOISE_FLOOR_MIN
+
+
+def test_degenerate_ratios_stop_the_chain_with_a_report(chain, capsys):
+    """Ratios a spread cannot back (a 0 reading among them) end the chain as a
+    generation with nothing to optimize, reported explicitly -- not a crash
+    after the generation's jobs have run."""
+    root, ran, gains, _ = chain
+    gains += [(1.3, [1.2, 0.0])]     # a real gain, but one job read ratio 0
+    assert se.main([str(_task(root))]) == 0
+    assert len(ran) == 1
+    assert not (root / "tasks" / "rmsnorm-g2").exists()
+    out = capsys.readouterr().out
+    assert "non-positive" in out and "chain stops here" in out

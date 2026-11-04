@@ -2109,7 +2109,14 @@ def _cluster_scale(ctx: LoopContext) -> float | None:
         return min(seen) / home
     anchors = _load_anchors(ctx)
     entry = anchors.get(cluster) or {}
-    if entry.get("ref_ms"):
+    # The anchor is only valid for the gate window it was read in: ref_ms is a
+    # reading of THAT window (device vs e2e) while home is taken in the CURRENT
+    # one — dividing a device-window reading by an e2e-window home (or the
+    # reverse) folds the ~5-10% host tax into the scale. A mismatched entry
+    # counts as no anchor and falls into the re-measure channel below; the
+    # attempts counter stays shared so a stale entry cannot reboot the budget
+    # (and the re-measure rewrite heals the file to the current window).
+    if entry.get("window") == ctx.gate_window and entry.get("ref_ms"):
         return float(entry["ref_ms"]) / home
     attempts = int(entry.get("attempts", 0))
     if ctx.reanchor_ref is None or attempts >= _REANCHOR_ATTEMPTS:

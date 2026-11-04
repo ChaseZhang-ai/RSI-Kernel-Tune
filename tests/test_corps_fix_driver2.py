@@ -14,6 +14,7 @@ import pytest
 
 from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
 from peregrine_kernel.loop.driver import (
+    _cluster_scale,
     _confirm_suspicious_watermark,
     _judge_patch,
     _PendingPatch,
@@ -220,3 +221,64 @@ def test_kept_probe_write_is_explicitly_utf8(tmp_path, monkeypatch):
     probe = tmp_path / "notes" / "p.py"
     assert probe.read_bytes().decode("utf-8") == "# latency budget: 42 \u00b5s\n"
     assert ctx.kept_probes["notes/p.py"] == "# latency budget: 42 \u00b5s\n"
+
+
+# ---------------------------------------------------------------- BUG-C1-03
+
+def _anchor_ctx(tmp_path, be, gate_window="device"):
+    ctx = _ctx(tmp_path, be)
+    ctx.home_cluster = "home"
+    ctx.gate_window = gate_window
+    return ctx
+
+
+def test_cluster_anchor_from_another_window_is_not_used(tmp_path):
+    """cluster_anchors.json records the gate window the anchor was read in; a
+    run that restarts with a different gate window must not scale its target
+    with the old window's reading (the host tax rides the window). The stale
+    entry counts as no anchor: the re-measure channel runs and rewrites it."""
+    calls = []
+
+    def reanchor():
+        calls.append(1)
+        return ([2.6, 2.65], "away")
+
+    be = ClusterBackend([], [], cluster="away")
+    ctx = _anchor_ctx(tmp_path, be)
+    anchors_path = tmp_path / "cluster_anchors.json"
+    anchors_path.write_text(json.dumps(
+        {"away": {"attempts": 0, "home_ref_ms": 2.0, "window": "e2e",
+                  "ref_ms": 3.0}}))
+    ctx.reanchor_ref = reanchor
+    # the e2e-window anchor (scale 1.5) is ignored; the fresh device-window
+    # re-anchor (2.6 ms, scale 1.3) is what the target scales with
+    assert ctx.ref_baseline.ms_device == 2.0
+    assert _cluster_scale(ctx) == pytest.approx(1.3)
+    assert calls == [1]
+    healed = json.loads(anchors_path.read_text())
+    assert healed["away"]["window"] == "device"
+    assert healed["away"]["ref_ms"] == pytest.approx(2.6)
+
+
+def test_cluster_anchor_for_the_current_window_still_scales(tmp_path):
+    """The window check only rejects foreign windows: an anchor read in the
+    gate window the run is on is still consumed without a re-measure."""
+    be = ClusterBackend([], [], cluster="away")
+    ctx = _anchor_ctx(tmp_path, be)
+    (tmp_path / "cluster_anchors.json").write_text(json.dumps(
+        {"away": {"attempts": 1, "home_ref_ms": 2.0, "window": "device",
+                  "ref_ms": 3.0}}))
+    ctx.reanchor_ref = lambda: (_ for _ in ()).throw(
+        AssertionError("must not re-measure with a matching window"))
+    assert _cluster_scale(ctx) == pytest.approx(1.5)
+
+
+def test_cluster_anchor_without_a_window_field_is_not_used(tmp_path):
+    """Legacy anchors written before the window field existed carry no window:
+    their provenance is unknown, so they go through the re-measure channel."""
+    be = ClusterBackend([], [], cluster="away")
+    ctx = _anchor_ctx(tmp_path, be)
+    (tmp_path / "cluster_anchors.json").write_text(json.dumps(
+        {"away": {"attempts": 0, "home_ref_ms": 2.0, "ref_ms": 3.0}}))
+    ctx.reanchor_ref = lambda: ([], "away")   # admission fails: no usable sample
+    assert _cluster_scale(ctx) is None        # suspended, not the stale 1.5

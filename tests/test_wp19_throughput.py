@@ -971,13 +971,18 @@ def test_t5_merged_blocks_are_the_same_text(tmp_path):
 
 
 def test_t5_infeasible_stop_channel_unmerged_break(tmp_path):
-    # an ACCEPTABLE INFEASIBLE stop request still leaves the loop immediately
-    # for the post-loop refusal path — no patch turn, no extra gate round
+    # an ACCEPTABLE INFEASIBLE stop request still leaves the loop for the
+    # post-loop refusal path — no patch turn. WP23 integration: WP18's
+    # bandwidth-recipe bounce (already merged, test_loop_driver's updated
+    # _INFEASIBLE contract pins it) fires once first — the stop carries no
+    # measured bandwidth reading — and the resent diagnosis lands as the stop
+    # (bw_demanded spent, acceptance on turn 2).
     from test_loop_driver import _INFEASIBLE as stop
-    ctx, be = _t5_ctx(tmp_path, [stop])
+    ctx, be = _t5_ctx(tmp_path, [stop, stop])
     res = driver.run_meta_step(ctx, best_before=0.978)
     assert res.patch_class == "infeasible-stop"
-    assert len(be.prompts) == 1                   # accepted on the first turn, no patch turn
+    assert len(be.prompts) == 2                   # one bounce, no patch turn
+    assert "effective_bw" in be.prompts[1]
 
 
 

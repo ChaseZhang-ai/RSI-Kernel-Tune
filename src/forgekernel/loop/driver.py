@@ -9504,12 +9504,17 @@ _WP18_BW_BOUNCE_BLOCK = (
 
 
 def _wp18_bw_recipe_missing(diagnosis: str, probe_readings: list) -> bool:
-    """True when a BLOCKED verdict names a bandwidth wall with no measured
-    bandwidth reading behind it: no effective_bw probe ran in this step (the
-    pre-registered readings), and the diagnosis cites neither the recipe nor a
-    measured bandwidth number of its own. Naming the wall in prose ("the wall
-    is bandwidth") is exactly what the bounce exists to catch — prose is not a
-    reading."""
+    """True when a BLOCKED verdict carries no measured bandwidth reading
+    behind it: no effective_bw probe ran in this step (the pre-registered
+    readings), and the diagnosis cites neither the recipe nor a measured
+    bandwidth number of its own. Naming the wall in prose ("the wall is
+    bandwidth") is exactly what the bounce exists to catch — prose is not a
+    reading, and a latency-only argument (the WP19 t5 stop's "ref itself reads
+    0.93 ms") is not a bandwidth measurement either: a stop's floor arithmetic
+    leans on the machine's limits either way, and WP18's updated test_loop
+    contract pins the one-bounce discipline for every unmeasured BLOCKED
+    (WP23 integration ruling: WP18's reviewed semantics, the conservative
+    side, governs the merged tree)."""
     if _BW_RECIPE_RE.search(diagnosis or "") or _BW_MEASURED_RE.search(diagnosis or ""):
         return False
     for row in probe_readings or []:
@@ -11886,7 +11891,7 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                     infeasible_asked = True  # the refusal block already names the channel
                     _log(f"meta: INFEASIBLE stop request not accepted ({why}) -> merged re-prompt")
                     violations.append(_infeasible_refused_block(why))
-                elif not bw_demanded and _wp18_bw_recipe_missing(out, probe_readings):
+                elif not why and not bw_demanded and _wp18_bw_recipe_missing(out, probe_readings):
                     # WP18 BANDWIDTH-RECIPE BOUNCE (one, before acceptance): a BLOCKED
                     # verdict with no measured bandwidth reading behind it is the most
                     # expensive wrong verdict a run can make — the effective_bw recipe
@@ -11894,8 +11899,10 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                     # cite a same-family measured reading / argue why it cannot apply);
                     # the next BLOCKED lands without the check. Sits on the
                     # would-be-accepted path only: a failing refusal keeps its own
-                    # bounce. WP23 integration: folded into WP19's C12 merged
-                    # re-prompt (a violations entry, not its own continue).
+                    # bounce, and a spent refusal budget lands without it (the
+                    # WP18 original's `break`). WP23 integration: folded into
+                    # WP19's C12 merged re-prompt (a violations entry, not its
+                    # own continue).
                     bw_demanded = True
                     _log("meta: BLOCKED without a measured bandwidth reading -> "
                          "one bounce offering the effective_bw recipe")

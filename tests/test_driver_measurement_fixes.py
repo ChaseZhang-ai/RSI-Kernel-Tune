@@ -11,8 +11,9 @@ import pytest
 
 import peregrine_kernel.loop.driver as drv
 from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
+from peregrine_kernel.loop.parse import parse_eval
 
-from test_loop_driver import FakeBackend, _ctx
+from test_loop_driver import EVAL_DW, FakeBackend, _ctx
 
 
 # --- fix 1: _paired_reanchor(gap=None) must not crash on the final log line ----
@@ -128,3 +129,45 @@ def test_unexpected_error_log_carries_the_traceback(tmp_path, monkeypatch, capsy
     assert "unexpected error, stopping cleanly: RuntimeError('boom')" in out
     assert "Traceback (most recent call last)" in out
     assert "_boom" in out   # the frames under the loop, not just the message
+
+
+# --- BUG-SEED-31: the sitting best's gpu_state is read same-cluster only --------
+
+def test_best_keep_gpu_state_reads_same_cluster_rows_only(tmp_path, monkeypatch):
+    # Absolute comparisons are same-cluster (the ~6% node-draw band): the
+    # telemetry behind the confirmation's clock-drift check must mirror
+    # _best_ms(_on_cluster(...)), not the global minimum — a foreign machine's
+    # faster best once supplied the reference clocks, flagging drift (or hiding
+    # it) that this machine never measured. The signature stays (records,
+    # gate_window); the CALLERS pass cluster-filtered records — pinned here on
+    # the confirmation path, where the drift check reads the sitting best.
+    be = FakeBackend([], [EVAL_DW(2.4, 1.97)])
+    ctx = _ctx(tmp_path, be)
+    ctx.gate_window = "device"
+    ctx.watermark_margin = 0.03
+    append_record(ctx.status_path, IterationRecord(
+        iter=0, decision_id="D0", change="c", correctness=True, verdict="KEEP",
+        device_median_ms=1.0, sha="s0", cluster="box-b",
+        gpu_state={"sm_clock_mhz": 2000.0}))
+    seen = []
+    real = drv._best_keep_gpu_state
+
+    def spy(records, gate_window):
+        seen.append(list(records))
+        return real(records, gate_window)
+
+    monkeypatch.setattr(drv, "_best_keep_gpu_state", spy)
+    drv._confirm_suspicious_watermark(ctx, be, "b", parse_eval(EVAL_DW(2.4, 1.95)),
+                                      2.0, profiler={})
+    assert seen, "the drift check must read the sitting best's telemetry"
+    assert all(getattr(r, "cluster", "") != "box-b" for r in seen[0])
+    # the same-cluster row that later lands IS the sitting best it reads
+    append_record(ctx.status_path, IterationRecord(
+        iter=1, decision_id="D1", change="c", correctness=True, verdict="KEEP",
+        device_median_ms=1.5, sha="s1", gpu_state={"sm_clock_mhz": 1900.0}))
+    seen.clear()
+    be.gpu_logs = [EVAL_DW(2.4, 1.44)]
+    drv._confirm_suspicious_watermark(ctx, be, "b", parse_eval(EVAL_DW(2.4, 1.45)),
+                                      1.9, profiler={})
+    assert seen and any(getattr(r, "cluster", "") != "box-b" and r.sha == "s1"
+                        for r in seen[0])

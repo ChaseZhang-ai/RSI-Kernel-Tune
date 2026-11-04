@@ -2319,9 +2319,14 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
     # WP1: the reading's SM clock vs the sitting best's — a >2% move is not one
     # measurement condition, and such a reading must not take the watermark on
     # its own. Readings without gpu_state telemetry are simply never flagged.
+    # the sitting best's telemetry comes from THIS cluster's rows only — an
+    # absolute comparison is same-cluster, and a foreign machine's faster best
+    # once supplied the reference clocks here (same window _best_ms and
+    # resolvable_diff read through _on_cluster above)
     clock_gap = _sm_clock_drift(ev.gpu_state,
-                                _best_keep_gpu_state(load_records(ctx.status_path),
-                                                     ctx.gate_window))
+                                _best_keep_gpu_state(_on_cluster(
+                                    load_records(ctx.status_path), ctx),
+                                    ctx.gate_window))
     drifted = clock_gap is not None and clock_gap > _CLOCK_DRIFT_BAND
     gain_pct = (metric_before - ms) / metric_before
     if ms < metric_before * (1 - margin):
@@ -4170,10 +4175,11 @@ def run_inner_iteration(
         _se_log = statistics.stdev(_logs) / (len(_logs) ** 0.5)
     # WP1: was this reading's SM clock >2% off the sitting best's at reading time?
     # Computed on the same comparison the confirmation just ran (the new row is not
-    # on file yet, so "best" is still the pre-iteration best).
+    # on file yet, so "best" is still the pre-iteration best) — same-cluster rows
+    # only, for the same reason the confirmation's own read above is.
     clock_drift = (_sm_clock_drift(
-        ev.gpu_state, _best_keep_gpu_state(load_records(ctx.status_path),
-                                           ctx.gate_window)) or 0.0) > _CLOCK_DRIFT_BAND
+        ev.gpu_state, _best_keep_gpu_state(_on_cluster(
+            load_records(ctx.status_path), ctx), ctx.gate_window)) or 0.0) > _CLOCK_DRIFT_BAND
     # WP14 per-shape ledger: this KEEP's per-workload ratios + the per-workload
     # historical best snapshot it inherits/advances (trajectory.py's single
     # definition; single-input benches get {} and the pre-WP14 fields stand).

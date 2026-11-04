@@ -356,3 +356,82 @@ def test_ncu_window_refuses_a_workload_with_no_input_groups(tmp_path, monkeypatc
         lb.ncu_window(problem_path=path)
     assert ei.value.code == 3
     assert "INPUT_ERROR" in capsys.readouterr().out
+
+
+# --- ported from the R2 archive (audit-r2-2026-11-05/forgekernel-untracked-tests) -----
+#
+# Ported and holding in the latest tree: the two import-scan tests above are the
+# archive's verbatim (BUG-SEED-08), the load_entry test above merges the archive's
+# ordering / lazy-reference / sibling assertions with the stdlib-shadow scenario
+# (BUG-SEED-09), and the harness unit tests above carry the archive's is_harness_path
+# cases under the narrower root-module rule this tree pins (the shared
+# test_harness_guard.py freezes "evaluation.py" -- a root module nothing imports
+# implicitly -- as NOT harness, so the blanket root-.py rule of the archive could not
+# land here; the hijack names a harness executes without being named do).
+#
+# Dropped from the archive, with reasons:
+# * fib_judge / SUITE_TASK / FIB_DEFAULTS (non-finite reference, task stress rows):
+#   the leaderboard engine they tested is gone from the latest tree; the benchkit
+#   successor documents gen_inputs' custom_inputs_fn as "accepted and ignored", i.e.
+#   the stress-rows-draw-make_inputs fix is not part of this tree and outside this
+#   cluster's fix list.
+# * timing _geomean / aggregate degrade (3 tests): the latest timing.py still geomeans
+#   over the subset when a reading is None and round(None) crashes on a 0 reading --
+#   the archive fix is not in this tree and timing.py is outside the cluster's
+#   editable files.
+# * precision length-mismatch (1 test): the latest PrecisionRecorder.measure still
+#   truncates silently via zip (verified: a short reference side yields a 'pass' row);
+#   precision.py is outside the cluster's editable files.
+# * timing_audit host_path_note (2 tests): SEED-23 is another engineer's lane.
+
+def _card(tmp_path: Path) -> Path:
+    """A card whose tracked harness includes a root sitecustomize.py (the card's own
+    startup hook): the overlay must ride it byte for byte."""
+    card = tmp_path / "card"
+    (card / "eval").mkdir(parents=True)
+    (card / "kernel.py").write_text("def run(): pass\n")
+    (card / "eval/bench.py").write_text("print('judge')\n")
+    (card / "gpu_entry.sh").write_text("#!/bin/bash\n")
+    (card / "sitecustomize.py").write_text("# the card's own root helper\n")
+    (card / "deep").mkdir()
+    (card / "deep/lib.py").write_text("x = 1\n")          # not root: not harness
+    subprocess.run(["git", "init", "-q", str(card)], check=True)
+    _commit(card, "card")
+    return card
+
+
+def test_tree_and_card_listings_carry_root_modules(tmp_path):
+    card = _card(tmp_path)
+    want = {"eval/bench.py", "gpu_entry.sh", "sitecustomize.py"}
+    assert set(harness_guard.tree_harness_files(card, "HEAD", "kernel.py")) == want
+    assert set(harness_guard.card_harness_files(card, "kernel.py")) == want
+    # the default kernel_file="" keeps the pre-existing convention: only the names a
+    # harness executes without being named count, so a plain root kernel does not
+    assert "kernel.py" not in harness_guard.tree_harness_files(card, "HEAD")
+
+
+def test_a_student_root_module_drifts_and_is_dropped_from_the_job_tree(tmp_path):
+    card = _card(tmp_path)
+    ws = tmp_path / "ws"
+    subprocess.run(["git", "clone", "-q", str(card), str(ws)], check=True)
+    (ws / "sitecustomize.py").write_text("import os\nos.environ['HACK'] = '1'\n")
+    (ws / "json.py").write_text("def loads(*a): return {'pass': True}\n")  # the card has no such file
+    (ws / "kernel.py").write_text("def run(): return 1\n")
+    head = _commit(ws, "student")
+    base = _git(ws, "rev-parse", "HEAD~1")
+
+    be = cli.RealBackend("demo", ws, None, "t", "t@t")
+    be.kernel_file = "kernel.py"
+    be.harness_card = card
+
+    # the delivery diff names them (the driver reverts such a commit before any job)
+    assert be.harness_changes(base, head) == ["json.py", "sitecustomize.py"]
+    # the overlay restores the card's file, drops the student-only one, keeps the kernel
+    job = be._with_job_env(head)
+    assert job != head and _git(ws, "rev-parse", "HEAD") == head
+    tree = set(_git(ws, "ls-tree", "-r", "--name-only", job).splitlines())
+    assert "json.py" not in tree
+    assert "kernel.py" in tree and "eval/bench.py" in tree
+    shown = subprocess.run(["git", "-C", str(ws), "show", f"{job}:sitecustomize.py"],
+                           check=True, capture_output=True).stdout
+    assert shown == b"# the card's own root helper\n"

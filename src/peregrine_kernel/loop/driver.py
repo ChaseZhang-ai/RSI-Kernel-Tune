@@ -5464,7 +5464,7 @@ def _detach_kb_probes(ctx: LoopContext, pre_head: str, probes: dict,
         dst = ctx.workspace / path
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(text)
+            dst.write_text(text, encoding="utf-8")
             kept.append(path)
         except OSError as e:
             _log(f"{what}: could not re-materialise {path}: {e}")
@@ -7276,12 +7276,13 @@ def _seed_sweep_toolkits(ctx: LoopContext, be) -> None:
     changed = []
     for name in modules:
         vendor = importlib.import_module(name)
-        text = Path(vendor.__file__).read_text()
+        # UTF-8, not the locale's default (see _seed_pricing_toolkits).
+        text = Path(vendor.__file__).read_text(encoding="utf-8")
         dst = Path(ctx.workspace) / "notes" / Path(vendor.__file__).name
-        if dst.exists() and dst.read_text() == text:
+        if dst.exists() and dst.read_text(encoding="utf-8") == text:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(dst.name)
     if changed:
         be.commit(f"notes: vendor {', '.join(changed)} (driver-seeded sweep toolkit)")
@@ -8940,14 +8941,17 @@ def _mc_seed_toolkit(ctx: LoopContext, be) -> None:
     import importlib
     changed = []
     vendor = importlib.import_module("peregrine_kernel.skills.lever_pricing_run")
-    text = Path(vendor.__file__).read_text()
+    # UTF-8, not the locale's default (see _seed_pricing_toolkits; the
+    # mc_prescreen writer below already pinned it — the vendor copy was the
+    # omission).
+    text = Path(vendor.__file__).read_text(encoding="utf-8")
     dst = Path(ctx.workspace) / "notes" / Path(vendor.__file__).name
-    if not (dst.exists() and dst.read_text() == text):
+    if not (dst.exists() and dst.read_text(encoding="utf-8") == text):
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(dst.name)
     dst = Path(ctx.workspace) / "notes" / "mc_prescreen.py"
-    if not (dst.exists() and dst.read_text() == _MC_PRESCREEN_SRC):
+    if not (dst.exists() and dst.read_text(encoding="utf-8") == _MC_PRESCREEN_SRC):
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(_MC_PRESCREEN_SRC, encoding="utf-8")
         changed.append("mc_prescreen.py")
@@ -15960,13 +15964,15 @@ def _seed_sass_tools(ctx: LoopContext, rbe) -> None:
     # copy them in by hand). launch_tools: §1's cluster shape off the NCU
     # launch metrics, never off the grid shape.
     for vendor in map(importlib.import_module, RECON_SEEDED_MODULES):
-        text = Path(vendor.__file__).read_text()
+        # UTF-8, not the locale's default (see _seed_pricing_toolkits): recon
+        # starts here, so a locale decode error must not end the run.
+        text = Path(vendor.__file__).read_text(encoding="utf-8")
         name = Path(vendor.__file__).name
         dst = ctx.recon_dir / "notes" / name
-        if dst.exists() and dst.read_text() == text:
+        if dst.exists() and dst.read_text(encoding="utf-8") == text:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(name)
     # The closed-source run's in-job tripwire rides the same way, for the same
     # reason: the ref tree's gpu_entry.sh is what runs on the node, and the node
@@ -15977,11 +15983,11 @@ def _seed_sass_tools(ctx: LoopContext, rbe) -> None:
     if ctx.oracle_mode == "blackbox":
         src = _blackbox_guard_source()
         if src is not None:
-            text = src.read_text()
+            text = src.read_text(encoding="utf-8")
             dst = ctx.recon_dir / "notes" / BLACKBOX_GUARD_NAME
-            if not (dst.exists() and dst.read_text() == text):
+            if not (dst.exists() and dst.read_text(encoding="utf-8") == text):
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                dst.write_text(text)
+                dst.write_text(text, encoding="utf-8")
                 changed.append(BLACKBOX_GUARD_NAME)
         else:
             _log(f"meta/recon: {BLACKBOX_GUARD_NAME} not found beside this checkout "
@@ -16577,13 +16583,17 @@ def _seed_pricing_toolkits(root: Path, backend) -> None:
     import importlib
     changed = []
     for vendor in map(importlib.import_module, PRICING_SEEDED_MODULES):
-        text = Path(vendor.__file__).read_text()
+        # UTF-8, not the locale's default: the seeded tool modules carry
+        # non-ASCII prose, and a non-UTF-8 locale must not crash the run at
+        # its first seeding read (the mc_prescreen writer two blocks down in
+        # _mc_seed_toolkit already pinned it — this was the omission).
+        text = Path(vendor.__file__).read_text(encoding="utf-8")
         name = Path(vendor.__file__).name
         dst = root / "notes" / name
-        if dst.exists() and dst.read_text() == text:
+        if dst.exists() and dst.read_text(encoding="utf-8") == text:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
         changed.append(name)
     if changed:
         backend.commit(f"notes: vendor {', '.join(changed)} (driver-seeded "
@@ -16636,8 +16646,10 @@ def _report_waives(ctx: LoopContext, *patterns) -> bool:
     if ctx.recon_path is None:
         return False
     try:
-        text = ctx.recon_path.read_text()
-    except OSError:
+        text = ctx.recon_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        # a bad byte in the report waives the marker, it does not stop the run
+        # (UnicodeDecodeError is a ValueError, it would pass an OSError-only net)
         return False
     return all(p.search(text) is not None for p in patterns)
 

@@ -22,7 +22,10 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 from pathlib import Path
+
+from peregrine_kernel.task import name_problem
 
 # Template files copied verbatim (with ``<op>`` -> op) from src/peregrine_kernel/card_template/.
 # milestone.md is deliberately absent: the distill step writes it from the oracle,
@@ -135,6 +138,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base-dir", default=None, help="main-repo root override (testing)")
     p.add_argument("--no-git", action="store_true", help="skip git init + initial commit")
     args = p.parse_args(argv)
+
+    # BUG-SEED-36: hold the task-name rules at creation, not only at load time --
+    # the operator tree becomes a task the loop loads, and a name the loader will
+    # refuse must not get as far as a git repo on disk.
+    problem = name_problem(args.op)
+    if problem is not None:
+        sys.stderr.write(f"[new] refusing {args.op!r}: {problem}\n")
+        return 2
 
     created = new_operator(args.op, kernel_file=args.kernel_file, base_dir=args.base_dir)
     base = Path(args.base_dir) if args.base_dir else _repo_root()

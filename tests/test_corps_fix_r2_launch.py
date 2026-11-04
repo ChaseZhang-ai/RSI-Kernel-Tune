@@ -8,9 +8,8 @@ repository's semantics and adapted where the two differ. Covered here:
 * a run completes only on evidence: a loop-reported stop=target no longer
   completes a run whose confirmed best is vetoed by the correctness monitor
   (BUG-SEED-13);
-* a one-sided (or chained) \u2297 companion declaration widens the in-place reopen
-  closure in both directions, and a one-sided declaration is warned about
-  (BUG-SEED-16);
+* a one-sided (or chained) ⊗ companion declaration widens the in-place reopen
+  closure in both directions (BUG-SEED-16);
 * milestone section presence/order is matched at line start (BUG-SEED-26);
 * task names are validated at the creation entry points, not just at load_task
   (BUG-SEED-36);
@@ -24,6 +23,7 @@ repository's semantics and adapted where the two differ. Covered here:
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -134,3 +134,46 @@ def test_sections_out_of_order_are_still_reported():
     swapped = VALID.replace(sec5 + sec6, sec6 + sec5)
     assert swapped != VALID
     assert any("out of order" in x for x in validate_milestone(swapped))
+
+
+# -- BUG-SEED-36: the creation entry points validate the task name ---------------------------
+
+
+def test_init_refuses_an_illegal_or_reserved_task_name(tmp_path, monkeypatch):
+    real = launch.repo_root()
+    monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)
+    shutil.copytree(real / "tasks" / "_template", tmp_path / "tasks" / "_template")
+    (tmp_path / "tasks").mkdir(exist_ok=True)
+    for bad in ("../../evil", "../evil", "a/b", "_hidden", "run", "status"):
+        assert launch.cmd_init([bad]) == 2, bad
+    # nothing written: tasks/ holds only the template the test itself copied
+    assert sorted(p.name for p in (tmp_path / "tasks").iterdir()) == ["_template"]
+    assert launch.cmd_init(["gemm"]) == 0                       # a good name still works
+
+
+def test_init_refuses_an_illegal_name_before_the_scaffold_runs(tmp_path, monkeypatch):
+    # the dash-arg route dispatches to the scaffolder; the name is checked first
+    monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)
+    (tmp_path / "tasks").mkdir()
+    from peregrine_kernel import scaffold
+    called = []
+    monkeypatch.setattr(scaffold, "main", lambda argv: called.append(argv) or 0)
+    for bad in ("../../evil", "run"):
+        assert launch.cmd_init([bad, "--kernel-file", "kernel.py"]) == 2, bad
+    assert called == []          # refused before the scaffold ever ran
+
+
+def test_scaffold_refuses_an_illegal_or_reserved_operator_name(tmp_path):
+    from peregrine_kernel import scaffold
+    for bad in ("../../evil", "../evil", "a/b", "_hidden", "run"):
+        assert scaffold.main([bad, "--base-dir", str(tmp_path), "--no-git"]) == 2, bad
+    assert list(tmp_path.rglob("*")) == []     # nothing created
+
+
+def test_new_kernels_task_refuses_an_illegal_or_reserved_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)
+    (tmp_path / "tasks").mkdir()
+    for bad in ("../evil", "run", "_hidden"):
+        assert launch.new_kernels_task(
+            [bad, "--from-kernels", "--axes", '{"n": 8}']) == 2, bad
+    assert list(tmp_path.rglob("*")) == [tmp_path / "tasks"]

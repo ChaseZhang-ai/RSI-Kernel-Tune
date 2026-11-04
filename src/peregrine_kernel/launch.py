@@ -48,7 +48,7 @@ from peregrine_kernel.localenv import MachineError, load_machine
 from peregrine_kernel.paths import OPERATORS_ENV, repo_root
 from peregrine_kernel.runs import RunError, new_run, open_run
 from peregrine_kernel.task import (MODE_BLACKBOX, MODE_GENERATE, MODE_SOURCE,
-                              TaskError, load_task)
+                              TaskError, load_task, name_problem)
 
 TASKS_DIR = "tasks"
 TEMPLATE_TASK = "_template"
@@ -91,6 +91,14 @@ def cmd_init(argv) -> int:
     """tasks/<op>/: a copy of tasks/_template/ to fill in; with --from-kernels, a task
     frozen from a published kernel (kernels/); with any other option, an operator tree
     made directly (peregrine_kernel.scaffold)."""
+    # BUG-SEED-36: the name is checked before any route runs, so an illegal or
+    # reserved name is refused before a directory is written or the scaffolder
+    # is dispatched at all. load_task holds the same rule at load time.
+    if argv and not argv[0].startswith("-"):
+        problem = name_problem(argv[0])
+        if problem:
+            sys.stderr.write(f"[peregrine] {problem}\n")
+            return 2
     if any(a.startswith("--from-kernels") for a in argv):
         return new_kernels_task(argv)
     if any(a.startswith("-") and a not in ("-h", "--help") for a in argv):
@@ -148,6 +156,10 @@ def new_kernels_task(argv) -> int:
                    help="JSON object: the campaign point's axes, from the kernel docstring's "
                         "frozen contract (the tool scaffolds; it does not guess the contract)")
     args = p.parse_args(argv)
+    problem = name_problem(args.op)      # BUG-SEED-36: refuse before anything is written
+    if problem:
+        sys.stderr.write(f"[peregrine] {problem}\n")
+        return 2
     d = repo_root() / TASKS_DIR / args.op
     if d.exists():
         sys.stderr.write(f"[peregrine] {d} already exists\n")

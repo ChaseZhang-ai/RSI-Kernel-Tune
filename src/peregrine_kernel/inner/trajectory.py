@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -413,14 +414,31 @@ def per_shape_best_readings(records: list,
 
 
 def load_records(path: str | Path) -> list[IterationRecord]:
-    """Load records, dropping any unknown keys (tolerates pre-refactor status files)."""
-    out = []
-    for line in Path(path).read_text().splitlines():
+    """Load records, dropping any unknown keys (tolerates pre-refactor status files).
+
+    append_record is a plain append: a process killed mid-write leaves half a JSON
+    line, and one torn line used to make the WHOLE trajectory unreadable and the
+    resume impossible. A torn FINAL line is therefore dropped with a stderr
+    warning; a broken line in the middle still raises — a hole there is corruption
+    in the middle of the decision history, and silently resuming over it would
+    make the prefix-reuse decisions on a trajectory that never existed."""
+    out: list[IterationRecord] = []
+    lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    last = len(lines) - 1
+    for i, line in enumerate(lines):
         line = line.strip()
-        if line:
+        if not line:
+            continue
+        try:
             d = json.loads(line)
-            d = {_LEGACY_KEYS.get(k, k): v for k, v in d.items()}
-            out.append(IterationRecord(**{k: v for k, v in d.items() if k in _FIELDS}))
+        except ValueError:
+            if i == last:
+                print(f"peregrine_kernel.inner.trajectory: torn final line in {path} "
+                      f"({len(line)} characters, dropped)", file=sys.stderr)
+                break
+            raise
+        d = {_LEGACY_KEYS.get(k, k): v for k, v in d.items()}
+        out.append(IterationRecord(**{k: v for k, v in d.items() if k in _FIELDS}))
     return out
 
 

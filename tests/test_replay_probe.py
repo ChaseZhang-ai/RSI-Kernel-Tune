@@ -1,3 +1,6 @@
+# Copyright 2026 The Peregrine-Kernel Authors
+# SPDX-License-Identifier: Apache-2.0
+
 """WP29: the replay probe — the parent-side integration tests (the G1 fix).
 
 The G1 cheat (docs/wp20r-known-gaps.md, now CLOSED): a content-keyed replay

@@ -481,6 +481,26 @@ def _correctness_fail_detail(corr_obj: dict) -> str:
     return "; ".join(parts)
 
 
+_CORRECTNESS_DETAIL_KEYS = ("dq", "dk", "dv")
+"""The attention-gradient spellings the summary listed first, kept verbatim so
+an attn-bwd FAIL's text is byte-identical to before the detail names were
+generalized (a non-attn card's detail dicts — ``rmsnorm_out`` and whatever the
+card's outputs are — used to degrade to "no failure detail in the eval JSON")."""
+
+
+def _correctness_detail_names(corr_obj: dict) -> list[str]:
+    """The correctness object's per-tensor detail keys: every key whose value is
+    a dict carrying a ``max_diff`` / ``error`` key (the shape the bench emits
+    per failing output), the legacy dq/dk/dv spellings first, the rest in the
+    bench's own emission order."""
+    names = [k for k in _CORRECTNESS_DETAIL_KEYS if isinstance(corr_obj.get(k), dict)
+             and ("max_diff" in corr_obj[k] or "error" in corr_obj[k])]
+    names += [k for k, v in corr_obj.items()
+              if k not in _CORRECTNESS_DETAIL_KEYS and isinstance(v, dict)
+              and ("max_diff" in v or "error" in v)]
+    return names
+
+
 def _correctness_error(corr_obj: dict) -> str:
     """The bench's failure verdict, verbatim when it wrote one.
 
@@ -497,10 +517,8 @@ def _correctness_error(corr_obj: dict) -> str:
         # the ranked rows add the RUNNERS-UP the first-fail stop never reached.
         return f"{err}; worst checks: {detail}" if detail and detail not in err else err
     parts = []
-    for name in ("dq", "dk", "dv"):
-        det = corr_obj.get(name)
-        if not isinstance(det, dict):
-            continue
+    for name in _correctness_detail_names(corr_obj):
+        det = corr_obj[name]
         if det_err := det.get("error"):
             parts.append(f"{name}: {det_err}")
         elif "max_diff" in det:

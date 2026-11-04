@@ -117,3 +117,47 @@ def test_parse_eval_finite_readings_ride_unchanged():
     assert ev.device_readings_ms == [0.25, 0.26]
     assert ev.workloads[0]["device_median_ms"] == 0.24
     assert ev.workloads[0]["device_readings_ms"] == [0.23, 0.24, 0.25]
+
+
+# --- BUG-SEED-47: the per-tensor failure detail is not attn-gradient-only -------
+
+def test_parse_eval_correctness_detail_names_any_failing_tensor():
+    """The numeric-FAIL summary hardcoded dq/dk/dv, so a card whose per-tensor
+    detail dict is named anything else degraded to "no failure detail in the
+    eval JSON" — the student and the meta diagnoser were sent chasing a failure
+    whose only evidence sat unread in the parsed object. Any correctness key
+    whose value is a detail dict (carries max_diff / error) is summarized, in
+    the bench's emission order with the legacy dq/dk/dv spellings first."""
+    log = ('=== JSON ===\n{"correctness": {"pass": false, '
+           '"rmsnorm_out": {"max_diff": 0.9, "tolerance": 0.001}}, '
+           '"performance": {}}')
+    ev = parse_eval(log)
+    assert ev.correctness is False
+    assert "rmsnorm_out: max_diff=0.9 tol=0.001" in ev.error
+
+
+def test_parse_eval_correctness_detail_legacy_order_and_mixed_names():
+    # dq/dk/dv keep their legacy order ahead of any other detail dict, and the
+    # error-valued / max_diff-valued shapes read exactly as before
+    log = ('=== JSON ===\n{"correctness": {"pass": false, '
+           '"rmsnorm_out": {"max_diff": 0.5, "tolerance": 0.001}, '
+           '"dq": {"max_diff": 0.01, "tolerance": 0.001}, '
+           '"dk": {"error": "nan detected"}, '
+           '"dv": {"max_diff": 0.02, "tolerance": 0.002}}, '
+           '"performance": {}}')
+    ev = parse_eval(log)
+    assert ev.error.startswith(
+        "dq: max_diff=0.01 tol=0.001; dk: nan detected; "
+        "dv: max_diff=0.02 tol=0.002; rmsnorm_out: max_diff=0.5 tol=0.001")
+
+
+def test_parse_eval_correctness_detail_ignores_non_detail_dicts():
+    # a dict that carries neither a max_diff nor an error key (bookkeeping the
+    # bench rides along in the correctness object) is not a tensor detail
+    log = ('=== JSON ===\n{"correctness": {"pass": false, '
+           '"meta": {"groups": 3, "seed": 7}, '
+           '"gate_out": {"max_diff": 0.7, "tolerance": 0.001}}, '
+           '"performance": {}}')
+    ev = parse_eval(log)
+    assert "meta:" not in ev.error
+    assert "gate_out: max_diff=0.7 tol=0.001" in ev.error

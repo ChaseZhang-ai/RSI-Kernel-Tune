@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import math
 import tomllib
 from pathlib import Path
 from types import SimpleNamespace
@@ -112,6 +113,14 @@ def test_noise_floor():
     assert se.noise_floor({"ratios": [1.0, 1.05, 1.02]}) == pytest.approx(0.05)
 
 
+def test_noise_floor_with_a_zero_ratio_stops_the_chain_instead_of_crashing():
+    # BUG-SEED-27: a zero ratio is nonsense data (a timed kernel never takes 0 ms);
+    # the old (max - min) / min raised ZeroDivisionError on it. The floor is now
+    # infinite — meaningless data must stop the chain, never wave it through.
+    assert se.noise_floor({"ratios": [1.10, 0.0]}) == math.inf
+    assert se.noise_floor({"ratios": [0.0, 1.10]}) == math.inf
+
+
 def test_a_generation_without_a_best_ends_the_chain(chain):
     root, ran, gains, _ = chain
     gains += [None]
@@ -119,10 +128,29 @@ def test_a_generation_without_a_best_ends_the_chain(chain):
     assert len(ran) == 1
 
 
-def test_an_existing_next_generation_is_not_overwritten(chain):
+def test_an_existing_next_generation_is_not_overwritten(chain, capsys):
+    # BUG-SEED-27: a collision with an existing generation directory is now a
+    # readable error on stderr and exit 2. The old assertion pinned the bare
+    # FileExistsError traceback itself — rewritten for the new semantics.
     root, ran, gains, _ = chain
     gains += [1.3]
     first = _task(root)
     (root / "tasks" / "rmsnorm-g2").mkdir()
-    with pytest.raises(FileExistsError):
-        se.main([str(first)])
+    assert se.main([str(first)]) == 2
+    assert not (root / "tasks" / "rmsnorm-g2" / "task.toml").exists()
+    assert "exists" in capsys.readouterr().err
+
+
+def test_a_chain_resumes_from_a_mid_generation_directory(chain):
+    # BUG-SEED-27: starting the chain from tasks/rmsnorm-g2 used to build the
+    # first child as rmsnorm-g2 — the directory the run itself lives in — and die
+    # on FileExistsError. The numbering continues from where you start: the child
+    # of -g2 is -g3.
+    root, ran, gains, _ = chain
+    gains += [1.3, 1.01]
+    start = _task(root, name="rmsnorm-g2")
+    assert se.main([str(start)]) == 0
+    g3 = root / "tasks" / "rmsnorm-g3"
+    assert ran == [start.resolve(), g3]
+    assert (g3 / "reference" / "kernel.py").read_text() == KERNEL
+    assert not (root / "tasks" / "rmsnorm-g4").exists()

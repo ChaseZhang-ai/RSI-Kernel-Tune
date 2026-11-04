@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import math
 import re
 import shutil
 import sys
@@ -57,10 +58,19 @@ def latest_run(task_name: str):
 
 def noise_floor(best: dict) -> float:
     """The relative gain a generation must clear: the spread of its same-job ratios
-    ((max - min) / min), never below NOISE_FLOOR_MIN."""
+    ((max - min) / min), never below NOISE_FLOOR_MIN.
+
+    A ratio of zero is nonsense data (a timed kernel never takes 0 ms) and its
+    spread is meaningless: BUG-SEED-27 makes the floor infinite in that case, so
+    the chain stops instead of waving a generation through on a corrupt sample.
+    """
     ratios = best.get("ratios") or []
-    spread = (max(ratios) - min(ratios)) / min(ratios) if len(ratios) > 1 else 0.0
-    return max(NOISE_FLOOR_MIN, spread)
+    if len(ratios) > 1:
+        lo = min(ratios)
+        if lo <= 0:
+            return math.inf
+        return max(NOISE_FLOOR_MIN, (max(ratios) - lo) / lo)
+    return NOISE_FLOOR_MIN
 
 
 def _floor_progress_text(task, best: dict) -> str | None:
@@ -347,7 +357,13 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
     task_dir = Path(args.task).resolve()
     base = re.sub(r"-g\d+$", "", task_dir.name)
-    for gen in itertools.count(1):
+    # BUG-SEED-27: a chain may be resumed from a mid-chain generation's own
+    # directory (tasks/<op>-g<k>): continue the numbering from there, so the first
+    # child is <op>-g<k+1> instead of colliding with the directory the run itself
+    # lives in. Starting from the plain task keeps the old 1, 2, ... numbering.
+    m = re.fullmatch(re.escape(base) + r"-g(\d+)", task_dir.name)
+    from_gen = int(m.group(1)) if m else 1
+    for gen in itertools.count(from_gen):
         try:
             task = load_task(task_dir)
         except TaskError as e:
@@ -382,8 +398,14 @@ def main(argv=None) -> int:
         if args.max_gen is not None and gen >= args.max_gen:
             print(f"[self-evolve] reached --max-gen {args.max_gen}", flush=True)
             return 0
-        task_dir = next_generation(task, best, task_dir.parent / f"{base}-g{gen + 1}",
-                                   args.step, run=run, best_data=best)
+        # BUG-SEED-27: a leftover generation directory is a readable error and a
+        # clean stop (exit 2), not a bare traceback out of main.
+        try:
+            task_dir = next_generation(task, best, task_dir.parent / f"{base}-g{gen + 1}",
+                                       args.step, run=run, best_data=best)
+        except FileExistsError as e:
+            sys.stderr.write(f"[self-evolve] {e}\n")
+            return 2
         print(f"[self-evolve] next generation: {task_dir}", flush=True)
     return 0
 

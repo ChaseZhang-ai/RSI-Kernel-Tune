@@ -378,6 +378,11 @@ class _Tee:
         self._stream.flush()
         self._file.flush()
 
+    def close(self):
+        # only the run.log handle: __getattr__ would delegate this to the real
+        # stream, and the drive must not close the process's stdout/stderr
+        self._file.close()
+
     def __getattr__(self, name):
         return getattr(self._stream, name)
 
@@ -401,9 +406,11 @@ def _entered(run, machine):
     finally:
         if sys.stdout is not saved_out:
             sys.stdout.flush()
+            sys.stdout.close()
             sys.stdout = saved_out
         if sys.stderr is not saved_err:
             sys.stderr.flush()
+            sys.stderr.close()
             sys.stderr = saved_err
         for k, v in saved_env.items():
             if v is None:

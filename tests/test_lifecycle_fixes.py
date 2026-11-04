@@ -16,6 +16,8 @@ lane is gone from peregrine_kernel (see CHANGES).
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from peregrine_kernel import launch
@@ -60,3 +62,23 @@ def test_commit_loudly_refuses_when_git_status_fails(tmp_path, monkeypatch):
     (tree / "f.txt").write_text("x")
     with pytest.raises(subprocess.CalledProcessError):
         taskcard._commit(tree, "test")
+
+
+# -- fix: the run log tee is closed when the drive ends --------------------------------------
+
+
+def test_entered_closes_the_run_log_handles(tmp_path):
+    import sys
+
+    log = tmp_path / "run.log"
+    run = SimpleNamespace(operators_dir=tmp_path / "ops", log=log)
+    machine = SimpleNamespace(env={})
+    saved_out, saved_err = sys.stdout, sys.stderr
+    with launch._entered(run, machine):
+        tees = [sys.stdout, sys.stderr]
+        assert isinstance(sys.stdout, launch._Tee)
+        print("hello")
+    assert sys.stdout is saved_out and sys.stderr is saved_err
+    assert all(t._file.closed for t in tees)     # no leaked run.log handle per drive
+    assert "hello" in log.read_text()
+    print("after the run")        # the restored stdout still takes writes

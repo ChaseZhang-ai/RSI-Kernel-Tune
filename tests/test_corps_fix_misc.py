@@ -229,3 +229,51 @@ def test_seed38_kb_changes_still_lists_real_changes(tmp_path, monkeypatch):
     monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)
     # porcelain lists an untracked directory as the directory itself
     assert launch.kb_changes() == ["hw_kb/"]
+
+
+# --- BUG-SEED-39: the _Tee run.log handle is closed when the drive ends ---------------
+
+import gc as _gc  # noqa: E402
+import warnings as _warnings  # noqa: E402
+
+
+def test_seed39_entered_closes_the_run_log_handle_and_stays_reentrant(tmp_path):
+    """Two drives in one process: each drive's tee file is closed on exit (no
+    ResourceWarning from the finalizer) and the second drive reopens run.log."""
+    run = _NS(operators_dir=tmp_path / "ops", log=tmp_path / "run.log")
+    machine = _NS(env={})
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter("always")
+        for i in range(2):
+            with launch._entered(run, machine):
+                tee = sys.stdout
+                assert isinstance(tee, launch._Tee)
+                print(f"drive {i} output")
+            assert tee._file.closed          # explicitly closed, not finalizer-dependent
+            del tee
+        _gc.collect()
+    leaked = [w for w in caught if issubclass(w.category, ResourceWarning)]
+    assert not leaked, leaked
+    log = (tmp_path / "run.log").read_text(encoding="utf-8")
+    assert "drive 0 output" in log and "drive 1 output" in log
+
+
+def test_seed39_tee_close_is_idempotent(tmp_path):
+    t = launch._Tee(sys.stdout, tmp_path / "log")
+    t.close()
+    t.close()                                # a repeated close must not raise
+    assert t._file.closed
+
+
+def test_seed39_nested_entered_does_not_close_the_outer_tee(tmp_path):
+    """A nested _entered sees stdout already teed and must leave the outer tee (and
+    its handle) working."""
+    outer_log, inner_log = tmp_path / "outer.log", tmp_path / "inner.log"
+    outer_run = _NS(operators_dir=tmp_path / "o", log=outer_log)
+    inner_run = _NS(operators_dir=tmp_path / "i", log=inner_log)
+    machine = _NS(env={})
+    with launch._entered(outer_run, machine):
+        with launch._entered(inner_run, machine):
+            pass
+        assert isinstance(sys.stdout, launch._Tee) and not sys.stdout._file.closed
+    assert sys.stdout is sys.__stdout__ or not isinstance(sys.stdout, launch._Tee)

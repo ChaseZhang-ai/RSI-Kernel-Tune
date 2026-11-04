@@ -382,6 +382,14 @@ class _Tee:
         self._stream.flush()
         self._file.flush()
 
+    def close(self):
+        """Flush and close the run.log handle (BUG-SEED-39: it used to be left to
+        the interpreter's finalizer). The underlying stream is not ours to close.
+        Idempotent, so a repeated close is safe."""
+        if not self._file.closed:
+            self._file.flush()
+            self._file.close()
+
     def __getattr__(self, name):
         return getattr(self._stream, name)
 
@@ -397,9 +405,11 @@ def _entered(run, machine):
     for k, v in machine.env.items():
         if v:       # an empty KEY= line (local.env.example) must not blank a login
             os.environ.setdefault(k, v)
+    tees = None
     if not isinstance(sys.stdout, _Tee):
         sys.stdout = _Tee(sys.stdout, run.log)
         sys.stderr = _Tee(sys.stderr, run.log)
+        tees = (sys.stdout, sys.stderr)     # only the tees THIS entry created
     try:
         yield
     finally:
@@ -409,6 +419,9 @@ def _entered(run, machine):
         if sys.stderr is not saved_err:
             sys.stderr.flush()
             sys.stderr = saved_err
+        if tees is not None:
+            for t in tees:
+                t.close()
         for k, v in saved_env.items():
             if v is None:
                 os.environ.pop(k, None)

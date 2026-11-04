@@ -2234,7 +2234,12 @@ def _sm_clock_drift(a, b) -> float | None:
 
 
 def _best_keep_gpu_state(records, gate_window: str) -> dict:
-    """The sitting best KEEP's gpu_state telemetry, if its job reported one."""
+    """The sitting best KEEP's gpu_state telemetry, if its job reported one.
+
+    Callers pass cluster-local rows (``_on_cluster(...)``): a clock is a node
+    fact, and the best on another cluster is another node's clock — pairing it
+    against this cluster's reading fabricates a drift claim, exactly what the
+    metric_before re-read's cluster rule exists to prevent."""
     kept = [r for r in records
             if r.verdict == "KEEP" and gate_ms(r, gate_window) is not None]
     if not kept:
@@ -2322,8 +2327,13 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
     # WP1: the reading's SM clock vs the sitting best's — a >2% move is not one
     # measurement condition, and such a reading must not take the watermark on
     # its own. Readings without gpu_state telemetry are simply never flagged.
+    # The baseline reads THIS cluster's best only: the timing comparisons above
+    # run cluster-local (records_now), and a foreign cluster's best carries a
+    # different node's clock — pairing it here would manufacture a drift claim
+    # out of a cluster change (see _best_ms's cluster rule at the metric_before
+    # re-read below).
     clock_gap = _sm_clock_drift(ev.gpu_state,
-                                _best_keep_gpu_state(load_records(ctx.status_path),
+                                _best_keep_gpu_state(records_now,
                                                      ctx.gate_window))
     drifted = clock_gap is not None and clock_gap > _CLOCK_DRIFT_BAND
     gain_pct = (metric_before - ms) / metric_before
@@ -4184,9 +4194,11 @@ def run_inner_iteration(
         _se_log = statistics.stdev(_logs) / (len(_logs) ** 0.5)
     # WP1: was this reading's SM clock >2% off the sitting best's at reading time?
     # Computed on the same comparison the confirmation just ran (the new row is not
-    # on file yet, so "best" is still the pre-iteration best).
+    # on file yet, so "best" is still the pre-iteration best) — same cluster as
+    # that comparison too: a foreign cluster's best is a different node's clock,
+    # and pairing against it fabricates a drift flag.
     clock_drift = (_sm_clock_drift(
-        ev.gpu_state, _best_keep_gpu_state(load_records(ctx.status_path),
+        ev.gpu_state, _best_keep_gpu_state(_on_cluster(load_records(ctx.status_path), ctx),
                                            ctx.gate_window)) or 0.0) > _CLOCK_DRIFT_BAND
     # WP14 per-shape ledger: this KEEP's per-workload ratios + the per-workload
     # historical best snapshot it inherits/advances (trajectory.py's single

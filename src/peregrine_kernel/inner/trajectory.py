@@ -450,7 +450,10 @@ def load_records(path: str | Path) -> list[IterationRecord]:
 # in a row landing on 4.504025/7.560892/7.823140 to the last digit is not a
 # numeric bug, and no one — student, meta, or log reader — was told (observed on
 # an MHA bwd run: four such iterations were only diagnosed by hand afterwards).
-_DIFF_SIG = re.compile(r"max_diff=([0-9]+\.[0-9]+|inf|nan)")
+# The exponent is part of the number: tolerance text writes small diffs in
+# scientific notation, and cutting it read 1.5e-05 and 1.5e-07 as the same
+# signature — genuinely moving outputs flagged as a constant-output streak.
+_DIFF_SIG = re.compile(r"max_diff=([0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|inf|nan)")
 CONSTANT_OUTPUT_MIN_REPEATS = 3
 
 

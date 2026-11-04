@@ -107,7 +107,7 @@ if [ -f "$SOL_ENV" ]; then set +u; source "$SOL_ENV"; set -u; fi
 export PATH=/usr/local/cuda/bin:${{PATH}}
 WORKSPACE="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
 cd "$WORKSPACE"
-export PYTHONPATH="$WORKSPACE:$WORKSPACE/eval:${{PYTHONPATH:-}}"
+export PYTHONPATH="${{PYTHONPATH:-}}:$WORKSPACE/eval:$WORKSPACE"
 export PYTHONUNBUFFERED=1
 export CUTE_DSL_ARCH="${{CUTE_DSL_ARCH:-{arch}}}"
 

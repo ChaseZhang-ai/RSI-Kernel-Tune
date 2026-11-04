@@ -22,10 +22,17 @@ Two layers, neither relying on the agent sandbox:
   lineage and the recorded shas are unchanged -- the overlay is a child commit, the
   same channel ``[loop] job_env_files`` always was.
 
-What counts as harness: ``HARNESS_PREFIXES`` below, minus the kernel file and
-``notes/`` (the student's tree). ``window.toml`` and README are export-ignored and the
-driver reads the card's copies, so they are not listed; ``.gitattributes`` is, because
-``git archive`` reads its export rules from the archived tree.
+What counts as harness: ``HARNESS_PREFIXES`` below, plus every tree-ROOT python module,
+minus the kernel file and ``notes/`` (the student's tree). ``window.toml`` and README are
+export-ignored and the driver reads the card's copies, so they are not listed;
+``.gitattributes`` is, because ``git archive`` reads its export rules from the archived
+tree.
+
+The root modules are harness because the job runs with the workspace on PYTHONPATH: a
+``sitecustomize.py`` or ``json.py`` a student drops at the root is imported by the bench
+itself, before any harness code runs. The git pathspecs carry the wildcard (``*.py``
+matches every depth, so diff and ls-files name the file wherever it lands); only the
+depth is narrowed afterwards, by ``is_harness_path`` -- a deep module is the student's.
 """
 from __future__ import annotations
 
@@ -34,8 +41,10 @@ from pathlib import Path
 
 # A prefix ending in "/" names a directory; the others name a file.
 HARNESS_PREFIXES = ("eval/", "gpu_entry.sh", "ref_bin/", ".gitattributes")
-# The same set as git pathspecs (directories without the slash).
-HARNESS_PATHSPECS = tuple(p.rstrip("/") for p in HARNESS_PREFIXES)
+# Every tree-root python module: shadowing these hijacks the harness (see above).
+ROOT_PY_PATHSPEC = "*.py"
+# The same set as git pathspecs (directories without the slash), then the root glob.
+HARNESS_PATHSPECS = tuple(p.rstrip("/") for p in HARNESS_PREFIXES) + (ROOT_PY_PATHSPEC,)
 
 GUARD_REVERT = "revert"
 GUARD_WARN = "warn"
@@ -63,6 +72,10 @@ def is_harness_path(path: str, kernel_file: str = "") -> bool:
         p = p[2:]
     if not p or p == str(kernel_file) or p.split("/")[0] == "notes":
         return False
+    if p.endswith(".py") and "/" not in p:
+        # a tree-root module: the bench imports it (sitecustomize) or resolves every
+        # bare import through it (json.py), since the job PYTHONPATH holds the root
+        return True
     return any(p == pre.rstrip("/") or (pre.endswith("/") and p.startswith(pre))
                for pre in HARNESS_PREFIXES)
 
@@ -119,8 +132,11 @@ def card_harness_files(card_dir: Path, kernel_file: str = "") -> dict[str, Path]
 
 
 def tree_harness_files(repo: Path, ref: str, kernel_file: str = "") -> dict[str, tuple[str, str]] | None:
-    """{path: (mode, blob sha)} of the harness files in commit ``ref`` of ``repo``."""
-    out = _git(Path(repo), "ls-tree", "-r", "-z", ref, "--", *HARNESS_PATHSPECS)
+    """{path: (mode, blob sha)} of the harness files in commit ``ref`` of ``repo``.
+    The whole tree is listed and narrowed here: ``git ls-tree`` takes no wildcard
+    pathspec (``*.py`` would read as a literal directory), while ``is_harness_path``
+    already does the narrowing."""
+    out = _git(Path(repo), "ls-tree", "-r", "-z", ref)
     if out.returncode != 0:
         return None
     files = {}

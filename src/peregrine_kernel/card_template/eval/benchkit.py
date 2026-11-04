@@ -1325,9 +1325,11 @@ def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
         env[FRESH_SEED_ENV] = str(seed)
     bench = (Path(__file__).parent / "bench.py").resolve()
     root = (Path(__file__).parent.parent).resolve()   # the workspace (eval/ below it)
+    # the inherited front stays in front: the correctness monitor's hook directory is
+    # there, and a workspace-root sitecustomize.py must never overtake it
     env["PYTHONPATH"] = os.pathsep.join(
-        [str(root), str(root / "eval")]
-        + [p for p in [env.get("PYTHONPATH", "")] if p])
+        [p for p in [env.get("PYTHONPATH", "")] if p]
+        + [str(root / "eval"), str(root)])
     try:
         proc = subprocess.run(
             [sys.executable, str(bench), "--mode", "correctness", "--fresh-recheck"],
@@ -1658,9 +1660,10 @@ def _probe_child(problem: dict) -> dict:
     env[REPLAY_PROBE_CHILD_ENV] = "1"
     bench = (Path(__file__).parent / "bench.py").resolve()
     root = (Path(__file__).parent.parent).resolve()   # the workspace (eval/ below it)
+    # the inherited front stays in front (the monitor's hook directory), as in _fresh_child
     env["PYTHONPATH"] = os.pathsep.join(
-        [str(root), str(root / "eval")]
-        + [p for p in [env.get("PYTHONPATH", "")] if p])
+        [p for p in [env.get("PYTHONPATH", "")] if p]
+        + [str(root / "eval"), str(root)])
     try:
         proc = subprocess.run(
             [sys.executable, str(bench), "--mode", "correctness", "--replay-probe"],

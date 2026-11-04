@@ -23,14 +23,29 @@ finally:
         pass
 
 
+def _student_roots() -> list:
+    """Directory roots the student controls, derived from the deployed layout
+    (``<workspace>/.pk_monitor/runtime/hook``): the workspace itself, everything under
+    it included -- its ``eval/``, a tree-root ``sitecustomize.py`` most of all. Empty
+    when this copy does not sit in the deployed layout."""
+    parts = _HERE.split(os.sep)
+    if parts[-3:-1] != [".pk_monitor", "runtime"]:
+        return []
+    return [os.path.normpath(os.path.join(_HERE, "..", "..", ".."))]
+
+
 def _chain() -> None:
     import importlib
 
     saved = list(sys.path)
     ours = sys.modules.pop("sitecustomize", None)
     try:
-        sys.path[:] = [p for p in sys.path
-                       if os.path.abspath(p or os.curdir) != _HERE]
+        roots = _student_roots()
+        # drop this directory (already imported) and every student-owned entry: the
+        # next ``sitecustomize`` must be one the image ships, never one the student's
+        # tree root carries -- chaining it would hand the bench over before any
+        # harness code has run
+        sys.path[:] = [p for p in sys.path if not _owned(p, roots)]
         try:
             importlib.import_module("sitecustomize")
         except ImportError:
@@ -38,6 +53,13 @@ def _chain() -> None:
                 sys.modules["sitecustomize"] = ours
     finally:
         sys.path[:] = saved
+
+
+def _owned(entry: str, roots: list) -> bool:
+    directory = os.path.abspath(entry or os.curdir)
+    if directory == _HERE:
+        return True
+    return any(directory == r or directory.startswith(r + os.sep) for r in roots)
 
 
 _chain()

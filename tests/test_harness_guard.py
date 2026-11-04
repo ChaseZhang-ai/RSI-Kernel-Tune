@@ -20,7 +20,9 @@ from peregrine_kernel.loop.driver import run_inner_iteration  # noqa: E402
 @pytest.mark.parametrize("path, want", [
     ("eval/bench.py", True), ("eval/problem/problem.json", True), ("gpu_entry.sh", True),
     ("ref_bin/binref_x.so", True), (".gitattributes", True), ("./eval/timing.py", True),
-    ("kernel.py", False), ("notes/probe.py", False), ("evaluation.py", False),
+    ("kernel.py", False), ("notes/probe.py", False),
+    ("evaluation.py", True),                       # a tree-root module shadows the bench
+    ("sitecustomize.py", True), ("json.py", True),
     ("gpu_entry.sh.bak", False), ("window.toml", False), ("README.md", False),
 ])
 def test_harness_paths(path, want):

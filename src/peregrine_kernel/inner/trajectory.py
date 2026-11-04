@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -413,14 +414,31 @@ def per_shape_best_readings(records: list,
 
 
 def load_records(path: str | Path) -> list[IterationRecord]:
-    """Load records, dropping any unknown keys (tolerates pre-refactor status files)."""
+    """Load records, dropping any unknown keys (tolerates pre-refactor status files).
+
+    A torn FINAL line — the process died mid-append — is dropped with a note on
+    stderr instead of making the whole trajectory unreadable and every resume
+    impossible; a broken line anywhere else still raises, since that is corruption
+    an append cannot produce and silently truncating the middle would mis-read
+    the run's history."""
     out = []
-    for line in Path(path).read_text().splitlines():
+    lines = Path(path).read_text().splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    for idx, line in enumerate(lines):
         line = line.strip()
-        if line:
+        if not line:
+            continue
+        try:
             d = json.loads(line)
-            d = {_LEGACY_KEYS.get(k, k): v for k, v in d.items()}
-            out.append(IterationRecord(**{k: v for k, v in d.items() if k in _FIELDS}))
+        except ValueError:
+            if idx == len(lines) - 1:
+                sys.stderr.write(f"[trajectory] torn final line dropped from {path}: "
+                                 f"{line[:60]!r}\n")
+                break
+            raise
+        d = {_LEGACY_KEYS.get(k, k): v for k, v in d.items()}
+        out.append(IterationRecord(**{k: v for k, v in d.items() if k in _FIELDS}))
     return out
 
 
@@ -432,7 +450,9 @@ def load_records(path: str | Path) -> list[IterationRecord]:
 # in a row landing on 4.504025/7.560892/7.823140 to the last digit is not a
 # numeric bug, and no one — student, meta, or log reader — was told (observed on
 # an MHA bwd run: four such iterations were only diagnosed by hand afterwards).
-_DIFF_SIG = re.compile(r"max_diff=([0-9]+\.[0-9]+|inf|nan)")
+# The number keeps its full form — optional fraction, optional exponent — so
+# 1.5e-05 and 1.5e-07 are different signatures, not the same "1.5".
+_DIFF_SIG = re.compile(r"max_diff=([0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|inf|nan)")
 CONSTANT_OUTPUT_MIN_REPEATS = 3
 
 

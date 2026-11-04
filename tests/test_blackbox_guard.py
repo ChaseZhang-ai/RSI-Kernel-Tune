@@ -133,6 +133,37 @@ def test_the_source_door_flags_stay_open_in_a_notes_file_text(tmp_path):
     assert "GUARD-PASSED" in res.stdout
 
 
+def test_attribute_chain_bypasses_are_refused(tmp_path):
+    """The source-introspection net used to stop at getsource/linecache: every one of
+    these reached the reference's source in a real run and passed. A function object's
+    __code__/co_filename, a module's __globals__ or __file__, dis.get_instructions and
+    getattr(sys, \"modules\") are all the same reach, spelled around the list."""
+    bypasses = (
+        "python3 -c 'import ref; print(ref.run.__code__)'",
+        "python3 -c 'import ref; print(ref.run.__code__.co_filename)'",
+        "python3 -c 'import ref; print(ref.run.__globals__[\"k\"])'",
+        "python3 -c 'import ref; print(ref.__file__)'",
+        "python3 -c 'import dis; print(dis.get_instructions(ref.run))'",
+        "python3 -c 'import sys; print(getattr(sys, \"modules\")[\"ref\"])'",
+        "python3 -c 'import sys; print(sys.modules.get(\"ref\"))'",
+    )
+    for cmd in bypasses:
+        res = run_guard(tmp_path, cmd)
+        assert res.returncode == 3, (cmd, res.returncode, res.stdout, res.stderr)
+        assert "BLACKBOX-GUARD REFUSED" in res.stdout
+
+
+def test_a_probe_files_own_path_does_not_trip_the_cmd_only_file_token(tmp_path):
+    """`__file__` is refused on the command line but not in notes/ text: the seeded
+    timeline_probe.py resolves its own path with __file__, and banning it there would
+    refuse every job of a tree the probe legitimately rides in."""
+    res = run_guard(tmp_path, "python3 notes/timeline_probe.py",
+                    notes={"timeline_probe.py":
+                           "ROOT = os.path.dirname(os.path.abspath(__file__))\n"})
+    assert res.returncode == 0, (res.returncode, res.stdout, res.stderr)
+    assert "GUARD-PASSED" in res.stdout
+
+
 def test_run_specific_names_via_extra(tmp_path):
     res = run_guard(tmp_path, "python3 -c 'import kda_gdn_ref'", extra="kda_gdn|gdn_core")
     assert res.returncode == 3

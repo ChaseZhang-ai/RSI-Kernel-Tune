@@ -15,9 +15,12 @@ One run:
 2. Take the GPU lock, then ``bash gpu_entry.sh <mode>`` with the tree's ``[env]``,
    ``CUDA_VISIBLE_DEVICES`` and ``TASK_TIMEOUT``. The lock is per GPU and per machine
    (two runs on one GPU would time each other), shared by every op and every run.
-3. Map the exit: rc 0 -> Succeeded; the task ran and failed -> Failed; ssh could not
-   deliver it (no begin marker) -> retried, then Failed with TRANSPORT_ERROR_MARKER, which
-   the loop reports as a transport problem rather than charging the kernel.
+3. Map the exit honestly: rc 0 -> Succeeded; the task ran and failed -> Failed; a
+   deadline that expired before the begin marker means the job QUEUED on the host GPU
+   lock the whole time and nothing ran -> Lost (the loop resubmits it, nothing is
+   charged); ssh could not deliver it (no begin marker) -> retried, then Failed with
+   TRANSPORT_ERROR_MARKER, which the loop reports as a transport problem rather than
+   charging the kernel.
 
 Nothing here kills processes it did not start: on a user's machine a GPU held by someone
 else is theirs. The lock is what keeps peregrine_kernel's own runs apart.
@@ -42,7 +45,8 @@ from pathlib import Path
 
 from peregrine_kernel.submit.config import SubmitConfig, is_secret_env
 from peregrine_kernel.submit.jobs import (BEGIN_MARKER, RUN_HEADROOM_S, STATUS_FAILED,
-                                     STATUS_SUCCEEDED, TRANSPORT_ERROR_MARKER, locked)
+                                     STATUS_LOST, STATUS_SUCCEEDED,
+                                     TRANSPORT_ERROR_MARKER, locked)
 
 LOCAL_TREE = ".exec/tree"
 CMD_PREFIX = "cmd:"
@@ -50,9 +54,6 @@ CMD_PREFIX = "cmd:"
 # (in the job's tree): stopping the job ends its whole session. A process group is not
 # enough -- gpu_entry's `timeout` moves itself and the task into a group of their own.
 SESSION_FILE = ".pk_job.sid"
-# Written in the session the job runs in: its id, then gpu_entry under the GPU lock
-# ("$0" is the lock, "$@" the entry command).
-_SESSION_SCRIPT = 'echo $$ > ' + SESSION_FILE + ' && exec flock "$0" "$@"'
 STOP_GRACE_S = 5
 LOCK_DIR_ENV = "PEREGRINE_LOCK_DIR"
 TRANSPORT_ATTEMPTS = 3
@@ -447,6 +448,24 @@ class DirectRunner:
         d = shlex.quote(remote_tree(self.cfg))
         return f"rm -rf {d} && mkdir -p {d} && tar xJ -C {d}"
 
+    def _session_script(self) -> str:
+        """The remote session (``setsid --wait sh -c`` runs this): write the session's
+        id, then hold the GPU lock for the entry command ("$0" is the lock, "$@" the
+        entry command).
+
+        The begin marker prints only once flock HOLDS the lock -- it is the
+        "everything after it is the job" boundary (jobs.py), so queueing time lands
+        before it and a deadline spent queueing can never read as a failed run (a
+        setsid/flock startup failure never sees the marker either). The wait itself
+        is logged in the driver's telemetry format, measured on the host -- the ssh
+        mirror of the local delivery's queue telemetry."""
+        gpu = shlex.quote(str(self.cfg.exec_gpu))
+        held = (f'echo "[direct] GPU {gpu} acquired after '
+                f'$(( $(date +%s) - $PK_QUEUE_T0 ))s wait"; echo {BEGIN_MARKER}; '
+                f'exec "$@"')
+        return ('echo $$ > ' + SESSION_FILE + ' && export PK_QUEUE_T0=$(date +%s) '
+                '&& exec flock "$0" sh -c ' + shlex.quote(held) + ' sh "$@"')
+
     def _exec_cmd(self, mode: str) -> str:
         env = _job_env(self.cfg)
         secrets = sorted(k for k in env if is_secret_env(k))
@@ -459,8 +478,8 @@ class DirectRunner:
         parts += [f"{{ IFS= read -r {k} || true; }} && export {k}" for k in secrets]
         lock = shlex.quote(f"{self.cfg.exec_workdir.rstrip('/')}/.gpu{self.cfg.exec_gpu}.lock")
         entry = " ".join(shlex.quote(a) for a in _entry_argv(self.cfg, mode))
-        parts.append(f"echo {BEGIN_MARKER}")
-        parts.append(f"setsid --wait sh -c {shlex.quote(_SESSION_SCRIPT)} {lock} {entry}")
+        parts.append(f"setsid --wait sh -c {shlex.quote(self._session_script())} "
+                     f"{lock} {entry}")
         return " && ".join(parts)
 
     def _stop_cmd(self) -> str:
@@ -515,12 +534,21 @@ class DirectRunner:
                     deadline = self._deadline_for(mode)
                     rc = proc.wait(timeout=deadline)
                 except subprocess.TimeoutExpired:
+                    # The marker prints only once the host lock is held: a whole
+                    # deadline without it is a job that queued past its window and
+                    # NEVER ran -- the machine was busy, not the kernel wrong.
+                    ran = _began(log_file, start, BEGIN_MARKER)
                     self._stop_remote(log_file)
                     _kill_group(proc)
-                    log_file.write(f"[direct] gpu_entry {mode} exceeded {deadline:.0f}s "
-                                   f"-- killed\n")
+                    if ran:
+                        log_file.write(f"[direct] gpu_entry {mode} exceeded {deadline:.0f}s "
+                                       f"-- killed\n")
+                    else:
+                        log_file.write(f"[direct] gpu_entry {mode} queued on the GPU lock "
+                                       f"past {deadline:.0f}s without the begin marker -- "
+                                       f"nothing ran; recorded as {STATUS_LOST}\n")
                     log_file.flush()
-                    return STATUS_FAILED
+                    return STATUS_FAILED if ran else STATUS_LOST
                 except BaseException:   # stopped (SIGTERM -> SystemExit) or interrupted
                     self._stop_remote(log_file)
                     _kill_group(proc)

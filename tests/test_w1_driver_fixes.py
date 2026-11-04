@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from test_loop_driver import _ctx
+from test_loop_driver import FakeBackend, _ctx
 
 from peregrine_kernel.inner.trajectory import IterationRecord
 from peregrine_kernel.loop import driver
@@ -114,3 +114,64 @@ def test_w1_drv_06_reopen_falls_back_to_global_best_without_home_keep(tmp_path):
     ref, reopened = driver._resolve_resume_in_place(ctx, meta, [foreign], "sha-base")
     assert ref == foreign.sha
     assert reopened == ["D1"]
+
+
+# ---------------------------------------------------------------------------
+# W1-DRV-07: _paired_reanchor replayed its memo on every same-best hit with no
+# freshness bound, while the absolute channel bounds its memo at
+# _FALSE_WIN_MEMO_TTL_S (4h) — "a target transported under one period's machine
+# conditions says nothing about a period hours later". A restart rebuilt the
+# memo from a days-old reanchor.jsonl entry and replayed it forever: the run
+# kept diagnosing against a same-card ratio measured on node conditions nobody
+# was on any more, without re-buying the 2-job check.
+# ---------------------------------------------------------------------------
+
+
+class _BuyRecorder:
+    """Stands in for run_best_confirmation; records that a re-measure was bought."""
+
+    def __init__(self):
+        self.bought = 0
+
+    def __call__(self, ctx, jobs=2, max_extra=1, ref=None):
+        self.bought += 1
+        return {"jobs": [{"job": f"j{self.bought}a", "ratio": 1.0},
+                         {"job": f"j{self.bought}b", "ratio": 1.01}]}
+
+
+def test_w1_drv_07_expired_persisted_memo_is_rebought(tmp_path, monkeypatch):
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    stale = ctx.now() - driver._FALSE_WIN_MEMO_TTL_S - 60.0
+    (tmp_path / "reanchor.jsonl").write_text(
+        json.dumps({"ts": stale, "verdict": "confirmed_gap", "best_ms": 1.85,
+                    "best_sha": "sha0", "median_ratio": 1.05,
+                    "equivalence_ratio": 1.0, "cluster": "", "student_jobs": []}),
+        encoding="utf-8")
+    buy = _BuyRecorder()
+    monkeypatch.setattr(driver, "run_best_confirmation", buy)
+    record = driver._paired_reanchor(ctx, best=1.85, gap=0.05)
+    assert buy.bought == 1, "the expired same-card verdict must be re-measured"
+    assert ctx.reanchor_note is None, "no replay of the stale note"
+
+
+def test_w1_drv_07_fresh_session_memo_is_still_reused(tmp_path, monkeypatch):
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    ctx.reanchor_memo = (1.85, "session note")
+    ctx.reanchor_memo_ts = ctx.now()
+    buy = _BuyRecorder()
+    monkeypatch.setattr(driver, "run_best_confirmation", buy)
+    assert driver._paired_reanchor(ctx, best=1.85, gap=0.05) is None
+    assert buy.bought == 0, "a fresh memo answers without re-buying"
+    assert ctx.reanchor_note == "session note"
+
+
+def test_w1_drv_07_expired_session_memo_is_rebought(tmp_path, monkeypatch):
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    ctx.reanchor_memo = (1.85, "stale session note")
+    ctx.reanchor_memo_ts = ctx.now() - driver._FALSE_WIN_MEMO_TTL_S - 1.0
+    buy = _BuyRecorder()
+    monkeypatch.setattr(driver, "run_best_confirmation", buy)
+    driver._paired_reanchor(ctx, best=1.85, gap=0.05)
+    assert buy.bought == 1, "a memo past the TTL must not answer any more"
+    assert ctx.reanchor_note != "stale session note"

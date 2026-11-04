@@ -879,6 +879,11 @@ class LoopContext:
     # re-bought the same-card re-measure the reanchor.jsonl audit trail had
     # already paid for. Read that file back once (see _reanchor_memo).
     reanchor_memo_loaded: bool = False
+    # When the memo above was established (ctx.now()). The paired re-anchor
+    # applies the absolute channel's _FALSE_WIN_MEMO_TTL_S freshness bound
+    # before reusing it — a same-card verdict travels one period's machine
+    # conditions, not any period (W1-DRV-07).
+    reanchor_memo_ts: "float | None" = None
     # --- WP11 -----------------------------------------------------------------
     # MERGE EVAL + NCU INTO ONE GPU JOB (default on, kill switch). The committed
     # iteration used to buy TWO full jobs — the eval (driver's submit at the
@@ -12973,7 +12978,12 @@ def _reanchor_memo(ctx: LoopContext) -> "tuple[float, str] | None":
                     and rec.get("equivalence_ratio")
                     # a same-card re-measure does not travel across machines
                     # (the paired_memo's own rule, held across the restart too)
-                    and (rec.get("cluster") or "") == _active_cluster(ctx)):
+                    and (rec.get("cluster") or "") == _active_cluster(ctx)
+                    # ... nor across periods (W1-DRV-07): past the absolute
+                    # channel's TTL the entry describes machine conditions
+                    # nobody is on any more; an un-dated entry counts as stale
+                    and rec.get("ts") is not None
+                    and 0 <= ctx.now() - float(rec["ts"]) < _FALSE_WIN_MEMO_TTL_S):
                 eq, med = rec["equivalence_ratio"], rec["median_ratio"]
                 residual = rec.get("paired_residual", eq / med - 1.0)
                 # the paired-residual memo reads off the same record (both memos
@@ -12990,6 +13000,7 @@ def _reanchor_memo(ctx: LoopContext) -> "tuple[float, str] | None":
                     f"residual; do not propose a structural reopen (R1) whose expected "
                     f"gain is below it. ")
                 ctx.reanchor_memo = (float(rec["best_ms"]), note)
+                ctx.reanchor_memo_ts = float(rec["ts"])
                 _log(f"meta/re-anchor: memo rebuilt from {path.name} (best "
                      f"{rec['best_ms']:.6g} ms, ratio {med:.4f}) — no new ref jobs")
                 break
@@ -13214,6 +13225,7 @@ def _confirm_apparent_target(ctx: LoopContext, best: float,
                 f"converted target back into §0.\n")
             ctx.reanchor_note = note
             ctx.reanchor_memo = (best, note)
+            ctx.reanchor_memo_ts = ctx.now()
             _log(f"iter {iter_no}: best {best} meets the launch-anchor target but is "
                  f"still +{residual:.1%} over the same-period target "
                  f"{memo['fresh_target']:.4f} ms transported {age / 60:.0f} min ago — "
@@ -13312,6 +13324,7 @@ def _confirm_apparent_target(ctx: LoopContext, best: float,
             f"writing it back would count the drift twice).\n")
     ctx.reanchor_note = note
     ctx.reanchor_memo = (best, note)
+    ctx.reanchor_memo_ts = ctx.now()
     _persist_reanchor(ctx, record)
     _log(f"iter {iter_no}: target NOT confirmed — {how} (residual +{residual:.1%}); "
          f"the absolute hit was a node draw, continuing")
@@ -13480,6 +13493,7 @@ def _phantom_gap_reanchor(ctx: LoopContext, best: float | None) -> dict | None:
             f"readings you measured contemporaneously yourself.\n")
         ctx.reanchor_note = note
         ctx.reanchor_memo = (best, note)
+        ctx.reanchor_memo_ts = ctx.now()
         _persist_reanchor(ctx, record)
 
     if best > fresh_target:
@@ -13543,7 +13557,14 @@ def _paired_reanchor(ctx: LoopContext, best: float, gap: float | None) -> dict |
     """
     eq = ctx.equivalence_ratio
     sha = _best_good_ref_here(load_records(ctx.status_path), ctx)
-    if (memo := _reanchor_memo(ctx)) and memo[0] == best:   # --- WP9 (C5)
+    memo = _reanchor_memo(ctx)
+    # WP9 (C5) reuse, bounded like the absolute channel's _FALSE_WIN_MEMO_TTL_S
+    # (W1-DRV-07): a same-card verdict travels one period's machine conditions,
+    # not any period — past the TTL the 2-job check must be re-bought, not
+    # replayed. An un-stamped memo (pre-TTL session) counts as stale.
+    if (memo and memo[0] == best
+            and ctx.reanchor_memo_ts is not None
+            and 0 <= ctx.now() - ctx.reanchor_memo_ts < _FALSE_WIN_MEMO_TTL_S):
         ctx.reanchor_note = memo[1]
         _log("meta/re-anchor: best unchanged since the last same-job check — "
              "reusing its verdict (no new jobs)")
@@ -13627,6 +13648,7 @@ def _paired_reanchor(ctx: LoopContext, best: float, gap: float | None) -> dict |
                  "it parity over continuing to hunt for a structural defect.\n")
     ctx.reanchor_note = note
     ctx.reanchor_memo = (best, note)
+    ctx.reanchor_memo_ts = ctx.now()
     ctx.paired_residual_memo = (best, residual)
     _persist_reanchor(ctx, record)
     _log(f"meta/re-anchor: same-job median ratio {med:.4f} < {eq} — paired "

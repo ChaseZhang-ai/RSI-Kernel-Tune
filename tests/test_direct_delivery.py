@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import threading
 import time
@@ -223,7 +224,12 @@ def test_ssh_run_syncs_the_tree_then_runs_under_the_host_gpu_lock(tmp_path):
     fake = _FakeSsh([(0, True)])
     status, log = _ssh_run(cfg, fake)
     assert status == ds.STATUS_SUCCEEDED
-    tree = f"/data/fk/{tmp_path.name}/op"
+    # the tree's name is remote_tree's derivation (a clone-keyed suffix now
+    # rides in it — see test_two_clones_of_one_op_never_share_a_remote_tree);
+    # what this test pins is the plumbing: extract, exec and the gpu lock all
+    # name that one tree
+    tree = direct.remote_tree(cfg)
+    assert tree.startswith("/data/fk/")
     (argv, payload), = fake.runs
     assert argv[0] == "ssh" and "box" in argv and f"tar xJ -C {tree}" in argv[-1]
     assert payload[:6] == b"\xfd7zXZ\x00"              # xz-compressed git archive
@@ -232,6 +238,31 @@ def test_ssh_run_syncs_the_tree_then_runs_under_the_host_gpu_lock(tmp_path):
     assert "export CUDA_VISIBLE_DEVICES=1" in remote and "export A=1" in remote
     assert "setsid --wait sh -c" in remote and "/data/fk/.gpu1.lock bash gpu_entry.sh perf" in remote
     assert "s3cret" not in remote and fake.stdin_text == "s3cret\n"
+
+
+def test_two_clones_of_one_op_never_share_a_remote_tree(tmp_path):
+    """Two clones of the same op whose run directories happen to share a name
+    (alice's wk6 and bob's wk6) used to derive the same remote tree — the name
+    pair was the whole key — and each job's ``rm -rf`` then deleted whichever
+    clone had extracted last: the tree the other clone's job was executing
+    vanished mid-run. The tree name carries a hash of the clone's own path, so
+    one clone keeps one tree (its jobs are serialized by its local op lock) and
+    two clones never collide."""
+    for owner in ("alice", "bob"):
+        _op(tmp_path / owner / "wk6", delivery="ssh",
+            exec_table='host = "box"\nworkdir = "/data/fk"\ngpu = "1"\n')
+    cfg_a = load_config("op", base_dir=tmp_path / "alice" / "wk6")
+    cfg_b = load_config("op", base_dir=tmp_path / "bob" / "wk6")
+    tree_a, tree_b = direct.remote_tree(cfg_a), direct.remote_tree(cfg_b)
+    assert tree_a != tree_b
+    # the configured workdir and the run/op layout are kept, the op name now
+    # carrying the clone key
+    assert re.search(r"^/data/fk/wk6/op-[0-9a-f]{12}$", tree_a), tree_a
+    assert re.search(r"^/data/fk/wk6/op-[0-9a-f]{12}$", tree_b), tree_b
+    # one clone derives one tree: the extract, exec and stop commands of its
+    # jobs must agree on it
+    assert direct.remote_tree(cfg_a) == tree_a
+    assert direct.remote_tree(cfg_b) == tree_b
 
 
 def test_ssh_that_never_delivers_is_a_transport_error_after_retries(tmp_path):

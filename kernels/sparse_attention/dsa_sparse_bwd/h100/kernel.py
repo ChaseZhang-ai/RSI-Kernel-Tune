@@ -1662,7 +1662,13 @@ def _run_k2(q, kv, dout, idx, tl, lse2, delta, dq, ws, sm_scale, stream=None):
     assert d_qk == DQK and h_q % H == 0 and topk % KVB == 0
     stream = _stream() if stream is None else stream
     args = _k2_args(q, kv, dout, idx, tl, lse2, delta, dq, ws, stream)
-    fn = _compiled(("k2", s_q, h_q, d_qk, s_kv, topk), _k2_jit, args,
+    # sm_scale is baked into the artifact by _k2_setup (_G_K2_CSCALE/_G_K2_SCALE
+    # are closed-over globals while tracing), so it belongs in the cache key:
+    # two calls at the same shape with a different sm_scale must not share an
+    # artifact that baked the first one in (same rule as dsa_score_recompute's
+    # _compiled, which keys on cscale for exactly this reason).
+    fn = _compiled(("k2", s_q, h_q, d_qk, s_kv, topk, float(sm_scale)),
+                   _k2_jit, args,
                    lambda: _k2_setup(s_q, h_q, s_kv, sm_scale))
     fn(*args)
 
@@ -1694,7 +1700,7 @@ def precompile(s_q, h_q, d_qk, d_v, s_kv, topk, sm_scale, device="cuda"):
               _k1_args(keep["o"], keep["do"], keep["lse"], keep["sink"],
                        keep["delta"], keep["lse2"], keep["dsink"], st),
               lambda: _k1_setup(s_q, h_q, d_v))
-    _compiled(("k2", s_q, h_q, d_qk, s_kv, topk), _k2_jit,
+    _compiled(("k2", s_q, h_q, d_qk, s_kv, topk, float(sm_scale)), _k2_jit,
               _k2_args(keep["q"], keep["kv"], keep["do"], keep["idx"],
                        keep["tl"], keep["lse2"], keep["delta"], keep["dq"],
                        keep["ws"], st),

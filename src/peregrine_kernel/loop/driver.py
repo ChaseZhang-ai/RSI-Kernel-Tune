@@ -32,6 +32,7 @@ import ast
 import shlex
 import statistics
 import time
+import traceback
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from collections import deque
@@ -4644,7 +4645,10 @@ def run_inner_loop(ctx: LoopContext, start_iter: int, *,
             _log(f"backend failed unrecoverably: {e}")
             return "backend_error"
         except Exception as e:  # unattended-run safety net: never crash, stop cleanly
-            _log(f"unexpected error, stopping cleanly: {e!r}")
+            # The traceback rides the same log line: a 20-hour unattended run that
+            # stops "cleanly" on {e!r} alone leaves the operator no stack to debug
+            # from, and the failing iteration is long gone by the time anyone reads.
+            _log(f"unexpected error, stopping cleanly: {e!r}\n{traceback.format_exc()}")
             return "error"
         if rec is None:
             return "exhausted"

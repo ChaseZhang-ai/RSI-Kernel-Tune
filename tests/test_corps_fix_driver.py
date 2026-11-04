@@ -114,3 +114,26 @@ def test_resume_over_a_never_evaluated_revert_stays_unknown_not_not_green(tmp_pa
     recs = load_records(ctx.status_path)
     assert [r.decision_id for r in recs] == ["probe-blocked"]
     assert _green_on_resume(recs, "sha-nobody-owns") is None
+
+
+# ---------------------------------------------------------------------------
+# BUG-SEED-29: the unattended-run safety net in run_inner_loop logged only
+# {e!r} — a 20-hour run that stopped "cleanly" left no stack to debug from.
+# It now logs traceback.format_exc() alongside the repr.
+# ---------------------------------------------------------------------------
+
+
+def test_unattended_safety_net_logs_the_full_traceback(tmp_path, monkeypatch, capsys):
+    import peregrine_kernel.loop.driver as drv
+
+    def boom(*args, **kwargs):
+        raise ValueError("synthetic inner failure")
+
+    monkeypatch.setattr(drv, "run_inner_iteration", boom)
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    assert run_inner_loop(ctx, start_iter=0) == "error"
+    out = capsys.readouterr().out
+    assert "unexpected error, stopping cleanly" in out
+    assert "ValueError: synthetic inner failure" in out
+    # the stack itself, not just the repr: the failing site is diagnosable
+    assert "Traceback (most recent call last)" in out

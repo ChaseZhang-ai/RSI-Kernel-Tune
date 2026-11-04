@@ -84,8 +84,12 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     """Classify a student agent's final message into the three terminal shapes.
 
     PROBE_REQUEST / EXHAUSTED take precedence (they are explicit single-line
-    markers); otherwise the record block fields are extracted from anywhere in
-    the text (agents often emit prose before the block).
+    markers — matched only at the start of a line, so a marker the turn merely
+    echoes mid-sentence — quoting the protocol, narrating it, or quoting a
+    reminder — does not classify the turn; an unanchored scan sent an echoed
+    marker to the probe branch and burned a GPU job on it, and an echoed
+    EXHAUSTED ended the run). Otherwise the record block fields are extracted
+    from anywhere in the text (agents often emit prose before the block).
 
     RECON_REQUEST is only a valid shape for the reconnaissance caller
     (``allow_recon=True``). Recognizing it everywhere let a student turn that
@@ -93,7 +97,7 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     saturates the prompts — reach the probe branch and burn a GPU job on a
     path that exists only in the teacher's tree.
     """
-    probe = re.search(r"PROBE_REQUEST:\s*(\S+)", text)
+    probe = re.search(r"^\s*PROBE_REQUEST:\s*(\S+)", text, re.MULTILINE)
     if probe:
         return ProbeRequest(path=_clean_path(probe.group(1)))
     # WP19 (task 2): a PROBE-MANIFEST names a ≤4-line list of self-contained
@@ -109,7 +113,10 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
         recon = re.search(r"RECON_REQUEST:\s*(\S+)", text)
         if recon:
             return ReconRequest(path=_clean_path(recon.group(1)))
-    exhausted = re.search(r"EXHAUSTED:\s*(.+)", text)
+    # Line-anchored like PROBE_REQUEST above: the protocol puts the marker on its
+    # own line ("End your turn with EXACTLY one of: ... 'EXHAUSTED: <reason>'"),
+    # and prose that merely mentions the phrase must not stop the run.
+    exhausted = re.search(r"^\s*EXHAUSTED:\s*(.+)", text, re.MULTILINE)
     if exhausted:
         return Exhausted(reason=exhausted.group(1).strip())
 

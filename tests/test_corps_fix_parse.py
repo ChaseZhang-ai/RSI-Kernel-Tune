@@ -10,7 +10,8 @@ from peregrine_kernel.inner.results import (_first_json_with_key,
                                             parse_correctness)
 from peregrine_kernel.inner.trajectory import (IterationRecord, _DIFF_SIG,
                                                constant_output_flag)
-from peregrine_kernel.loop.parse import _float_list, detect_plateau, parse_eval
+from peregrine_kernel.loop.parse import (Exhausted, ProbeRequest, Record,
+                                         _float_list, detect_plateau, parse_eval)
 
 
 def _eval_text(**perf):
@@ -220,3 +221,46 @@ def test_load_records_clean_file_warns_nothing(tmp_path, capsys):
     append_record(p, _keep_rec(2))
     assert [r.iter for r in load_records(p)] == [1, 2]
     assert capsys.readouterr().err == ""
+
+
+# --- BUG-SEED-50: an unanchored scan classified any turn containing the marker --
+# text anywhere in it, so a turn that merely echoed "PROBE_REQUEST: ..." burned a
+# GPU probe and an echoed "EXHAUSTED: ..." stopped the run.
+
+def _import_parse_student_turn():
+    from peregrine_kernel.loop.parse import parse_student_turn
+    return parse_student_turn
+
+
+def test_an_echoed_probe_marker_does_not_burn_a_probe():
+    parse = _import_parse_student_turn()
+    text = ('I will not use PROBE_REQUEST: notes/x.py now that the probe budget '
+            'is spent; the record stands.')
+    try:
+        turn = parse(text)
+        assert not isinstance(turn, ProbeRequest)
+    except ValueError:
+        pass    # no record block either: unparseable is fine, a probe is not
+
+
+def test_an_echoed_exhausted_marker_does_not_stop_the_run():
+    parse = _import_parse_student_turn()
+    text = ('The protocol reminder says to end with EXHAUSTED: no decisions left, '
+            'but I have one more lever to try.\ndecision_id: D9\nchange: unroll')
+    turn = parse(text)
+    assert not isinstance(turn, Exhausted)
+
+
+def test_an_echoed_marker_yields_the_record_block():
+    parse = _import_parse_student_turn()
+    text = ('As the prompt says, a probe is PROBE_REQUEST: notes/whatever.py — '
+            'meanwhile:\ndecision_id: D7\nchange: vectorize\nfiles_touched: kernel.py')
+    turn = parse(text)
+    assert isinstance(turn, Record) and turn.decision_id == "D7"
+
+
+def test_own_line_markers_still_parse():
+    parse = _import_parse_student_turn()
+    assert parse("prose first\nPROBE_REQUEST: notes/x.py").path == "notes/x.py"
+    assert parse("  EXHAUSTED: nothing left to try\n").reason == "nothing left to try"
+    assert parse("EXHAUSTED: done").reason == "done"

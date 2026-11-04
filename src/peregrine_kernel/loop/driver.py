@@ -2585,6 +2585,13 @@ def _probe_label(pv: ProbeVerdict) -> str:
     return "FAIL" if pv.found else "NO VERDICT"
 
 
+# The reason prefix a verdict probe reports when the backend transport itself
+# failed (commit/push/submit raised) — the job never ran, so the feedback must
+# not read as the probe script's protocol problem. Both the producer
+# (_run_meta_verdict_probe) and the renderer (_verdict_probe_feedback) share it.
+_PROBE_JOB_FAILED = "job failed"
+
+
 def _probe_feedback(path: str, pv: ProbeVerdict, log: str, *, what: str = "probe",
                     on_pass: str = "") -> str:
     """One probe round's feedback, split by failure mode.
@@ -2805,10 +2812,25 @@ def _run_meta_verdict_probe(ctx: LoopContext, be, probe_branch: str, path: str,
     """One single-script verdict probe on its own job (the pre-WP19 path).
 
     WP19 (task 2): extracted verbatim so the manifest's wholesale-failure
-    fallback runs exactly this — the old path is the fallback, not a copy."""
-    be.commit(f"meta-probe: {path}")
-    be.push_branch(probe_branch)
-    probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    fallback runs exactly this — the old path is the fallback, not a copy.
+
+    Verbatim except the transport: the sibling probe paths degrade locally when
+    the backend fails — _run_ablation_probe returns "job failed (...)" as its
+    no-reading reason, _run_stall_pricing diagnoses without a ledger — while
+    this path let one commit/push/submit raise (a node drain mid-run, a lost
+    push) out of the diagnose step and end the whole run. A probe the transport
+    never delivered is this round's NO VERDICT, not the run's death: the
+    teacher is told the job never ran and may send PROBE_REQUEST again."""
+    try:
+        be.commit(f"meta-probe: {path}")
+        be.push_branch(probe_branch)
+        probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    except BackendError as e:
+        return (ProbeVerdict(False, found=False,
+                             reason=f"{_PROBE_JOB_FAILED} ({e}) — the experiment did "
+                                    f"not run; send PROBE_REQUEST for it again if the "
+                                    f"hypothesis still needs testing"),
+                "", [])
     # audit=False: these lines answer pre-registered hypotheses, and the
     # max_diff field carries the reading as printed. The certification
     # audit (error-norm ceiling, float-only) was downgrading a PASS with a
@@ -2851,11 +2873,20 @@ def _verdict_probe_feedback(path: str, pv: ProbeVerdict, log: str,
                  f"hypothesis's answer, readings recorded exactly as the script printed them):"
                  f"\n```\n{pv.contract_table()}\n```\n")
     if not pv.found:
-        head += ("(The log has no `PROBE PASS/FAIL` verdict line — a verdict experiment must "
-                 "pre-register a falsifiable criterion: print one line "
-                 "`PROBE PASS/FAIL max_diff=<reading>` per hypothesis, so the script lands the "
-                 "verdict in the log instead of you interpreting it afterwards. Fix this next "
-                 "round.)\n")
+        if pv.reason.startswith(_PROBE_JOB_FAILED):
+            # The transport failed (backend commit/push/submit raised) — nothing
+            # about the script was tested. The pre-register sermon below would
+            # send the teacher editing a probe that never executed; the sibling
+            # paths report the same shape instead (_run_ablation_probe's
+            # "job failed (...)" reason, _run_stall_pricing's degraded
+            # diagnosis). The round is spent; the teacher may simply ask again.
+            head += f"(the probe job never ran: {pv.reason})\n"
+        else:
+            head += ("(The log has no `PROBE PASS/FAIL` verdict line — a verdict experiment must "
+                     "pre-register a falsifiable criterion: print one line "
+                     "`PROBE PASS/FAIL max_diff=<reading>` per hypothesis, so the script lands the "
+                     "verdict in the log instead of you interpreting it afterwards. Fix this next "
+                     "round.)\n")
     elif pv.reason:
         head += f"(the driver's audit of the verdict line: {pv.reason})\n"
     return head + f"\n### Job log tail (your experiment's readings)\n```\n{tail}\n```\n"

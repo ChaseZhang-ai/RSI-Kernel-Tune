@@ -232,3 +232,90 @@ def test_malformed_declaration_does_not_spend_the_package_budget():
     segment = [_pkg_tail_row("part 0 of 3 — malformed opener"),
                _pkg_tail_row("part 1 of 2 — real package step")]
     assert _open_package_tail(segment) == (1, 2)
+
+
+# --- BUG-SEED-35: a verdict probe whose transport failed ended the whole run --
+
+
+from peregrine_kernel.loop.driver import BackendError
+
+
+class _DyingTransportBackend(FakeBackend):
+    """A backend whose transport raises BackendError (a node drain mid-run, a
+    lost push) — the GPU-jitter shape the triage reproduced."""
+
+    def __init__(self, die_on):
+        super().__init__([], [])
+        self._die_on = die_on
+
+    def commit(self, message):
+        if "commit" in self._die_on:
+            raise BackendError("transient: node drain mid-run (GPU jitter)")
+        return super().commit(message)
+
+    def push_branch(self, branch):
+        if "push" in self._die_on:
+            raise BackendError("transient: push lost (GPU jitter)")
+        return super().push_branch(branch)
+
+    def submit_gpu(self, branch, mode):
+        if "submit" in self._die_on:
+            raise BackendError("transient: node drain mid-run (GPU jitter)")
+        return super().submit_gpu(branch, mode)
+
+
+@pytest.mark.parametrize("die_on", ["submit", "push", "commit"])
+def test_verdict_probe_transport_failure_is_a_no_verdict_not_a_crash(
+        tmp_path, die_on):
+    """Observed: _run_meta_verdict_probe ran commit/push/submit bare — one
+    BackendError escaped the diagnose step and terminated the whole run, while
+    the sibling paths degrade locally (_run_ablation_probe catches the same
+    sequence into a "job failed (...)" reason, _run_stall_pricing diagnoses
+    without a ledger). The probe is now this round's NO VERDICT and the run
+    survives."""
+    from peregrine_kernel.loop.driver import (
+        _probe_label,
+        _run_meta_verdict_probe,
+    )
+
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    be = _DyingTransportBackend(die_on)
+    pv, probe_log, readings = _run_meta_verdict_probe(
+        ctx, be, "fs-demo-metaprobe", "notes/probe_x.py", 1)
+    assert probe_log == "" and readings == []
+    assert pv.found is False and pv.passed is False
+    assert _probe_label(pv) == "NO VERDICT"
+    assert "job failed" in pv.reason and "GPU jitter" in pv.reason
+
+
+def test_verdict_probe_transport_feedback_does_not_preach_protocol(tmp_path):
+    """The failed-transport round must not reach the teacher as the probe's
+    protocol problem: the no-verdict-line sermon (pre-register a criterion)
+    would send it editing a script that never executed."""
+    from peregrine_kernel.loop.driver import (
+        _verdict_probe_feedback,
+        _run_meta_verdict_probe,
+    )
+
+    ctx = _ctx(tmp_path, FakeBackend([], []))
+    be = _DyingTransportBackend("submit")
+    pv, probe_log, _readings = _run_meta_verdict_probe(
+        ctx, be, "fs-demo-metaprobe", "notes/probe_x.py", 1)
+    feedback = _verdict_probe_feedback(
+        "notes/probe_x.py", pv, probe_log, 1, 3)
+    assert "the probe job never ran" in feedback
+    assert "GPU jitter" in feedback
+    assert "pre-register" not in feedback
+
+
+def test_verdict_probe_no_verdict_line_feedback_keeps_the_sermon(tmp_path):
+    """A probe that RAN but printed no verdict line keeps the original
+    protocol feedback — the transport wording is only for jobs that never
+    started."""
+    from peregrine_kernel.loop.driver import _verdict_probe_feedback
+    from peregrine_kernel.loop.parse import parse_probe_verdict
+
+    pv = parse_probe_verdict("some output with no verdict line", audit=False)
+    feedback = _verdict_probe_feedback("notes/probe_x.py", pv, "some output", 1, 3)
+    assert "pre-register" in feedback
+    assert "the probe job never ran" not in feedback

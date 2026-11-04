@@ -344,6 +344,44 @@ def test_parse_eval_reads_the_window_basis_and_the_reference_enqueue_clock():
     assert ev.ref_host_enqueue_ms == 0.01911
 
 
+def test_parse_eval_filters_non_finite_readings():
+    """The JSON decoder accepts NaN / Infinity literals, and a NaN reading used
+    to ride into the trajectory untouched: min() is order-dependent on it
+    (min([nan, 2.5]) is nan, so the NaN hijacks every best it precedes),
+    comparisons against it are never true (a plateau check stalls forever), and
+    medians over lists holding it are arbitrary. The probe path already refuses
+    a non-finite max_diff; the eval's timing readings get the same posture — a
+    non-finite number parses as an absent reading, never as a passing one."""
+    log = ('=== JSON ===\n{"correctness": {"pass": true}, "performance": {'
+           '"bwd_median_ms": NaN, "mfu": Infinity, "device_median_ms": NaN, '
+           '"ref_median_ms": 9.9, "vs_ref": NaN, "host_enqueue_ms": NaN, '
+           '"device_readings_ms": [1.0, NaN, 2.0], '
+           '"ref_device_readings_ms": [Infinity], '
+           '"workloads": [{"name": "w0", "device_median_ms": NaN, "vs_ref": 0.9, '
+           '"device_readings_ms": [NaN, 3.0]}]}}')
+    ev = parse_eval(log)
+    assert ev.correctness is True
+    assert ev.bwd_median_ms is None and ev.mfu is None
+    assert ev.device_median_ms is None and ev.vs_ref is None
+    assert ev.host_enqueue_ms is None
+    assert ev.ref_median_ms == 9.9                      # finite readings survive
+    assert ev.device_readings_ms == [1.0, 2.0]
+    assert ev.ref_device_readings_ms == []
+    assert "device_median_ms" not in ev.workloads[0]
+    assert ev.workloads[0]["vs_ref"] == 0.9
+    assert ev.workloads[0]["device_readings_ms"] == [3.0]
+
+
+def test_parse_eval_scalar_readings_reject_bool_and_str():
+    # float(True) is 1.0 ms and float("2.5") parses: a malformed block must not
+    # manufacture a reading out of either.
+    ev = parse_eval('{"correctness": {"pass": true}, "performance": {'
+                    '"bwd_median_ms": true, "device_median_ms": "2.5", '
+                    '"vs_ref": null}}')
+    assert ev.bwd_median_ms is None and ev.device_median_ms is None
+    assert ev.vs_ref is None
+
+
 # --- per-contract verdicts: what a probe printed is what gets recorded ----
 
 def test_fail_with_na_is_reported_as_na_not_unreported():

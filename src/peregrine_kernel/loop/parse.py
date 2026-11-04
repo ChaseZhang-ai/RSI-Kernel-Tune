@@ -292,6 +292,26 @@ _WORKLOAD_KEYS = ("device_median_ms", "bwd_median_ms", "ref_device_ms", "vs_ref_
 _WORKLOAD_LIST_KEYS = ("device_readings_ms", "ref_device_readings_ms")
 
 
+def _finite(v) -> float | None:
+    """``v`` as a finite float, else None — a non-finite number is an absent
+    reading, never a passing one.
+
+    The JSON decoder accepts NaN / Infinity literals, so a malformed bench
+    block carries them straight past parsing; downstream, min() is
+    order-dependent on a NaN (min([nan, 2.5]) is nan, so one NaN reading
+    hijacks the running best it precedes), comparisons against one are never
+    True (a plateau check then never fires), and medians over lists holding
+    one are arbitrary. The probe path already refuses a non-finite max_diff
+    (_audit_pass); the eval's timing readings get the same posture. bool is
+    rejected too (float(True) is 1.0 ms), and a str is a malformed block, not
+    a reading.
+    """
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return None
+    v = float(v)
+    return v if math.isfinite(v) else None
+
+
 def readings_spread_pct(readings) -> float | None:
     """``(max - min) / min`` over finite positive readings, as a fraction; None when
     fewer than two usable readings — an absent verdict, never a passing one."""
@@ -311,17 +331,16 @@ def _workloads(perf: dict) -> list:
             continue
         item = {"name": str(w.get("name", len(out)))}
         for key in _WORKLOAD_KEYS:
-            v = w.get(key)
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
-                item[key] = float(v)
+            v = _finite(w.get(key))
+            if v is not None:
+                item[key] = v
         for key in _WORKLOAD_LIST_KEYS:
             v = w.get(key)
             if isinstance(v, (list, tuple)):
-                item[key] = [float(x) for x in v
-                             if isinstance(x, (int, float)) and not isinstance(x, bool)]
-        host = w.get("host_enqueue_ms")
-        if isinstance(host, (int, float)) and not isinstance(host, bool):
-            item["host_enqueue_ms"] = float(host)
+                item[key] = [f for f in map(_finite, v) if f is not None]
+        host = _finite(w.get("host_enqueue_ms"))
+        if host is not None:
+            item["host_enqueue_ms"] = host
         # WP15: the workload's SPRT early-stop decision (timing.py's controller),
         # so the driver's card rule (a loss-stopped workload cannot acquit the
         # card) and the digest can read it off the row.
@@ -335,12 +354,12 @@ def _workloads(perf: dict) -> list:
 
 
 def _float_list(raw) -> list:
-    """The numeric entries of ``raw`` as floats; [] for anything else (a bench that
-    reports no raw readings, or a malformed one)."""
+    """The finite numeric entries of ``raw`` as floats; [] for anything else (a bench
+    that reports no raw readings, or a malformed one). A NaN or inf entry is
+    dropped, not kept: medians over a list holding one are arbitrary (_finite)."""
     if not isinstance(raw, (list, tuple)):
         return []
-    return [float(v) for v in raw
-            if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    return [f for f in map(_finite, raw) if f is not None]
 
 
 def describe_workload_readings(workloads: list) -> str:
@@ -557,8 +576,7 @@ def parse_eval(text: str) -> EvalResult:
         # legacy: pre-rename bench key (cublas_* — the in-job reference was recorded
         # under that name whatever library it was). Read so older cards' bench.py
         # keeps parsing; new benches emit the ref_* names only.
-        v = perf.get(key, perf.get(legacy) if legacy else None)
-        return float(v) if v is not None else None
+        return _finite(perf.get(key, perf.get(legacy) if legacy else None))
 
     def _opt_any(*keys: str) -> float | None:
         for key in keys:
@@ -596,8 +614,8 @@ def parse_eval(text: str) -> EvalResult:
         # COMPILE_ERROR verdict's nvcc/ptxas error and a numeric FAIL's surrounding
         # output are in the log the parser holds, so the record now holds them too.
         error="" if correct else _with_log_tail(_correctness_error(corr_obj), text),
-        bwd_median_ms=float(ms) if ms is not None else None,
-        mfu=float(mfu) if mfu is not None else None,
+        bwd_median_ms=_finite(ms),
+        mfu=_finite(mfu),
         ref_median_ms=_opt("ref_median_ms", "cublas_median_ms"),
         vs_ref=_opt("vs_ref", "vs_cublas"),
         device_median_ms=_opt("device_median_ms"),

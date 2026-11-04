@@ -23,7 +23,7 @@ def parse_correctness(stdout: str) -> dict:
     failed = _FAILED_RE.search(stdout)
     if failed:
         fails = int(failed.group(1))
-        passed = False
+        passed = fails == 0   # "0/N FAILED" is a pass: the summary's own count rules
     elif all_pass:
         fails = 0
         passed = True
@@ -56,20 +56,14 @@ def parse_perf(stdout: str) -> dict:
 
 
 def _first_json_with_key(text: str, key: str) -> dict | None:
-    """Scan for a top-level JSON object containing `key` (handles one-line dumps)."""
+    """Scan for a JSON object containing `key`, trying a full decode from every
+    ``{`` (counting braces by hand cannot work: a string value may hold them)."""
+    dec = json.JSONDecoder()
     for start in (i for i, ch in enumerate(text) if ch == "{"):
-        depth = 0
-        for end in range(start, len(text)):
-            if text[end] == "{":
-                depth += 1
-            elif text[end] == "}":
-                depth -= 1
-                if depth == 0:
-                    try:
-                        obj = json.loads(text[start:end + 1])
-                    except json.JSONDecodeError:
-                        break
-                    if isinstance(obj, dict) and key in obj:
-                        return obj
-                    break
+        try:
+            obj, _ = dec.raw_decode(text, start)
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and key in obj:
+            return obj
     return None

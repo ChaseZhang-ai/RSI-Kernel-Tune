@@ -49,6 +49,7 @@ import importlib.abc
 import json
 import os
 import sys
+import threading
 import time
 import types
 
@@ -83,7 +84,9 @@ def _dump() -> None:
     try:
         os.makedirs(out, exist_ok=True)
         path = os.path.join(out, f"hook-{os.getpid()}.json")
-        tmp = path + ".tmp"
+        tmp = f"{path}.{threading.get_ident()}.tmp"   # per-thread: concurrent _dump
+        # calls in one process (a multi-threaded bench) must not share a tmp file
+        # and land half a JSON in each other's hands
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump({k: v for k, v in _state.items() if k != "out"}, fh)
         os.replace(tmp, path)

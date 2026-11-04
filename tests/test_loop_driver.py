@@ -1036,7 +1036,7 @@ def test_kb_certify_quarantines_a_persistent_leak(tmp_path):
     res = run_kb_certify(ctx, diagnosis="G3")
     assert res.certified is False and res.recipe is None
     assert not (kb / "sm90" / "r.md").exists()
-    quarantined = tmp_path / "repo" / "kb_quarantine" / "r.md"
+    quarantined = tmp_path / "repo" / "kb_quarantine" / "sm90__r.md"
     assert quarantined.is_file() and "oracle" in quarantined.read_text()
 
 

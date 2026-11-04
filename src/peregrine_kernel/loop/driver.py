@@ -5406,13 +5406,18 @@ def _quarantine_leaky_kb(ctx: LoopContext, findings: list[str]) -> None:
     A finding's path is relative to the lint root's parent (lint_kb_dir's
     rel_to), i.e. ``<arch>/<entry>.md`` under hw_kb/; the quarantine hangs off
     the repo root, because a quarantine inside hw_kb/ would still sit in the
-    tree this is trying to take the entry out of."""
+    tree this is trying to take the entry out of. The banked name keeps the
+    finding's relative path (``<arch>__<entry>.md``): the quarantine is shared
+    by every tree of the repo, POSIX rename silently overwrites, and an
+    sm90/overview.md quarantined after an sm100/overview.md used to leave one
+    file behind with no trace of the other — the whole point of this move is
+    to leave the evidence for review by hand."""
     qdir = lang_mode.kb_repo_root(ctx.kb_dir) / "kb_quarantine"
     for rel in sorted({f.split(":", 1)[0] for f in findings}):
         src = kb_read_dir(ctx).parent / rel
         if src.is_file():
             qdir.mkdir(exist_ok=True)
-            dst = qdir / src.name
+            dst = qdir / rel.replace("/", "__")
             src.rename(dst)
             _log(f"meta/kb: QUARANTINED leaky entry {rel} -> {dst} — review by hand")
 

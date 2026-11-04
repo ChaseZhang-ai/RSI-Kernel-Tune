@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import signal
 import subprocess
 import sys
 import time
@@ -57,3 +58,35 @@ def test_a_refusal_hands_the_reply_back_on_stdout(tmp_path, monkeypatch, capsys)
     assert "SAFEGUARD REFUSAL" in out.err              # the explanation on stderr
     assert json.loads((tmp_path / "result.json").read_text().splitlines()[-1])[
         "outcome"] == "refusal"
+
+
+# --- W1-LIF-05: a signal-killed child exits 128+n, not a wrapped negative ---------------
+
+def test_timeout_run_maps_a_signal_killed_child_to_128_plus_n():
+    """proc.wait() returns a negative status for a child killed by a signal;
+    sys.exit(-11) lands as 245 and reads as an ordinary program exit. 128+n (the
+    convention the signal-forwarding branch already speaks) says what actually
+    happened."""
+    r = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "timeout-run.py"), "30",
+         sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGKILL)"],
+        capture_output=True, text=True, timeout=60)
+    assert r.returncode == 128 + signal.SIGKILL, (r.returncode, r.stdout, r.stderr)
+    r = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "timeout-run.py"), "30",
+         sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"],
+        capture_output=True, text=True, timeout=60)
+    assert r.returncode == 128 + signal.SIGTERM, (r.returncode, r.stdout, r.stderr)
+
+
+def test_timeout_run_still_returns_124_on_expiry_and_zero_on_clean_exit():
+    r = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "timeout-run.py"), "1",
+         sys.executable, "-c", "import time; time.sleep(30)"],
+        capture_output=True, text=True, timeout=60)
+    assert r.returncode == 124, (r.returncode, r.stdout, r.stderr)
+    r = subprocess.run(
+        [sys.executable, str(REPO / "scripts" / "timeout-run.py"), "30",
+         sys.executable, "-c", "pass"],
+        capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)

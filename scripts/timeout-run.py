@@ -8,7 +8,8 @@ zero bytes written). The
 model is a separate process family, so wait() can't bound it without a kill.
 
 Usage: timeout-run.py <seconds> <cmd> [args...]
-Exit:  the child's exit status, or 124 if the timeout fired (like GNU timeout).
+Exit:  the child's exit status (128+n when the child died to signal n, like bash),
+       or 124 if the timeout fired (like GNU timeout).
 """
 import os
 import signal
@@ -46,7 +47,7 @@ def main() -> int:
     for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(s, _forward)
     try:
-        return proc.wait(timeout=secs)
+        rc = proc.wait(timeout=secs)
     except subprocess.TimeoutExpired:
         # On macOS, signaling a process group whose leader has already died
         # (SIGTERM killed it during the grace window) raises EPERM, not ESRCH —
@@ -66,6 +67,11 @@ def main() -> int:
                 pass
         proc.wait()
         return 124
+    # A child killed by a signal comes back as a NEGATIVE wait() status; sys.exit(-11)
+    # is not a signal exit, it lands as 245 and reads as an ordinary (and wrong) exit
+    # code. 128+n is the shell convention the signal-forwarding branch above already
+    # speaks, so the caller can tell "killed by SIGSEGV" from a program's own 245.
+    return 128 + (-rc) if rc < 0 else rc
 
 
 if __name__ == "__main__":

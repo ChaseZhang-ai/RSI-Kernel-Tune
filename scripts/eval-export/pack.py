@@ -178,7 +178,9 @@ def best_keep(op_dir: Path) -> dict:
         raise Refused(f"{op_dir}: no evaluated KEEP row in student/status.jsonl "
                       f"-- nothing to export")
     window, reading, row = min(rows, key=lambda t: t[1])
-    clusters = sorted({t[2].get("cluster") for t in rows} - {""})
+    # a KEEP row without a cluster key falls back to "" (like the row's sha
+    # below) instead of sorting None among strings
+    clusters = sorted({t[2].get("cluster") or "" for t in rows} - {""})
     return {"window": window, "reading_ms": reading, "iter": row.get("iter"),
             "sha": row.get("sha", ""), "cluster": row.get("cluster", ""),
             "change": row.get("change", ""), "row": row, "clusters": clusters}

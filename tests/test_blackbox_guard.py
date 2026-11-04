@@ -258,6 +258,30 @@ def test_a_probe_cannot_hide_under_the_guards_file_name(tmp_path):
     assert "notes/blackbox-guard.sh" in res.stdout
 
 
+def test_a_relative_source_path_survives_a_later_cd(tmp_path):
+    """The regression: sourcing the guard by a relative path and cd'ing before the first
+    probe left BLACKBOX_GUARD_SELF pointing at a file that no longer existed from the
+    new cwd, the self-skip never matched, and the guard scanned its own comments and
+    forbid list — refusing EVERY cmd in the job. Resolved to an absolute path at
+    source time, the self-skip works from any later cwd."""
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    (notes_dir / "blackbox-guard.sh").write_bytes(SCRIPT.read_bytes())
+    (notes_dir / "r01.py").write_text("import sass_tools\nprint('clean')\n")
+    script = (
+        "set -euo pipefail\n"
+        f'cd {tmp_path}\n'
+        'source notes/blackbox-guard.sh\n'      # relative, as a caller may do
+        'cd /\n'                                # the caller moves on before probing
+        'blackbox_guard "python3 notes/r01.py"\n'
+        'echo GUARD-PASSED\n'
+    )
+    res = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert res.returncode == 0, (res.returncode, res.stdout, res.stderr)
+    assert "GUARD-PASSED" in res.stdout
+    assert "BLACKBOX-GUARD REFUSED" not in res.stdout
+
+
 def test_extra_naming_the_trees_own_wrapper_warns_at_source_time(tmp_path):
     """Regression: EXTRA listed `gdn_ls_ref`, the tree's own wrapper that the README
     told probes to import. Say so the moment the guard is sourced — before any probe."""

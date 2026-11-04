@@ -77,12 +77,14 @@ BLACKBOX_FORBID_CMD='--set[= ]+full|--section[= ]+SourceCounters|--page[= ]+(sou
 # timeline_probe.py resolves its own path with __file__, so the token cannot go on the
 # notes/ list without refusing every job that tree starts.
 
-# This file, as it is being sourced. The driver seeds it into notes/, and notes/ is
-# what blackbox_guard scans — while this file's own comments and forbid list carry
-# every forbidden token, so scanning it would refuse EVERY `cmd` before a single probe
-# ran (unit tests that source it from scripts/ cannot show the self-hit). blackbox_guard skips a notes/ file only when it is this
-# guard byte for byte, so a probe cannot hide under the guard's file name.
-BLACKBOX_GUARD_SELF="${BASH_SOURCE[0]}"
+# This file, as it is being sourced — resolved to an ABSOLUTE path now, while the
+# sourcing cwd is still the one the relative path was written against. A caller that
+# sources it relatively (`source notes/blackbox-guard.sh`) and cd's before the first
+# probe would otherwise leave BLACKBOX_GUARD_SELF pointing at a file that no longer
+# exists from the new cwd: the self-skip in blackbox_guard never matches, the guard
+# scans its own comments and forbid list (they carry every forbidden token), and every
+# cmd is refused before a single probe runs. (The `cd && pwd` idiom is scripts/claude-goal.sh's.)
+BLACKBOX_GUARD_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
 # An EXTRA token that names the tree's own measurement wrapper (a <tree>/*.py module
 # probes are told to import) refuses every sanctioned probe — see the header. Say so

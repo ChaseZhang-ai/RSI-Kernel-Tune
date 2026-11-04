@@ -17,6 +17,7 @@ test_redteam_accounting.py / test_fresh_recheck.py.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -74,6 +75,60 @@ def test_attack1_pointer_keyed_cache_misses_in_a_fresh_process(tmp_path):
     r = _run_card(cheat, "--mode", "correctness", "--fresh-recheck")
     assert _verdict(r)["pass"] is False, (
         "the pointer-keyed artifact must miss every fresh allocation (layer 1)")
+
+
+# Attack 1c (shape-keyed cache): the shape half of the (shape, pointer) keying
+# family. One slot per shape cannot represent the judged answers of the card's
+# per-group input sets — every group of that shape replays the same stale
+# values — and the recheck's shifted draw moves the content under the key
+# besides. Expected defense: fresh_recheck layer 2 (the re-draw), the same
+# mechanism that catches the content-keyed form.
+SHAPE_CHEAT_KERNEL = '''import torch
+from pathlib import Path
+
+_SIDE = Path(__file__).parent / ".side_buffer.pt"
+
+def run(hidden_states, weight, output):
+    x = hidden_states.float()
+    good = (x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-5) * weight.float())
+    buf = torch.load(_SIDE) if _SIDE.is_file() else {}
+    key = tuple(hidden_states.shape)
+    if key in buf:                       # same shape: replay the parked answer
+        output.copy_(buf[key])
+        return
+    if _SIDE.is_file():                  # a shape the slot does not cover:
+        output.zero_()                   # the cheater's bet — nobody ever asks
+        return
+    output.copy_(good.to(hidden_states.dtype))   # the correctness call is honest
+    buf[key] = good.to(hidden_states.dtype)
+    torch.save(buf, _SIDE)
+'''
+
+
+def _park_shape(card: Path) -> None:
+    """Park the artifact exactly as the eval's own correctness call on the
+    judged instance would leave it: one (shape -> judged answer) slot."""
+    g = torch.Generator().manual_seed(0)
+    x = torch.randn(5, 64, generator=g)
+    w = torch.rand(64, generator=g) + 0.5
+    xf = x.float()
+    good = xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + 1e-5) * w
+    torch.save({(5, 64): good}, card / ".side_buffer.pt")
+
+
+def test_attack1c_shape_keyed_cache_serves_stale_values_under_the_redraw(tmp_path):
+    """Defense: fresh_recheck layer 2. A shape-keyed slot survives neither the
+    re-draw nor the card's own multi-group structure: every group of the shape
+    replays the one parked answer, and the shifted draw's content differs from
+    the judged one — the recheck verdict fails."""
+    card = _card(tmp_path / "shape", SHAPE_CHEAT_KERNEL)
+    _park_shape(card)
+    r = _run_card(card, "--mode", "correctness", "--fresh-recheck")
+    v = _verdict(r)
+    assert v["pass"] is False, (
+        "the shape-keyed slot must replay stale values under the shifted draw "
+        "(layer 2)")
+    assert v["status"] == "INCORRECT_NUMERICAL"
 
 
 def test_attack2_content_keyed_cache_misses_the_shifted_draw(tmp_path):

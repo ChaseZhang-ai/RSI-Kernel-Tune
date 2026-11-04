@@ -575,10 +575,13 @@ def reference_callables(problem: dict):
 
 def load_entry(path: Path, entry: str):
     """``entry`` from the python file at ``path``, imported as a module with its own
-    directory on sys.path (a solution may import its sibling files, at call time too)."""
+    directory on sys.path (a solution may import its sibling files, at call time too).
+    APPENDED, never prepended: the directory stays on sys.path for the life of the
+    process, and the reference loads before the kernel (BUG-SEED-09 -- a prepended
+    kernel directory shadowed the stdlib and the reference's own lazy imports)."""
     path = Path(path).resolve()
     if str(path.parent) not in sys.path:
-        sys.path.insert(0, str(path.parent))
+        sys.path.append(str(path.parent))
     spec = importlib.util.spec_from_file_location(
         f"lb_{path.parent.name}_{path.stem}", path)
     mod = importlib.util.module_from_spec(spec)
@@ -2203,6 +2206,14 @@ def task_correctness(problem: dict, impl, dps: bool, device, prec=None) -> tuple
         verdict.update(status=status, error=error)
         return verdict, sets
 
+    if not task_groups(problem):
+        # an empty input_groups used to skip the loop and leave `pass = True` standing,
+        # then blow up timing (no work) and the ncu window (calls // 0) -- a card
+        # defect reading as a win (BUG-C5-03), reported like the other malformed
+        # inputs below.
+        return fail("INPUT_ERROR", "the workload defines no input_groups: nothing to "
+                    "judge and nothing to time")
+
     for gi, group in enumerate(task_groups(problem)):
         try:
             inp = task_inputs(problem, group, device, make_inputs)
@@ -2453,12 +2464,19 @@ def run_bench(argv=None, problem_path=None) -> int:
         warm_reference(problem, ref_fn, ref_dps, device)
     try:
         impl, dps = (ref_fn, ref_dps) if args.impl == "ref" else _impl(problem, "kernel")
-    except Exception as e:  # noqa: BLE001
-        if Path(problem.get("kernel_file", "kernel.py")).suffix not in CUDA_KERNEL_SUFFIXES:
-            raise
+    except Exception as e:  # noqa: BLE001 — foreign code: reported, never a bare crash
+        # A CUDA kernel reports a failed build (COMPILE_ERROR); a Python kernel's
+        # module-level failure (an import the judge's env lacks, a raise at import
+        # time) is the same kind of card defect and used to escape as a bare raise,
+        # burning the job with no eval JSON at all (BUG-C5-02). Same channel, named
+        # for what failed (BUG-C5-02: this widens the structured-failure channel only;
+        # the gate's verdict semantics are untouched).
+        status = ("COMPILE_ERROR"
+                  if Path(problem.get("kernel_file", "kernel.py")).suffix in CUDA_KERNEL_SUFFIXES
+                  else "IMPORT_ERROR")
         why = f"{type(e).__name__}: {e}"
-        print(f"[bench] correctness: COMPILE_ERROR — {why[-6000:]}")
-        _emit({"correctness": {"pass": False, "status": "COMPILE_ERROR", "error": why[-6000:]},
+        print(f"[bench] correctness: {status} — {why[-6000:]}")
+        _emit({"correctness": {"pass": False, "status": status, "error": why[-6000:]},
                "performance": None})
         return 0
     return _run_task(problem, args, impl, dps, ref_fn, ref_dps, timed_ref, device)
@@ -2516,6 +2534,12 @@ def ncu_window(problem_path=None, calls: int = 8, which: str = "kernel") -> None
     # the calls spread over them: a profile of one group is a profile tuned to it
     pairs = [(v, task_inputs(v, g, "cuda")) for v in _task_shapes(problem)
              for g in task_groups(v)]
+    if not pairs:
+        # `calls // len(pairs)` divided by zero on the empty groups an empty
+        # input_groups produces (BUG-C5-03): refuse like the bench's fence does
+        print("[bench] ncu: INPUT_ERROR — the workload defines no input groups, "
+              "there is nothing to profile")
+        raise SystemExit(3)
     per = max(1, calls // len(pairs))
     outs = {id(v): allocate_outputs(v, "cuda") if dps else [] for v, _ in pairs}
     for v, inp in pairs:

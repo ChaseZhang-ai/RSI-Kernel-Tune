@@ -23,19 +23,32 @@ Two layers, neither relying on the agent sandbox:
   same channel ``[loop] job_env_files`` always was.
 
 What counts as harness: ``HARNESS_PREFIXES`` below, minus the kernel file and
-``notes/`` (the student's tree). ``window.toml`` and README are export-ignored and the
-driver reads the card's copies, so they are not listed; ``.gitattributes`` is, because
-``git archive`` reads its export rules from the archived tree.
+``notes/`` (the student's tree) -- plus the tree-root python modules a harness process
+executes without the tree naming them (``ROOT_PY_HOOKS``, ``is_harness_path``).
+``window.toml`` and README are export-ignored and the driver reads the card's copies,
+so they are not listed; ``.gitattributes`` is, because ``git archive`` reads its export
+rules from the archived tree.
 """
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 # A prefix ending in "/" names a directory; the others name a file.
 HARNESS_PREFIXES = ("eval/", "gpu_entry.sh", "ref_bin/", ".gitattributes")
-# The same set as git pathspecs (directories without the slash).
-HARNESS_PATHSPECS = tuple(p.rstrip("/") for p in HARNESS_PREFIXES)
+# Tree-root python modules a harness process runs without the tree naming them: the
+# interpreter's startup hooks (sitecustomize / usercustomize) and any shadow of a
+# stdlib top-level name -- the job tree rides PYTHONPATH ahead of the stdlib, so a
+# student's json.py IS the json the judge imports. Deeper paths stay the student's,
+# and so does a root module the tree names itself (a helper); the kernel file is
+# excluded by name below.
+ROOT_PY_HOOKS = ("sitecustomize", "usercustomize")
+# The git pathspec that lists root python modules for the checks above (git returns
+# every depth for it; is_harness_path narrows to the root hijacks).
+ROOT_PY_PATHSPEC = "*.py"
+# The same set as git pathspecs (directories without the slash) + the root glob.
+HARNESS_PATHSPECS = tuple(p.rstrip("/") for p in HARNESS_PREFIXES) + (ROOT_PY_PATHSPEC,)
 
 GUARD_REVERT = "revert"
 GUARD_WARN = "warn"
@@ -56,6 +69,14 @@ def resolve_guard_mode(cfg: dict) -> str:
     return mode
 
 
+def _root_py_hijack(stem: str) -> bool:
+    """Whether a tree-root ``<stem>.py`` is executed by a harness process without the
+    tree naming it: an interpreter startup hook, or a stdlib top-level name the
+    workspace's PYTHONPATH placement shadows (BUG-SEED-07: a root sitecustomize.py or
+    json.py hijacked every job; the monitor's sitecustomize even chain-imports it)."""
+    return stem in ROOT_PY_HOOKS or stem in getattr(sys, "stdlib_module_names", ())
+
+
 def is_harness_path(path: str, kernel_file: str = "") -> bool:
     """Whether ``path`` (tree-relative, posix) is card-owned evaluation harness."""
     p = str(path).strip()
@@ -63,6 +84,8 @@ def is_harness_path(path: str, kernel_file: str = "") -> bool:
         p = p[2:]
     if not p or p == str(kernel_file) or p.split("/")[0] == "notes":
         return False
+    if "/" not in p and p.endswith(".py") and _root_py_hijack(p[:-3]):
+        return True
     return any(p == pre.rstrip("/") or (pre.endswith("/") and p.startswith(pre))
                for pre in HARNESS_PREFIXES)
 
@@ -120,7 +143,13 @@ def card_harness_files(card_dir: Path, kernel_file: str = "") -> dict[str, Path]
 
 def tree_harness_files(repo: Path, ref: str, kernel_file: str = "") -> dict[str, tuple[str, str]] | None:
     """{path: (mode, blob sha)} of the harness files in commit ``ref`` of ``repo``."""
-    out = _git(Path(repo), "ls-tree", "-r", "-z", ref, "--", *HARNESS_PATHSPECS)
+    # git ls-tree matches pathspecs literally (no glob magic), so the root-module
+    # glob cannot narrow it: list the whole tree and let is_harness_path do the
+    # narrowing (a job tree is a few dozen files).
+    if ROOT_PY_PATHSPEC in HARNESS_PATHSPECS:
+        out = _git(Path(repo), "ls-tree", "-r", "-z", ref)
+    else:
+        out = _git(Path(repo), "ls-tree", "-r", "-z", ref, "--", *HARNESS_PATHSPECS)
     if out.returncode != 0:
         return None
     files = {}

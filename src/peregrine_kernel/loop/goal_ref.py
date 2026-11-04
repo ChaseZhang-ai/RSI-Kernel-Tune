@@ -413,9 +413,13 @@ def bar_met(bar: dict, reading: float | None, vs_ref: float | None) -> bool:
 _PY_LIBS = ("flashinfer", "sgl_kernel", "vllm", "deep_gemm", "flash_attn", "flash_mla",
             "xformers", "transformer_engine", "apex", "liger_kernel", "torchao",
             "fbgemm_gpu", "tensorrt_llm", "bitsandbytes", "cudnn", "nvmath", "cublas")
+# A dynamic import names its library in a string literal -- which the flattened body
+# stripped, so this pattern runs over the raw source (comments may over-name: the
+# heuristic flags what it can see, never proves absence).
+_DYNAMIC_IMPORT = re.compile(
+    r"\b(?:importlib(?:\.\w+)*\.import_module|__import__)\s*\(\s*[\"']"
+    r"(?:[\w.]+\.)?(" + "|".join(_PY_LIBS) + r")(?:\.[\w.]*)*[\"']")
 _LIB_PATTERNS = (
-    (re.compile(r"^\s*(?:from|import)\s+(" + "|".join(_PY_LIBS) + r")\b", re.M),
-     "imports the kernel library {0}"),
     (re.compile(r"\btorch\s*\.\s*(matmul|mm|bmm|addmm|baddbmm|einsum|_scaled_mm|softmax|"
                 r"layer_norm|rms_norm|group_norm|conv\w*|cdist)\s*\("),
      "computes with torch.{0}"),
@@ -424,10 +428,35 @@ _LIB_PATTERNS = (
                 r"embedding|silu|gelu)\s*\("),
      "computes with torch.nn.functional.{0}"),
     (re.compile(r"\btorch\s*\.\s*ops\s*\.\s*(\w+)"), "calls the registered op torch.ops.{0}"),
+    # the same computations through the C++ API, on .cu / .cpp sources (BUG-C3-01:
+    # a kernel calling torch::matmul / at::linear read as a kernel of its own)
+    (re.compile(r"\b(?:torch|at|c10)::\s*(matmul|mm|bmm|addmm|baddbmm|einsum|softmax|"
+                r"log_softmax|layer_norm|rms_norm|group_norm|conv\w*|linear|"
+                r"scaled_dot_product_attention|_scaled_mm|cdist)\s*\("),
+     "computes with the torch C++ API {0}"),
+    (re.compile(r"\btorch::ops::(\w+)"), "calls the registered op torch::ops::{0}"),
+    (re.compile(r"\btorch::nn::functional::(\w+)"), "computes with torch::nn::functional::{0}"),
     (re.compile(r"[\w\)\]][ \t]*@[ \t]*[\w\(]"), "uses the @ (matmul) operator"),
     (re.compile(r"\b(cublas\w*|cudnn\w*|cublasLt\w*)\s*\("), "calls {0}"),
     (re.compile(r"#\s*include\s*[<\"](cublas\w*|cudnn\w*)"), "includes {0}"),
 )
+
+
+def _py_import_libs(body: str) -> list[str]:
+    """The module names the import statements of the flattened body bind, in order:
+    EVERY name of an ``import`` statement, not just the first (``import os,
+    flashinfer`` read only ``os`` before -- BUG-SEED-08), the ``;``-joined statements
+    of one line included, and the module of a ``from``."""
+    names = []
+    for stmt in re.split(r"[;\n]", body):
+        m = re.match(r"\s*from\s+([\w.]+)", stmt)
+        if m:
+            names.append(m.group(1))
+            continue
+        m = re.match(r"\s*import\s+(.+)$", stmt)
+        if m:
+            names += re.findall(r"[\w.]+", m.group(1))
+    return names
 
 
 def _strip_comments(src: str, kernel_file: str) -> str:
@@ -461,11 +490,19 @@ def library_findings(src: str, kernel_file: str) -> list[str]:
     spellings, it cannot prove their absence."""
     body = _strip_comments(src, kernel_file)
     found = []
+    for name in _py_import_libs(body):
+        lib = name.split(".")[0]
+        if lib in _PY_LIBS and (text := f"imports the kernel library {lib}") not in found:
+            found.append(text)
     for rx, what in _LIB_PATTERNS:
         for m in rx.finditer(body):
             text = what.format(*(m.groups() or ("",)))
             if text not in found:
                 found.append(text)
+    for m in _DYNAMIC_IMPORT.finditer(src):
+        text = f"dynamically imports the kernel library {m.group(1)}"
+        if text not in found:
+            found.append(text)
     return found
 
 

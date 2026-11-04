@@ -134,3 +134,49 @@ def test_classify_keeps_the_old_reading_for_records_without_a_process_count():
     v = monitor.classify(result)
     assert v["status"] == "ok" and v["ran"] == ["base"]
     assert any("no kernel call was observed" in f["what"] for f in v["findings"])
+
+
+# --- BUG-SEED-15: a final marker without its JSON line falls back to the rebuild ------
+
+
+def test_parse_log_rebuilds_when_the_final_marker_has_no_json():
+    """The runner prints the final marker and its JSON on two lines: a job killed
+    between them leaves the marker without a result line. The per-profile blocks
+    still on the log are recovered instead of the whole parse reading as None."""
+    log = (f"{monitor.PROFILE_MARKER}\n"
+           + json.dumps({"profile": "base", "card_pass": True,
+                         "hook": {"processes": 1, "calls": []}}) + "\n"
+           + f"{monitor.PROFILE_MARKER}\n"
+           + json.dumps({"profile": "seed1", "card_pass": False,
+                         "hook": {"processes": 1, "calls": [], "perturbed": 3}}) + "\n"
+           + f"{monitor.MARKER}\n")          # the final JSON line never landed
+    res = monitor.parse_log(log)
+    assert res is not None and res["complete"] is False
+    assert [r["profile"] for r in res["profiles"]] == ["base", "seed1"]
+    # and the recovered findings survive classification: the seed1 FAIL is not lost
+    v = monitor.classify(res)
+    assert v["status"] == "alarm"
+    assert any(f["profile"] == "seed1" and f["severity"] == "alarm"
+               for f in v["findings"])
+
+
+def test_parse_log_with_a_complete_final_result_is_unchanged():
+    """A log whose final JSON line landed parses as before: the final result wins,
+    complete, with the skipped list the rebuild cannot know."""
+    prof = json.dumps({"profile": "base", "card_pass": True, "hook": {"calls": []}})
+    final = {"version": 1, "profiles": [{"profile": "base", "card_pass": True,
+                                         "hook": {"calls": []}}],
+             "skipped": [{"profile": "seed1", "why": "budget"}], "complete": True}
+    log = (f"{monitor.PROFILE_MARKER}\n{prof}\n"
+           f"{monitor.MARKER}\n{json.dumps(final)}\n")
+    res = monitor.parse_log(log)
+    assert res == final and res["complete"] is True
+
+
+def test_parse_log_without_any_final_marker_still_rebuilds():
+    """The pre-existing cut-short shape (no final marker at all) keeps rebuilding."""
+    log = (f"{monitor.PROFILE_MARKER}\n"
+           + json.dumps({"profile": "base", "card_pass": True, "hook": {"calls": []}}) + "\n")
+    res = monitor.parse_log(log)
+    assert res is not None and res["complete"] is False
+    assert [r["profile"] for r in res["profiles"]] == ["base"]

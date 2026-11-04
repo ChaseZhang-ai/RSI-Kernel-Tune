@@ -22,8 +22,9 @@ def parse_correctness(stdout: str) -> dict:
     all_pass = _ALL_PASS_RE.search(stdout)
     failed = _FAILED_RE.search(stdout)
     if failed:
+        # the count decides, not the marker's existence: "0/M FAILED" is a pass
         fails = int(failed.group(1))
-        passed = False
+        passed = fails == 0
     elif all_pass:
         fails = 0
         passed = True
@@ -42,7 +43,13 @@ def parse_perf(stdout: str) -> dict:
     region = stdout[marker:] if marker != -1 else stdout
     obj = _first_json_with_key(region, "performance") or _first_json_with_key(stdout, "performance")
     if obj is None:
-        return empty
+        # say why: an unparseable block after the marker and a missing marker are
+        # different diagnoses, and an all-None result without a note reads as
+        # "the bench said nothing" when it may have said something unreadable
+        return {**empty,
+                "note": ("the === JSON === block does not parse into an object "
+                         "carrying 'performance'" if marker != -1 else
+                         "no === JSON === block in the output")}
     corr = obj.get("correctness", {})
     perf = obj.get("performance", {})
     return {
@@ -56,20 +63,18 @@ def parse_perf(stdout: str) -> dict:
 
 
 def _first_json_with_key(text: str, key: str) -> dict | None:
-    """Scan for a top-level JSON object containing `key` (handles one-line dumps)."""
-    for start in (i for i, ch in enumerate(text) if ch == "{"):
-        depth = 0
-        for end in range(start, len(text)):
-            if text[end] == "{":
-                depth += 1
-            elif text[end] == "}":
-                depth -= 1
-                if depth == 0:
-                    try:
-                        obj = json.loads(text[start:end + 1])
-                    except json.JSONDecodeError:
-                        break
-                    if isinstance(obj, dict) and key in obj:
-                        return obj
-                    break
+    """Scan for a JSON object containing `key` (handles one-line dumps).
+
+    The scan goes through JSONDecoder.raw_decode, which knows where a JSON string
+    ends: the old hand-rolled brace counter read a ``}`` inside a string value as
+    a closing brace, lost the depth, truncated every candidate, and quietly
+    returned None for the whole output."""
+    dec = json.JSONDecoder()
+    for m in re.finditer(r"\{", text):
+        try:
+            obj, _ = dec.raw_decode(text, m.start())
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and key in obj:
+            return obj
     return None

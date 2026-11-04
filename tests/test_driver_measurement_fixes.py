@@ -315,3 +315,27 @@ def test_cluster_scale_ignores_an_anchor_from_another_window(tmp_path):
     # the same anchor read from the other window must not scale the target
     ctx.gate_window = "e2e"
     assert drv._cluster_scale(ctx) is None
+
+
+# --- C-T2-01: the student digest's header line carries the clock header ---------
+
+def test_student_digest_header_carries_the_clock_header(tmp_path):
+    # build_digest computes the WP15 clock header (the last window's SM clock
+    # beside the job mean — the cross-job comparison's first reading), but the
+    # digest writer's key list dropped it, so the file never carried it; the
+    # curve/regressions trimming above the write was dead with it (nothing but
+    # the header keys and decisions is serialized).
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    ctx.gate_window = "device"
+    append_record(ctx.status_path, IterationRecord(
+        iter=0, decision_id="D0", change="c", correctness=True, verdict="KEEP",
+        bwd_median_ms=1.8, device_median_ms=1.8, sha="s0",
+        gpu_state={"sm_clock_mhz": 1500,
+                   "window_readings": [{"sm_clock_mhz": 1450}]}))
+    drv._write_student_digest(ctx)
+    path = drv._student_digest_path(ctx)
+    head = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+    assert head.get("clock", {}).get("sm_clock_mhz") == 1450
+    # the header line still carries everything it always did
+    assert set(head) >= {"sol", "target", "achieved", "flags", "clock"}

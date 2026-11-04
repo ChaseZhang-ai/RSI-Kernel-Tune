@@ -1723,15 +1723,13 @@ def _write_student_digest(ctx: LoopContext) -> None:
         n = ctx.student_tail_lines or 50
         rows = digest.get("decisions", [])
         digest["decisions"] = rows[-n:] if len(rows) > n else rows
-        curve = digest.get("curve", [])
-        digest["curve"] = curve[-n:] if len(curve) > n else curve
-        regressions = digest.get("regressions", [])
-        digest["regressions"] = regressions[-n:] if len(regressions) > n else regressions
+        # (the curve/regressions tails once got trimmed here, but nothing below
+        # serializes them — the trim was dead and is gone)
         path = _student_digest_path(ctx)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(json.dumps({k: digest[k] for k in
-                                 ("sol", "target", "achieved", "flags")},
+                                 ("sol", "clock", "target", "achieved", "flags")},
                                 ensure_ascii=False) + "\n")
             for row in digest["decisions"]:
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")

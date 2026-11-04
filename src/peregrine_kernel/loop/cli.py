@@ -372,9 +372,14 @@ class RealBackend:
         drains the pipes so this side can print a line every
         ``agent_heartbeat_s`` seconds.
         """
+        # The turn's own session: `shell=True` makes Popen's child a wrapper shell,
+        # so killing only that child would orphan the model process under it. A
+        # dedicated process group (the same hygiene goal_ref.py gives a /goal
+        # session) lets the exit path below end everything at once.
         proc = subprocess.Popen(
             cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, cwd=self.workspace,
+            start_new_session=True,
         )
         box: dict = {}
 
@@ -399,8 +404,11 @@ class RealBackend:
             # Ctrl-C / SystemExit lands on THIS thread while the pump owns the
             # pipes. `subprocess.run` killed the child on its way out; a Popen
             # driven from a thread must do that by hand, or the agent (a claude
-            # process) outlives the loop and keeps spending API usage.
-            proc.kill()
+            # process) outlives the loop and keeps spending API usage. The
+            # process group is ended, not just the wrapper shell: under
+            # `shell=True` the model process is the wrapper's child, and a
+            # watchdog's SIGKILL path gets no say at all.
+            _end_process_group(proc)
             pump.join(timeout=5)
             raise
         if "exc" in box:

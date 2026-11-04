@@ -180,9 +180,12 @@ def new_kernels_task(argv) -> int:
         return 2
 
     d.mkdir(parents=True)
+    # the kernel's true kernels/-relative directory (family segment included):
+    # the one provenance path both generated surfaces cite.
+    kernel_dir = kfile.parent.relative_to(repo_root() / "kernels").as_posix()
     task_toml = FROM_KERNELS_TASK_TOML.format(
         op=args.op,
-        kernel_dir=kfile.parent.relative_to(repo_root() / "kernels").as_posix(),
+        kernel_dir=kernel_dir,
         language="cutedsl",
         arch={"h100": "sm90", "b200": "sm100"}.get(kfile.parent.name, kfile.parent.name))
     (d / "task.toml").write_text(task_toml, encoding="utf-8")
@@ -196,7 +199,7 @@ def new_kernels_task(argv) -> int:
         encoding="utf-8")
     (d / "description.md").write_text(
         f"# {args.op}\n\n"
-        f"Published kernel `kernels/{kfile.parent.parent.name}/{kfile.parent.name}/kernel.py` "
+        f"Published kernel `kernels/{kernel_dir}/kernel.py` "
         f"(its docstring below is the frozen contract: axes, dtypes, input semantics). The "
         f"reference is that kernel, sealed.\n\n"
         f"## Semantics (from the published kernel)\n\n{doc}\n\n"

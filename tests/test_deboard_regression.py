@@ -217,9 +217,15 @@ def test_from_kernels_scaffolds_a_task_from_a_published_kernel(repo, monkeypatch
     task_toml = (d / "task.toml").read_text()
     assert 'arch     = "sm90"' in task_toml and 'language = "cutedsl"' in task_toml
     assert 'blackbox = true' in task_toml and 'run      = "reference/run.py:run"' in task_toml
+    # both generated provenance surfaces cite the kernel's real kernels/-relative
+    # directory (family segment included — the R2 auditA finding: the description
+    # used to drop `attention/` while the task.toml header kept it)
+    assert "kernels/attention/rms_h64/sm90" in task_toml
+    desc = (d / "description.md").read_text()
+    assert "kernels/attention/rms_h64/sm90/kernel.py" in desc
     ref = (d / "reference" / "run.py").read_text()
     assert "run = rms_h64" in ref and "rsqrt" in ref          # the kernel rides, aliased
-    assert "frozen contract" in (d / "description.md").read_text()
+    assert "frozen contract" in desc
     task = load_task(d)
     assert task.mode == "blackbox" and task.arch == "sm90"
     assert task.shapes[0].axes == {"seqs": 64}

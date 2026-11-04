@@ -310,17 +310,24 @@ def _workloads(perf: dict) -> list:
         if not isinstance(w, dict):
             continue
         item = {"name": str(w.get("name", len(out)))}
+        # A NaN/inf reading is a malformed measurement, not a small one: like
+        # readings_spread_pct below, drop it here — a NaN that reaches the
+        # trajectory takes over every min() it lands in (a NaN best hijacks the
+        # plateau comparison, so the meta loop can never fire).
         for key in _WORKLOAD_KEYS:
             v = w.get(key)
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
+            if (isinstance(v, (int, float)) and not isinstance(v, bool)
+                    and math.isfinite(float(v))):
                 item[key] = float(v)
         for key in _WORKLOAD_LIST_KEYS:
             v = w.get(key)
             if isinstance(v, (list, tuple)):
                 item[key] = [float(x) for x in v
-                             if isinstance(x, (int, float)) and not isinstance(x, bool)]
+                             if isinstance(x, (int, float)) and not isinstance(x, bool)
+                             and math.isfinite(float(x))]
         host = w.get("host_enqueue_ms")
-        if isinstance(host, (int, float)) and not isinstance(host, bool):
+        if (isinstance(host, (int, float)) and not isinstance(host, bool)
+                and math.isfinite(float(host))):
             item["host_enqueue_ms"] = float(host)
         # WP15: the workload's SPRT early-stop decision (timing.py's controller),
         # so the driver's card rule (a loss-stopped workload cannot acquit the
@@ -335,12 +342,15 @@ def _workloads(perf: dict) -> list:
 
 
 def _float_list(raw) -> list:
-    """The numeric entries of ``raw`` as floats; [] for anything else (a bench that
-    reports no raw readings, or a malformed one)."""
+    """The finite numeric entries of ``raw`` as floats; [] for anything else (a bench
+    that reports no raw readings, or a malformed one). NaN/inf are dropped like
+    readings_spread_pct drops them — a NaN reading is a broken measurement, and one
+    let into a readings list poisons the spreads and medians computed from it."""
     if not isinstance(raw, (list, tuple)):
         return []
     return [float(v) for v in raw
-            if isinstance(v, (int, float)) and not isinstance(v, bool)]
+            if isinstance(v, (int, float)) and not isinstance(v, bool)
+            and math.isfinite(float(v))]
 
 
 def describe_workload_readings(workloads: list) -> str:
@@ -556,9 +566,15 @@ def parse_eval(text: str) -> EvalResult:
     def _opt(key: str, legacy: str | None = None) -> float | None:
         # legacy: pre-rename bench key (cublas_* — the in-job reference was recorded
         # under that name whatever library it was). Read so older cards' bench.py
-        # keeps parsing; new benches emit the ref_* names only.
+        # keeps parsing; new benches emit the ref_* names only. A non-finite value
+        # (a NaN median from a bench that measured nothing) reads as None — the same
+        # filter readings_spread_pct applies — because a NaN gate reading takes over
+        # every min() it joins and silently disables the plateau trigger.
         v = perf.get(key, perf.get(legacy) if legacy else None)
-        return float(v) if v is not None else None
+        if v is None:
+            return None
+        f = float(v)
+        return f if math.isfinite(f) else None
 
     def _opt_any(*keys: str) -> float | None:
         for key in keys:
@@ -596,8 +612,10 @@ def parse_eval(text: str) -> EvalResult:
         # COMPILE_ERROR verdict's nvcc/ptxas error and a numeric FAIL's surrounding
         # output are in the log the parser holds, so the record now holds them too.
         error="" if correct else _with_log_tail(_correctness_error(corr_obj), text),
-        bwd_median_ms=float(ms) if ms is not None else None,
-        mfu=float(mfu) if mfu is not None else None,
+        bwd_median_ms=(float(ms) if ms is not None and math.isfinite(float(ms))
+                       else None),
+        mfu=(float(mfu) if mfu is not None and math.isfinite(float(mfu))
+             else None),
         ref_median_ms=_opt("ref_median_ms", "cublas_median_ms"),
         vs_ref=_opt("vs_ref", "vs_cublas"),
         device_median_ms=_opt("device_median_ms"),

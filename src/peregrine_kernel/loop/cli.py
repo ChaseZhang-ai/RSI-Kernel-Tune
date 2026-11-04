@@ -372,9 +372,13 @@ class RealBackend:
         drains the pipes so this side can print a line every
         ``agent_heartbeat_s`` seconds.
         """
+        # A session of its own: the turn is killed as a GROUP below, and a group is
+        # only the turn's when Popen made one (the shell and every child it spawns --
+        # the model process included -- sit inside it, reachable from here).
         proc = subprocess.Popen(
             cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, cwd=self.workspace,
+            start_new_session=True,
         )
         box: dict = {}
 
@@ -399,8 +403,11 @@ class RealBackend:
             # Ctrl-C / SystemExit lands on THIS thread while the pump owns the
             # pipes. `subprocess.run` killed the child on its way out; a Popen
             # driven from a thread must do that by hand, or the agent (a claude
-            # process) outlives the loop and keeps spending API usage.
-            proc.kill()
+            # process) outlives the loop and keeps spending API usage. The shell
+            # is only the turn's first process: its agent (the leg script's
+            # grandchild) survives a bare kill, so the whole GROUP goes, via the
+            # same terminator every other turn-killer here uses.
+            _end_process_group(proc)
             pump.join(timeout=5)
             raise
         if "exc" in box:

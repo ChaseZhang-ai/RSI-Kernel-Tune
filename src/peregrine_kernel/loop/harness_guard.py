@@ -23,19 +23,51 @@ Two layers, neither relying on the agent sandbox:
   same channel ``[loop] job_env_files`` always was.
 
 What counts as harness: ``HARNESS_PREFIXES`` below, minus the kernel file and
-``notes/`` (the student's tree). ``window.toml`` and README are export-ignored and the
-driver reads the card's copies, so they are not listed; ``.gitattributes`` is, because
-``git archive`` reads its export rules from the archived tree.
+``notes/`` (the student's tree), plus the tree-root shadow modules -- a root
+``sitecustomize.py`` or a root file named like a module the judge imports (``json.py``,
+``os.py``, ``torch.py``, ...) would be imported INSTEAD of the real one, so it is
+harness wherever the tree root is on sys.path ahead of it. ``window.toml`` and README
+are export-ignored and the driver reads the card's copies, so they are not listed;
+``.gitattributes`` is, because ``git archive`` reads its export rules from the
+archived tree.
 """
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 # A prefix ending in "/" names a directory; the others name a file.
 HARNESS_PREFIXES = ("eval/", "gpu_entry.sh", "ref_bin/", ".gitattributes")
-# The same set as git pathspecs (directories without the slash).
-HARNESS_PATHSPECS = tuple(p.rstrip("/") for p in HARNESS_PREFIXES)
+# The same set as git pathspecs (directories without the slash), plus the tree-root
+# *.py pathspec: git diff / git ls-files match the wildcard at every depth, and
+# ``is_harness_path`` decides which of the surfaced .py files count as harness.
+ROOT_PY_PATHSPEC = "*.py"
+HARNESS_PATHSPECS = tuple(p.rstrip("/") for p in HARNESS_PREFIXES) + (ROOT_PY_PATHSPEC,)
+# git ls-tree matches literal paths and directory prefixes only -- no wildcards -- so
+# the recursive harness listing takes the prefix pathspecs, and the tree-root .py
+# files surface from the top-level (non-recursive) listing instead.
+HARNESS_TREE_PATHSPECS = tuple(p.rstrip("/") for p in HARNESS_PREFIXES)
+
+# The shadow-module names: what Python itself imports at start-up (the site hooks) and
+# what the harness and the judge import by name -- the standard library (any top-level
+# name of it) and the third-party modules the evaluation runs on. A tree-root file with
+# one of these names is imported instead of the real module by every process whose
+# sys.path reaches the tree root first (gpu_entry.sh puts $WORKSPACE on PYTHONPATH;
+# ``python3 -c`` starts on the working directory), so it can silence the correctness
+# monitor's loader or forge what the judge reads. Other root .py files stay the
+# student's: the kernel may import root siblings by name, and the kernel file itself is
+# excluded in ``is_harness_path``.
+_SITE_HOOKS = ("sitecustomize", "usercustomize")
+_JUDGE_IMPORTS = ("torch", "numpy", "triton", "cuda", "cutlass", "flashinfer")
+_ROOT_PY_NAMES = frozenset(_SITE_HOOKS + _JUDGE_IMPORTS) | frozenset(sys.stdlib_module_names)
+
+
+def _root_py_shadows(rel: str) -> bool:
+    """``rel`` is a tree-root ``*.py`` whose name Python or the judge imports."""
+    if not rel.endswith(".py") or "/" in rel:
+        return False
+    return rel[:-3] in _ROOT_PY_NAMES
 
 GUARD_REVERT = "revert"
 GUARD_WARN = "warn"
@@ -63,6 +95,8 @@ def is_harness_path(path: str, kernel_file: str = "") -> bool:
         p = p[2:]
     if not p or p == str(kernel_file) or p.split("/")[0] == "notes":
         return False
+    if _root_py_shadows(p):
+        return True
     return any(p == pre.rstrip("/") or (pre.endswith("/") and p.startswith(pre))
                for pre in HARNESS_PREFIXES)
 
@@ -120,15 +154,21 @@ def card_harness_files(card_dir: Path, kernel_file: str = "") -> dict[str, Path]
 
 def tree_harness_files(repo: Path, ref: str, kernel_file: str = "") -> dict[str, tuple[str, str]] | None:
     """{path: (mode, blob sha)} of the harness files in commit ``ref`` of ``repo``."""
-    out = _git(Path(repo), "ls-tree", "-r", "-z", ref, "--", *HARNESS_PATHSPECS)
+    repo = Path(repo)
+    out = _git(repo, "ls-tree", "-r", "-z", ref, "--", *HARNESS_TREE_PATHSPECS)
     if out.returncode != 0:
         return None
+    top = _git(repo, "ls-tree", "-z", ref)
+    if top.returncode != 0:
+        return None
     files = {}
-    for entry in out.stdout.split("\0"):
+    for entry in out.stdout.split("\0") + top.stdout.split("\0"):
         if not entry or "\t" not in entry:
             continue
         meta, rel = entry.split("\t", 1)
         mode, _kind, sha = meta.split()
+        if mode.startswith("04"):        # a directory: the top-level listing names them
+            continue
         if is_harness_path(rel, kernel_file):
             files[rel] = (mode, sha)
     return files

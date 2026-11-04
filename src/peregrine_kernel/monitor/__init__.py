@@ -106,12 +106,19 @@ def _json_after(text: str, at: int, marker: str) -> dict | None:
 
 
 def parse_log(text: str) -> dict | None:
-    """The runner's final result; when the job was cut short before it, a partial
+    """The runner's final result; when it is missing or unreadable (the job was cut
+    short before it, or died between the final marker and the JSON dump), a partial
     result (``complete`` False) rebuilt from the per-profile blocks."""
     text = text or ""
     at = text.rfind(MARKER)
     if at != -1:
-        return _json_after(text, at, MARKER)
+        final = _json_after(text, at, MARKER)
+        if final is not None:
+            return final
+    # No final JSON to read: the marker never printed, or it stands over a
+    # truncated / missing dump (the job was killed between the two prints, or
+    # mid-dump). The per-profile blocks still hold every profile that finished —
+    # rebuild from them rather than losing their alarm-level findings.
     recs, pos = [], text.find(PROFILE_MARKER)
     while pos != -1:
         rec = _json_after(text, pos, PROFILE_MARKER)

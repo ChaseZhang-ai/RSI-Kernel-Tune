@@ -210,8 +210,14 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         shutil.rmtree(work, ignore_errors=True)
         result["seconds"] = round(time.time() - t0, 1)
-        print(MARKER, flush=True)
-        print(json.dumps({**result, "complete": True}, separators=(",", ":")), flush=True)
+        # One write for marker + JSON: as two separate prints, a job killed between
+        # them left the marker standing over no payload at all. The harness still
+        # rebuilds from the per-profile blocks when this line is torn, but the
+        # smaller the window, the more often the complete result survives.
+        sys.stdout.write(MARKER + "\n"
+                         + json.dumps({**result, "complete": True}, separators=(",", ":"))
+                         + "\n")
+        sys.stdout.flush()
     return 0
 
 

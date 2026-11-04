@@ -42,7 +42,8 @@ from pathlib import Path
 
 from peregrine_kernel.submit.config import SubmitConfig, is_secret_env
 from peregrine_kernel.submit.jobs import (BEGIN_MARKER, RUN_HEADROOM_S, STATUS_FAILED,
-                                     STATUS_SUCCEEDED, TRANSPORT_ERROR_MARKER, locked)
+                                     STATUS_LOST, STATUS_SUCCEEDED,
+                                     TRANSPORT_ERROR_MARKER, locked)
 
 LOCAL_TREE = ".exec/tree"
 CMD_PREFIX = "cmd:"
@@ -571,6 +572,20 @@ class DirectRunner:
                     if rc == 0:
                         return STATUS_SUCCEEDED
                     if _began(log_file, start, BEGIN_MARKER):
+                        if rc == 255:
+                            # The ssh client itself failed after the job began: the
+                            # connection dropped mid-run and the remote outcome cannot
+                            # be confirmed from here. The setsid session survives an
+                            # sshd hangup, so END it (the next job's extract must not
+                            # rm -rf a tree a live session is running), and record
+                            # Lost — a machine fault the loop resubmits, never charging
+                            # the kernel for a verdict nobody saw.
+                            self._stop_remote(log_file)
+                            log_file.write(f"[direct] ssh to {self.cfg.exec_host} dropped "
+                                           f"after the job began (rc=255) -- recorded "
+                                           f"{STATUS_LOST}\n")
+                            log_file.flush()
+                            return STATUS_LOST
                         log_file.write(f"[direct] gpu_entry {mode} exited rc={rc}\n")
                         log_file.flush()
                         return STATUS_FAILED

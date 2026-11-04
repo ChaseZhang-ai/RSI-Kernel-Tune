@@ -478,3 +478,36 @@ def test_the_session_prints_the_begin_marker_only_under_the_lock(tmp_path):
     text = log.read_text()
     assert jobs.BEGIN_MARKER in text and "job ran" in text
     assert text.index(jobs.BEGIN_MARKER) < text.index("job ran")
+
+
+# --- BUG-SEED-12: an ssh drop after the job began is Lost, and ends the session -------
+
+from test_direct_delivery import _FakeSsh  # noqa: E402
+
+
+def test_an_ssh_drop_after_the_job_began_is_lost_and_ends_the_session(tmp_path):
+    """The ssh client failing (rc=255) after the begin marker used to be recorded
+    Failed: the kernel was charged for a verdict nobody saw, and the remote setsid
+    session -- which an sshd hangup does not reach -- kept running and holding the
+    host lock for the next job's extract to rm -rf. Now: session stopped, verdict
+    Lost (the loop resubmits without charging)."""
+    cfg = _ssh_cfg(tmp_path)
+    fake = _FakeSsh([(255, True)])
+    status, log = _ssh_run(cfg, fake)
+    assert status == jobs.STATUS_LOST
+    assert "dropped after the job began" in log
+    assert jobs.TRANSPORT_ERROR_MARKER not in log
+    assert any("pkill" in argv[-1] for argv, _ in fake.runs), \
+        "the remote session was not stopped"
+    assert len(fake.execs) == 1, "an unconfirmed drop must not re-execute the job"
+
+
+def test_a_confirmed_remote_failure_stays_failed(tmp_path):
+    """A remote command that ran to its own non-zero exit (rc=1, session over) is a
+    confirmed verdict: Failed, charged, no stop round-trip, no transport retry."""
+    cfg = _ssh_cfg(tmp_path)
+    fake = _FakeSsh([(1, True)])
+    status, log = _ssh_run(cfg, fake)
+    assert status == jobs.STATUS_FAILED
+    assert "exited rc=1" in log and "pkill" not in log
+    assert len(fake.execs) == 1 and len(fake.runs) == 1

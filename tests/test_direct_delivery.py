@@ -172,7 +172,7 @@ class _FakeSsh:
         self.execs: list = []
         self.stdin_text = ""
 
-    def run(self, argv, input=None, capture_output=False):
+    def run(self, argv, input=None, capture_output=False, timeout=None):
         self.runs.append((argv, input))
         return subprocess.CompletedProcess(argv, 0, b"", b"")
 

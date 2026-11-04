@@ -84,7 +84,12 @@ def check_problems(check_dir: Path, task) -> list[str]:
         groups = json.loads((d / GROUPS).read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         return [f"{CHECK_DIR}: a JSON file does not parse: {e}"]
-    axes = set(task.shapes[0].axes)
+    # the union of every shape's axes: shapes[0] alone missed an axis a later
+    # shape introduces, so a definition keyed on it was called un-declared (or
+    # an undeclared one slipped through) depending on the shapes' order.
+    axes: set = set()
+    for s in task.shapes:
+        axes |= set(s.axes)
     out += _definition_problems(defn, axes)
     src = (d / JUDGE).read_text(encoding="utf-8")
     inputs = list((defn.get("inputs") or {}) if isinstance(defn, dict) else {})

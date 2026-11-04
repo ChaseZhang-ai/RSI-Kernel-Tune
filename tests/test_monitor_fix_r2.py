@@ -62,3 +62,32 @@ def test_classify_with_a_live_hook_stays_ok_and_old_records_unaffected():
     v = monitor.classify(old)
     assert v["status"] == "ok"
     assert not any("monitor hook never ran" in f["what"] for f in v["findings"])
+
+
+# --- BUG-SEED-15: a killed final JSON still yields the finished profiles ----------
+def test_parse_log_rebuilds_partial_when_final_json_is_truncated():
+    blocks = [_p_rec("base", calls=[_call(pid=7)]),
+              _p_rec("repeat", card_pass=False, calls=[_call(i=0, pid=8)])]
+    text = "".join(f"{monitor.PROFILE_MARKER}\n{json.dumps(b)}\nnoise\n" for b in blocks)
+    text += monitor.MARKER + "\n" + '{"profiles":[{"profile":"base"'   # killed mid-dump
+    res = monitor.parse_log(text)
+    assert res is not None and res["complete"] is False
+    assert [r["profile"] for r in res["profiles"]] == ["base", "repeat"]
+    v = monitor.classify(res)
+    assert v["status"] == "alarm"          # the verdict flip survives the kill
+    assert any("cut short after 2" in f["what"] for f in v["findings"])
+
+
+def test_parse_log_partial_when_the_marker_stands_alone():
+    block = _p_rec("base")
+    text = f"{monitor.PROFILE_MARKER}\n{json.dumps(block)}\n{monitor.MARKER}\n"
+    res = monitor.parse_log(text)
+    assert res is not None and res["complete"] is False and len(res["profiles"]) == 1
+
+
+def test_parse_log_a_complete_final_json_still_wins():
+    final = {"profiles": [_p_rec("base")], "skipped": [], "complete": True}
+    text = (f"{monitor.PROFILE_MARKER}\n{json.dumps(_p_rec('base'))}\n"
+            f"{monitor.MARKER}\n{json.dumps(final)}")
+    res = monitor.parse_log(text)
+    assert res == final and res["complete"] is True

@@ -106,12 +106,14 @@ def _json_after(text: str, at: int, marker: str) -> dict | None:
 
 
 def parse_log(text: str) -> dict | None:
-    """The runner's final result; when the job was cut short before it, a partial
-    result (``complete`` False) rebuilt from the per-profile blocks."""
+    """The runner's final result; when the job was cut short before it — or the
+    final JSON dump itself was killed mid-line — a partial result (``complete``
+    False) rebuilt from the per-profile blocks."""
     text = text or ""
     at = text.rfind(MARKER)
-    if at != -1:
-        return _json_after(text, at, MARKER)
+    final = _json_after(text, at, MARKER) if at != -1 else None
+    if final is not None:
+        return final
     recs, pos = [], text.find(PROFILE_MARKER)
     while pos != -1:
         rec = _json_after(text, pos, PROFILE_MARKER)

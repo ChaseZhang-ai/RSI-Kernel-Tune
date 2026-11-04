@@ -216,8 +216,18 @@ def test_the_host_path_note_records_the_deployment_cost_without_touching_the_gat
                           ref_host_enqueue_ms=SPAN_REF_HOST_MS)
     assert note.startswith("HOST PATH:")
     assert "NOT affected" in note and "not a gate" in note
-    assert "3.4x thinner" in note                   # 0.06463 / 0.01911
+    assert "3.4x thicker" in note                   # 0.06463 / 0.01911: the student's
+    # enqueue path is the THICK one, and the note says so (SEED-23: it used to print
+    # "thinner" no matter which side was bigger)
     assert "inflated" not in note and "HOST-BOUND" not in note
+
+
+def test_the_host_path_note_names_both_directions():
+    # a thin wrapper reads as thinner than the reference's, a thick one as thicker
+    thin = host_path_note(0.02, 0.01522, basis=BASIS_CUPTI, ref_host_enqueue_ms=0.06463)
+    thick = host_path_note(0.08, 0.01522, basis=BASIS_CUPTI, ref_host_enqueue_ms=0.02)
+    assert "0.3x thinner" in thin and "thicker" not in thin
+    assert "4.0x thicker" in thick and "thinner" not in thick
 
 
 def test_the_host_path_note_is_silent_on_a_plain_basis_and_under_the_threshold():

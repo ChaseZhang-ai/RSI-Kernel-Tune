@@ -152,8 +152,13 @@ def host_path_note(host_enqueue_ms, device_ms, *, basis, ref_host_enqueue_ms=Non
             f"{device_ms:.4g} ms kernel (basis={basis}: the gate reads the kernel alone, "
             f"so the gate reading is NOT affected)")
     if ref_host_enqueue_ms:
+        # say the direction the ratio actually has: the docstring promises a wrapper
+        # "N× thicker than the reference's is visible" -- a fixed "thinner" printed
+        # 4x-thicker wrappers as if they were leaner than the reference's (SEED-23)
+        ratio = host_enqueue_ms / ref_host_enqueue_ms
+        word = "thicker" if ratio >= 1.0 else "thinner"
         head += (f"; the in-job reference enqueues in {ref_host_enqueue_ms:.4g} ms "
-                 f"({host_enqueue_ms / ref_host_enqueue_ms:.1f}x thinner)")
+                 f"({ratio:.1f}x {word})")
     return head + ". Deployment pays the python path; it is a cost to record, not a gate."
 
 

@@ -7,9 +7,12 @@ test_loop_driver.py's FakeBackend/_ctx, so the whole file runs without a GPU.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 import peregrine_kernel.loop.driver as drv
+from peregrine_kernel.baseline import RefBaseline
 from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
 from peregrine_kernel.loop.parse import parse_eval
 
@@ -286,3 +289,29 @@ def test_quarantine_collision_gets_a_sequence_number(tmp_path):
               for p in qdir.iterdir() if p.is_file()}
     assert len(bodies) == 2
     assert sorted(bodies.values()) == ["root-level lookalike\n", "v1\n"]
+
+
+# --- BUG-C1-03: a cluster anchor read is window-checked -------------------------
+
+def test_cluster_scale_ignores_an_anchor_from_another_window(tmp_path):
+    # The anchor file stores ref_ms together with the window it measured
+    # (the writer stamps window+home_ref_ms), but the read side never checked
+    # the window: a device-window anchor scaled an e2e target (or the reverse)
+    # — numbers from different timing windows dividing each other. A
+    # mismatched anchor is no anchor: the target stop falls to the existing
+    # re-measure/suspend channel instead.
+    be = FakeBackend([], [])
+    be.last_cluster = "box-b"
+    ctx = _ctx(tmp_path, be)
+    ctx.home_cluster = "home"
+    ctx.gate_window = "device"
+    ctx.ref_baseline = RefBaseline(op="demo", ms=2.0, ms_device=2.0, job="j",
+                                   ref_name="cuDNN")
+    ctx.reanchor_ref = None   # the fresh-measurement channel is closed here
+    (tmp_path / "cluster_anchors.json").write_text(json.dumps(
+        {"box-b": {"attempts": 1, "home_ref_ms": 2.0,
+                   "window": "device", "ref_ms": 2.4}}), encoding="utf-8")
+    assert drv._cluster_scale(ctx) == pytest.approx(1.2)
+    # the same anchor read from the other window must not scale the target
+    ctx.gate_window = "e2e"
+    assert drv._cluster_scale(ctx) is None

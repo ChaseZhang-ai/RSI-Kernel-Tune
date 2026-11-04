@@ -2109,7 +2109,11 @@ def _cluster_scale(ctx: LoopContext) -> float | None:
         return min(seen) / home
     anchors = _load_anchors(ctx)
     entry = anchors.get(cluster) or {}
-    if entry.get("ref_ms"):
+    # the anchor is only an anchor for its own window (the writer stamps
+    # window+home_ref_ms beside ref_ms): a device-window reading must not scale
+    # an e2e target or the reverse. Mismatched = no anchor here — the fresh
+    # re-measure / suspend channel below decides instead.
+    if entry.get("ref_ms") and entry.get("window") == ctx.gate_window:
         return float(entry["ref_ms"]) / home
     attempts = int(entry.get("attempts", 0))
     if ctx.reanchor_ref is None or attempts >= _REANCHOR_ATTEMPTS:

@@ -342,7 +342,17 @@ def status_text(run) -> str:
             lines.append(f"  {key}: {rec[key]}")
     status = run.operators_dir / run.task_name / "student" / "status.jsonl"
     if status.is_file():
-        rows = [json.loads(x) for x in status.read_text().splitlines() if x.strip()]
+        # BUG-SEED-39 (ported hardening): a status line killed mid-append is not a
+        # verdict -- skip it instead of letting one torn line take `peregrine
+        # status` down for a run that is otherwise fine.
+        rows = []
+        for x in status.read_text().splitlines():
+            if not x.strip():
+                continue
+            try:
+                rows.append(json.loads(x))
+            except ValueError:
+                continue
         keeps = [r for r in rows if r.get("verdict") == "KEEP"]
         lines.append(f"  iterations: {len(rows)} ({len(keeps)} kept)")
     if run.log.is_file():
@@ -403,9 +413,13 @@ def _entered(run, machine):
     finally:
         if sys.stdout is not saved_out:
             sys.stdout.flush()
+            if isinstance(sys.stdout, _Tee):
+                sys.stdout._file.close()    # BUG-SEED-39: the log file is ours; close it
             sys.stdout = saved_out
         if sys.stderr is not saved_err:
             sys.stderr.flush()
+            if isinstance(sys.stderr, _Tee):
+                sys.stderr._file.close()
             sys.stderr = saved_err
         for k, v in saved_env.items():
             if v is None:

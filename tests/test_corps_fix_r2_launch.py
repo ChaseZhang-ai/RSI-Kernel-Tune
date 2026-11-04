@@ -1,9 +1,9 @@
 """Regression tests for the audit-corps R2 launch/lifecycle fix batch.
 
-Ported from the R2 audit's untracked test archive
-(audit-r2-2026-11-05/forgekernel-untracked-tests/test_lifecycle_fixes.py and
-test_monitor_resume_fixes.py), with every assertion re-checked against this
-repository's semantics and adapted where the two differ. Covered here:
+Ported from the R2 audit's untracked test archive (audit-r2-2026-11-05:
+test_lifecycle_fixes.py, test_monitor_resume_fixes.py), with every assertion
+re-checked against this repository's semantics and adapted where the two
+differ. Covered here:
 
 * a run completes only on evidence: a loop-reported stop=target no longer
   completes a run whose confirmed best is vetoed by the correctness monitor
@@ -22,11 +22,9 @@ repository's semantics and adapted where the two differ. Covered here:
 
 from __future__ import annotations
 
-import json
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -234,3 +232,31 @@ def test_submit_cluster_lets_unexpected_errors_propagate(monkeypatch):
     monkeypatch.setattr(submit_config, "load_config", boom)
     with pytest.raises(AttributeError):
         baseline_cli._submit_cluster("op")
+
+
+# -- BUG-SEED-39: the run-log tee is closed, `peregrine status` survives a torn line ----------
+
+
+def test_entered_closes_the_run_log_handles(tmp_path):
+    log = tmp_path / "run.log"
+    run = SimpleNamespace(operators_dir=tmp_path / "ops", log=log)
+    machine = SimpleNamespace(env={})
+    saved_out, saved_err = sys.stdout, sys.stderr
+    with launch._entered(run, machine):
+        tees = [sys.stdout, sys.stderr]
+        assert isinstance(sys.stdout, launch._Tee)
+        print("hello")
+    assert sys.stdout is saved_out and sys.stderr is saved_err
+    assert all(t._file.closed for t in tees)
+    assert "hello" in log.read_text()
+    print("after the run")        # the restored stdout still takes writes
+
+
+def test_status_skips_a_half_written_line(tmp_path):
+    op_dir = tmp_path / "ops" / "op"
+    (op_dir / "student").mkdir(parents=True)
+    (op_dir / "student" / "status.jsonl").write_text(
+        '{"verdict": "KEEP"}\n{"verdict": "DROP"\nnot json at all\n{"verdict": "KEEP"}\n')
+    run = SimpleNamespace(name="op", operators_dir=tmp_path / "ops", task_name="op",
+                          record=lambda: {}, log=tmp_path / "no.log")
+    assert "iterations: 2 (2 kept)" in launch.status_text(run)

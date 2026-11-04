@@ -120,3 +120,40 @@ def test_tree_listings_carry_root_hijack_modules(tmp_path):
     assert set(harness_guard.tree_harness_files(tree, head, "kernel.py")) == want
     assert set(harness_guard.harness_only(["sitecustomize.py", "json.py", "newmod.py",
                                            "deep/lib.py"], "kernel.py")) == want - {"eval/bench.py"}
+
+
+# --- BUG-SEED-08: the import scan sees every name and the dynamic forms ---------------
+
+def test_every_import_name_is_scanned():
+    """One name per statement read the scan before: the second name of
+    ``import os, flashinfer`` escaped, as did ``;``-joined statements and the
+    string literals of importlib.import_module / __import__ (BUG-SEED-08)."""
+    cases = [
+        "import os, flashinfer\n",                       # the escape: first name is clean
+        "import torch\nimport flashinfer.rope\n",        # a submodule still names the lib
+        "import flashinfer as fi, torch\n",              # an as-binding on the way
+        "import a; import flashinfer\n",                 # two statements on one line
+        "from flashinfer.rope import apply_rope\n",
+        "from flashinfer.rope import (\n    apply_rope,\n    Rope,\n)\n",
+        'import importlib\nimportlib.import_module("flashinfer")\n',
+        'import importlib.util\nx = importlib.util\nimportlib.import_module("vllm.model")\n',
+        'm = __import__("sgl_kernel.attention")\n',
+        'importlib.import_module(flashinfer_name)\n',    # not a literal: not flagged
+    ]
+    for i, src in enumerate(cases[:-1]):
+        found = library_findings(src, "kernel.py")
+        assert any("flashinfer" in f or "vllm" in f or "sgl_kernel" in f for f in found), \
+            f"case {i} escaped: {found}"
+    # a variable target cannot be read -- the heuristic names what it can see only
+    assert library_findings(cases[-1], "kernel.py") == []
+
+
+def test_the_import_scan_stays_quiet_on_clean_and_foreign_text():
+    clean = '"""contract: out = a + b"""\nimport torch\n' \
+            "def run(a, b, out):\n    out.copy_(a + b)\n"
+    assert library_findings(clean, "kernel.py") == []
+    assert library_findings("from . import helper\nfrom ops import thing\n", "kernel.py") == []
+    # a CUDA source has no import statement
+    cu = '#include <cublas_v2.h>\nvoid run() { cublasGemmEx(h); }\n'
+    found = library_findings(cu, "kernel.cu")
+    assert len(found) == 2 and not any("import" in f for f in found)

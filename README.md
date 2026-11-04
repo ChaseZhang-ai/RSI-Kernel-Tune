@@ -17,7 +17,7 @@
 - 本仓库基于上游 [ForgeKernel](https://github.com/OpenBMB/ForgeKernel)（fork 自 `https://github.com/OpenBMB/ForgeKernel.git`，基线 commit `5030503`）修改而成。
 - 上游代码以 **Apache License 2.0** 授权；本仓库遵循同一许可，[LICENSE](LICENSE) 保留，[NOTICE](NOTICE) 为 WP24 缩减版（逐文件自查记录见 `CHANGES-WP24.md`）。
 
-## 本仓库的改进（WP1–WP6 一代 / WP8–WP12 二代）
+## 本仓库的改进（WP1–WP6 一代 / WP8–WP12 二代 / WP14–WP21 三代）
 
 | 包 | 改进摘要 |
 |---|---|
@@ -32,6 +32,14 @@
 | WP10 结构搜索深化 | `STAGNATION` 架构逃逸触发器（连续 K 次 `stagnation_k` 带内尝试即注入结构路线约束，`stagnation_override` 减压阀，只加压不改判）；`multi_candidate:` MC-DELIVERY 多候选单 job 预筛（赢家独过全门）；compile-flags 决策轴（白名单内合法杠杆） |
 | WP11 过程提速包 | eval+NCU 合并单 job（省一次冷启动，段预算=两段之和绝不沿用单段；`merge_eval_ncu` 缺省开、false 回两 job）；内容寻址 build cache（`FK_BUILD_CACHE`，默认关）；SPRT 窗边界早停（只提前输、永不造 KEEP，`sprt_early_stop` 默认关）；墙钟构成遥测五字段（纯测量，无门读它） |
 | WP12 知识注入与 KB 生命周期 | 确定性 KB-MENU 注入（`kbmenu.py` 唯一合成器：KB-HINTS/LEVER-MENU/CALIBRATION，检索辅助、无未测数字）；KB 条目陈旧度与死路跨 run 传播；`skills/probe-recipes/` 预置判定探针配方库（占用曲线/相位消融/有效带宽三元组） |
+| WP14 形状分域决策通道 | per-shape 台账（每 workload 的历史最优与逐 workload 比值，C8 单一定义）与 `per_shape:`/`regime:` 决策线词汇（regime 谓词是 shape 轴的纯函数、族互斥全覆盖否则冻结无效）；per-regime NCU 证据（每 meta 步上限 `regime_ncu_max`）；MC-DISPATCH 按 workload 分 job 预筛 |
+| WP15 分辨率确认与测量统计 | 独立确认带（近优读数每次确认一次，预算入轨迹）；SPRT 早停回测翻本地默认（只提前输永不造 KEEP，族 cell 代价 1.35% < 2% 门）；Stouffer 逐 workload 组合检验（advisory）；log 域 best 置信（se/低置信旗标） |
+| WP16 搜索种群治理 | shrink-grid pattern search（STAGNATION 触发的驱动测量通道）；噪声门 SWEEP 减半 + 范围配方；MC 近平局复检；亚噪声复利池与 k-best runner-up 池（重启靶子+墓园+混合谱系）；`floor_progress` 报告行 |
+| WP17 筛选原语与 M0 保真 | `loop/screening.py` 唯一筛选原语（冻结 spec 校验/配对顺序/node-dirty/解析地板 advisory 预排）；ARCH_PROBE 保真度分层与近差一次复测；`(family, arch)` 读数台账 |
+| WP18 知识闭环与超参考供给 | `kb_used:` 学生引用行 → 逐条目台账（KEEP/REVERT 回流）；CANDIDATES 批量认证职责块 + regime 字段；kernel 工件采集器（`scripts/collect_kernel_artifacts.py` → `build_priors --from-artifacts` 实测锚填充）；null 杠杆 PRICED_NULL 盖章 + lever×workload 矩阵 |
+| WP19 过程提速三代 | 探针 manifest 整批失败回退单脚本路径；teacher/student 上下文有界（digest 绑定 + NCU tail 行数）；诊断 gate 合并为一次 re-prompt；七件 carry 跨代携带；run 级墙钟桶（stdout 遥测） |
+| WP20 测量侧防线 | eval 哨兵（stream span / 计时器身份 / 线程子进程普查，只降级 unknown 永不定罪）；判官边缘带一次复检（协议不变）；gate 静默失明旗标；参照侧镜像散度旗标；`tests/redteam/` 攻击夹具（C16：资产全在 tests/） |
+| WP21 通电审计 | 数据流审计 CI（每字段必须有读者，`tests/dataflow_audit_*.json` 自维护清单）；通电与收获协议（`docs/energize-protocol.md` + `scripts/energize_ab.py` 骨架）；wp21mini 冒烟任务集 |
 
 各包的详细交付文档：一代集中在 [docs/wp-changes/](docs/wp-changes/)（CHANGES-WP1.md … CHANGES-WP6.md），二代在仓库根（CHANGES-WP8.md … CHANGES-WP12.md），均与各实现分支 tip 逐字一致。
 

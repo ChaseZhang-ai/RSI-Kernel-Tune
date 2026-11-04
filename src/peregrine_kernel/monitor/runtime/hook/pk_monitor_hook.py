@@ -87,8 +87,15 @@ def _dump() -> None:
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump({k: v for k, v in _state.items() if k != "out"}, fh)
         os.replace(tmp, path)
-    except Exception:  # noqa: BLE001 — the monitor never costs the bench
-        pass
+    except Exception as e:  # noqa: BLE001 — the monitor never costs the bench
+        # a dump that cannot land is exactly the evidence anyone will ask for, so
+        # record it where the next successful dump (or the runner's tail) shows it,
+        # and say so on stderr once — never per call.
+        _err("dump", e)
+        if not _state.get("_dump_warned"):
+            _state["_dump_warned"] = True
+            sys.stderr.write(f"[pk_monitor_hook] cannot write monitor data to {out}: "
+                             f"{e!r}\n")
 
 
 # --- tensor summaries -------------------------------------------------------------
@@ -522,8 +529,8 @@ def _install_rng() -> None:
                 None if s is None else (int(s) + off) % (2 ** 32))))
             _patch(np.random, "default_rng", lambda orig: (lambda s=None, *a, **k: orig(
                 None if s is None else (int(s) + off) % (2 ** 63), *a, **k)))
-        except Exception:  # noqa: BLE001 — no numpy, nothing to offset
-            pass
+        except Exception as e:  # noqa: BLE001 — no numpy, nothing to offset; still recorded
+            _err("numpy", e)
         return
 
     if prof == "int_edges":

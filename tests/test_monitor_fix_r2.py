@@ -91,3 +91,27 @@ def test_parse_log_a_complete_final_json_still_wins():
             f"{monitor.MARKER}\n{json.dumps(final)}")
     res = monitor.parse_log(text)
     assert res == final and res["complete"] is True
+
+
+# --- BUG-SEED-41: the hook records its own dump failures --------------------------
+def _load_hook_module():
+    import importlib.util
+    path = Path(monitor.RUNTIME_DIR) / "hook" / "pk_monitor_hook.py"
+    spec = importlib.util.spec_from_file_location("pk_monitor_hook_under_test", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_dump_failure_is_recorded_and_reported_once(tmp_path, capsys):
+    hook = _load_hook_module()
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("x")          # a file where the dump directory should be
+    hook._state.clear()
+    hook._state.update({"out": str(blocker), "calls": [{"fn": "call"}]})
+    hook._dump()
+    hook._dump()
+    assert not list(tmp_path.glob("hook-*.json"))       # nothing landed, as before
+    errs = hook._state["errors"]                        # but it is recorded now
+    assert len(errs) == 2 and errs[0].startswith("dump:")
+    assert capsys.readouterr().err.count("pk_monitor_hook") == 1   # said once

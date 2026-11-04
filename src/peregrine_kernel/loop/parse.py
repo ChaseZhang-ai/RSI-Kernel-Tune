@@ -1102,7 +1102,13 @@ def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
     so the old behavior is the data-poor fallback, never a separate mode. A
     record with clock_drift=True is dropped from the sample while enough clean
     rows remain (drifted readings inflate sigma; the fallback keeps a history
-    that is ALL drift measurable, as before).
+    that is ALL drift measurable, as before). A row that reuses an earlier
+    row's reading (``reading_of`` set — the driver's unchanged-tree and
+    declared-gate-close rows) is dropped from both pools entirely: it is a copy
+    of a reading already in the history, not one more draw, and feeding the
+    duplicate to the pools flattened the between-job residuals onto the floor.
+    driver.py's other pools (_runner_up_pool, _climb_streak, the stagnation
+    ledger) exclude reused rows the same way.
 
     ``raw`` (contract C8's injection point): {"pairs": [...], "ratios": [...]} —
     within-job window deviations and between-job job-level ratios the CALLER
@@ -1113,7 +1119,8 @@ def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
     ``floor`` / ``cap`` are loop.toml [loop] resolvable_floor / resolvable_cap
     (defaults here); detect_plateau forwards its caller's.
     """
-    evaluated = [r for r in records if gate_ms(r, gate_window) is not None]
+    evaluated = [r for r in records if gate_ms(r, gate_window) is not None
+                 and getattr(r, "reading_of", None) is None]
     recent = _drift_clean(evaluated[-RESOLVABLE_SAMPLES:], RESOLVABLE_MIN_SAMPLES)
     ratios = [v for r in recent if (v := _gate_ratio(r, gate_window)) is not None]
     extra = [float(v) for v in ((raw or {}).get("ratios") or ())

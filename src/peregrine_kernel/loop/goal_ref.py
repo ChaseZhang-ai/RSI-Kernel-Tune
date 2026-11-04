@@ -1580,10 +1580,22 @@ def apply(cfg: dict, state: dict, *, target_ms: float | None = None,
                   "arch_ref_host_enqueue_ms", "arch_ref_ncu", "arch_ref_job",
                   "arch_ref_provenance"):
             lc.pop(k, None)     # the declaration replaced describes another reading
-        e2e = acc.get("e2e_ms") if acc.get("e2e_ms") is not None else acc.get("reading_ms")
-        lc["arch_ref_ms"] = float(e2e)
-        if acc.get("device_ms") is not None:
-            lc["arch_ref_device_ms"] = float(acc["device_ms"])
+        # each reading lands under the key of its own window: reading_ms is the gate
+        # window's reading, so under a device window it may never fall back into the
+        # e2e key (arch_ref_ms) — and the device key only under a device window. The
+        # window is the one the acceptance readings were taken in (the session's).
+        device_win = (state.get("gate_window") or lc.get("gate_window")
+                      or "device") == "device"
+        e2e = acc.get("e2e_ms")
+        if e2e is None and not device_win:
+            e2e = acc.get("reading_ms")     # an e2e-window reading is e2e semantics
+        if e2e is not None:
+            lc["arch_ref_ms"] = float(e2e)
+        device = acc.get("device_ms")
+        if device is None and device_win:
+            device = acc.get("reading_ms")  # a device-window reading is device semantics
+        if device is not None:
+            lc["arch_ref_device_ms"] = float(device)
         if acc.get("basis"):
             lc["arch_ref_device_basis"] = acc["basis"]
         if (acc.get("n_workloads") or 1) > 1 and acc.get("workloads"):

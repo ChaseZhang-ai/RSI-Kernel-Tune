@@ -80,12 +80,41 @@ def _clean_path(tok: str) -> str:
     return tok.lstrip(_PATH_LWRAP).rstrip(_PATH_RWRAP)
 
 
+_STUDENT_MARK = r"(?m)^[ \t]*{}:[ \t]*"
+"""The turn markers are LINES: anchored to line start like driver.py's
+_ARCH_PROBE_REQUEST_RE, because the vocabulary saturates the prompts and a
+student turn that merely quotes a marker mid-prose must not act on it — a
+prose 'EXHAUSTED: no more ideas' used to terminate the whole run (the driver
+returns None on Exhausted) and a quoted PROBE_REQUEST used to burn a GPU job
+on a path that was never submitted."""
+
+_EXHAUSTED_RE = re.compile(_STUDENT_MARK.format("EXHAUSTED") + r"(.+)")
+
+
+def _exhausted_close(text: str) -> Exhausted | None:
+    """The Exhausted marker, only when it closes the message. The driver's
+    re-prompt states the contract — end the turn with EXACTLY one marker 'and
+    nothing after it' — and Exhausted terminates the whole run, the
+    highest-stakes reading in this parser, so it is held to that contract: the
+    last line-start EXHAUSTED line must be the last non-empty line, or the text
+    falls through to the ordinary shapes (a record after the marker then lands
+    instead of being dropped). The probe markers stay line-start-only: WP19
+    pins PROBE_REQUEST winning over a line that follows it."""
+    last = None
+    for m in _EXHAUSTED_RE.finditer(text):
+        last = m
+    if last is not None and not text[last.end():].strip():
+        return Exhausted(reason=last.group(1).strip())
+    return None
+
+
 def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     """Classify a student agent's final message into the three terminal shapes.
 
     PROBE_REQUEST / EXHAUSTED take precedence (they are explicit single-line
-    markers); otherwise the record block fields are extracted from anywhere in
-    the text (agents often emit prose before the block).
+    markers, matched at line start only — a mid-prose mention is prose, see
+    ``_STUDENT_MARK``); otherwise the record block fields are extracted from
+    anywhere in the text (agents often emit prose before the block).
 
     RECON_REQUEST is only a valid shape for the reconnaissance caller
     (``allow_recon=True``). Recognizing it everywhere let a student turn that
@@ -93,7 +122,7 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     saturates the prompts — reach the probe branch and burn a GPU job on a
     path that exists only in the teacher's tree.
     """
-    probe = re.search(r"PROBE_REQUEST:\s*(\S+)", text)
+    probe = re.search(_STUDENT_MARK.format("PROBE_REQUEST") + r"(\S+)", text)
     if probe:
         return ProbeRequest(path=_clean_path(probe.group(1)))
     # WP19 (task 2): a PROBE-MANIFEST names a ≤4-line list of self-contained
@@ -102,16 +131,15 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     # fields — the manifest is a meta-side vocabulary; a student turn is not
     # expected to carry it, and a stray echo falls through to the ordinary
     # shapes exactly like a stray RECON_REQUEST does.
-    manifest = re.search(r"PROBE-MANIFEST:\s*(\S+)", text)
+    manifest = re.search(_STUDENT_MARK.format("PROBE-MANIFEST") + r"(\S+)", text)
     if manifest:
         return ProbeRequest(path=_clean_path(manifest.group(1)), manifest=True)
     if allow_recon:
-        recon = re.search(r"RECON_REQUEST:\s*(\S+)", text)
+        recon = re.search(_STUDENT_MARK.format("RECON_REQUEST") + r"(\S+)", text)
         if recon:
             return ReconRequest(path=_clean_path(recon.group(1)))
-    exhausted = re.search(r"EXHAUSTED:\s*(.+)", text)
-    if exhausted:
-        return Exhausted(reason=exhausted.group(1).strip())
+    if (exhausted := _exhausted_close(text)) is not None:
+        return exhausted
 
     fields: dict[str, str] = {}
     for line in text.splitlines():
@@ -303,6 +331,20 @@ def readings_spread_pct(readings) -> float | None:
     return (max(vals) - min(vals)) / min(vals)
 
 
+def _finite_num(v) -> float | None:
+    """The non-bool number as a float, or None when it is not one or is not
+    finite (NaN / inf) — the same audit the probe verdict path applies to a
+    reported max_diff (_audit_pass). A non-finite timing reading is a bench
+    fault, not a fact: left in, it reached the trajectory and locked every
+    downstream comparison (min(recs, key=gate_ms) kept selecting the NaN row;
+    plateau's best comparison went permanently False)."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        f = float(v)
+        if f == f and f not in (float("inf"), float("-inf")):
+            return f
+    return None
+
+
 def _workloads(perf: dict) -> list:
     """Compact per-workload readings from a multi-workload performance block."""
     out = []
@@ -312,16 +354,15 @@ def _workloads(perf: dict) -> list:
         item = {"name": str(w.get("name", len(out)))}
         for key in _WORKLOAD_KEYS:
             v = w.get(key)
-            if isinstance(v, (int, float)) and not isinstance(v, bool):
-                item[key] = float(v)
+            if (f := _finite_num(v)) is not None:
+                item[key] = f
         for key in _WORKLOAD_LIST_KEYS:
             v = w.get(key)
             if isinstance(v, (list, tuple)):
-                item[key] = [float(x) for x in v
-                             if isinstance(x, (int, float)) and not isinstance(x, bool)]
+                item[key] = [f for x in v if (f := _finite_num(x)) is not None]
         host = w.get("host_enqueue_ms")
-        if isinstance(host, (int, float)) and not isinstance(host, bool):
-            item["host_enqueue_ms"] = float(host)
+        if (fh := _finite_num(host)) is not None:
+            item["host_enqueue_ms"] = fh
         # WP15: the workload's SPRT early-stop decision (timing.py's controller),
         # so the driver's card rule (a loss-stopped workload cannot acquit the
         # card) and the digest can read it off the row.
@@ -335,12 +376,12 @@ def _workloads(perf: dict) -> list:
 
 
 def _float_list(raw) -> list:
-    """The numeric entries of ``raw`` as floats; [] for anything else (a bench that
-    reports no raw readings, or a malformed one)."""
+    """The finite numeric entries of ``raw`` as floats; [] for anything else (a
+    bench that reports no raw readings, a malformed one, or NaN / inf entries —
+    a fault the spread arithmetic cannot survive, dropped like a non-number)."""
     if not isinstance(raw, (list, tuple)):
         return []
-    return [float(v) for v in raw
-            if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    return [f for x in raw if (f := _finite_num(x)) is not None]
 
 
 def describe_workload_readings(workloads: list) -> str:
@@ -468,6 +509,26 @@ def _correctness_fail_detail(corr_obj: dict) -> str:
     return "; ".join(parts)
 
 
+_CORRECTNESS_DETAIL_KEYS = ("dq", "dk", "dv")
+"""The attention-gradient spellings the summary listed first, kept verbatim so
+an attn-bwd FAIL's text is byte-identical to before the detail names were
+generalized (a non-attn card's detail dicts — ``rmsnorm_out`` and whatever the
+card's outputs are — used to degrade to "no failure detail in the eval JSON")."""
+
+
+def _correctness_detail_names(corr_obj: dict) -> list[str]:
+    """The correctness object's per-tensor detail keys: every key whose value is
+    a dict carrying a ``max_diff`` / ``error`` key (the shape the bench emits
+    per failing output), the legacy dq/dk/dv spellings first, the rest in the
+    bench's own emission order."""
+    names = [k for k in _CORRECTNESS_DETAIL_KEYS if isinstance(corr_obj.get(k), dict)
+             and ("max_diff" in corr_obj[k] or "error" in corr_obj[k])]
+    names += [k for k, v in corr_obj.items()
+              if k not in _CORRECTNESS_DETAIL_KEYS and isinstance(v, dict)
+              and ("max_diff" in v or "error" in v)]
+    return names
+
+
 def _correctness_error(corr_obj: dict) -> str:
     """The bench's failure verdict, verbatim when it wrote one.
 
@@ -484,10 +545,8 @@ def _correctness_error(corr_obj: dict) -> str:
         # the ranked rows add the RUNNERS-UP the first-fail stop never reached.
         return f"{err}; worst checks: {detail}" if detail and detail not in err else err
     parts = []
-    for name in ("dq", "dk", "dv"):
-        det = corr_obj.get(name)
-        if not isinstance(det, dict):
-            continue
+    for name in _correctness_detail_names(corr_obj):
+        det = corr_obj[name]
         if det_err := det.get("error"):
             parts.append(f"{name}: {det_err}")
         elif "max_diff" in det:
@@ -556,9 +615,10 @@ def parse_eval(text: str) -> EvalResult:
     def _opt(key: str, legacy: str | None = None) -> float | None:
         # legacy: pre-rename bench key (cublas_* — the in-job reference was recorded
         # under that name whatever library it was). Read so older cards' bench.py
-        # keeps parsing; new benches emit the ref_* names only.
+        # keeps parsing; new benches emit the ref_* names only. NaN / inf read as
+        # None — a bench fault is an absent reading, never a fact.
         v = perf.get(key, perf.get(legacy) if legacy else None)
-        return float(v) if v is not None else None
+        return _as_finite_float(v)
 
     def _opt_any(*keys: str) -> float | None:
         for key in keys:
@@ -596,8 +656,8 @@ def parse_eval(text: str) -> EvalResult:
         # COMPILE_ERROR verdict's nvcc/ptxas error and a numeric FAIL's surrounding
         # output are in the log the parser holds, so the record now holds them too.
         error="" if correct else _with_log_tail(_correctness_error(corr_obj), text),
-        bwd_median_ms=float(ms) if ms is not None else None,
-        mfu=float(mfu) if mfu is not None else None,
+        bwd_median_ms=_as_finite_float(ms),
+        mfu=_as_finite_float(mfu),
         ref_median_ms=_opt("ref_median_ms", "cublas_median_ms"),
         vs_ref=_opt("vs_ref", "vs_cublas"),
         device_median_ms=_opt("device_median_ms"),
@@ -732,13 +792,16 @@ def job_abend(log: str) -> JobEnd:
         "the archive is cut (the log archiver lags the job) or the job died silently"))
 
 
-def _as_finite_float(raw: str | None) -> float | None:
-    """The token as an error norm / reading, or None when it is not a finite number."""
+def _as_finite_float(raw) -> float | None:
+    """The token / number as a reading, or None when it is not a finite number.
+    The probe verdict path's audit (_audit_pass), reused for the eval JSON's
+    perf scalars: ``float()`` alone turned a bench fault's NaN / inf into a
+    recorded reading that locked every downstream comparison."""
     if raw is None:
         return None
     try:
         v = float(raw)
-    except ValueError:
+    except (ValueError, TypeError):
         return None
     if v != v or v in (float("inf"), float("-inf")):
         return None
@@ -1102,7 +1165,13 @@ def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
     so the old behavior is the data-poor fallback, never a separate mode. A
     record with clock_drift=True is dropped from the sample while enough clean
     rows remain (drifted readings inflate sigma; the fallback keeps a history
-    that is ALL drift measurable, as before).
+    that is ALL drift measurable, as before). A row that reuses an earlier
+    row's reading (``reading_of`` set — the driver's unchanged-tree and
+    declared-gate-close rows) is dropped from both pools entirely: it is a copy
+    of a reading already in the history, not one more draw, and feeding the
+    duplicate to the pools flattened the between-job residuals onto the floor.
+    driver.py's other pools (_runner_up_pool, _climb_streak, the stagnation
+    ledger) exclude reused rows the same way.
 
     ``raw`` (contract C8's injection point): {"pairs": [...], "ratios": [...]} —
     within-job window deviations and between-job job-level ratios the CALLER
@@ -1113,7 +1182,8 @@ def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
     ``floor`` / ``cap`` are loop.toml [loop] resolvable_floor / resolvable_cap
     (defaults here); detect_plateau forwards its caller's.
     """
-    evaluated = [r for r in records if gate_ms(r, gate_window) is not None]
+    evaluated = [r for r in records if gate_ms(r, gate_window) is not None
+                 and getattr(r, "reading_of", None) is None]
     recent = _drift_clean(evaluated[-RESOLVABLE_SAMPLES:], RESOLVABLE_MIN_SAMPLES)
     ratios = [v for r in recent if (v := _gate_ratio(r, gate_window)) is not None]
     extra = [float(v) for v in ((raw or {}).get("ratios") or ())

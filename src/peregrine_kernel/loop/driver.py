@@ -5409,7 +5409,15 @@ def _quarantine_leaky_kb(ctx: LoopContext, findings: list[str]) -> None:
         src = kb_read_dir(ctx).parent / rel
         if src.is_file():
             qdir.mkdir(exist_ok=True)
-            dst = qdir / src.name
+            # the tree rides in the name: entries of the same file name from two
+            # trees (sm90/leak.md, sm100/leak.md) used to rename onto one
+            # destination, the second silently replacing the first. A residual
+            # collision (a root-level lookalike name) breaks the tie by number.
+            dst = qdir / rel.replace("/", "__")
+            seq = 1
+            while dst.exists():
+                dst = qdir / f"{dst.stem}__{seq}{dst.suffix}"
+                seq += 1
             src.rename(dst)
             _log(f"meta/kb: QUARANTINED leaky entry {rel} -> {dst} — review by hand")
 

@@ -242,3 +242,47 @@ def test_probe_manifest_backend_error_is_feedback_not_a_crash(tmp_path, monkeypa
     batch, err = drv._run_probe_manifest_commit_batch(
         ctx, be_ok, "fs-demo-metaprobe", "notes/p.py", ["notes/p.py"])
     assert batch is None and "job failed" in err
+
+
+# --- BUG-SEED-49: quarantining two same-named entries keeps both ---------------
+
+def test_quarantine_keeps_both_same_named_entries(tmp_path):
+    # The quarantine moved entries to qdir / src.name: two trees' entries with
+    # the same file name (sm90/leak.md and sm100/leak.md quarantined in one
+    # harvest) renamed onto the same destination — the second silently
+    # replaced the first and one leaky entry's evidence was lost. The
+    # destination now carries the entry's tree in the name (rel's separators
+    # flattened), and a residual collision is broken by a sequence number.
+    kb = tmp_path / "repo" / "hw_kb"
+    for arch in ("sm90", "sm100"):
+        (kb / arch).mkdir(parents=True)
+        (kb / arch / "leak.md").write_text(f"{arch} leaked content\n", encoding="utf-8")
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    ctx.kb_dir = kb
+    drv._quarantine_leaky_kb(ctx, ["sm90/leak.md:1: oracle narrative",
+                                   "sm100/leak.md:2: oracle narrative"])
+    qdir = tmp_path / "kb_quarantine"
+    sm90 = qdir / "sm90__leak.md"
+    sm100 = qdir / "sm100__leak.md"
+    assert sm90.is_file() and "sm90 leaked content" in sm90.read_text(encoding="utf-8")
+    assert sm100.is_file() and "sm100 leaked content" in sm100.read_text(encoding="utf-8")
+    assert not (kb / "sm90" / "leak.md").exists()
+    assert not (kb / "sm100" / "leak.md").exists()
+
+
+def test_quarantine_collision_gets_a_sequence_number(tmp_path):
+    kb = tmp_path / "repo" / "hw_kb"
+    (kb / "sm90").mkdir(parents=True)
+    (kb / "sm90" / "leak.md").write_text("v1\n", encoding="utf-8")
+    # a name that flattens onto the same destination as sm90/leak.md
+    (kb / "sm90__leak.md").write_text("root-level lookalike\n", encoding="utf-8")
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    ctx.kb_dir = kb
+    drv._quarantine_leaky_kb(ctx, ["sm90/leak.md:1: x", "sm90__leak.md:1: x"])
+    qdir = tmp_path / "kb_quarantine"
+    bodies = {p.name: p.read_text(encoding="utf-8")
+              for p in qdir.iterdir() if p.is_file()}
+    assert len(bodies) == 2
+    assert sorted(bodies.values()) == ["root-level lookalike\n", "v1\n"]

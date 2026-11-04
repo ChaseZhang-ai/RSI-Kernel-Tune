@@ -163,3 +163,60 @@ def test_keep_row_clock_drift_flag_reads_this_cluster_best(tmp_path):
     rec = run_inner_iteration(ctx, 2, metric_before=100.0)
     assert rec.verdict == "KEEP" and rec.cluster == "home"
     assert rec.clock_drift is False
+
+
+# ---------------------------------------------------------------- BUG-C1-02
+
+def test_keep_probe_survives_a_bad_byte_in_the_student_probe(tmp_path, capsys):
+    """The probe file is student-authored: one non-UTF-8 byte used to raise
+    UnicodeDecodeError straight through the OSError-only handler and stop the
+    whole run. A bad byte degrades instead — the probe is just not kept."""
+    from peregrine_kernel.loop.driver import _keep_probe_across_reset
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    probe = tmp_path / "notes" / "p.py"
+    probe.parent.mkdir(exist_ok=True)
+    probe.write_bytes(b"# rig note: caf\xe9 baseline\nPASS\n")
+    assert _keep_probe_across_reset(ctx, "notes/p.py") is None
+    # a decodable probe still round-trips
+    probe.write_text("# rig note\nPASS\n", encoding="utf-8")
+    assert _keep_probe_across_reset(ctx, "notes/p.py") == "# rig note\nPASS\n"
+
+
+def test_restore_kept_probe_drops_a_workspace_copy_that_cannot_decode(tmp_path):
+    """The restore comparison read gets the same hardening: an undecodable
+    workspace copy is not the kept text — the kept copy is dropped and the
+    student's file is left alone, without an exception."""
+    from peregrine_kernel.loop.driver import _restore_kept_probes
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    probe = tmp_path / "notes" / "p.py"
+    probe.parent.mkdir(exist_ok=True)
+    probe.write_bytes(b"\xff\xfe broken")
+    ctx.kept_probes["notes/p.py"] = "# rig note\nPASS\n"
+    _restore_kept_probes(ctx)
+    assert "notes/p.py" not in ctx.kept_probes
+    assert probe.read_bytes() == b"\xff\xfe broken"   # the student's file stands
+
+
+def test_kept_probe_write_is_explicitly_utf8(tmp_path, monkeypatch):
+    """The kept-probe writes pin encoding='utf-8' so a non-UTF-8 locale cannot
+    turn the keep/restore round-trip into an UnicodeEncodeError crash (and so
+    the bytes on disk are the text that was kept)."""
+    import pathlib
+    from peregrine_kernel.loop.driver import _restore_probe_after_reset
+    captured = {}
+    real_write = pathlib.Path.write_text
+
+    def spy(self, data, encoding=None, *args, **kwargs):
+        captured["encoding"] = encoding
+        return real_write(self, data, encoding=encoding, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "write_text", spy)
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
+    _restore_probe_after_reset(ctx, "notes/p.py", "# latency budget: 42 \u00b5s\n")
+    assert captured["encoding"] == "utf-8"
+    probe = tmp_path / "notes" / "p.py"
+    assert probe.read_bytes().decode("utf-8") == "# latency budget: 42 \u00b5s\n"
+    assert ctx.kept_probes["notes/p.py"] == "# latency budget: 42 \u00b5s\n"

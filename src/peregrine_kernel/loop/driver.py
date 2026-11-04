@@ -3444,10 +3444,14 @@ def _keep_probe_across_reset(ctx: LoopContext, probe_path: str) -> str | None:
     """The probe file's text before a workspace reset wipes the iteration's
     commits — a fight that spans iterations (ProbeBattle) needs the probe to
     survive the reset that ends the iteration, or the next student starts the
-    apparatus from scratch (observed: five rounds lost to rig debugging)."""
+    apparatus from scratch (observed: five rounds lost to rig debugging).
+
+    The probe file is student-authored and student-writable: a non-UTF-8 byte
+    in it must degrade the keep (the probe is simply not carried over), never
+    stop the run — the same convention as the _timeline_* reads."""
     try:
-        return (ctx.workspace / probe_path).read_text()
-    except OSError:
+        return (ctx.workspace / probe_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
         return None
 
 
@@ -3460,7 +3464,7 @@ def _restore_probe_after_reset(ctx: LoopContext, probe_path: str, text: str) -> 
     dst = ctx.workspace / probe_path
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(text)
+        dst.write_text(text, encoding="utf-8")
     except OSError as e:
         _log(f"could not keep {probe_path} across the reset: {e}")
 
@@ -3469,13 +3473,14 @@ def _restore_kept_probes(ctx: LoopContext) -> None:
     """Re-materialise the kept probes a reset erased. A file that is present
     with OTHER text is the student's later edit (or its deliberate rewrite):
     it is left alone and the kept copy is dropped — the keep exists to survive
-    a reset, never to overrule the student's tree."""
+    a reset, never to overrule the student's tree. An undecodable workspace
+    copy is not the kept text either: it is left alone and dropped."""
     for path, text in list(ctx.kept_probes.items()):
         dst = ctx.workspace / path
         if dst.is_file():
             try:
-                same = dst.read_text() == text
-            except OSError:
+                same = dst.read_text(encoding="utf-8") == text
+            except (OSError, UnicodeError):
                 same = False
             if not same:
                 ctx.kept_probes.pop(path, None)

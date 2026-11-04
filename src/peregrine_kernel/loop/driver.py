@@ -35,7 +35,7 @@ import time
 import traceback
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections import deque
+from collections import Counter, deque
 from typing import Callable, Protocol
 
 from peregrine_kernel.inner.ncu import (kernels_from_ncu, match_resusage, parse_resusage_lines,
@@ -5416,13 +5416,30 @@ def _quarantine_leaky_kb(ctx: LoopContext, findings: list[str]) -> None:
     A finding's path is relative to the lint root's parent (lint_kb_dir's
     rel_to), i.e. ``<arch>/<entry>.md`` under hw_kb/; the quarantine hangs off
     the repo root, because a quarantine inside hw_kb/ would still sit in the
-    tree this is trying to take the entry out of."""
+    tree this is trying to take the entry out of.
+
+    The bare file name is only the quarantine name while it stays unique: a
+    destination that a sibling in this batch (same basename from another
+    subtree) or an earlier quarantine already holds would make rename(2)
+    silently REPLACE the occupant — a sm100/leak.md batch mate used to erase
+    hopper/leak.md (or a previous run's copy) and the human reviewing the
+    quarantine saw one entry, not two. A colliding name is flattened with its
+    relative path (``hopper__leak.md``); a flattened name that still collides
+    gets an ordinal."""
     qdir = lang_mode.kb_repo_root(ctx.kb_dir) / "kb_quarantine"
-    for rel in sorted({f.split(":", 1)[0] for f in findings}):
+    rels = sorted({f.split(":", 1)[0] for f in findings})
+    batch_names = Counter(Path(rel).name for rel in rels)
+    for rel in rels:
         src = kb_read_dir(ctx).parent / rel
         if src.is_file():
             qdir.mkdir(exist_ok=True)
             dst = qdir / src.name
+            if batch_names[src.name] > 1 or dst.exists():
+                dst = qdir / rel.replace("/", "__")
+            ordinal = 2
+            while dst.exists():
+                dst = qdir / f"{dst.stem}.{ordinal}{dst.suffix}"
+                ordinal += 1
             src.rename(dst)
             _log(f"meta/kb: QUARANTINED leaky entry {rel} -> {dst} — review by hand")
 

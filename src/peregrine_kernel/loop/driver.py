@@ -15371,7 +15371,7 @@ def _price_student_trees(ctx: LoopContext, records) -> PricedTrees:
     else:
         _, _, out.head_dossier, _ = _run_stall_pricing(
             ctx, ref=out.head_sha, bank_as=(_STUDENT_ORCH_DOSSIER_NAME,),
-            label="head")
+            label="head", bank_roles=False)
         if out.head_dossier is None:
             out.missing.append(f"HEAD {short(out.head_sha)}: pricing job failed or its "
                                "self-check did not pass — the tree judged this time has no "
@@ -16273,7 +16273,11 @@ def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
 
     A partial table (no tensor term) is banked only where no full one is: a
     later --set-source probe must not downgrade the account a pricing job
-    delivered."""
+    delivered. And a full table only supersedes a banked full one when its
+    collection is at least as heavy: same guard as the dossier's, for the same
+    reason — a gdn_prefill_bwd run banked the main kernel's table off one
+    probe, and the next probe's aux-kernel blocks silently became the whole
+    run's ref account."""
     ev = _evidence_dir(ctx, create=True)
     if ev is None:
         return
@@ -16284,11 +16288,30 @@ def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
     if not full and _ref_overlap_banked(ctx):
         return
     dst = ev / _REF_ROLE_EXPOSURE_NAME
+    if full and _ref_overlap_banked(ctx):
+        kept = _role_samples(_read_ref_role_exposure(ctx))
+        new = _role_samples(block)
+        if kept is not None and new is not None and kept > new:
+            _log(f"meta/recon: ref role table kept the banked collection "
+                 f"({kept} stall samples) over this log's smaller one ({new})")
+            return
     try:
         dst.write_text(block)
     except OSError as e:
         _log(f"meta/recon: could not persist {_REF_ROLE_EXPOSURE_NAME} "
              f"to {dst}: {e}")
+
+
+_ROLE_SAMPLES_RE = re.compile(r"of (\d+) stall samples resolved")
+
+
+def _role_samples(block_text: str | None) -> int | None:
+    """Stall samples behind a role table — the account's weight, the role-side
+    analogue of the dossier header's instruction count. The writer prints it
+    in the block's own ``[join]`` line, so a banked table carries its weight
+    without a separate header."""
+    m = _ROLE_SAMPLES_RE.search(block_text or "")
+    return int(m.group(1)) if m else None
 
 
 def _pick_role_block(log: str) -> "tuple[str, bool] | None":
@@ -17165,13 +17188,18 @@ def _ref_confirm_reading_ms(ctx: LoopContext, be, branch: str) -> "float | None"
 
 def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
                        bank_as: "tuple[str, ...]" = (_STUDENT_ORCH_DOSSIER_NAME,),
-                       label: str = "best", workload: str | None = None) \
+                       label: str = "best", workload: str | None = None,
+                       bank_roles: bool = True) \
         -> "tuple[str | None, str | None, str | None, str | None]":
     """Price one student tree (``ref``; the best-so-far KEEP when None);
     return (row ledger, segment account, orchestration dossier, role exposure).
     ``workload``: one of a group card's other meta workloads (``--workload``;
     loop/meta_shapes.py), read beside the representative's and banked as nothing
     (``bank_as`` = () from its caller) -- the banked dossiers stay the card's own.
+    ``bank_roles``: the banked role ledger is single-named and belongs to the
+    ledger-source tree, so the head≠best follow-up pricing (a different tree
+    than the one the diagnose's role rows read) must not bank its own reading
+    over it — unlike the dossiers, roles carry no second name.
 
     The collection rides the PM-sampling sections (``--pm``): the role
     exposure ledger scales stall shares by the mainloop tensor plateau, which
@@ -17245,7 +17273,7 @@ def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
         _log(f"meta/stall-price[{label}]: role exposure "
              f"{'OK' if full else 'PARTIAL (no tensor term — PM sections missing)'} @ "
              f"{ref[:10] if ref else '?'}")
-        if (ev := _evidence_dir(ctx, create=True)) is not None and (
+        if bank_roles and (ev := _evidence_dir(ctx, create=True)) is not None and (
                 _STUDENT_ORCH_DOSSIER_NAME in bank_as
                 or _STUDENT_BEST_ORCH_DOSSIER_NAME in bank_as):
             try:

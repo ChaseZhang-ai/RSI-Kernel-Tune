@@ -107,13 +107,16 @@ def test_digest_shows_spread_but_never_the_raw_arrays():
     rec = IterationRecord(iter=1, decision_id="D", change="c", correctness=True,
                           verdict="KEEP", device_median_ms=ev.device_median_ms,
                           workloads=ev.workloads)
+    src_w = ev.workloads  # captured before the digest: the source of truth
     digest = build_digest([rec], {"value": 0.5})
     shown = digest["achieved"]["workloads"]
     assert shown, "the digest keeps the per-workload breakdown"
-    for w in shown:
+    for w, src in zip(shown, src_w):
         assert "device_readings_ms" not in w
         assert "ref_device_readings_ms" not in w
-        assert w["device_median_ms"] == w["device_median_ms"]  # medians stay
+        # build_digest keeps every non-readings key verbatim: hold the medians
+        # to the record's own workload values, not to themselves
+        assert w["device_median_ms"] == src["device_median_ms"]
     assert shown[0]["device_spread_pct"] == ev.workloads[0]["device_spread_pct"]
 
 

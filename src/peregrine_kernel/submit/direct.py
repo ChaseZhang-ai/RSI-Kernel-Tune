@@ -303,11 +303,21 @@ def gpu_lock(gpu: str, log_file=None, poll_s: float = 30.0):
 
 
 def remote_tree(cfg: SubmitConfig) -> str:
-    """``<workdir>/<run>/<op>``: one tree per op and run, so concurrent runs on one host
-    never share a directory."""
+    """``<workdir>/<run>/<op>-<key>``: one tree per op and run, so concurrent runs on
+    one host never share a directory.
+
+    ``key`` is a short hash of the op tree's resolved path. The name pair that
+    used to be the whole key — the run directory's name and the op's name —
+    collides across two clones of one op on a host (alice's ``wk6`` and bob's
+    ``wk6`` both mapped to ``<workdir>/wk6/<op>``), and each job's ``rm -rf``
+    then deleted whichever clone had extracted last, the tree the other clone's
+    job was executing. One resolved path is one clone, so its hash is stable
+    across the extract, exec and stop commands of its jobs — and one clone's
+    jobs are serialized by its local op lock."""
     op_dir = Path(cfg.op_dir)
     run = op_dir.parents[1].name if len(op_dir.parents) > 1 else "repo"
-    return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}"
+    key = hashlib.sha256(str(op_dir.resolve()).encode()).hexdigest()[:12]
+    return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}-{key}"
 
 
 def _entry_argv(cfg: SubmitConfig, mode: str) -> list[str]:

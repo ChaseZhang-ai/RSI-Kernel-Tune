@@ -314,3 +314,45 @@ def test_a_cuda_kernel_build_failure_still_reports_compile_error(tmp_path, monke
     out = _emit_json(capsys)
     assert out["correctness"]["status"] == "COMPILE_ERROR"
     assert "nvcc exploded" in out["correctness"]["error"]
+
+
+
+# --- BUG-C5-03: an empty input_groups is an INPUT_ERROR, never a pass -----------------
+
+def test_empty_input_groups_is_an_input_error_not_a_pass():
+    """The group loop ran zero times and `verdict["pass"] = True` fell out of it: an
+    empty input_groups PASSED correctness, then timing blew up on no work and the ncu
+    window on a division by zero -- a card defect reading as a win (BUG-C5-03)."""
+    problem = json.loads(json.dumps(_TASK_PROBLEM_EMPTY))
+    verdict, sets = lb.task_correctness(problem, lambda *a, **k: [], False, "cpu")
+    assert verdict["pass"] is False
+    assert verdict["status"] == "INPUT_ERROR"
+    assert "input_groups" in verdict["error"]
+    assert sets == []
+
+
+_TASK_PROBLEM_EMPTY = {
+    "definition": {
+        "name": "rmsnorm_h64", "op_type": "rmsnorm",
+        "axes": {"batch_size": {"type": "var"}, "hidden_size": {"type": "const", "value": 64}},
+        "inputs": {"hidden_states": {"shape": ["batch_size", "hidden_size"], "dtype": "float32"},
+                   "weight": {"shape": ["hidden_size"], "dtype": "float32"}},
+        "outputs": {"output": {"shape": ["batch_size", "hidden_size"], "dtype": "float32"}},
+        "reference": _TASK_JUDGE, "custom_inputs_entrypoint": "make_inputs",
+    },
+    "workload": {"uuid": "w0", "axes": {"batch_size": 5}, "input_groups": []},
+    "dps": True, "_dir": ".",
+}
+
+
+def test_ncu_window_refuses_a_workload_with_no_input_groups(tmp_path, monkeypatch, capsys):
+    """ncu_window spread calls with `per = max(1, calls // len(pairs))`, which divides
+    by zero on the empty pairs an empty input_groups produces (BUG-C5-03)."""
+    path = _task_card(tmp_path, "def run(hidden_states, weight):\n    return hidden_states\n",
+                      input_groups=[])
+    monkeypatch.setattr(lb, "kernel_fence", lambda problem: None)
+    monkeypatch.setattr(lb, "_impl", lambda problem, which: (lambda *a: None, False))
+    with pytest.raises(SystemExit) as ei:
+        lb.ncu_window(problem_path=path)
+    assert ei.value.code == 3
+    assert "INPUT_ERROR" in capsys.readouterr().out

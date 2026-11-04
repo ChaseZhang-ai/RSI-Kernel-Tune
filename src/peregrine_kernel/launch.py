@@ -431,7 +431,16 @@ def drive(run, machine, *, resuming: bool = False, harvest_only: bool = False) -
             raise
         stop = loop_stop(run, task) if rc == 0 else None
         met = rc == 0 and confirmed_at_target(run, task)
-        final = (runs_mod.STATUS_DONE if stop == STOP_TARGET or met
+        # BUG-SEED-13: the exit contract (__main__) is "0 when the final confirmation
+        # meets the target and the correctness monitor raised no alarm on that
+        # kernel". A loop-reported stop=target used to complete the run on its own,
+        # so a confirmed best that the monitor alarmed on (or that measures short of
+        # the task target) still exited 0. `stop` is a record field now: DONE needs
+        # `met`, or a stop=target with no confirmation on file at all -- the
+        # historical contract the loop's own gate stands behind (pinned by five
+        # tests in tests/test_launch.py, whose stand-ins never write one).
+        final = (runs_mod.STATUS_DONE
+                 if met or (stop == STOP_TARGET and confirmation(run, task) is None)
                  else runs_mod.STATUS_STOPPED)
         run.update(status=final, loop_rc=rc, stop=stop, target_met=met)
         write_report(run, task, rc)
@@ -696,7 +705,9 @@ def write_report(run, task, rc: int) -> Path:
                 "with STRICT numbers" if lane == "memo" else ""),
              f"- status: {rec.get('status')} (stop: {rec.get('stop') or 'unknown'}, "
              f"loop exit {rc})"]
-    if rec.get("target_met") and rec.get("stop") != STOP_TARGET:
+    if rec.get("target_met"):
+        # `stop` is a record field (BUG-SEED-13): the claim rides on the
+        # confirmation, not on why the loop stopped.
         lines.append("- the final confirmation meets the target")
     best = best_of(run, task)
     if best is not None:

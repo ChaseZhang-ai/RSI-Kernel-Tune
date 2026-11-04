@@ -10,7 +10,7 @@ original flat model list + global window could not tell apart.
 import json
 from pathlib import Path
 
-from forgekernel.loop.agentctx import (
+from peregrine_kernel.loop.agentctx import (
     inspect_agent_cmd,
     window_findings,
 )

@@ -43,5 +43,5 @@ archived copy the driver makes at harvest time — `notes/` is overwritten by th
   archived for this entry, write exactly: Probe archive: probe not archived — the line is mandatory, its value may say so.
 ```
 
-The mechanical gate `src/forgekernel/loop/kb_lint.py` scans for banned tokens at three points: loop start, recipe
+The mechanical gate `src/peregrine_kernel/loop/kb_lint.py` scans for banned tokens at three points: loop start, recipe
 certification into the KB, and publish. A hit at certification is bounced back for revision first and the entry is quarantined if it still fails; a hit at harvest refuses the publish.

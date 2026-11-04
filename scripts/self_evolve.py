@@ -3,7 +3,7 @@
 
     python scripts/self_evolve.py tasks/<op> [--step 1.05] [--max-gen N]
 
-A generation is an ordinary run (`forge new`, then `forge run`). When it ends with a confirmed
+A generation is an ordinary run (`peregrine new`, then `peregrine run`). When it ends with a confirmed
 best kernel faster than its reference by more than the noise floor, the next generation is
 written as a new task, ``tasks/<op>-g<k>/``: the same task.toml, description and shapes, the
 best kernel copied into its reference/ (so the new task carries everything it needs and can be
@@ -33,20 +33,20 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from forgekernel import launch  # noqa: E402
-from forgekernel.runs import list_runs  # noqa: E402
-from forgekernel.task import (TaskError, dump_task_toml, load_task,  # noqa: E402
+from peregrine_kernel import launch  # noqa: E402
+from peregrine_kernel.runs import list_runs  # noqa: E402
+from peregrine_kernel.task import (TaskError, dump_task_toml, load_task,  # noqa: E402
                               read_task_toml)
 
 REF_DIR = "reference"
-# == forgekernel.loop.parse's noise constants (WP1): below the CAP, two readings of one
+# == peregrine_kernel.loop.parse's noise constants (WP1): below the CAP, two readings of one
 # kernel are not told apart, however tight a handful of confirmation jobs happened to
 # be. Single source of truth: import the cap (and floor) from parse; this standalone
 # script keeps local copies only for the case the import cannot resolve.
 try:
-    from forgekernel.loop.parse import RESOLVABLE_DIFF_CAP as _RESOLVABLE_CAP  # noqa: E402
-except ImportError:  # pragma: no cover - forgekernel not importable (script run standalone)
-    _RESOLVABLE_CAP = 0.015   # == forgekernel.loop.parse.RESOLVABLE_DIFF_CAP
+    from peregrine_kernel.loop.parse import RESOLVABLE_DIFF_CAP as _RESOLVABLE_CAP  # noqa: E402
+except ImportError:  # pragma: no cover - peregrine_kernel not importable (script run standalone)
+    _RESOLVABLE_CAP = 0.015   # == peregrine_kernel.loop.parse.RESOLVABLE_DIFF_CAP
 NOISE_FLOOR_MIN = _RESOLVABLE_CAP
 
 
@@ -69,7 +69,7 @@ def _floor_progress_text(task, best: dict) -> str | None:
     single source; a card without a problem.json yields None and no line is
     printed). Report-only: nothing downstream reads it."""
     try:
-        from forgekernel.loop.analytic_floor import floor_from_op_dir
+        from peregrine_kernel.loop.analytic_floor import floor_from_op_dir
         info = floor_from_op_dir(Path(task.dir), arch="")
     except Exception:  # noqa: BLE001 — an advisory must never break the chain
         return None
@@ -248,7 +248,7 @@ def _write_carry(task, run, dest: Path, best: dict | None = None) -> None:
     census_sections = _best_tree_census_sections(run, best) if best else {}
     census = ""
     if best and best.get("kernel"):
-        header = (f"<!-- fk-ref-census\n"
+        header = (f"<!-- pk-ref-census\n"
                   f"reference_kernel_sha256: {_reference_kernel_sha(best['kernel'])}\n"
                   f"parent_best_sha: {best.get('sha', '')}\n"
                   f"window: {best.get('window') or ''}\n"

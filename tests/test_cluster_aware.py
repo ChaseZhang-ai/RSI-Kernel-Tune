@@ -8,8 +8,8 @@ import json
 
 import pytest
 
-from forgekernel.inner.trajectory import IterationRecord as IR, append_record, load_records
-from forgekernel.loop.driver import (
+from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record, load_records
+from peregrine_kernel.loop.driver import (
     _PendingPatch,
     _cluster_scale,
     _judge_patch,
@@ -17,7 +17,7 @@ from forgekernel.loop.driver import (
     run_inner_iteration,
     run_inner_loop,
 )
-from forgekernel.loop.parse import detect_plateau
+from peregrine_kernel.loop.parse import detect_plateau
 
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx
 
@@ -237,7 +237,7 @@ def test_reanchor_samples_from_another_cluster_do_not_anchor_this_one(tmp_path):
 
 
 def test_phantom_gap_reanchor_is_skipped_on_a_foreign_cluster(tmp_path, capsys):
-    from forgekernel.loop.driver import _phantom_gap_reanchor
+    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
     be = ClusterBackend([], [], cluster="away")
     ctx = _home_ctx(tmp_path, be, target_ms=1.9)
     ctx.reanchor_ref = lambda: (_ for _ in ()).throw(AssertionError("must not measure"))
@@ -252,7 +252,7 @@ def test_scale_divides_min_by_the_plain_device_reading(tmp_path):
     """Medium 2: numerator and denominator must be the same estimator on the
     same window — a median-over-graph mix loosens the scaled target inside
     the noise band."""
-    from forgekernel.baseline import RefBaseline
+    from peregrine_kernel.baseline import RefBaseline
     be = ClusterBackend([], [], cluster="away")
     ctx = _home_ctx(tmp_path, be, target_ms=1.9,
                     ref_baseline=RefBaseline(op="demo", ms=2.2, ms_device=2.0,
@@ -266,13 +266,13 @@ def test_scale_divides_min_by_the_plain_device_reading(tmp_path):
 
 def test_an_adopted_job_is_stamped_with_the_cluster_it_ran_on(tmp_path, monkeypatch):
     """Medium 6."""
-    from forgekernel.loop import cli
+    from peregrine_kernel.loop import cli
     (tmp_path / ".git").mkdir()
     be = cli.RealBackend("demo", tmp_path, None, "n", "e")
     monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
     be.last_cluster = "machine_a"
     be._record_inflight("tasks/9", "br", "all")
-    assert json.loads((tmp_path / ".git" / "fk-inflight.json").read_text())["cluster"] == "machine_a"
+    assert json.loads((tmp_path / ".git" / "pk-inflight.json").read_text())["cluster"] == "machine_a"
     be.last_cluster = "machine_b"     # what a submit made NOW would resolve to
     assert be._adopt_inflight("br", "all") == "tasks/9"
     assert be.last_cluster == "machine_a"

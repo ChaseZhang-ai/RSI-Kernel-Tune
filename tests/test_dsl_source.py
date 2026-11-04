@@ -7,8 +7,8 @@ import os
 import sys
 from pathlib import Path
 
-from forgekernel.loop import agent_policy as ap
-from forgekernel.loop import dsl_source as ds
+from peregrine_kernel.loop import agent_policy as ap
+from peregrine_kernel.loop import dsl_source as ds
 
 PY = sys.executable
 
@@ -208,12 +208,12 @@ def test_declaration_warnings_defer_to_the_resolution(tmp_path):
 
 
 def test_card_env_reads_the_toml_without_validating_the_whole_card(tmp_path):
-    """`forge <op> loop` reads the card's [env] straight from the TOML. Going
+    """`peregrine <op> loop` reads the card's [env] straight from the TOML. Going
     through submit.config.load_config validated the whole card, and its ValueError
     (delivery=clone with no submit.local.toml, the normal state of a fresh run)
     was swallowed — the pin compare then never happened and the loop defaulted to
     whatever this machine had installed."""
-    from forgekernel.loop.cli import _card_env
+    from peregrine_kernel.loop.cli import _card_env
     root = tmp_path
     op = root / "operators" / "demo"
     op.mkdir(parents=True)

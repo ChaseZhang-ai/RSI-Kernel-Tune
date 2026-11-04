@@ -74,7 +74,7 @@ import time
 try:                                    # vendored flat in notes/ (notes/ on sys.path)
     import lever_pricing_run as lpr
 except ImportError:                     # the harness imports it as a skill
-    from forgekernel.skills import lever_pricing_run as lpr
+    from peregrine_kernel.skills import lever_pricing_run as lpr
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_KERNEL = "kernel.py"

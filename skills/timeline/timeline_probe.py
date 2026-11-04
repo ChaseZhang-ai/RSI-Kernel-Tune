@@ -235,14 +235,14 @@ def _seg(site, row=0):
 # A CUDA-mode student (loop language cuda-sol, a CUDA C++ kernel file) marks its timeline with a
 # no-op macro instead of a Python function:
 #
-#     #define FK_SEG(...) ((void)0)                       // keep this exact line
-#     FK_SEG("state.C.wait_kk.begin", ci);                // before a blocking wait
-#     FK_SEG("aux.entry");                                // no row outside the loop
+#     #define PK_SEG(...) ((void)0)                       // keep this exact line
+#     PK_SEG("state.C.wait_kk.begin", ci);                // before a blocking wait
+#     PK_SEG("aux.entry");                                // no row outside the loop
 #
 # Same site-name rules (string literal, `<role>.<segment>.<event>`), same slab, same
 # reduction. The stamped build replaces the #define with CUDA_PREAMBLE (a static
 # __device__ slab and one predicated st.global.u64 per stamp, the DSL stamp's PTX
-# verbatim), rewrites each call to `_fk_tl_seg(<id>, row)`, and adds a readout
+# verbatim), rewrites each call to `_pk_tl_seg(<id>, row)`, and adds a readout
 # binding to the kernel's own PYBIND11_MODULE. Nothing in the injected code needs
 # the environment or a file (the card fences both in CUDA C++): the stride is baked in
 # at stamping, and the slab is read by THIS script running the bench/launcher in
@@ -251,38 +251,38 @@ def _seg(site, row=0):
 # symbol, not an address baked in from another process, so the card's source-keyed
 # build cache may serve the stamped build to the launcher run.
 CU_MARKER_CALL_RE = re.compile(
-    r"""(?<![A-Za-z0-9_])FK_SEG\(\s*"([A-Za-z0-9_][A-Za-z0-9_.\-]*)"\s*(?:,\s*([^\n()]+?))?\s*\)""")
-CU_MARKER_DEF_RE = re.compile(r"^[ \t]*#[ \t]*define[ \t]+FK_SEG\b.*$", re.M)
-CU_ANY_CALL_RE = re.compile(r"(?<![A-Za-z0-9_])FK_SEG\((?:[^()\n]|\([^()\n]*\))*\)")
-CU_RESIDUAL_CALL_RE = re.compile(r"(?<![A-Za-z0-9_])FK_SEG\b[^\n]*")
+    r"""(?<![A-Za-z0-9_])PK_SEG\(\s*"([A-Za-z0-9_][A-Za-z0-9_.\-]*)"\s*(?:,\s*([^\n()]+?))?\s*\)""")
+CU_MARKER_DEF_RE = re.compile(r"^[ \t]*#[ \t]*define[ \t]+PK_SEG\b.*$", re.M)
+CU_ANY_CALL_RE = re.compile(r"(?<![A-Za-z0-9_])PK_SEG\((?:[^()\n]|\([^()\n]*\))*\)")
+CU_RESIDUAL_CALL_RE = re.compile(r"(?<![A-Za-z0-9_])PK_SEG\b[^\n]*")
 CU_PYBIND_RE = re.compile(r"PYBIND11_MODULE\s*\(\s*TORCH_EXTENSION_NAME\s*,\s*([A-Za-z_]\w*)\s*\)\s*\{")
 CU_NOOP = "((void)0)"
-CU_READ_FN = "_fk_tl_read"
+CU_READ_FN = "_pk_tl_read"
 CUDA_RUN_FLAG = "--cuda-run"
 
 CUDA_PREAMBLE = r'''// ---- timeline probe (driver-injected into the stamped build only) ------------
 // [slot][warp][row][site] <- %gridid << 48 | low 48 bits of %clock64, lane 0 of every
 // warp of the first NSLOT x STRIDE CTAs (every STRIDE-th, linear CTA order
 // x + gx * (y + gy * z)); rows >= NROW are not stored. One predicated st.global.u64.
-#define FK_TL_NSLOT @NSLOT@
-#define FK_TL_NWARP @NWARP@
-#define FK_TL_NROW @NROW@
-#define FK_TL_NSITE @NSITE@
-#define FK_TL_STRIDE @STRIDE@
-__device__ unsigned long long _fk_tl_slab[(size_t)FK_TL_NSLOT * FK_TL_NWARP * FK_TL_NROW * FK_TL_NSITE];
+#define PK_TL_NSLOT @NSLOT@
+#define PK_TL_NWARP @NWARP@
+#define PK_TL_NROW @NROW@
+#define PK_TL_NSITE @NSITE@
+#define PK_TL_STRIDE @STRIDE@
+__device__ unsigned long long _pk_tl_slab[(size_t)PK_TL_NSLOT * PK_TL_NWARP * PK_TL_NROW * PK_TL_NSITE];
 
-__device__ __forceinline__ void _fk_tl_seg(int site, long long row) {
+__device__ __forceinline__ void _pk_tl_seg(int site, long long row) {
     const long long cta = (long long)blockIdx.x + (long long)gridDim.x
         * ((long long)blockIdx.y + (long long)gridDim.y * (long long)blockIdx.z);
-    const long long slot = cta / FK_TL_STRIDE;
+    const long long slot = cta / PK_TL_STRIDE;
     const unsigned tid = threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * threadIdx.z);
     const unsigned warp = tid / 32u;
-    const int gate = (int)((cta % FK_TL_STRIDE) != 0) | (int)((tid & 31u) != 0u)
-        | (int)(slot >= FK_TL_NSLOT) | (int)(row < 0 || row >= FK_TL_NROW)
-        | (int)(warp >= FK_TL_NWARP);
+    const int gate = (int)((cta % PK_TL_STRIDE) != 0) | (int)((tid & 31u) != 0u)
+        | (int)(slot >= PK_TL_NSLOT) | (int)(row < 0 || row >= PK_TL_NROW)
+        | (int)(warp >= PK_TL_NWARP);
     const size_t idx = gate ? (size_t)0
-        : ((((size_t)slot * FK_TL_NWARP + warp) * FK_TL_NROW + (size_t)row) * FK_TL_NSITE + (size_t)site);
-    const unsigned long long addr = (unsigned long long)__cvta_generic_to_global(&_fk_tl_slab[idx]);
+        : ((((size_t)slot * PK_TL_NWARP + warp) * PK_TL_NROW + (size_t)row) * PK_TL_NSITE + (size_t)site);
+    const unsigned long long addr = (unsigned long long)__cvta_generic_to_global(&_pk_tl_slab[idx]);
     asm volatile("{\n\t.reg .pred ptl;\n\t.reg .b64 ttl, tgl;\n\tsetp.eq.b32 ptl, %0, 0;\n\t"
                  "mov.u64 ttl, %%clock64;\n\tmov.u64 tgl, %%gridid;\n\t"
                  "and.b64 ttl, ttl, 0xFFFFFFFFFFFF;\n\tshl.b64 tgl, tgl, 48;\n\tor.b64 ttl, ttl, tgl;\n\t"
@@ -292,10 +292,10 @@ __device__ __forceinline__ void _fk_tl_seg(int site, long long row) {
 '''
 
 CUDA_READOUT = r'''// ---- timeline probe readout (driver-injected into the stamped build only) -----
-static void _fk_tl_read(at::Tensor dst) {
+static void _pk_tl_read(at::Tensor dst) {
     TORCH_CHECK(dst.is_cuda() && dst.scalar_type() == at::kLong
-                && (size_t)dst.numel() * 8 == sizeof(_fk_tl_slab), "timeline slab: wrong buffer");
-    TORCH_CHECK(cudaMemcpyFromSymbol(dst.data_ptr(), _fk_tl_slab, sizeof(_fk_tl_slab), 0,
+                && (size_t)dst.numel() * 8 == sizeof(_pk_tl_slab), "timeline slab: wrong buffer");
+    TORCH_CHECK(cudaMemcpyFromSymbol(dst.data_ptr(), _pk_tl_slab, sizeof(_pk_tl_slab), 0,
                                      cudaMemcpyDeviceToDevice) == cudaSuccess, "timeline slab: copy");
 }
 // ---- end timeline probe readout ----------------------------------------------
@@ -312,7 +312,7 @@ def is_cuda_kernel(kernel: str) -> bool:
 
 
 def _cu_def_span(src: str):
-    """(start, end) of the `#define FK_SEG ...` line (with its `\\` continuations)."""
+    """(start, end) of the `#define PK_SEG ...` line (with its `\\` continuations)."""
     m = CU_MARKER_DEF_RE.search(src)
     if m is None:
         return None
@@ -349,15 +349,15 @@ def cuda_preamble(stride: int = 1) -> str:
 
 def stamp_cuda_source(src: str, mode: str = "all", stride: int = 1):
     """(stamped CUDA C++ source, site names by id) — ``stamp_source`` for a CUDA C++
-    kernel. Raises ValueError when the source carries no `#define FK_SEG` line, no
+    kernel. Raises ValueError when the source carries no `#define PK_SEG` line, no
     marker call, or no PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) block to carry the
     readout; SiteCapExceeded as the DSL path does."""
     span = _cu_def_span(src)
     if span is None:
-        raise ValueError("kernel carries no `#define FK_SEG(...) ((void)0)` marker definition")
+        raise ValueError("kernel carries no `#define PK_SEG(...) ((void)0)` marker definition")
     names = cu_markers(src)
     if not names:
-        raise ValueError('kernel carries no `FK_SEG("...")` marker call')
+        raise ValueError('kernel carries no `PK_SEG("...")` marker call')
     keep = names if mode == "all" else [n for n in names if _is_wait_site(n, names)]
     if not keep:
         raise ValueError("no wait site to keep in mode=waits")
@@ -373,7 +373,7 @@ def stamp_cuda_source(src: str, mode: str = "all", stride: int = 1):
         name, row = m.group(1), (m.group(2) or "0").strip()
         if name not in ids:
             return CU_NOOP
-        return f"_fk_tl_seg({ids[name]}, (long long)({row}))"
+        return f"_pk_tl_seg({ids[name]}, (long long)({row}))"
 
     def body(text: str) -> str:
         text = CU_ANY_CALL_RE.sub(
@@ -395,7 +395,7 @@ def stamp_cuda_source(src: str, mode: str = "all", stride: int = 1):
 def cuda_run(argv: list) -> int:
     """``timeline_probe.py --cuda-run <script> [args]``: run the card's bench or
     launch target in THIS process with the stamped CUDA kernel, and at exit copy
-    the slab of the extension module the card built (its ``_fk_tl_read``) to
+    the slab of the extension module the card built (its ``_pk_tl_read``) to
     ``TL_SLAB_OUT``. The card builds the kernel with torch's cpp_extension.load;
     the module it returns is captured here, outside the kernel file's fence."""
     if not argv:
@@ -453,7 +453,7 @@ class SiteCapExceeded(ValueError):
 
 def markers(src: str, cuda: bool = False) -> list:
     """The marker site names in ``src``, in source order, once each (``cuda``:
-    the `FK_SEG("...")` calls of a CUDA C++ kernel)."""
+    the `PK_SEG("...")` calls of a CUDA C++ kernel)."""
     if cuda:
         return cu_markers(src)
     out: list = []
@@ -468,7 +468,7 @@ def unparsed_markers(src: str, cuda: bool = False) -> list:
     formatted or looked-up name, a row with parentheses), as written, one per
     call. ``markers`` does not see them; the stamped build reads them as no-ops;
     the driver's student note and the probe's WARN name them. ``cuda``: the
-    `FK_SEG(` calls of a CUDA C++ kernel."""
+    `PK_SEG(` calls of a CUDA C++ kernel."""
     if cuda:
         return cu_unparsed_markers(src)
     return [" ".join(m.group(0).split()) for m in ANY_CALL_RE.finditer(src)
@@ -1125,7 +1125,7 @@ def _bench_json(label: str, rc: int, out: str, err: str):
 # other meta workloads this way, one job each) -- and the slab launcher's ncu_window
 # follows the same variable, so the bench, the slab and the span denominator are one
 # workload; the timeline reads one launch's span.
-WORKLOAD_SCOPE_ENV = "FK_LB_WORKLOAD_SCOPE"
+WORKLOAD_SCOPE_ENV = "PK_LB_WORKLOAD_SCOPE"
 _SCOPE = {"name": "representative"}
 
 

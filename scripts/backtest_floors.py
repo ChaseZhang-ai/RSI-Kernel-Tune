@@ -54,7 +54,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from forgekernel.loop.analytic_floor import floor_for   # noqa: E402
+from peregrine_kernel.loop.analytic_floor import floor_for   # noqa: E402
 
 MANIFEST = Path(__file__).resolve().parent / "floor_backtest.json"
 HEALTHY_BAND = (1.0, 2.5)

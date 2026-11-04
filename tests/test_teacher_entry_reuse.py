@@ -10,9 +10,9 @@ reachability line read OPEN, where the gate refuses a stop anyway (1157 of 1163;
 """
 import json
 
-from forgekernel.inner.trajectory import IterationRecord, append_record
-from forgekernel.loop import driver
-from forgekernel.loop.driver import (
+from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+from peregrine_kernel.loop import driver
+from peregrine_kernel.loop.driver import (
     _STALL_PRICE_LOGS,
     _TIMELINE_CMD,
     _run_stall_pricing,

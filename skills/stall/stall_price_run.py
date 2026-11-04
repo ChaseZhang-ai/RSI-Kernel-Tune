@@ -35,7 +35,7 @@ frozen recipe by naming it here — the driver reads it from loop.toml
 open the profiler only around the kernel calls (--profile-from-start off).
 
 `--workload <name>` (before `--app`): price one workload of a group card. The
-launch target's ncu_window follows FK_LB_WORKLOAD_SCOPE (set here, inherited
+launch target's ncu_window follows PK_LB_WORKLOAD_SCOPE (set here, inherited
 by everything ncu starts); without the flag a group card is priced on its
 representative. The driver prices the card's other meta workloads (the
 group's smallest and largest) this way, one job each, beside the
@@ -50,7 +50,7 @@ import sys
 
 REPORT = "/tmp/stallprice"
 IR_DIR = "/tmp/dsl_ir"
-WORKLOAD_SCOPE_ENV = "FK_LB_WORKLOAD_SCOPE"   # == benchkit.WORKLOAD_SCOPE_ENV
+WORKLOAD_SCOPE_ENV = "PK_LB_WORKLOAD_SCOPE"   # == benchkit.WORKLOAD_SCOPE_ENV
 
 # The analysis output, replayed compactly at the very END of the job log.
 # A log read back with a length cap keeps only its tail, and the pricing output
@@ -376,7 +376,7 @@ def main(argv=None) -> int:
     # a CUDA C++ kernel: the card's loader (load_cuda_entry) gives this run its own
     # -lineinfo build, so the ledger keys on CUDA source lines instead of PC buckets; a caller
     # that only wants role exposure (the lever pricing's role pass) passes "0"
-    os.environ.setdefault("FK_CUDA_LINEINFO", "1")
+    os.environ.setdefault("PK_CUDA_LINEINFO", "1")
     os.environ["CUTE_DSL_KEEP_IR"] = "1"
     os.environ["CUTE_DSL_DUMP_DIR"] = IR_DIR
     os.environ["CUTE_DSL_CACHE_DIR"] = "/tmp/dslcache_lineinfo"

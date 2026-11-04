@@ -17,7 +17,7 @@ places the driver now compares the two trees:
 """
 import json
 
-from forgekernel.loop.driver import (
+from peregrine_kernel.loop.driver import (
     _LEVER_PRICING_CMD,
     _cited_levers,
     _mark_lever_citations,
@@ -98,7 +98,7 @@ def _revisions(ctx):
 # --- citations & verdicts (pure) ------------------------------------------------
 
 def test_cited_levers_reads_every_spelling_once():
-    from forgekernel.loop.driver import _cited_price_jobs
+    from peregrine_kernel.loop.driver import _cited_price_jobs
     text = ("price +25.59% via lever:regsplit_184_120 [MEASURED, job 885353]\n"
             "reopen_price: +8% via lever：ring（independent）\n"
             "`lever:ring_lane` again, and lever:regsplit_184_120. Then a clever:trap\n"
@@ -176,7 +176,7 @@ def test_new_best_reprices_a_stale_cited_lever_marks_the_milestone_and_suspends_
     assert (row["name"], row["add_pct"], row["priced_on"], row["decisions"]) == (LEVER, -11.63, rec.sha, ["D0.4"])
     assert banked[-1]["spec_levers"][0]["edits"] == [{"old": "a", "new": "b"}]
     # a price-check's partial table is history, never the teacher's table
-    from forgekernel.loop.driver import _banked_lever_table
+    from peregrine_kernel.loop.driver import _banked_lever_table
     assert _banked_lever_table(ctx, rec.sha) == []
     assert [lv["name"] for lv in _banked_lever_table(ctx, "sha_first_green") if lv["kind"] == "lever"] == [LEVER]
     # the student is told, on every turn, until the teacher's next entry
@@ -325,7 +325,7 @@ def test_a_landed_lever_is_repriced_by_taking_it_out(tmp_path):
 
 
 def test_cited_price_jobs_ignore_the_drivers_reprice_marker():
-    from forgekernel.loop.driver import _cited_price_jobs
+    from peregrine_kernel.loop.driver import _cited_price_jobs
     untagged = ("- r3: price +25.59% via lever:regsplit_184_120 [RE-PRICED @abcdef1234 job 886001: "
                 "add -11.63% / remove n/a — REVERSED; SUSPENDED by driver]")
     assert _cited_price_jobs(untagged, "regsplit_184_120") == []

@@ -1,4 +1,4 @@
-"""forgekernel.task: reading and validating tasks/<op>/."""
+"""peregrine_kernel.task: reading and validating tasks/<op>/."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import task as task_mod
-from forgekernel.task import TaskError, load_task
+from peregrine_kernel import task as task_mod
+from peregrine_kernel.task import TaskError, load_task
 
 SHAPES = [{"name": "small", "axes": {"m": 128, "n": 256}},
           {"name": "large", "axes": {"m": 4096, "n": 256}}]
@@ -72,7 +72,7 @@ def test_the_task_overrides_global_config_key_by_key(tmp_path):
 
 
 def test_a_provider_must_be_declared_and_its_key_set(tmp_path, monkeypatch):
-    from forgekernel import agents, provider
+    from peregrine_kernel import agents, provider
     gc = tmp_path / "gc"
     gc.mkdir()
     (gc / "backends.toml").write_text('[gw]\nbase_url = "https://gw.example/anthropic"\n'
@@ -86,7 +86,7 @@ def test_a_provider_must_be_declared_and_its_key_set(tmp_path, monkeypatch):
         agents.agent_command(t.student, "student", env={})
     cmd = agents.agent_command(t.student, "student", env={"GW_KEY": "secret"})
     assert cmd.startswith("env ANTHROPIC_BASE_URL=https://gw.example/anthropic "
-                          "FK_PROVIDER_KEY_ENV=GW_KEY bash ")
+                          "PK_PROVIDER_KEY_ENV=GW_KEY bash ")
     assert "secret" not in cmd and cmd.endswith(" 7200")
     native = load_task(_task(tmp_path, MINIMAL, name="nat"), kb_root=_kb(tmp_path))
     assert agents.agent_command(native.teacher, "teacher").startswith("bash ")

@@ -1,6 +1,6 @@
 """Tests for the MMA operand-source census (the [VERIFY: sass-derived] channel)."""
 
-from forgekernel.skills.sass_census import (
+from peregrine_kernel.skills.sass_census import (
     census_from_text,
     parse_census_line,
     render_census_line,

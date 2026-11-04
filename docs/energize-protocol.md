@@ -3,7 +3,7 @@
 > 执行归 **WP23**（集成与收获）：本文档是协议与固定动作清单；本包（WP21）只落文档
 > 与 `scripts/energize_ab.py` 参数化骨架，**跑批与翻默认都不发生在本包**。
 >
-> 背景：甲 G25（二代休眠机制验证债）——`FK_BUILD_CACHE=off`、`SPRT=off`、
+> 背景：甲 G25（二代休眠机制验证债）——`PK_BUILD_CACHE=off`、`SPRT=off`、
 > MC-DELIVERY 通道开但需教师写 `multi_candidate` 才激活、stagnation/multi_candidate
 > 的 cli 转发行曾缺（dcfdcb5 已接）、floor 门在 floor_backtest `best_ms` 填充前
 > inert、survey 通道 opt-in 默认关、NCU flags 的 board A/B 从未跑、JustGoal A/B
@@ -31,7 +31,7 @@
 | A1 | **普通任务集执行**（对照组基线） | 固定 mini 任务集（`tasks/wp21mini` + 1 个正式小卡）×2 job；记录：status.jsonl 行数、eval/NCU job 完成率、墙钟构成表五桶、digest 产出 | run 归档 + status.jsonl + 两份 run.log；基线不入库存档（run 目录即证据） | —（基线态无开关） | 先跑 A1 作为一切 A/B 的 A 侧 |
 | A2 | **NCU flags A/B**（WP9 遗留 `ncu_flag_ab` 方向确认） | `scripts/ncu_flag_ab.py`（WP9 已落，3060 无 CUDA torch 时未跑——现已有 ml venv CUDA torch 可跑）：同内核新旧 regime flags（`--cache-control none --clock-control none`）各采一次，比对 SOL/L2/DRAM 读数偏移方向 | 两次 NCU 报表 + 偏移表落盘；结论只写"方向确认"，不写性能结论；跨代 NCU 数字不可混读须在报表头注明 | NCU flags 生成点全部带开关（WP9 原生），关即回旧 regime | 任何时候（纯测量无默认翻转；只为跨代读数口径立证） |
 | A3 | **SPRT 默认**（`sprt_early_stop`，默认关） | A1 任务集 ×2：off vs on；度量：每迭eval job 时长分布（早停生效的窗口占比）、verdict 一致性（KEEP/REVERT 与 A 完全一致才算过） | 两轮 status.jsonl 的逐迭代 eval_job_s 对比 + verdict 对照表；**SPRT 只提前输永不造 KEEP**须逐行核对（loop/driver 的 SPRT 段） | `--sprt-early-stop` cli / loop.toml `[loop] sprt_early_stop`（默认 false 即回退） | WP15/WP19 合入后第 3 位（在 build cache 之后、floor 之前） |
-| A4 | **build cache 默认**（`FK_BUILD_CACHE`，默认关） | 乙线折中先行：①真跑构建日志验证"同内核跨 job 重复构建"假设（丙 T5 标注推断）；②key 覆盖用例：改头文件必 miss / 改注释必命中；③然后 A1 任务集 ×2 度量墙钟构成表 eval_job_s 桶 | ①构建日志摘录（同 sha 两次 nvcc 调用）；②key 覆盖单测输出；③两轮 wall-clock 构成表；manifest 逐产物 sha 复核日志 | `FK_BUILD_CACHE=0`（env，一行回退）；board 卡与密封 ref 不启用（范围护栏） | **第 1 位**（乙线主张本地默认开；证据齐后进 CHANGES 建议，翻转归 WP23） |
+| A4 | **build cache 默认**（`PK_BUILD_CACHE`，默认关） | 乙线折中先行：①真跑构建日志验证"同内核跨 job 重复构建"假设（丙 T5 标注推断）；②key 覆盖用例：改头文件必 miss / 改注释必命中；③然后 A1 任务集 ×2 度量墙钟构成表 eval_job_s 桶 | ①构建日志摘录（同 sha 两次 nvcc 调用）；②key 覆盖单测输出；③两轮 wall-clock 构成表；manifest 逐产物 sha 复核日志 | `PK_BUILD_CACHE=0`（env，一行回退）；board 卡与密封 ref 不启用（范围护栏） | **第 1 位**（乙线主张本地默认开；证据齐后进 CHANGES 建议，翻转归 WP23） |
 | A5 | **floor_stop / floor_margin**（解析地板门，默认关） | 前置：`scripts/backtest_floors.py --from-run <归档>` 把 `scripts/floor_backtest.json` 的 25×null 回填（WP21 冒烟已验 --from-run 通路）；回填后 backtest_early_stop.py 回测 floor_stop 假命中率；A1 任务集 ×2：off vs on 度量"误提前停=0、plateau 判定漂移=0" | floor_backtest.json 回填 diff + 回测早停报告 + 两轮 run.log 的 floor 行 | `[target] floor_margin` / `[loop] floor_stop`（task 层键，默认关） | 第 4 位（依赖 A5 前置回填完成 + WP15 resolvable v2 合入） |
 | A6 | **survey 通道**（`teacher_prior_survey`，默认关） | A1 任务集 ×2：off vs on；度量：survey 产物落盘（priors/ 路径）、教师诊断 turn 数变化、SOL 头行是否被教师引用（诊断文本引用率）；**机械存在检查**（甲 F18：义务句空转=fail） | 两轮 run.log + priors 产物 + 诊断 turn 计数表；survey 未做而无机械拦截 = 本项 fail | `[loop] teacher_prior_survey = false`（card 层 loop.toml） | 第 5 位 |
 | A7 | **MC-DELIVERY 激活**（通道开，需教师写 `multi_candidate`） | A1 任务集 ×2：普通 vs 教师里程碑含 `multi_candidate:` 块；度量：variant_timings 落行、合并 job 预筛行（smoke 判定表）、赢家独过全门（gate 行只在赢家） | 两轮 status.jsonl（variant_timings 字段）+ 合并 job 日志的 MC 段；**注意 variant_timings 基线无读者（WP21 审计基线 #7）——本项证据同时是 WP16 池的供料验证** | 教师不写 `multi_candidate` 块即天然关闭；`[loop] multi_candidate_max` cli 转发（dcfdcb5 接缝） | 第 6 位（依赖 WP16 池合入后联测） |

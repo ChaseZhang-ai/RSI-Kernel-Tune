@@ -1,4 +1,4 @@
-"""The binary reference (forgekernel.binref) on a generated task card: the card's
+"""The binary reference (peregrine_kernel.binref) on a generated task card: the card's
 sealed in-job reference, the recon tree, the guards, install."""
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import binref
+from peregrine_kernel import binref
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CU = """#include <torch/extension.h>
@@ -49,19 +49,19 @@ def solution(**over) -> dict:
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch) -> Path:
     """A scratch place for runs; this machine (local), like test_launch's."""
-    monkeypatch.setenv("FORGEKERNEL_RUNS_DIR", str(tmp_path / "runs"))
-    monkeypatch.setenv("FORGEKERNEL_LOCK_DIR", str(tmp_path / "locks"))
-    monkeypatch.delenv("FORGEKERNEL_OPERATORS_DIR", raising=False)
-    monkeypatch.setenv("FK_DELIVERY", "local")
-    monkeypatch.setenv("FK_GPU", "0")
+    monkeypatch.setenv("PEREGRINE_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("PEREGRINE_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("PEREGRINE_OPERATORS_DIR", raising=False)
+    monkeypatch.setenv("PK_DELIVERY", "local")
+    monkeypatch.setenv("PK_GPU", "0")
     return tmp_path
 
 
 @pytest.fixture
 def base(repo: Path) -> Path:
     shutil.copytree(REPO_ROOT / "meta", repo / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "forgekernel" / "card_template",
-                    repo / "src" / "forgekernel" / "card_template")
+    shutil.copytree(REPO_ROOT / "src" / "peregrine_kernel" / "card_template",
+                    repo / "src" / "peregrine_kernel" / "card_template")
     return repo
 
 
@@ -69,10 +69,10 @@ def new_card(base: Path, sol: dict | None = None, *, protocol: bool = True,
              definition: str = "rmsnorm") -> tuple[Path, Path, str]:
     """A generated task card (taskcard.write_card, the normal-task path) carrying the
     binary reference: write_ref_tree, the card guard, the problem's reference_impl."""
-    from forgekernel import judge as judge_mod, taskcard
-    from forgekernel.localenv import load_machine
-    from forgekernel.runs import new_run
-    from forgekernel.task import load_task
+    from peregrine_kernel import judge as judge_mod, taskcard
+    from peregrine_kernel.localenv import load_machine
+    from peregrine_kernel.runs import new_run
+    from peregrine_kernel.task import load_task
     sol = sol or solution()
     d = base / "tasks" / "rmsnorm"
     (d / "reference").mkdir(parents=True, exist_ok=True)
@@ -139,15 +139,15 @@ def test_recon_tree_holds_the_sources_and_a_copy_of_the_bench(base: Path) -> Non
     for tree in (card, ref):
         assert subprocess.run(["bash", "-n", str(tree / "gpu_entry.sh")]).returncode == 0
         assert (tree / "gpu_entry.sh").read_text().count("BLACKBOX_FORBID=") == 1
-    from forgekernel.loop.cli import fresh_start_contamination
+    from peregrine_kernel.loop.cli import fresh_start_contamination
     assert fresh_start_contamination(card, card / "milestone.md", card / "student" / "status.jsonl",
                                      card / "meta_status.jsonl", ref, evidence_dir=card / "evidence") == []
 
 
 def test_recon_tree_refuses_every_task_where_the_clock_lock_does_not_hold(base: Path) -> None:
     """The recon tree inherits the card's declared clock lock and its refusal: its build /
-    binref / ncu / cmd jobs on a node at SM 1155 MHz print the line ForgeKernel withholds."""
-    from forgekernel.submit.jobs import clock_lock_refusal
+    binref / ncu / cmd jobs on a node at SM 1155 MHz print the line Peregrine-Kernel withholds."""
+    from peregrine_kernel.submit.jobs import clock_lock_refusal
     card, ref, _ = new_card(base)
     smi = base / "fake-smi"
     smi.write_text('#!/bin/bash\ncase "$*" in *clocks.current.graphics*) echo "1155, 3996";; '
@@ -375,7 +375,7 @@ def test_the_loops_own_jobs_pass_both_guards_with_notes_seeded_as_the_loop_seeds
     tree), the recon toolkit and the shared blackbox-guard.sh into the recon tree. Every job the
     loop itself sends must pass; a probe that reaches for the reference must not."""
     from types import SimpleNamespace
-    from forgekernel.loop import driver
+    from peregrine_kernel.loop import driver
     card, ref, module = new_card(base)
     stub = SimpleNamespace(commit=lambda *a, **k: None)
     driver._seed_pricing_toolkits(card, stub)

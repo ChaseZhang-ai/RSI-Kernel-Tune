@@ -55,7 +55,7 @@ never a per-measurement fit (which would let a quiet draw keep what a run-level
 margin would revert).
 
 Usage: python scripts/backtest_early_stop.py [trials_per_cell]
-       (forgekernel venv — the imported timing.py pulls torch)
+       (peregrine_kernel venv — the imported timing.py pulls torch)
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from forgekernel.card_template.eval import timing as _timing  # noqa: E402
+from peregrine_kernel.card_template.eval import timing as _timing  # noqa: E402
 
 DEVICE_REPS = _timing.DEVICE_REPS             # windows per side, one paired measurement
 SPRT_MIN_WINDOWS = _timing.SPRT_MIN_WINDOWS   # single-workload floor (family cards

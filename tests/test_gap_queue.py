@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import FakeBackend, _ctx  # noqa: E402
 
-from forgekernel.loop.driver import (  # noqa: E402
+from peregrine_kernel.loop.driver import (  # noqa: E402
     _persist_gap_queue, load_gap_queue, parse_gap_queue, run_kb_harvest,
 )
 
@@ -163,7 +163,7 @@ def test_inferred_rows_join_the_queue_and_reach_the_distill_prompt(tmp_path):
     byte-identical readings, shipped as sass-derived "no ambiguity" and cost a
     13-decision reopen). It is queued, and the distill step is told to carry
     both readings as [ESTIMATE] candidates."""
-    from forgekernel.loop.driver import _inferred_rows_block_for_distill
+    from peregrine_kernel.loop.driver import _inferred_rows_block_for_distill
     text = ("| Decision | Value | VERIFY | Notes |\n|---|---|---|---|\n"
             "| KV ring segment axis | 32 key × 512 d or 64 key × 256 d | `inferred` | G1d printed 0 lines |\n"
             "| stage count | 4 | `sass-derived` | immediates 0x0/0x8000/0x10000/0x18000 |\n")

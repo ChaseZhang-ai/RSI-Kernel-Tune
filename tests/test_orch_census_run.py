@@ -15,9 +15,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from test_orch_tools import SASS_SMALL, _big_page  # noqa: E402
 
-from forgekernel.skills import orch_census_run as R  # noqa: E402
-from forgekernel.skills import orch_tools  # noqa: E402
-from forgekernel.skills.sass_tools import parse_sass  # noqa: E402
+from peregrine_kernel.skills import orch_census_run as R  # noqa: E402
+from peregrine_kernel.skills import orch_tools  # noqa: E402
+from peregrine_kernel.skills.sass_tools import parse_sass  # noqa: E402
 
 SASS_BIG = _big_page()
 _SMALL_KERNEL = "\n        Function : tiny_kernel\n" + SASS_SMALL

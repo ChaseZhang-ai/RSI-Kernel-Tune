@@ -212,8 +212,8 @@ usage: backtest_floors.py [-h] [--manifest MANIFEST] [--selftest]
 ### 2.6 冒烟执行记录（逐阶段摘录，.artifacts/wp21mini_261103-183520-78a3/run.log）
 
 ```
-[forge] the judge: files pass the static check                    # stub judge 回合
-[forge] calibrate → tolerance frozen；probe NCU → available
+[peregrine] the judge: files pass the static check                    # stub judge 回合
+[peregrine] calibrate → tolerance frozen；probe NCU → available
 [loop] the ref baseline … (0.0607 ms, ncu=yes)                     # 真 baseline job
 [loop] meta/recon: 12 run(s), budget exhausted … ref-price ledger/segments/
        roles+tensor/timeline banked (job 1793701503)               # recon/ref-price 真跑

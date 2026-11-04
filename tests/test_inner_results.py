@@ -1,6 +1,6 @@
 """Tests for parsing GPU job output (correctness + perf) from job logs."""
 
-from forgekernel.inner import (
+from peregrine_kernel.inner import (
     parse_correctness,
     parse_perf,
 )

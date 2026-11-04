@@ -4,7 +4,7 @@ plausible wrong answer."""
 
 import re
 
-from forgekernel.skills import sass_tools as st
+from peregrine_kernel.skills import sass_tools as st
 
 FA_KERNEL = ("kernel_cutlass_kernel_flash_attncuteflash_fwd_sm90"
              "FlashAttentionForwardSm90_16x384x128")

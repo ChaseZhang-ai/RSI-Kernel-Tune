@@ -12,10 +12,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import NCU, REC, FakeBackend, _ctx  # noqa: E402
 
-from forgekernel.inner.trajectory import load_records  # noqa: E402
-from forgekernel.loop import cli, precision_gate as pg  # noqa: E402
-from forgekernel.loop.driver import run_inner_iteration  # noqa: E402
-from forgekernel.loop.parse import parse_eval  # noqa: E402
+from peregrine_kernel.inner.trajectory import load_records  # noqa: E402
+from peregrine_kernel.loop import cli, precision_gate as pg  # noqa: E402
+from peregrine_kernel.loop.driver import run_inner_iteration  # noqa: E402
+from peregrine_kernel.loop.parse import parse_eval  # noqa: E402
 
 
 

@@ -1,4 +1,4 @@
-"""``measure_paired`` in ``src/forgekernel/card_template/eval/timing.py``: the in-job
+"""``measure_paired`` in ``src/peregrine_kernel/card_template/eval/timing.py``: the in-job
 reference and the kernel on one warm plateau, mirrored.
 
 Same stub-torch harness as ``test_template_timing.py`` (the CI host has no CUDA);

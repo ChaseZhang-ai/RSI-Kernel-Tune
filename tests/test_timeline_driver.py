@@ -3,7 +3,7 @@ new bests beyond the margin, on request), what it hands the teacher and the
 student, and the locus_segment line it makes the diagnosis carry."""
 import json
 
-from forgekernel.loop.driver import (
+from peregrine_kernel.loop.driver import (
     _TIMELINE_CMD,
     _student_prompt,
     _timeline_on,
@@ -175,8 +175,8 @@ def test_everything_that_reads_a_table_asks_the_same_question():
     """One rule, one place. ``table_usable`` decides; ``parse_timeline`` banks its
     answer and the driver reads that field back. Re-deriving it in the driver is
     how the retrieval, the log line and the banked record came to disagree."""
-    from forgekernel.loop.driver import _timeline_renderable, _timeline_short_coverage
-    from forgekernel.skills.timeline_probe import parse_timeline, table_usable
+    from peregrine_kernel.loop.driver import _timeline_renderable, _timeline_short_coverage
+    from peregrine_kernel.skills.timeline_probe import parse_timeline, table_usable
 
     def tl_from(log):
         return parse_timeline(log)
@@ -214,7 +214,7 @@ def test_the_student_note_carries_the_shortage_caveat_too(tmp_path):
                      [TL_PARTIAL])
     ctx = _tl_ctx(tmp_path, be)
     run_meta_step(ctx)
-    from forgekernel.loop.driver import _timeline_student_note
+    from peregrine_kernel.loop.driver import _timeline_student_note
     note = _timeline_student_note(ctx)
     assert "Latest table" in note and "Coverage note" in note and "read the absolute values as they are" in note and "mode=waits" in note
     # a full-coverage table does not carry it
@@ -247,7 +247,7 @@ def test_an_over_spanning_table_is_still_dropped(tmp_path):
 
 
 def test_teacher_can_request_a_timeline_as_a_verdict_probe(tmp_path):
-    from forgekernel.loop.driver import _is_timeline_request
+    from peregrine_kernel.loop.driver import _is_timeline_request
     assert _is_timeline_request("`timeline`") and _is_timeline_request("notes/timeline.") \
         and _is_timeline_request("TIMELINE") and not _is_timeline_request("notes/timeline_x.py")
     # the entry already read the tree: the request re-uses that table, no second job
@@ -336,8 +336,8 @@ def test_student_note_carries_the_convention_the_markers_and_the_latest_table(tm
     note = _student_prompt(ctx, 2)
     assert "Markers in the current tree (2): `state.A.top`, `aux.entry`" in note
     ctx.evidence_dir.mkdir(parents=True, exist_ok=True)
-    from forgekernel.loop.driver import _bank_timeline
-    from forgekernel.skills.timeline_probe import parse_timeline
+    from peregrine_kernel.loop.driver import _bank_timeline
+    from peregrine_kernel.skills.timeline_probe import parse_timeline
     _bank_timeline(ctx, "sha9", "777", "iter9:new best", parse_timeline(TL_LOG))
     note = _student_prompt(ctx, 3)
     assert "Latest table (@`sha9`, iter9:new best)" in note
@@ -415,8 +415,8 @@ def test_a_stale_tree_probe_is_named_once_in_the_log_and_in_the_student_note(tmp
     refreshes it. When the two differ (or the tree has none) the operator is told
     once per loop and the student is told where the current file is; when they
     are identical, neither is said."""
-    from forgekernel.loop.driver import _timeline_probe_stale, _timeline_student_note
-    from forgekernel.skills import timeline_probe as probe_mod
+    from peregrine_kernel.loop.driver import _timeline_probe_stale, _timeline_student_note
+    from peregrine_kernel.skills import timeline_probe as probe_mod
     be = FakeBackend([_DIAG, DIAG_SEG,
                       _patching(tmp_path, "\n### D6 added\nx\n",
                                 "patch_class: additive\nchanged_entries: []\n")],
@@ -446,7 +446,7 @@ def test_a_preamble_the_card_fence_would_refuse_skips_the_probe_before_any_job(t
     and the pre-0318c147 preamble read `_tl_os.environ`: three stamped jobs, three
     no-slab-dumped. The self-check reads the workspace's eval/bench.py, names the
     token, and spends no job; a fence the preamble clears runs the probe as before."""
-    from forgekernel.loop.driver import _run_timeline
+    from peregrine_kernel.loop.driver import _run_timeline
     from test_timeline_probe import GDN_FENCE_BENCH
     be = FakeBackend([], [TL_LOG])
     ctx = _tl_ctx(tmp_path, be)
@@ -468,7 +468,7 @@ def test_a_preamble_the_card_fence_would_refuse_skips_the_probe_before_any_job(t
 
 
 def test_a_stamped_bench_refusal_reaches_the_log_with_the_benchs_reason(tmp_path, capsys):
-    from forgekernel.loop.driver import _run_timeline
+    from peregrine_kernel.loop.driver import _run_timeline
     refused = ("TIMELINE-FAIL reason=stamped-bench-failed mode=all "
                "detail=forbidden op in kernel: os.environ\n")
     be = FakeBackend([], [refused])
@@ -520,7 +520,7 @@ class OverlayBackend(FakeBackend):
         self.calls.append(("push_ref", ref, branch))
 
     def with_file(self, ref, path, text, message):
-        from forgekernel.loop.driver import BackendError
+        from peregrine_kernel.loop.driver import BackendError
         assert path == "notes/timeline_probe.py" and "overlaid" in message and "TIMELINE-FAIL" in text
         if self.fail:
             raise BackendError("git read-tree failed")
@@ -531,7 +531,7 @@ class OverlayBackend(FakeBackend):
 
 
 def test_the_probe_job_archives_the_ref_with_the_harness_probe_overlaid(tmp_path, capsys):
-    from forgekernel.loop.driver import _run_timeline
+    from peregrine_kernel.loop.driver import _run_timeline
     be = OverlayBackend([], [TL_LOG])
     ctx = _tl_ctx(tmp_path, be)
     tl = _run_timeline(ctx, "shabest", "plateau")
@@ -549,7 +549,7 @@ def test_the_probe_job_archives_the_ref_with_the_harness_probe_overlaid(tmp_path
 
 
 def test_a_tree_already_carrying_the_harness_probe_is_pushed_as_is(tmp_path, capsys):
-    from forgekernel.loop.driver import _run_timeline
+    from peregrine_kernel.loop.driver import _run_timeline
     be = OverlayBackend([], [TL_LOG], tree_is_harness=True)
     ctx = _tl_ctx(tmp_path, be)
     _run_timeline(ctx, "shabest", "plateau")
@@ -558,7 +558,7 @@ def test_a_tree_already_carrying_the_harness_probe_is_pushed_as_is(tmp_path, cap
 
 
 def test_an_overlay_the_backend_cannot_build_falls_back_to_the_trees_copy(tmp_path, capsys):
-    from forgekernel.loop.driver import _run_timeline
+    from peregrine_kernel.loop.driver import _run_timeline
     be = OverlayBackend([], [TL_LOG], fail=True)
     ctx = _tl_ctx(tmp_path, be)
     tl = _run_timeline(ctx, "shabest", "plateau")

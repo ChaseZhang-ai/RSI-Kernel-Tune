@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import json
 
-from forgekernel.loop.driver import (_analytic_floor_ms, _floor_stop_check,
+from peregrine_kernel.loop.driver import (_analytic_floor_ms, _floor_stop_check,
                                       _floor_teacher_line, _mfu_teacher_line,
                                       _resolve_target)
-from forgekernel.inner.trajectory import IterationRecord, build_digest
-from forgekernel.loop.parse import parse_eval
+from peregrine_kernel.inner.trajectory import IterationRecord, build_digest
+from peregrine_kernel.loop.parse import parse_eval
 
 from test_loop_driver import FakeBackend, _ctx
 

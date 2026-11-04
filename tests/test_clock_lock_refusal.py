@@ -10,10 +10,10 @@ caller, resubmits a few times, then stops with ClockLockRefusedError (a NoRunErr
 
 import pytest
 
-from forgekernel.loop import cli
-from forgekernel.loop.driver import NoRunError
-from forgekernel.loop.parse import parse_eval
-from forgekernel.submit import jobs
+from peregrine_kernel.loop import cli
+from peregrine_kernel.loop.driver import NoRunError
+from peregrine_kernel.loop.parse import parse_eval
+from peregrine_kernel.submit import jobs
 
 REFUSED_LOG = """\
 === gpu_entry.sh (010_gemm_n6144_k4096) ===

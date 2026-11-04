@@ -36,7 +36,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 REPO = Path(__file__).resolve().parents[2]
-EVAL_SRC = REPO / "src" / "forgekernel" / "card_template" / "eval"
+EVAL_SRC = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
 
 EVENT_MS = 0.5   # what the fake event pair always reads (ms)
 
@@ -142,9 +142,9 @@ def test_unknown_readings_never_become_a_fail(lb):
 def test_driver_reverts_and_marks_suspicious_on_mode_stream(tmp_path):
     """The loop's consumption: a mode=stream fresh_recheck fail is the WP9 row —
     REVERT, suspicious=True, the mode in the error text."""
-    from forgekernel.inner.trajectory import load_records
+    from peregrine_kernel.inner.trajectory import load_records
     from test_loop_driver import NCU, REC, FakeBackend, _ctx
-    from forgekernel.loop.driver import run_inner_loop
+    from peregrine_kernel.loop.driver import run_inner_loop
 
     fail_json = ("=== JSON ===\n"
                  + json.dumps({"correctness": {"pass": True},

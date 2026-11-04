@@ -15,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.baseline import ROLE_ARCHITECTURE, RefBaseline, load_baseline, save_baseline
-from forgekernel.inner.ncu import kernel_table, kernels_from_ncu, parse_ncu_csv
-from forgekernel.inner.trajectory import IterationRecord, append_record, load_records
-from forgekernel.window_contract import (
+from peregrine_kernel.baseline import ROLE_ARCHITECTURE, RefBaseline, load_baseline, save_baseline
+from peregrine_kernel.inner.ncu import kernel_table, kernels_from_ncu, parse_ncu_csv
+from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
+from peregrine_kernel.window_contract import (
     COVERAGE_BAND,
     EXIT_WINDOW_UNDECLARED,
     WINDOW_FILENAME,
@@ -110,7 +110,7 @@ def test_absent_file_is_none_and_a_named_finding(tmp_path):
 def test_template_placeholder_is_undeclared_not_malformed():
     """The scaffolded file parses but is UNDECLARED: a fresh card must refuse
     until the author fills it in — vacuous consistency would defeat the gate."""
-    text = (REPO / "src" / "forgekernel" / "card_template" / WINDOW_FILENAME).read_text(encoding="utf-8")
+    text = (REPO / "src" / "peregrine_kernel" / "card_template" / WINDOW_FILENAME).read_text(encoding="utf-8")
     c = parse_window_contract(text)
     assert not c.declared
     findings = window_findings(c)
@@ -276,7 +276,7 @@ def test_baseline_archives_and_reloads_the_kernel_table(tmp_path):
 
 
 def test_pre_field_baseline_loads_with_an_empty_table(tmp_path):
-    from forgekernel.baseline import SCHEMA_VERSION, baseline_path
+    from peregrine_kernel.baseline import SCHEMA_VERSION, baseline_path
     baseline_path(tmp_path).write_text(
         json.dumps({"op": "demo", "ms": 1.0, "schema_version": SCHEMA_VERSION}),
         encoding="utf-8")
@@ -444,25 +444,25 @@ def _cfg_with_ref():
 
 
 def test_preflight_refuses_a_fresh_start_without_a_declaration(tmp_path):
-    from forgekernel.loop.cli import _window_preflight
+    from peregrine_kernel.loop.cli import _window_preflight
     state, contract, problems = _window_preflight(tmp_path, _cfg_with_ref(), resuming=False)
     assert state == "refuse" and contract is None and problems
 
 
 def test_preflight_only_warns_on_resume(tmp_path):
-    from forgekernel.loop.cli import _window_preflight
+    from peregrine_kernel.loop.cli import _window_preflight
     state, _, problems = _window_preflight(tmp_path, _cfg_with_ref(), resuming=True)
     assert state == "warn" and problems
 
 
 def test_preflight_is_not_applicable_without_a_reference(tmp_path):
-    from forgekernel.loop.cli import _window_preflight
+    from peregrine_kernel.loop.cli import _window_preflight
     state, _, problems = _window_preflight(tmp_path, {}, resuming=False)
     assert state == "n/a" and problems == []
 
 
 def test_preflight_passes_a_declared_card_and_surfaces_notes(tmp_path):
-    from forgekernel.loop.cli import _window_preflight
+    from peregrine_kernel.loop.cli import _window_preflight
     _write(tmp_path, DECLARED.replace('student_kernel_regex = "Preprocess"\n', ""))
     state, contract, problems = _window_preflight(tmp_path, _cfg_with_ref(), resuming=False)
     assert state == "ok" and contract.declared
@@ -470,14 +470,14 @@ def test_preflight_passes_a_declared_card_and_surfaces_notes(tmp_path):
 
 
 def test_preflight_refuses_a_malformed_file_even_on_resume(tmp_path):
-    from forgekernel.loop.cli import _window_preflight
+    from peregrine_kernel.loop.cli import _window_preflight
     _write(tmp_path, "[reference\n")
     state, contract, problems = _window_preflight(tmp_path, _cfg_with_ref(), resuming=True)
     assert state == "refuse" and contract is None and "not valid TOML" in problems[0]
 
 
 def test_preflight_holds_declared_arch_refs_to_the_contract(tmp_path):
-    from forgekernel.loop.cli import _window_preflight
+    from peregrine_kernel.loop.cli import _window_preflight
     state, *_ = _window_preflight(tmp_path, {"loop": {"arch_ref_mode": "flashref"}},
                                   resuming=False)
     assert state == "refuse"
@@ -492,7 +492,7 @@ def test_loop_start_exit_code_is_reserved():
 
 
 def test_dry_run_line_names_the_state():
-    from forgekernel.loop.cli import _window_dry_run_line
+    from peregrine_kernel.loop.cli import _window_dry_run_line
     c = parse_window_contract(DECLARED)
     assert _window_dry_run_line("ok", c, [], False) == "declared (2 asymmetries, 1 priced)"
     assert "refuse" in _window_dry_run_line("refuse", None, ["x"], False)
@@ -501,10 +501,10 @@ def test_dry_run_line_names_the_state():
     assert _window_dry_run_line("n/a", None, [], False).startswith("n/a")
 
 
-# --- forge <op> window ----------------------------------------------------------
+# --- peregrine <op> window ----------------------------------------------------------
 
 def test_window_cli_reports_findings_and_renders_the_ledger(tmp_path, capsys):
-    from forgekernel.window_contract import main
+    from peregrine_kernel.window_contract import main
     op_dir = tmp_path / "operators" / "demo"
     _write(op_dir)
     save_baseline(op_dir, RefBaseline(op="demo", ms=1.0, ms_device=0.68, role=ROLE_ARCHITECTURE,
@@ -543,7 +543,7 @@ def _keep(iter_no=2, sha="abc123", profiler=None):
 
 
 def test_binding_and_student_note_read_the_contract(tmp_path):
-    from forgekernel.loop.driver import _bindings, _student_prompt
+    from peregrine_kernel.loop.driver import _bindings, _student_prompt
     ctx = _driver_ctx(tmp_path, parse_window_contract(DECLARED))
     append_record(ctx.status_path, _keep())
     block = _bindings(ctx)["{WINDOW_CONTRACT}"]
@@ -557,20 +557,20 @@ def test_binding_and_student_note_read_the_contract(tmp_path):
 
 
 def test_student_note_only_lists_what_the_student_pays(tmp_path):
-    from forgekernel.loop.driver import _student_prompt
+    from peregrine_kernel.loop.driver import _student_prompt
     ctx = _driver_ctx(tmp_path, parse_window_contract(STUDENT_FAVOURED))
     assert "Timed-window contract" not in _student_prompt(ctx, 1)   # the reference pays both
 
 
 def test_binding_says_undeclared_and_student_note_stays_silent(tmp_path):
-    from forgekernel.loop.driver import _bindings, _student_prompt
+    from peregrine_kernel.loop.driver import _bindings, _student_prompt
     ctx = _driver_ctx(tmp_path, None)
     assert "Not declared" in _bindings(ctx)["{WINDOW_CONTRACT}"]
     assert "Timed-window contract" not in _student_prompt(ctx, 1)
 
 
 def test_confirmation_credit_lands_next_to_the_raw_ratio(tmp_path):
-    from forgekernel.loop.driver import apply_window_credit
+    from peregrine_kernel.loop.driver import apply_window_credit
     ctx = _driver_ctx(tmp_path, parse_window_contract(DECLARED))
     append_record(ctx.status_path, _keep())
     confirm = {"sha": "abc123", "median_ms": 0.80, "median_ratio": 0.85,
@@ -588,7 +588,7 @@ def test_confirmation_credit_lands_next_to_the_raw_ratio(tmp_path):
 
 
 def test_confirmation_credit_is_marked_unusable_never_zero(tmp_path):
-    from forgekernel.loop.driver import apply_window_credit
+    from peregrine_kernel.loop.driver import apply_window_credit
     # regex matches nothing (the rebuild was fused into the main kernel)
     ctx = _driver_ctx(tmp_path, parse_window_contract(DECLARED.replace('"Preprocess"', '"gone"')))
     append_record(ctx.status_path, _keep())
@@ -607,7 +607,7 @@ def test_confirmation_credit_is_marked_unusable_never_zero(tmp_path):
 
 
 def test_confirmation_credit_is_absent_when_unpriced_or_untabled(tmp_path):
-    from forgekernel.loop.driver import apply_window_credit
+    from peregrine_kernel.loop.driver import apply_window_credit
     unpriced = parse_window_contract(DECLARED.replace('student_kernel_regex = "Preprocess"\n', ""))
     ctx = _driver_ctx(tmp_path, unpriced)
     confirm = {"sha": "abc123", "median_ms": 0.80, "jobs": []}
@@ -622,7 +622,7 @@ def test_iteration_banks_the_kernel_table_off_the_ncu_job(tmp_path):
     """The student's decomposition rides the NCU job into IterationRecord.kernels
     and stays OUT of the flat profiler digest."""
     from test_loop_driver import EVAL, REC, FakeBackend, _ctx
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.loop.driver import run_inner_iteration
     be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), FIXTURE.read_text()])
     ctx = _ctx(tmp_path, be)
     run_inner_iteration(ctx, 0, metric_before=3.0)
@@ -670,7 +670,7 @@ PREP_OK = {"outputs": {"A": {"shape": [4, 32, 64], "dtype": "bfloat16"},
 
 
 def test_symmetrized_contract_declares_prep_entries_and_is_consistent():
-    from forgekernel.window_contract import check_prep_report
+    from peregrine_kernel.window_contract import check_prep_report
     c = parse_window_contract(SYMMETRIZED)
     assert window_findings(c) == []
     assert [a.name for a in c.prep_entries] == ["A", "g_cumsum"]
@@ -722,13 +722,13 @@ produced_by = "cache"
     (dict(PREP_OK, mutated=["A"]), "mutated the prep tensor(s) A"),
 ])
 def test_prep_report_is_held_to_the_declaration(report, needle):
-    from forgekernel.window_contract import check_prep_report
+    from peregrine_kernel.window_contract import check_prep_report
     problems = check_prep_report(parse_window_contract(SYMMETRIZED), report)
     assert any(needle in p for p in problems), problems
 
 
 def test_prep_check_is_vacuous_without_symmetrized_inputs():
-    from forgekernel.window_contract import check_prep_report
+    from peregrine_kernel.window_contract import check_prep_report
     assert check_prep_report(parse_window_contract(DECLARED), None) == []
     assert check_prep_report(None, PREP_OK) == []
 
@@ -774,14 +774,14 @@ torch.cuda.profiler.stop()
     ("def f(:\n", "does not parse"),
 ])
 def test_bench_prep_rules_are_static_findings(src, needle):
-    from forgekernel.window_contract import bench_prep_analysis, bench_uses_prep
+    from peregrine_kernel.window_contract import bench_prep_analysis, bench_uses_prep
     (finding,) = bench_prep_analysis(src)["findings"]
     assert needle in finding, finding
     assert not bench_uses_prep(src)
 
 
 def test_a_conforming_bench_prep_names_the_function():
-    from forgekernel.window_contract import bench_prep_analysis, bench_uses_prep
+    from peregrine_kernel.window_contract import bench_prep_analysis, bench_uses_prep
     assert bench_prep_analysis(BENCH_OK) == {"prep": "prep_saved", "findings": []}
     assert bench_uses_prep(BENCH_OK)
 
@@ -797,13 +797,13 @@ def test_a_conforming_bench_prep_names_the_function():
      "torch.cuda.profiler.start()\nsaved = prep_saved()\n", "after torch.cuda.profiler.start()"),
 ])
 def test_ncu_run_must_run_the_same_prep_before_the_profiler_window(src, needle):
-    from forgekernel.window_contract import ncu_run_prep_findings
+    from peregrine_kernel.window_contract import ncu_run_prep_findings
     (finding,) = ncu_run_prep_findings(src, "prep_saved")
     assert needle in finding, finding
 
 
 def test_ncu_run_conforming_forms_pass():
-    from forgekernel.window_contract import ncu_run_prep_findings
+    from peregrine_kernel.window_contract import ncu_run_prep_findings
     assert ncu_run_prep_findings(NCU_OK, "prep_saved") == []
     aliased = NCU_OK.replace("from bench import prep_saved", "from bench import prep_saved as p"
                              ).replace("saved = prep_saved()", "saved = p()")
@@ -814,7 +814,7 @@ def test_ncu_run_conforming_forms_pass():
 
 
 def test_bench_prep_findings_reads_bench_then_ncu_run(tmp_path):
-    from forgekernel.window_contract import bench_prep_findings
+    from peregrine_kernel.window_contract import bench_prep_findings
     c = parse_window_contract(SYMMETRIZED)
     (tmp_path / "eval").mkdir()
     bench = tmp_path / "eval" / "bench.py"
@@ -835,7 +835,7 @@ def test_bench_prep_findings_reads_bench_then_ncu_run(tmp_path):
 
 
 def test_preflight_refuses_a_symmetrized_card_whose_bench_runs_no_prep(tmp_path):
-    from forgekernel.loop.cli import _window_dry_run_line, _window_preflight
+    from peregrine_kernel.loop.cli import _window_dry_run_line, _window_preflight
     _write(tmp_path, SYMMETRIZED)
     (tmp_path / "eval").mkdir()
     (tmp_path / "eval" / "bench.py").write_text("win = measure_windows(_run)\n", encoding="utf-8")
@@ -849,7 +849,7 @@ def test_preflight_refuses_a_symmetrized_card_whose_bench_runs_no_prep(tmp_path)
 
 
 def test_parse_eval_reads_the_prep_block():
-    from forgekernel.loop.parse import parse_eval
+    from peregrine_kernel.loop.parse import parse_eval
     perf = json.dumps({"bwd_median_ms": 1.0, "device_median_ms": 0.9, "prep": PREP_OK})
     ev = parse_eval('=== JSON ===\n{"correctness": {"pass": true}, "performance": %s}' % perf)
     assert ev.prep == PREP_OK
@@ -870,7 +870,7 @@ def test_iteration_holds_the_prep_report_to_the_contract(tmp_path):
     """A prep step that widens what the timed call receives is a REVERT with the
     mismatch as its error; a conforming one banks the prep block on the record."""
     from test_loop_driver import NCU, REC, FakeBackend, _ctx
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.loop.driver import run_inner_iteration
     smuggled = {"outputs": dict(PREP_OK["outputs"],
                                 h_states={"shape": [4, 128, 128], "dtype": "fp32"}),
                 "median_ms": 0.5, "device_median_ms": 0.45}
@@ -889,7 +889,7 @@ def test_iteration_holds_the_prep_report_to_the_contract(tmp_path):
 
 def test_iteration_without_a_prep_block_fails_when_the_contract_symmetrizes(tmp_path):
     from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.loop.driver import run_inner_iteration
     be = FakeBackend([REC("D2.3", 2.6)], [EVAL(2.6), NCU])
     ctx = _ctx(tmp_path, be)
     ctx.window_contract = parse_window_contract(SYMMETRIZED)
@@ -908,7 +908,7 @@ def test_inner_loop_stops_on_a_structural_prep_defect(tmp_path):
     its own reason on the first sighting (gate_unmeasured's family). A mismatch
     that repeats verbatim stops too; one that a student edit clears does not."""
     from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx
-    from forgekernel.loop.driver import run_inner_loop
+    from peregrine_kernel.loop.driver import run_inner_loop
     be = FakeBackend([REC("D1", 2.6)], [EVAL(2.6), NCU])
     ctx = _ctx(tmp_path, be)
     ctx.window_contract = parse_window_contract(SYMMETRIZED)
@@ -936,8 +936,8 @@ def test_inner_loop_stops_on_a_structural_prep_defect(tmp_path):
 
 
 def test_student_note_and_ledger_show_the_prep_step(tmp_path):
-    from forgekernel.loop.driver import _bindings, _student_prompt
-    from forgekernel.window_contract import render_prep_lines
+    from peregrine_kernel.loop.driver import _bindings, _student_prompt
+    from peregrine_kernel.window_contract import render_prep_lines
     ctx = _driver_ctx(tmp_path, parse_window_contract(SYMMETRIZED))
     prompt = _student_prompt(ctx, 1)
     assert "produced by the bench's prep step" in prompt and "(4, 32, 64) bf16" in prompt and "REVERT" in prompt

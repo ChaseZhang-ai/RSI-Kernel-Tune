@@ -16,11 +16,11 @@ from test_loop_driver import (  # noqa: E402
     _DIAG, _MILESTONE, _STALL_LOG_OK, FakeBackend, _ctx, _patching, _seed_keep,
 )
 
-from forgekernel.loop.driver import (  # noqa: E402
+from peregrine_kernel.loop.driver import (  # noqa: E402
     BackendError, PricedTrees, _orch_diff_views, _pick_ref_dossier,
     _price_student_trees, _save_ref_orch_dossier, _student_prompt, run_meta_step,
 )
-from forgekernel.inner.trajectory import load_records  # noqa: E402
+from peregrine_kernel.inner.trajectory import load_records  # noqa: E402
 
 
 def _block(instrs, summary):
@@ -76,7 +76,7 @@ def test_save_ref_orch_dossier_banks_the_picked_block(tmp_path):
     _save_ref_orch_dossier(ctx, _CHAIN_LOG)
     banked = (tmp_path / "evidence" / "ref_orch_dossier.txt").read_text()
     assert banked.startswith("# banked: block 2/2 kernel=sparse_attn_fwd_kernel")
-    from forgekernel.loop.driver import _orch_summary
+    from peregrine_kernel.loop.driver import _orch_summary
     assert _orch_summary(banked)["cache_ops"] == ["LDGSTS.E.BYPASS.LTC256B.128"]
 
 

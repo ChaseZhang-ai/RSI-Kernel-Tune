@@ -1,6 +1,6 @@
 """The template bench timing module, exercised WITHOUT a GPU.
 
-``src/forgekernel/card_template/eval/timing.py`` is copied verbatim into every operator card
+``src/peregrine_kernel/card_template/eval/timing.py`` is copied verbatim into every operator card
 and into every generated bench, so it is the one file whose behaviour is shared by
 every measurement the project makes -- and until now nothing tested it, because it
 imports torch and the CI host has no CUDA. A stub torch fixes that: the pieces under
@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 TIMING_PY = (Path(__file__).resolve().parents[1]
-             / "src" / "forgekernel" / "card_template" / "eval" / "timing.py")
+             / "src" / "peregrine_kernel" / "card_template" / "eval" / "timing.py")
 
 EMPTY_GRAPH_WARNING = (
     "The CUDA Graph is empty. This usually means that the graph was attempted to be "

@@ -55,23 +55,23 @@ TESTS_DIR = Path(__file__).resolve().parent
 ROOT = TESTS_DIR.parent
 SRC = ROOT / "src"
 
-TRAJECTORY = SRC / "forgekernel" / "inner" / "trajectory.py"
-PARSE = SRC / "forgekernel" / "loop" / "parse.py"
-TIMING = SRC / "forgekernel" / "card_template" / "eval" / "timing.py"
-DRIVER = SRC / "forgekernel" / "loop" / "driver.py"
+TRAJECTORY = SRC / "peregrine_kernel" / "inner" / "trajectory.py"
+PARSE = SRC / "peregrine_kernel" / "loop" / "parse.py"
+TIMING = SRC / "peregrine_kernel" / "card_template" / "eval" / "timing.py"
+DRIVER = SRC / "peregrine_kernel" / "loop" / "driver.py"
 
 # IterationRecord 的写侧管道与同名异物文件：命中不计读者。launch.py / loop/cli.py /
 # monitor/cli.py 消费的是 best_confirmation.json / monitor / job-state 等 JSON 导出件
 # 的 "sha" 键与同名 CLI 参数/局部变量，与轨迹行同形不同源（loop/cli.py:634 job 状态、
 # :1797/:1814 确认与监控 JSON、:3184 配对确认；monitor/cli.py:33 确认 JSON、:72 args），
 # 不是 IterationRecord 行的读者。
-IR_PLUMBING = ("src/forgekernel/loop/driver.py", "src/forgekernel/loop/parse.py",
-               "src/forgekernel/launch.py", "src/forgekernel/loop/cli.py",
-               "src/forgekernel/monitor/cli.py")
-IR_BENCH = "src/forgekernel/card_template/"
+IR_PLUMBING = ("src/peregrine_kernel/loop/driver.py", "src/peregrine_kernel/loop/parse.py",
+               "src/peregrine_kernel/launch.py", "src/peregrine_kernel/loop/cli.py",
+               "src/peregrine_kernel/monitor/cli.py")
+IR_BENCH = "src/peregrine_kernel/card_template/"
 # EvalResult：构造方与 bench 写侧不算读者（driver 是它的设计受众）。
-EV_PLUMBING = ("src/forgekernel/loop/parse.py",)
-EV_BENCH = "src/forgekernel/card_template/"
+EV_PLUMBING = ("src/peregrine_kernel/loop/parse.py",)
+EV_BENCH = "src/peregrine_kernel/card_template/"
 
 BASELINE_PATH = TESTS_DIR / "dataflow_audit_baseline.json"
 WHITELIST_PATH = TESTS_DIR / "dataflow_audit_whitelist.json"
@@ -80,8 +80,8 @@ WHITELIST_PATH = TESTS_DIR / "dataflow_audit_whitelist.json"
 # 只收 dict 载荷键（profiler/gpu_state 内部键，字段级审计够不到的）；_WP11_TELEMETRY_FIELDS
 # 的五个键本就是 IterationRecord 字段（白名单按字段登记），不重复入表。
 TUPLES = (
-    (TRAJECTORY, "_SOL_HEADER_KEYS", "SOL", "src/forgekernel/inner/ncu.py"),
-    (TIMING, "GPU_STATE_FIELDS", "GPU_STATE", "src/forgekernel/card_template/"),
+    (TRAJECTORY, "_SOL_HEADER_KEYS", "SOL", "src/peregrine_kernel/inner/ncu.py"),
+    (TIMING, "GPU_STATE_FIELDS", "GPU_STATE", "src/peregrine_kernel/card_template/"),
 )
 
 DIGEST_FN = "build_digest"
@@ -242,7 +242,7 @@ def audit() -> dict[str, dict]:
             }
 
     callers = [c for c in _production_callers(DIGEST_FN)
-               if not c.startswith("forgekernel/inner/trajectory.py")]
+               if not c.startswith("peregrine_kernel/inner/trajectory.py")]
     table[DIGEST_FN] = {
         "status": "read" if callers else "readerless",
         "tier": "consumption" if callers else "no-read",

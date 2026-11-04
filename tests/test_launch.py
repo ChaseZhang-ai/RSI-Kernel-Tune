@@ -1,4 +1,4 @@
-"""The launch flow: the judge's files, the generated trees, loop.toml, and `forge run` end
+"""The launch flow: the judge's files, the generated trees, loop.toml, and `peregrine run` end
 to end with the agent, the GPU and the loop stood in for."""
 
 from __future__ import annotations
@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import judge as judge_mod
-from forgekernel import launch, taskcard
-from forgekernel.localenv import load_machine
-from forgekernel.runs import list_runs, new_run, open_run
-from forgekernel.task import load_task
+from peregrine_kernel import judge as judge_mod
+from peregrine_kernel import launch, taskcard
+from peregrine_kernel.localenv import load_machine
+from peregrine_kernel.runs import list_runs, new_run, open_run
+from peregrine_kernel.task import load_task
 
 
 DESCRIPTION = "y = x / sqrt(mean(x^2) + 1e-6) * w over the last axis\n"
@@ -56,12 +56,12 @@ GROUPS = {s["name"]: [{"name": "plain", "intent": "randn", "seed": 1},
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
     """A scratch place for runs and locks; the harness itself stays the real repository."""
-    monkeypatch.setenv("FORGEKERNEL_RUNS_DIR", str(tmp_path / "runs"))
-    monkeypatch.setenv("FORGEKERNEL_LOCK_DIR", str(tmp_path / "locks"))
-    monkeypatch.delenv("FORGEKERNEL_OPERATORS_DIR", raising=False)
+    monkeypatch.setenv("PEREGRINE_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("PEREGRINE_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("PEREGRINE_OPERATORS_DIR", raising=False)
     # this machine, whatever the developer's local.env says (the environment wins over it)
-    monkeypatch.setenv("FK_DELIVERY", "local")
-    monkeypatch.setenv("FK_GPU", "0")
+    monkeypatch.setenv("PK_DELIVERY", "local")
+    monkeypatch.setenv("PK_GPU", "0")
     # no GPU here: the probe job is stood in for (a test that cares overrides it)
     monkeypatch.setattr(launch, "probe_ncu", lambda task, op_dir: True)
     return tmp_path
@@ -82,7 +82,7 @@ def _task(tmp_path, toml=REF_TOML, files=None, shapes=SHAPES) -> Path:
 
 
 def _start(task_dir) -> int:
-    """`forge new` then `forge run`, the way a user starts a run."""
+    """`peregrine new` then `peregrine run`, the way a user starts a run."""
     assert launch.cmd_new([str(task_dir)]) == 0
     return launch.cmd_run([str(list_runs()[-1].dir)])
 
@@ -90,12 +90,12 @@ def _start(task_dir) -> int:
 def _loop_ends(hook=None, stop="target", confirm=None):
     """A stand-in for the loop: sees its argv, ends with ``stop`` in its summary (and
     ``confirm`` as its final confirmation, when given)."""
-    from forgekernel.loop.cli import SUMMARY_FILE
+    from peregrine_kernel.loop.cli import SUMMARY_FILE
 
     def main(argv):
         if hook is not None:
             hook(argv)
-        d = Path(os.environ["FORGEKERNEL_OPERATORS_DIR"]) / argv[0]
+        d = Path(os.environ["PEREGRINE_OPERATORS_DIR"]) / argv[0]
         (d / SUMMARY_FILE).write_text(json.dumps({"stop": stop}))
         if confirm is not None:
             (d / "best_confirmation.json").write_text(json.dumps(confirm))
@@ -214,7 +214,7 @@ def test_seal_reference_rides_the_card_and_writes_the_recon_tree(repo):
     assert (ref / "sealref.py").is_file() and (ref / "ref_bin" / "ref_payload.bin").is_file()
     # the key never enters git, the plaintext never enters either tree
     for tree in (op_dir, ref):
-        assert "FK_REF_KEY" in (tree / "submit.local.toml").read_text()
+        assert "PK_REF_KEY" in (tree / "submit.local.toml").read_text()
         assert "submit.local.toml" not in _git(tree, "ls-files").split()
         assert "rsqrt" not in "".join(p.read_text(errors="ignore") for p in tree.rglob("*.py")
                                       if ".git" not in p.parts
@@ -255,7 +255,7 @@ def test_other_runs_are_denied(repo):
     assert str(run_b.dir) in launch.deny_paths(run_a, task_a)
 
 
-# -- forge run, end to end with stand-ins ---------------------------------------------------
+# -- peregrine run, end to end with stand-ins ---------------------------------------------------
 
 
 class _Teacher:
@@ -279,7 +279,7 @@ class _Teacher:
 
 
 def test_forge_run_drives_every_stage(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from peregrine_kernel.loop import cli as loop_cli
     task_dir = _task(repo)
     teacher = _Teacher()
     calls = {}
@@ -303,7 +303,7 @@ def test_forge_run_drives_every_stage(repo, monkeypatch):
 
 
 def test_a_calibration_mismatch_sends_the_judge_back(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from peregrine_kernel.loop import cli as loop_cli
     task_dir = _task(repo)
     teacher = _Teacher()
     outcomes = iter([{"match": False, "problems": ["small/plain output y: normalized error 0.9"]},
@@ -317,7 +317,7 @@ def test_a_calibration_mismatch_sends_the_judge_back(repo, monkeypatch):
 
 
 def test_a_task_without_a_reference_gets_the_floor_and_the_goal_session(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from peregrine_kernel.loop import cli as loop_cli
     task_dir = _task(repo, toml=TASK_TOML)
     calls = {}
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
@@ -334,7 +334,7 @@ def test_a_task_without_a_reference_gets_the_floor_and_the_goal_session(repo, mo
 
 
 def test_resume_skips_what_is_done(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from peregrine_kernel.loop import cli as loop_cli
     task_dir = _task(repo)
     teacher = _Teacher()
     seen = []
@@ -383,7 +383,7 @@ def test_forge_new_only_creates_the_run(repo, capsys):
 
 
 def test_a_stop_short_of_the_target_exits_2(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from peregrine_kernel.loop import cli as loop_cli
     task_dir = _task(repo)
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
@@ -406,7 +406,7 @@ def _confirmed(ratio, monitor="ok"):
     (_confirmed(8.0, monitor="alarm"), 2),   # met, but its correctness is in doubt
 ])
 def test_a_confirmed_best_at_the_target_completes_the_run(repo, monkeypatch, confirm, rc):
-    from forgekernel.loop import cli as loop_cli
+    from peregrine_kernel.loop import cli as loop_cli
     task_dir = _task(repo)
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
@@ -435,7 +435,7 @@ def test_the_ncu_probe_reads_a_metric_row_or_a_refusal():
 
 
 def test_without_ncu_the_loop_runs_on_timings(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from peregrine_kernel.loop import cli as loop_cli
     task_dir = _task(repo)
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
@@ -452,7 +452,7 @@ def test_without_ncu_the_loop_runs_on_timings(repo, monkeypatch):
 
 
 def test_an_arch_reference_without_ncu_is_accepted_only_when_ncu_is_off():
-    from forgekernel.loop import cli as loop_cli
+    from peregrine_kernel.loop import cli as loop_cli
 
     class _Ref:
         has_ncu = False
@@ -478,7 +478,7 @@ def test_meta_tools_and_ncu_cover_every_shape_and_group(repo):
 
 def test_export_writes_the_kernel_source_from_the_best_kernel(repo, monkeypatch,
                                                                       capsys):
-    from forgekernel.loop import cli as loop_cli
+    from peregrine_kernel.loop import cli as loop_cli
     task_dir = _task(repo)
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
@@ -528,7 +528,7 @@ def test_deny_urls_and_modules_reach_the_policy_the_guards_and_the_fence(repo):
         assert subprocess.run(["grep", "-Eq", "--", forbid.pattern], input=site.encode()).returncode == 0
 
     spec = importlib.util.spec_from_file_location(
-        "_fk_test_bk", taskcard.template_dir() / "eval" / "benchkit.py")
+        "_pk_test_bk", taskcard.template_dir() / "eval" / "benchkit.py")
     lbm = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(lbm)
     problem = dict(json.loads((op_dir / taskcard.PROBLEM).read_text()),

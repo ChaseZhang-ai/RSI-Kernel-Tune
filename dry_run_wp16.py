@@ -9,9 +9,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from forgekernel.loop import driver as drv
-from forgekernel.loop import lever_pool
-from forgekernel.inner.trajectory import IterationRecord
+from peregrine_kernel.loop import driver as drv
+from peregrine_kernel.loop import lever_pool
+from peregrine_kernel.inner.trajectory import IterationRecord
 
 
 def main() -> int:

@@ -3,7 +3,7 @@ metrics, never inferred from the grid shape (dsa_sparse: flat grid 128,
 launch__cluster_dim_x=16, report said "no cluster")."""
 import io
 
-from forgekernel.skills import launch_tools as LT
+from peregrine_kernel.skills import launch_tools as LT
 
 # the --page raw dump a probe printed (a dsa_sparse probe log, values as
 # measured; whitespace-separated key / value)

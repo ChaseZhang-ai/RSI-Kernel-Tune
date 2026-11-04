@@ -31,12 +31,12 @@ from test_loop_driver import (  # noqa: E402
     _stall_ctx,
 )
 
-from forgekernel.loop import cli  # noqa: E402
-from forgekernel.loop.driver import (  # noqa: E402
+from peregrine_kernel.loop import cli  # noqa: E402
+from peregrine_kernel.loop.driver import (  # noqa: E402
     _JOB_ENV_CHECK_CMD, _LEVER_PRICING_CMD, _ncu_profiler, _run_timeline,
     _timeline_feedback, job_env_preflight, run_meta_step,
 )
-from forgekernel.loop.job_env import env_failure  # noqa: E402
+from peregrine_kernel.loop.job_env import env_failure  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -291,7 +291,7 @@ def test_preflight_off_costs_nothing_and_unseeded_trees_check_ncu_only(tmp_path)
 
 
 def test_preflight_that_cannot_submit_does_not_judge(tmp_path):
-    from forgekernel.loop.driver import BackendError
+    from peregrine_kernel.loop.driver import BackendError
 
     class _Down(FakeBackend):
         def submit_gpu(self, branch, mode):
@@ -416,7 +416,7 @@ def test_job_env_files_config_is_validated(tmp_path):
 
 
 def test_the_check_script_rides_the_pricing_toolkit():
-    from forgekernel.loop.driver import PRICING_SEEDED_MODULES
-    assert "forgekernel.skills.job_env_check" in PRICING_SEEDED_MODULES
+    from peregrine_kernel.loop.driver import PRICING_SEEDED_MODULES
+    assert "peregrine_kernel.skills.job_env_check" in PRICING_SEEDED_MODULES
     assert _JOB_ENV_CHECK_CMD == "cmd:python3 notes/job_env_check.py"
     assert json.dumps(_JOB_ENV_CHECK_CMD).count(" ") == 1        # quote-free, as cmd: requires

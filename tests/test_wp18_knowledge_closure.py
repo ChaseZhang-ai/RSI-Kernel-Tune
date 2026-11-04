@@ -27,9 +27,9 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 
-from forgekernel.inner.trajectory import IterationRecord
-from forgekernel.loop import driver, kbmenu
-from forgekernel.loop.driver import (
+from peregrine_kernel.inner.trajectory import IterationRecord
+from peregrine_kernel.loop import driver, kbmenu
+from peregrine_kernel.loop.driver import (
     _is_wp18_batch_request,
     _meta_prompt,
     _bindings,
@@ -302,7 +302,7 @@ def test_wp18_rules_appended_only():
 def test_wp18_rules_point_at_real_rows_on_three_trees(tree):
     """Acceptance 5: on every tree, at least three of the appended rules resolve
     a pointer whose quote is a verbatim substring of that tree's index."""
-    from forgekernel.loop.kbmenu import _match_row, parse_symptom_rows
+    from peregrine_kernel.loop.kbmenu import _match_row, parse_symptom_rows
     idx = (REPO / "hw_kb" / tree / "index.md").read_text(encoding="utf-8")
     rows = parse_symptom_rows(idx)
     resolved = 0

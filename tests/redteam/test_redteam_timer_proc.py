@@ -31,7 +31,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 REPO = Path(__file__).resolve().parents[2]
-EVAL_SRC = REPO / "src" / "forgekernel" / "card_template" / "eval"
+EVAL_SRC = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
 if str(EVAL_SRC) not in sys.path:
     sys.path.insert(0, str(EVAL_SRC))   # the sentinel watches the eval's own `timing` module
 
@@ -137,9 +137,9 @@ def test_census_ok_without_injection_and_none_when_blind():
 def test_proc_census_is_accounting_only_in_the_loop(tmp_path):
     """An anomaly rides the eval JSON and the loop KEEPS anyway: the census has
     zero verdict weight today (the matrix's recorded posture for attack 5)."""
-    from forgekernel.loop.parse import parse_eval
+    from peregrine_kernel.loop.parse import parse_eval
     from test_loop_driver import NCU, REC, FakeBackend, _ctx
-    from forgekernel.loop.driver import run_inner_iteration
+    from peregrine_kernel.loop.driver import run_inner_iteration
 
     eval_json = ("=== JSON ===\n"
                  + json.dumps({"correctness": {"pass": True},

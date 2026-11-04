@@ -1,4 +1,4 @@
-"""The forgekernel task suite of src/forgekernel/card_template/eval/benchkit.py: input groups, the
+"""The peregrine_kernel task suite of src/peregrine_kernel/card_template/eval/benchkit.py: input groups, the
 judge, the calibrated tolerance and the calibration itself. CPU only (timing needs CUDA)."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ torch = pytest.importorskip("torch")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location(
-    "fk_template_benchkit_task", REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval" / "benchkit.py")
+    "pk_template_benchkit_task", REPO_ROOT / "src" / "peregrine_kernel" / "card_template" / "eval" / "benchkit.py")
 lb = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(lb)
 

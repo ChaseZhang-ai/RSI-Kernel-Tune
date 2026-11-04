@@ -13,7 +13,7 @@
     python scripts/energize_ab.py --item A4 --runs-dir .artifacts --report-only
 
 骨架说明：`--mode task-set` 的跑批段以注释占位（WP23 按当时的 runner 接上，
-通常即 `forge run` 两轮：off 一轮 on 一轮）；`--report-only` 从已完成的 run 归档
+通常即 `peregrine run` 两轮：off 一轮 on 一轮）；`--report-only` 从已完成的 run 归档
 提取墙钟构成表与 verdict 对照，产出 markdown 报告。3060 上产出的数字只作链路
 证据，禁止写性能结论（红线 11）。
 """
@@ -34,8 +34,8 @@ ITEMS: dict[str, dict] = {
             "depends": ["scripts/ncu_flag_ab.py", "CUDA torch venv"]},
     "A3": {"title": "SPRT 早停默认", "switch": "[loop] sprt_early_stop",
             "rollback": "--sprt-early-stop=false（默认 false 即回退）", "depends": ["WP15/WP19 合入"]},
-    "A4": {"title": "build cache 默认", "switch": "FK_BUILD_CACHE",
-            "rollback": "FK_BUILD_CACHE=0（一行）",
+    "A4": {"title": "build cache 默认", "switch": "PK_BUILD_CACHE",
+            "rollback": "PK_BUILD_CACHE=0（一行）",
             "depends": ["同内核跨 job 重复构建日志", "key 覆盖用例（改头文件必 miss/改注释必命中）"]},
     "A5": {"title": "floor_stop / floor_margin", "switch": "[target] floor_margin / [loop] floor_stop",
             "rollback": "键默认关即回退",
@@ -80,7 +80,7 @@ def run_item(args: argparse.Namespace) -> int:
     if not args.execute:
         print("[energize-ab] dry 骨架（--execute 才组装真跑；真跑须 with-lock gpu 包裹）：")
     for side, flag in (("A(off/基线)", None), ("B(on/翻转)", item["switch"])):
-        cmd = (f"forge run <runs-dir>/<{'off' if side.startswith('A') else 'on'}>-run  "
+        cmd = (f"peregrine run <runs-dir>/<{'off' if side.startswith('A') else 'on'}>-run  "
                f"# {side}"
                + (f"  env/键: {flag}" if flag else ""))
         print(f"  {cmd}")

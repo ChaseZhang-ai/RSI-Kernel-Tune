@@ -1368,3 +1368,55 @@ def test_an_interrupted_agent_turn_ends_the_whole_session(tmp_path, monkeypatch)
         assert _orphans() == []          # the grandchild did not survive the interrupt
     finally:
         sp.run(["pkill", "-f", marker], capture_output=True)
+
+
+# --- BUG-SEED-48: the submit retry budget is not a 30-minute hole ---------------
+
+def test_retry_call_sleeps_only_between_attempts(monkeypatch):
+    """The last failed attempt goes straight to the raise: sleeping after it only
+    delays the error by another backoff step."""
+    from peregrine_kernel.loop import cli
+    from peregrine_kernel.loop.driver import BackendError
+    b = _backend(monkeypatch, git_retries=3, git_retry_sleep=10.0)
+    sleeps = []
+    monkeypatch.setattr(cli.time, "sleep", lambda s: sleeps.append(s))
+
+    def fn():
+        return _FakeProc(1, stderr="nope")
+    with pytest.raises(BackendError):
+        b._retry_call(fn, what="git push")
+    assert sleeps == [10.0, 20.0]          # between attempts, not after the last
+
+
+def test_retry_call_lets_unexpected_errors_propagate(monkeypatch):
+    """The capture face is the expected transport classes (OSError / subprocess);
+    anything else is a bug in the caller, not a hiccup to paper over."""
+    from peregrine_kernel.loop import cli
+    b = _backend(monkeypatch, git_retries=3)
+
+    def fn():
+        raise TypeError("load_config changed shape")
+    with pytest.raises(TypeError):
+        b._retry_call(fn, what="git push")
+
+
+def test_a_hung_submit_retries_within_minutes_not_half_an_hour(monkeypatch, tmp_path):
+    """A submit whose subprocess hangs costs timeout x attempts; 3 x 600s plus a
+    tail sleep used to hold the loop hostage for about half an hour before the
+    error surfaced."""
+    import subprocess
+
+    from peregrine_kernel.loop import cli
+    timeouts = []
+
+    def fake_forge(op, verb, *a, **k):
+        timeouts.append(k.get("timeout"))
+        raise subprocess.TimeoutExpired(cmd="forge", timeout=k.get("timeout") or 0)
+    monkeypatch.setattr(cli, "_forge", fake_forge)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    be = cli.RealBackend("demo", tmp_path, None, "n", "e", poll_s=0.0)
+    monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
+    with pytest.raises(BackendError):
+        be.submit_gpu_start("br", "all")
+    assert timeouts == [cli._SUBMIT_TIMEOUT_S] * be.git_retries
+    assert cli._SUBMIT_TIMEOUT_S * be.git_retries <= 400   # minutes, not half an hour

@@ -263,6 +263,14 @@ def _forge(op: str, *args: str, timeout: float = 600.0,
     )
 
 
+# A submit is a local hand-off (stage the tree, lock, spawn the runner or one ssh
+# session), not the job itself -- the job's own clock is the [job] timeout. When the
+# submit subprocess hangs anyway, retrying it 3 x 600s held the loop hostage for
+# about half an hour before the error surfaced (BUG-SEED-48); this bounds the whole
+# budget to a few minutes.
+_SUBMIT_TIMEOUT_S = 120.0
+
+
 def _entry_task(mode: str) -> str:
     """The gpu_entry task a submit ``--mode`` runs: the mode itself, or ``cmd``
     for ``cmd:<command>`` — what the entry script's closing line names."""
@@ -533,7 +541,8 @@ class RealBackend:
         ``submit_gpu_finish``. The fused ``submit_gpu`` above stays the only
         gate-facing path."""
         sub = self._retry_call(
-            lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode),
+            lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode,
+                           timeout=_SUBMIT_TIMEOUT_S),
             what=f"submit {mode}")
         m = re.search(r"job=(\d+)", sub.stdout) or re.search(r'"id":\s*(\d+)', sub.stdout)
         if not m:
@@ -599,7 +608,8 @@ class RealBackend:
                       f"instead of resubmitting", flush=True)
             else:
                 sub = self._retry_call(
-                    lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode),
+                    lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode,
+                                   timeout=_SUBMIT_TIMEOUT_S),
                     what=f"submit {mode}")
                 m = re.search(r"job=(\d+)", sub.stdout) or re.search(r'"id":\s*(\d+)', sub.stdout)
                 if not m:
@@ -804,18 +814,25 @@ class RealBackend:
 
     def _retry_call(self, fn, what: str):
         """Retry a subprocess.CompletedProcess-returning call on non-zero rc / OS error,
-        with a short backoff: a git or local hiccup clears in seconds."""
+        with a short backoff between attempts and none after the last: a git or local
+        hiccup clears in seconds, and the error surfaces as soon as the budget is spent.
+
+        The capture face is the expected transport classes only (OSError, subprocess
+        errors -- a hung subprocess's TimeoutExpired included); anything else is a
+        bug at the call site and propagates.
+        """
         last = ""
         for attempt in range(1, self.git_retries + 1):
             try:
                 proc = fn()
-            except Exception as e:  # OS hiccup
+            except (OSError, subprocess.SubprocessError) as e:  # transport hiccup
                 last = repr(e)
             else:
                 if getattr(proc, "returncode", 0) == 0:
                     return proc
                 last = f"rc={proc.returncode} {getattr(proc, 'stderr', '')[-200:].strip()!r}"
-            time.sleep(self.git_retry_sleep * attempt)  # transient backoff
+            if attempt < self.git_retries:
+                time.sleep(self.git_retry_sleep * attempt)  # transient backoff
         raise BackendError(f"{what} failed after {self.git_retries} attempts: {last}")
 
     def _git(self, *args: str, what: str) -> None:

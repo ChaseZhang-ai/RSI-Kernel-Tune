@@ -17,7 +17,11 @@ One run:
    (two runs on one GPU would time each other), shared by every op and every run.
 3. Map the exit: rc 0 -> Succeeded; the task ran and failed -> Failed; ssh could not
    deliver it (no begin marker) -> retried, then Failed with TRANSPORT_ERROR_MARKER, which
-   the loop reports as a transport problem rather than charging the kernel.
+   the loop reports as a transport problem rather than charging the kernel. A job whose
+   window expired while it was still waiting on the host GPU lock never began (the begin
+   marker prints only once the lock is held): it is Lost, which the loop resubmits. So is
+   a job whose ssh client died (rc 255) with the job in flight: the remote session's
+   outcome is unknowable, and the orphaned session is stopped before the verdict.
 
 Nothing here kills processes it did not start: on a user's machine a GPU held by someone
 else is theirs. The lock is what keeps peregrine_kernel's own runs apart.
@@ -42,7 +46,8 @@ from pathlib import Path
 
 from peregrine_kernel.submit.config import SubmitConfig, is_secret_env
 from peregrine_kernel.submit.jobs import (BEGIN_MARKER, RUN_HEADROOM_S, STATUS_FAILED,
-                                     STATUS_SUCCEEDED, TRANSPORT_ERROR_MARKER, locked)
+                                     STATUS_LOST, STATUS_SUCCEEDED,
+                                     TRANSPORT_ERROR_MARKER, locked)
 
 LOCAL_TREE = ".exec/tree"
 CMD_PREFIX = "cmd:"
@@ -50,10 +55,32 @@ CMD_PREFIX = "cmd:"
 # (in the job's tree): stopping the job ends its whole session. A process group is not
 # enough -- gpu_entry's `timeout` moves itself and the task into a group of their own.
 SESSION_FILE = ".pk_job.sid"
-# Written in the session the job runs in: its id, then gpu_entry under the GPU lock
-# ("$0" is the lock, "$@" the entry command).
-_SESSION_SCRIPT = 'echo $$ > ' + SESSION_FILE + ' && exec flock "$0" "$@"'
+# Written in the session the job runs in (before it waits on the lock, so a merely
+# queued session is still stoppable). _session_script builds it: the session id,
+# then gpu_entry under the GPU lock ("$0" is the lock file, "$@" the entry command).
+# The begin marker prints only once flock HOLDS the lock -- everything before it
+# (ssh setup, the whole wait on a busy host GPU lock) is transport, never the job,
+# and never counted against the task's deadline. The queue wait is bounded by
+# flock -w (its own budget, independent of the run deadline): on expiry the session
+# exits QUEUE_TIMEOUT_RC before any marker, and the runner reads that as a
+# queued-out job (Lost), not a failed one. The lock travels across the final exec
+# on fd 9 (inherited; no close-on-exec), so gpu_entry holds it for its whole run.
 STOP_GRACE_S = 5
+# flock -E's exit code when the -w wait for the host GPU lock expires (util-linux
+# >= 2.24; an older host exits 1 instead and degrades to the retry path). Only
+# ever interpreted when no begin marker was printed: the queue path is strictly
+# pre-marker, so it cannot be a gpu_entry exit code.
+QUEUE_TIMEOUT_RC = 190
+
+
+def _session_script(queue_budget_s: float) -> str:
+    return ('echo $$ > ' + SESSION_FILE
+            + ' && exec 9>"$0"'
+            + f' && flock -w {max(1, int(queue_budget_s))} -E {QUEUE_TIMEOUT_RC} 9'
+            + ' && echo ' + BEGIN_MARKER
+            + ' && exec "$@"')
+
+
 LOCK_DIR_ENV = "PEREGRINE_LOCK_DIR"
 TRANSPORT_ATTEMPTS = 3
 TRANSPORT_RETRY_S = 10.0
@@ -303,11 +330,21 @@ def gpu_lock(gpu: str, log_file=None, poll_s: float = 30.0):
 
 
 def remote_tree(cfg: SubmitConfig) -> str:
-    """``<workdir>/<run>/<op>``: one tree per op and run, so concurrent runs on one host
-    never share a directory."""
+    """``<workdir>/<run>/<op>-<hash>``: one tree per op per clone, so concurrent
+    runs on one host never share a directory. The run segment is only a basename,
+    so two clones of the same name would still collide; the clone's absolute
+    path is hashed into the tree's name to keep them apart (stable for the same
+    clone, so re-delivery refreshes its own tree and _stop_cmd finds the same
+    one)."""
     op_dir = Path(cfg.op_dir)
-    run = op_dir.parents[1].name if len(op_dir.parents) > 1 else "repo"
-    return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}"
+    if len(op_dir.parents) > 1:
+        run = op_dir.parents[1].name
+        clone = str(op_dir.parents[1])
+    else:
+        run = "repo"
+        clone = str(op_dir)
+    token = hashlib.sha1(clone.encode()).hexdigest()[:8]
+    return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}-{token}"
 
 
 def _entry_argv(cfg: SubmitConfig, mode: str) -> list[str]:
@@ -368,6 +405,15 @@ class DirectRunner:
         except ValueError:
             ncu = MERGED_NCU_TIMEOUT_DEFAULT
         return base + max(0.0, ncu)                 # NCU segment: NCU_TIMEOUT
+
+    def _queue_budget_s(self, mode: str) -> float:
+        """The remote session's own budget for WAITING on the host GPU lock
+        (``flock -w``), independent of the task's run deadline: time spent queued
+        is not time the task ran (the local path starts its deadline only after
+        its lock is held). Sized to the run deadline -- a queued job gets as long
+        to reach the lock as it would then get to run; the runner's total window
+        for the ssh job is queue + run."""
+        return self._deadline_for(mode)
 
     def run_mode(self, branch: str, mode: str, log_file) -> str:
         with locked(Path(self.cfg.op_dir)):
@@ -459,8 +505,8 @@ class DirectRunner:
         parts += [f"{{ IFS= read -r {k} || true; }} && export {k}" for k in secrets]
         lock = shlex.quote(f"{self.cfg.exec_workdir.rstrip('/')}/.gpu{self.cfg.exec_gpu}.lock")
         entry = " ".join(shlex.quote(a) for a in _entry_argv(self.cfg, mode))
-        parts.append(f"echo {BEGIN_MARKER}")
-        parts.append(f"setsid --wait sh -c {shlex.quote(_SESSION_SCRIPT)} {lock} {entry}")
+        script = shlex.quote(_session_script(self._queue_budget_s(mode)))
+        parts.append(f"setsid --wait sh -c {script} {lock} {entry}")
         return " && ".join(parts)
 
     def _stop_cmd(self) -> str:
@@ -513,21 +559,59 @@ class DirectRunner:
                         pass
                 try:
                     deadline = self._deadline_for(mode)
-                    rc = proc.wait(timeout=deadline)
+                    queue_budget = self._queue_budget_s(mode)
+                    # the queue wait has its own budget (the session's flock -w),
+                    # so the runner's window is queue + run, never queue instead
+                    # of run
+                    rc = proc.wait(timeout=deadline + queue_budget)
                 except subprocess.TimeoutExpired:
                     self._stop_remote(log_file)
                     _kill_group(proc)
-                    log_file.write(f"[direct] gpu_entry {mode} exceeded {deadline:.0f}s "
-                                   f"-- killed\n")
+                    if _began(log_file, start, BEGIN_MARKER):
+                        log_file.write(f"[direct] gpu_entry {mode} exceeded "
+                                       f"{deadline:.0f}s -- killed\n")
+                        log_file.flush()
+                        return STATUS_FAILED
+                    # no begin marker: the job never began -- it queued on the
+                    # host GPU lock (or the ssh session stalled before it) for
+                    # its whole window. Nothing ran, so this is not the kernel's
+                    # failure: Lost, which the loop resubmits.
+                    log_file.write(f"[direct] gpu_entry {mode} queued on the GPU lock for "
+                                   f"its whole {deadline + queue_budget:.0f}s window -- "
+                                   f"nothing ran\n")
                     log_file.flush()
-                    return STATUS_FAILED
+                    return STATUS_LOST
                 except BaseException:   # stopped (SIGTERM -> SystemExit) or interrupted
                     self._stop_remote(log_file)
                     _kill_group(proc)
                     raise
                 if rc == 0:
                     return STATUS_SUCCEEDED
-                if _began(log_file, start, BEGIN_MARKER):
+                began = _began(log_file, start, BEGIN_MARKER)
+                if rc == QUEUE_TIMEOUT_RC and not began:
+                    # the session's flock -w expired: the job queued out without
+                    # ever beginning (the marker prints only once the lock is
+                    # held). Not the kernel's failure: Lost, resubmitted.
+                    log_file.write(f"[direct] gpu_entry {mode} queued on the GPU lock past "
+                                   f"its {self._queue_budget_s(mode):.0f}s queue budget -- "
+                                   f"nothing ran\n")
+                    log_file.flush()
+                    return STATUS_LOST
+                if began:
+                    if rc == 255:
+                        # ssh's own exit code: the client died (the network blip
+                        # outlived ServerAlive's patience) while the job was in
+                        # flight on the host -- the session kept running, and its
+                        # outcome is unknowable. The machine's fault, not the
+                        # kernel's: end the orphaned session (it still holds the
+                        # GPU lock) and record Lost, which the loop resubmits.
+                        self._stop_remote(log_file)
+                        _kill_group(proc)
+                        log_file.write(f"[direct] ssh to {self.cfg.exec_host} died (rc=255) "
+                                       f"with the job in flight -- the outcome on the host "
+                                       f"is unknown, recorded {STATUS_LOST}\n")
+                        log_file.flush()
+                        return STATUS_LOST
                     log_file.write(f"[direct] gpu_entry {mode} exited rc={rc}\n")
                     log_file.flush()
                     return STATUS_FAILED

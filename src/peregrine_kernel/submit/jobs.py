@@ -10,7 +10,7 @@ State lives in ``operators/<op>/.jobs/<id>/``:
 
 * ``log.txt``     -- what gpu_entry printed (closed before the verdict is written, so
   the log of a finished job is whole);
-* ``result.json`` -- ``{"id": <id>, "status": "Succeeded" | "Failed"}``;
+* ``result.json`` -- ``{"id": <id>, "status": "Succeeded" | "Failed" | "Lost"}``;
 * ``runner.pid``  -- the runner's pid (a session leader: stopping it stops its group);
 * ``runner.log``  -- the runner process's own output (a crash before the log opens).
 

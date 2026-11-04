@@ -465,9 +465,15 @@ def _git_init(tree: Path, message: str) -> None:
 
 def _commit(tree: Path, message: str) -> None:
     _git(tree, "add", "-A")
+    # "nothing to commit" and "git is broken" both leave stdout empty: telling them
+    # apart is the returncode. A broken git used to read as "nothing to do" and the
+    # card silently shipped without the change it was told to carry (BUG-SEED-38).
     status = subprocess.run(["git", "-C", str(tree), "status", "--porcelain"],
-                            capture_output=True, text=True).stdout
-    if status.strip():
+                            capture_output=True, text=True)
+    if status.returncode != 0:
+        raise subprocess.CalledProcessError(status.returncode, status.args,
+                                            output=status.stdout, stderr=status.stderr)
+    if status.stdout.strip():
         _git(tree, "commit", "-q", "-m", message)
 
 

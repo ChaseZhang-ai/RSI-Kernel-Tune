@@ -10,8 +10,8 @@ peregrine_kernel), kept beside the fixes they pin:
   the run stopped and the exit code at 2);
 * the run status tolerates a torn final line.
 
-The board-lane tests the archived batch also carried are not ported: the
-leaderboard/board card lane is gone from peregrine_kernel (see CHANGES).
+The board-lane tests the archived batch also carried are not ported: that card
+lane is gone from peregrine_kernel (see CHANGES).
 """
 
 from __future__ import annotations
@@ -34,3 +34,29 @@ def test_init_refuses_an_illegal_or_reserved_task_name(tmp_path, monkeypatch):
     for bad in ("../../evil", "../evil", "a/b", "_hidden", "run", "status"):
         assert launch.cmd_init([bad]) == 2, bad
     assert list(tmp_path.rglob("*")) == [tmp_path / "tasks"]    # nothing written
+
+
+# -- fix: git failures around committing are loud, not silent skips --------------------------
+
+
+def test_commit_loudly_refuses_when_git_status_fails(tmp_path, monkeypatch):
+    import subprocess
+
+    from peregrine_kernel import taskcard
+    tree = tmp_path / "card"
+    tree.mkdir()
+    subprocess.run(["git", "-C", str(tree), "init", "-q", "-b", "main"], check=True,
+                   capture_output=True)
+    real_run = subprocess.run
+
+    def fake_run(cmd, **kw):
+        if "status" in cmd and "--porcelain" in cmd:
+            # what a broken git prints: empty stdout, non-zero rc -- not "nothing to do"
+            return subprocess.CompletedProcess(cmd, 128, stdout="",
+                                               stderr="fatal: not a git repository")
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(taskcard.subprocess, "run", fake_run)
+    (tree / "f.txt").write_text("x")
+    with pytest.raises(subprocess.CalledProcessError):
+        taskcard._commit(tree, "test")

@@ -307,10 +307,13 @@ def validate_milestone(text: str, *, authoring: bool = False,
         v.append("missing title header (# <op> milestone)")
 
     # presence AND order: a milestone with the right headings in the wrong sequence is
-    # not the construction blueprint the phase order describes
+    # not the construction blueprint the phase order describes. Headings are matched
+    # at line start (_heading_at), the same way _section_body reads them: as a bare
+    # substring, "### 4. M2 pipeline" contains "## 4." and stands in for the real
+    # section — the same trap the decisions-section cut already fixed.
     found: list[tuple[str, int]] = []
     for sec in REQUIRED_SECTIONS:
-        i = text.find(sec)
+        i = _heading_at(text, sec)
         if i < 0:
             v.append(f"missing required section: {sec}")
         else:

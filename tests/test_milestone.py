@@ -64,6 +64,27 @@ def test_missing_worked_example_flagged():
     assert any("Worked Example" in x for x in validate_milestone(broken))
 
 
+def test_a_numbered_subheading_does_not_stand_in_for_a_required_section():
+    """'### 4. M2 pipeline' contains the substring '## 4.'; the required-section
+    check used text.find, so the real '## 4. Known dead ends' could be absent and
+    validate still passed (BUG-SEED-26). Headings are matched at line start, the
+    same way _section_body reads them."""
+    broken = VALID.replace("## 4. Known dead ends", "### 4. M2 pipeline")
+    v = validate_milestone(broken)
+    assert any("missing required section: ## 4." in x for x in v), v
+    # the genuine heading still satisfies the check
+    assert not any("## 4." in x for x in validate_milestone(VALID))
+
+
+def test_required_sections_are_checked_in_order_at_line_starts():
+    # a section appearing AFTER its successor used to pass when its marker sat in
+    # a later line's prefix; order is judged on the anchored positions
+    swapped = VALID.replace("## 6. Rules", "## Worked Example (draft)") \
+                   .replace("## Worked Example\nBM=128, BN=256, BK=64.", "## 6. Rules\nBM=128.")
+    v = validate_milestone(swapped)
+    assert any("out of order" in x for x in v), v
+
+
 def test_decisions_without_five_tuple_flagged():
     # §3 present but free-form (no five-tuple keys)
     broken = VALID.replace(

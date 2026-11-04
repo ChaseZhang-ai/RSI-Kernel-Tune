@@ -156,3 +156,42 @@ def test_the_clock_lock_budget_prints_its_attempt_count(monkeypatch, tmp_path, c
     out = capsys.readouterr().out
     assert "attempt 2 of 3" in out and "attempt 3 of 3" in out
     assert "attempt 4" not in out
+
+
+# --- BUG-SEED-48: the retry budget does not sleep past its last attempt --------------
+
+def _sleeps_recorder(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(cli.time, "sleep", sleeps.append)
+    return sleeps
+
+
+def test_a_failing_retry_budget_never_sleeps_after_its_last_attempt(monkeypatch):
+    """Three failing attempts with a 10 s base sleep cost two backoffs, not three: the
+    old unconditional tail sleep added the last multiplier after the final failure."""
+    sleeps = _sleeps_recorder(monkeypatch)
+    be = cli.RealBackend("op", Path("/ws"), None, "n", "e", git_retries=3,
+                         git_retry_sleep=10.0)
+    proc = type("P", (), {"returncode": 1, "stderr": "boom"})()
+    with pytest.raises(BackendError):
+        be._retry_call(lambda: proc, what="submit all")
+    assert sleeps == [10.0, 20.0]
+
+
+def test_a_call_that_ran_to_its_own_timeout_is_not_retried(monkeypatch):
+    """A hung submit comes back as one 600 s timeout, not three of them plus backoff
+    (~31 minutes before this could say anything)."""
+    import subprocess as sp
+
+    sleeps = _sleeps_recorder(monkeypatch)
+    be = cli.RealBackend("op", Path("/ws"), None, "n", "e", git_retries=3,
+                         git_retry_sleep=10.0)
+    calls = []
+
+    def fn():
+        calls.append(1)
+        raise sp.TimeoutExpired("cmd", 600)
+
+    with pytest.raises(BackendError, match="timed out"):
+        be._retry_call(fn, what="submit all")
+    assert calls == [1] and sleeps == []

@@ -786,18 +786,29 @@ class RealBackend:
 
     def _retry_call(self, fn, what: str):
         """Retry a subprocess.CompletedProcess-returning call on non-zero rc / OS error,
-        with a short backoff: a git or local hiccup clears in seconds."""
+        with a short backoff: a git or local hiccup clears in seconds.
+
+        Two deliberate asymmetries. The backoff follows only the attempts that will
+        still happen — a budget that fails every attempt does not sleep past its last
+        one (a hung submit used to pay three 600 s timeouts plus 60 s of tail backoff,
+        ~31 minutes, before saying so). And a call that ran to its own timeout is not
+        retried at all: it is hung, not transient, and re-running it only multiplies
+        the wait — the failure comes back at once.
+        """
         last = ""
         for attempt in range(1, self.git_retries + 1):
             try:
                 proc = fn()
+            except subprocess.TimeoutExpired as e:
+                raise BackendError(f"{what} timed out (hung, not retried): {e!r}") from e
             except Exception as e:  # OS hiccup
                 last = repr(e)
             else:
                 if getattr(proc, "returncode", 0) == 0:
                     return proc
                 last = f"rc={proc.returncode} {getattr(proc, 'stderr', '')[-200:].strip()!r}"
-            time.sleep(self.git_retry_sleep * attempt)  # transient backoff
+            if attempt < self.git_retries:
+                time.sleep(self.git_retry_sleep * attempt)  # transient backoff
         raise BackendError(f"{what} failed after {self.git_retries} attempts: {last}")
 
     def _git(self, *args: str, what: str) -> None:

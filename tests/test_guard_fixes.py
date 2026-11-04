@@ -157,3 +157,46 @@ def test_the_import_scan_stays_quiet_on_clean_and_foreign_text():
     cu = '#include <cublas_v2.h>\nvoid run() { cublasGemmEx(h); }\n'
     found = library_findings(cu, "kernel.cu")
     assert len(found) == 2 and not any("import" in f for f in found)
+
+
+# --- BUG-C3-01: the torch C++ call forms are library findings -------------------------
+
+def test_cpp_torch_call_forms_are_flagged():
+    """The Python patterns name dotted spellings only, so a .cu/.cpp kernel computing
+    through the torch C++ API read as a kernel of its own (BUG-C3-01)."""
+    calls = ["torch::matmul(a, b)", "at::mm(x, y)", "torch::bmm(x, y)",
+             "at::addmm(bias, x, y)", "at::baddbmm(b, x, y)",
+             "torch::einsum(\"bhm,mh->bh\", q, k)", "at::softmax(x, -1)",
+             "at::log_softmax(x, -1)", "torch::layer_norm(x, m, v)",
+             "at::rms_norm(x, w)", "torch::group_norm(x, 8, m, v)",
+             "at::conv2d(x, w)", "at::conv_transpose2d(x, w)",
+             "at::linear(x, w, b)", "at::scaled_dot_product_attention(q, k, v)",
+             "at::_scaled_mm(a, b)", "at::cdist(a, b)"]
+    for call in calls:
+        for suffix in (".cu", ".cpp"):
+            src = f"#include <torch/torch.h>\nvoid f() {{ auto o = {call}; }}\n"
+            found = library_findings(src, f"kernel{suffix}")
+            assert found, f"{call} escaped on {suffix}: {found}"
+    assert library_findings("auto o = torch::ops::aten::mm::call(a, b);\n", "kernel.cu")
+    assert library_findings("auto o = torch::nn::functional::linear(x, w);\n", "kernel.cpp")
+
+
+def test_the_python_dotted_forms_still_fire():
+    assert library_findings("def f(a, b):\n    return torch.matmul(a, b)\n", "kernel.py")
+    assert library_findings("import torch\n"
+                            "def f(q, k, v):\n"
+                            "    return torch.nn.functional.scaled_dot_product_attention(q, k, v)\n",
+                            "kernel.py")
+
+
+def test_a_handwritten_cuda_kernel_stays_quiet():
+    src = ("#include <cuda_runtime.h>\n"
+           "__global__ void scale_kernel(const float* x, float* y, int n) {\n"
+           "    int i = blockIdx.x * blockDim.x + threadIdx.x;\n"
+           "    if (i < n) y[i] = 1.5f * x[i];\n"
+           "}\n"
+           "void launch(const float* x, float* y, int n) {\n"
+           "    scale_kernel<<<16, 256>>>(x, y, n);\n"
+           "    cudaDeviceSynchronize();\n"
+           "}\n")
+    assert library_findings(src, "kernel.cu") == []

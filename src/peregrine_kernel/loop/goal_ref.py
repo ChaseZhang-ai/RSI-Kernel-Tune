@@ -428,6 +428,14 @@ _LIB_PATTERNS = (
                 r"embedding|silu|gelu)\s*\("),
      "computes with torch.nn.functional.{0}"),
     (re.compile(r"\btorch\s*\.\s*ops\s*\.\s*(\w+)"), "calls the registered op torch.ops.{0}"),
+    # the same computations through the C++ API, on .cu / .cpp sources (BUG-C3-01:
+    # a kernel calling torch::matmul / at::linear read as a kernel of its own)
+    (re.compile(r"\b(?:torch|at|c10)::\s*(matmul|mm|bmm|addmm|baddbmm|einsum|softmax|"
+                r"log_softmax|layer_norm|rms_norm|group_norm|conv\w*|linear|"
+                r"scaled_dot_product_attention|_scaled_mm|cdist)\s*\("),
+     "computes with the torch C++ API {0}"),
+    (re.compile(r"\btorch::ops::(\w+)"), "calls the registered op torch::ops::{0}"),
+    (re.compile(r"\btorch::nn::functional::(\w+)"), "computes with torch::nn::functional::{0}"),
     (re.compile(r"[\w\)\]][ \t]*@[ \t]*[\w\(]"), "uses the @ (matmul) operator"),
     (re.compile(r"\b(cublas\w*|cudnn\w*|cublasLt\w*)\s*\("), "calls {0}"),
     (re.compile(r"#\s*include\s*[<\"](cublas\w*|cudnn\w*)"), "includes {0}"),

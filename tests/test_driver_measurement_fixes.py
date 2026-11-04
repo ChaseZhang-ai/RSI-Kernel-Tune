@@ -1,4 +1,4 @@
-"""Regression tests ported from the ForgeKernel fix wave (loop/driver measurement
+"""Regression tests ported from the upstream fix wave (loop/driver measurement
 batch).
 
 Only the mechanisms that exist in this lineage are pinned; the one that survives

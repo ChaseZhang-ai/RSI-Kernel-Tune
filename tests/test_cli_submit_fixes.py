@@ -1,4 +1,4 @@
-"""Regression tests ported from the ForgeKernel fix wave (loop CLI + submit batch).
+"""Regression tests ported from the upstream fix wave (loop CLI + submit batch).
 
 Only the mechanisms that exist in this lineage are pinned; each names the fix it
 carries:

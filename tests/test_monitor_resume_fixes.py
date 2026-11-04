@@ -1,4 +1,4 @@
-"""Regression tests ported from the ForgeKernel fix wave (monitor / resume batch).
+"""Regression tests ported from the upstream fix wave (monitor / resume batch).
 
 Only the mechanisms that exist in this lineage are pinned here; each names the fix
 it carries:

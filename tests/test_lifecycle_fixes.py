@@ -1,4 +1,4 @@
-"""Regression tests ported from the ForgeKernel fix wave (lifecycle batch).
+"""Regression tests ported from the upstream fix wave (lifecycle batch).
 
 Only the mechanisms that exist in this lineage are pinned; each names the fix it
 carries:
@@ -17,12 +17,12 @@ old test exposed a live bug here):
   confirmed-at-target gate only tightens ``met``, it never gates the stop);
 * task names validated at the creation entry points: cmd_init accepts any name,
   including ones that escape tasks/ (BUG-PORT);
-* a malformed board card being a TaskError: the board/leaderboard task loader
+* a malformed board card being a TaskError: the retired board task loader
   does not exist in this package (the card judge is benchkit's task protocol);
 * git failures around committing/reporting being loud: taskcard._commit treats a
   failed ``git status`` as "nothing to do" (BUG-PORT) and kb_changes returns []
   silently; the run-log tee files are never closed;
-* forge status surviving a torn status.jsonl line: status_text json.loads every
+* the status command surviving a torn status.jsonl line: status_text json.loads every
   nonempty line and crashes on a torn one (BUG-PORT);
 * the baseline CLI degrading narrowly and reporting bad archives: _submit_cluster
   deliberately degrades to "" on any exception (its docstring owns that), and

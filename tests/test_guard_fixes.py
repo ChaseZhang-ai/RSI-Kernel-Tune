@@ -1,4 +1,4 @@
-"""Regression tests ported from the ForgeKernel fix wave (guard / eval batch).
+"""Regression tests ported from the upstream fix wave (guard / eval batch).
 
 This lineage carries almost none of the fix wave's guard mechanisms; every drop
 is recorded here with its reason and, where the old test exposed a live bug, in
@@ -17,11 +17,11 @@ Dropped from the source file, with reasons:
   scanned -- library_findings here is an earlier, deliberately narrow heuristic
   (first import name only, no dynamic-import literals; its docstring states the
   limits), so the old assertions pin neither its question nor its scope;
-* leaderboard: load_entry appending the kernel's directory (so a reference's
+* card-eval entry loading: load_entry appending the kernel's directory (so a reference's
   lazy imports are not shadowed) -- load_entry here PREPENDS (BUG-PORT); the
-  FlashInfer-Bench judge (fib_judge, FIB_DEFAULTS, SUITE_TASK) does not exist in
+  retired board judge (fib_judge, FIB_DEFAULTS, SUITE_TASK) does not exist in
   this package (the card judge is benchkit's task protocol now);
-* leaderboard: a task card's stress rows drawing the task's own make_inputs
+* card eval: a task card's stress rows drawing the task's own make_inputs
   distribution -- superseded by design: gen_inputs accepts custom_inputs_fn and
   ignores it ("the historical signature"), the stress rides plain random draws
   and the task's make_inputs seeds are drawn by task_inputs;

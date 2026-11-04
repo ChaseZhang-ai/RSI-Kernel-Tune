@@ -364,7 +364,7 @@ def render_kernel_stub(task, check) -> str:
     ins = "\n".join(_spec(n, s) for n, s in check.definition["inputs"].items())
     outs = "\n".join(_spec(n, s) for n, s in check.definition["outputs"].items())
     if task.language == "cuda":
-        params = ", ".join(lbmod._cpp_param(n, s) for n, s in check.definition["inputs"].items())
+        params = ", ".join(cardkit._cpp_param(n, s) for n, s in check.definition["inputs"].items())
         comment = "\n".join("// " + line for line in (
             f"{task.name} -- the student's kernel, CUDA C++ (one file, its own torch binding).",
             "", "Value-returning: return the output tensor.", "", "Shapes (one kernel serves all):",

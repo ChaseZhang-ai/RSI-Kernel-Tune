@@ -180,7 +180,19 @@ def install_wp20_sentinels() -> None:
 
         def _census_stream_init(self, *a, **kw):
             _KERNEL_STREAMS.append(self)
-            return stream_init(self, *a, **kw)
+            try:
+                return stream_init(self, *a, **kw)
+            except TypeError:
+                # A C-extension Stream type finishes its construction in
+                # __new__; the py-level __init__ face is the bare
+                # object.__init__, which rejects the forwarded arguments AFTER
+                # the instance is already usable (torch's own
+                # current_stream() path). The census entry stands and
+                # construction is not broken — the sentinel never convicts on
+                # its own install shape (WP23 A1, 3060 chain evidence).
+                if getattr(self, "stream_id", None) is not None:
+                    return None
+                raise
 
         torch.cuda.Stream.__init__ = _census_stream_init
     except Exception:  # noqa: BLE001

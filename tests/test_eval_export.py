@@ -389,6 +389,37 @@ def test_best_keep_falls_back_to_the_tree_without_git(tmp_path: Path) -> None:
     assert "no repository under the run holds sha" in locate["detail"]
 
 
+def test_best_keep_survives_keep_rows_without_a_cluster_key(tmp_path: Path) -> None:
+    """Green KEEP rows may lack the ``cluster`` key entirely: the selection
+    falls back to "" exactly like the row's sha does, instead of crashing on
+    a bare traceback that bypasses the exit-2 refusal contract."""
+    run = tmp_path / "artifacts" / "rms_mix"
+    card = run / "operators" / "rms"
+    write_cutedsl_tree(card)
+    status = card / "student"
+    status.mkdir(parents=True, exist_ok=True)
+    (status / "status.jsonl").write_text("\n".join([
+        json.dumps({"iter": 1, "verdict": "KEEP", "correctness": True,
+                    "device_median_ms": 3.5, "cluster": "b200-a"}),
+        json.dumps({"iter": 2, "verdict": "KEEP", "correctness": True,
+                    "device_median_ms": 2.0, "cluster": "b200-b"}),
+        json.dumps({"iter": 3, "verdict": "KEEP", "correctness": True,
+                    "device_median_ms": 2.5}),          # no cluster key at all
+        json.dumps({"iter": 4, "verdict": "KEEP", "correctness": True,
+                    "device_median_ms": 1.7}),          # the best: no cluster key
+    ]) + "\n", encoding="utf-8")
+    out = tmp_path / "pkg"
+    r = run_pack(str(out), "--run-dir", str(run), "--op", "rms",
+                 "--definition", "rmsnorm_h8")
+    assert r.returncode == 0, r.stderr
+    assert "Traceback" not in r.stderr
+    product = json.loads((out / "artifact_sha256.json").read_text())["product"]
+    assert product["iteration"] == 4
+    assert product["cluster"] == ""            # the chosen row's missing key
+    # the mixed rows still sort: only the two named clusters span, None never enters
+    assert any("span clusters b200-a, b200-b" in n for n in product.get("notes", []))
+
+
 def test_run_with_no_green_keep_refused(tmp_path: Path) -> None:
     run = tmp_path / "artifacts" / "rms_sad"
     card = run / "operators" / "rms"

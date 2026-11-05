@@ -1017,11 +1017,25 @@ def _current_stream():
         return _drv.CUstream(raw)
 
 
-_COMPILED = None
+_COMPILED = {}
 
 
 def attn_fwd(q, k, v):
-    global _COMPILED
+    # The compiled artifact bakes the pinned shape in twice over: the launch
+    # grid (GRID = B * NUM_M_TILES) and the device-side tile decode
+    # (m_tile = (NUM_M_TILES - 1) - bidx // B) are module constants read at
+    # trace time, so a second shape can never be made to work by recompiling
+    # under a fresh cache key — the retrace would bake the same stale
+    # constants.  This release is a fixed-point artifact: refuse any other
+    # shape (or dtype) loudly instead of silently reusing, or faithfully
+    # re-baking, the wrong mapping.
+    if tuple(q.shape) != (B, H_Q, S, D) or tuple(k.shape) != (B, H_KV, S, D) \
+            or tuple(v.shape) != (B, H_KV, S, D) or q.dtype is not torch.bfloat16:
+        raise ValueError(
+            "attn_fwd gen0 is a fixed-shape artifact pinned to "
+            f"q ({B}, {H_Q}, {S}, {D}) bf16 and k/v ({B}, {H_KV}, {S}, {D}) "
+            f"bf16; got q {tuple(q.shape)} {q.dtype}, k {tuple(k.shape)}, "
+            f"v {tuple(v.shape)}")
     o = torch.empty_like(q)
 
     # gmem views in cute mode order.  Q/O: (H, S, D, B); K/V: (S, D, B).
@@ -1031,14 +1045,19 @@ def attn_fwd(q, k, v):
     mO = from_dlpack(o.permute(1, 2, 3, 0), assumed_align=16)
     stream = _current_stream()
 
-    if _COMPILED is None:
+    # gen1's cache discipline: keyed by shape + dtype + device so a second
+    # device never reuses another context's artifact.
+    key = (tuple(q.shape), tuple(k.shape), q.dtype, q.device.index)
+    compiled = _COMPILED.get(key)
+    if compiled is None:
         dump = os.environ.get("ATTN_FWD_DUMP_DIR")
         if dump:
-            _COMPILED = cute.compile(
+            compiled = cute.compile(
                 _attn_fwd_jit, mQ, mK, mV, mO, stream,
                 options="--dump-dir=%s --keep-cubin --keep-ptx" % dump)
         else:
-            _COMPILED = cute.compile(_attn_fwd_jit, mQ, mK, mV, mO, stream)
+            compiled = cute.compile(_attn_fwd_jit, mQ, mK, mV, mO, stream)
+        _COMPILED[key] = compiled
 
-    _COMPILED(mQ, mK, mV, mO, stream)
+    compiled(mQ, mK, mV, mO, stream)
     return o

@@ -289,8 +289,13 @@ class AgentPolicy:
             "filesystem": {
                 "denyRead": [str(p) for p in denied],
                 "allowWrite": [str(p) for p in self.allow_write(role)],
+                # read-only trees in both spellings: the bare path covers the tree by
+                # itself or not, depending on how the runtime reads a directory entry,
+                # and the guarantee (a rewritten verdict, a forged response file) must
+                # hold at the file level regardless.
                 "denyWrite": [str(workspace / ".claude"), str(HOOK_SCRIPT),
-                              *(str(p) for p in denied), *(str(p) for p in read_only)],
+                              *(str(p) for p in denied),
+                              *(x for p in read_only for x in (str(p), f"{p}/**"))],
             },
         }
         if self.offline(role):

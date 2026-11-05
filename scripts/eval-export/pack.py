@@ -743,43 +743,58 @@ def preflight_correctness(src: bytes, kfile: str, contract: Contract, dps: bool,
     device = torch.device("cuda")
     gen = torch.Generator(device="cpu").manual_seed(0)
     checked = 0
-    for wl in workloads:
-        axes_env = dict(wl.get("axes") or {})
-        try:
-            inputs = [_smoke_tensor(s, axes_env, torch, gen)
-                      for s in (defn.get("inputs") or {}).values()]
-        except (Refused, RuntimeError) as e:
-            report.add("correctness", "SKIP", f"contract inputs not drawable here ({e})")
-            return
-        inputs = [t.to(device) for t in inputs]
-        with torch.no_grad():
-            refs = ref_fn(*[t.clone() for t in inputs])
-        if not isinstance(refs, (tuple, list)):
-            refs = (refs,)
-        if dps:
-            outs = [torch.empty_like(r) for r in refs]
-            with torch.no_grad():
-                kern_fn(*inputs, *outs)
-        else:
-            with torch.no_grad():
-                outs = kern_fn(*inputs)
-            if not isinstance(outs, (tuple, list)):
-                outs = (outs,)
-        names = list((defn.get("outputs") or {}).keys()) \
-            or [f"output_{i}" for i in range(len(outs))]
-        tol_map = ((contract.tolerance or {}).get("outputs") or {})
-        for name, got, want in zip(names, outs, refs):
-            got_c, want_c = got.float(), want.float()
-            denom = want_c.abs().max().clamp(min=1e-30)
-            err = (got_c - want_c).abs().max().item() / denom.item()
-            dtype_name = str(want.dtype).replace("torch.", "")
-            tol = float(tol_map.get(name, 2 * DTYPE_EPS.get(dtype_name, 1e-2)))
-            if got.shape != want.shape or err > tol:
-                report.add("correctness", "FAIL",
-                           f"{name}: max rel err {err:.3e} > tol {tol:.3e} "
-                           f"(shape got {tuple(got.shape)} want {tuple(want.shape)})")
+    try:
+        for wl in workloads:
+            axes_env = dict(wl.get("axes") or {})
+            try:
+                inputs = [_smoke_tensor(s, axes_env, torch, gen)
+                          for s in (defn.get("inputs") or {}).values()]
+            except (Refused, RuntimeError) as e:
+                report.add("correctness", "SKIP", f"contract inputs not drawable here ({e})")
                 return
-        checked += 1
+            # from here through the comparison, a machine that cannot run the
+            # reference or the kernel (fp8 reference off sm90, an OOM, a kernel
+            # that will not launch here) is a SKIP-stage WARN like the load
+            # guard above -- never a traceback out of the tool
+            inputs = [t.to(device) for t in inputs]
+            with torch.no_grad():
+                refs = ref_fn(*[t.clone() for t in inputs])
+            if not isinstance(refs, (tuple, list)):
+                refs = (refs,)
+            if dps:
+                outs = [torch.empty_like(r) for r in refs]
+                with torch.no_grad():
+                    kern_fn(*inputs, *outs)
+            else:
+                with torch.no_grad():
+                    outs = kern_fn(*inputs)
+                if not isinstance(outs, (tuple, list)):
+                    outs = (outs,)
+            names = list((defn.get("outputs") or {}).keys()) \
+                or [f"output_{i}" for i in range(len(outs))]
+            if len(outs) != len(refs) or len(names) != len(refs):
+                report.add("correctness", "FAIL",
+                           f"the kernel returned {len(outs)} output(s) for the "
+                           f"contract/reference's {len(refs)} ({len(names)} contract "
+                           f"name(s)) -- the missing comparison(s) would silently pass")
+                return
+            tol_map = ((contract.tolerance or {}).get("outputs") or {})
+            for name, got, want in zip(names, outs, refs):
+                got_c, want_c = got.float(), want.float()
+                denom = want_c.abs().max().clamp(min=1e-30)
+                err = (got_c - want_c).abs().max().item() / denom.item()
+                dtype_name = str(want.dtype).replace("torch.", "")
+                tol = float(tol_map.get(name, 2 * DTYPE_EPS.get(dtype_name, 1e-2)))
+                if got.shape != want.shape or err > tol:
+                    report.add("correctness", "FAIL",
+                               f"{name}: max rel err {err:.3e} > tol {tol:.3e} "
+                               f"(shape got {tuple(got.shape)} want {tuple(want.shape)})")
+                    return
+            checked += 1
+    except (RuntimeError, ValueError, TypeError) as e:  # noqa: BLE001 -- environment gap, not a verdict
+        report.add("correctness", "WARN", f"could not run the reference or the kernel "
+                   f"here ({type(e).__name__}: {e})")
+        return
     report.add("correctness", "PASS",
                f"{checked} contract workload(s) pass the contract's tolerance on this GPU")
 

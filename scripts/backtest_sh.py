@@ -58,12 +58,15 @@ ROUNDS = 3                       # the recipe's rounds (the sweep's default)
 def surface(n: int, rng: random.Random) -> tuple[list[float], int]:
     """(true objectives, argmax) of a smooth unimodal one-axis surface: a
     parabola over a random interior peak plus a little local texture (the
-    shapes parameter sweeps' response faces, idealized)."""
+    shapes parameter sweeps' response faces, idealized). Held positive: the
+    halving cut's relative criterion reads production's positive-ratio
+    domain (speedup scores), and a negative-valued surface inverts the
+    ratio so every cut candidate silently "survives"."""
     peak = rng.uniform(0.2, 0.8)
     truth = []
     for i in range(n):
         x = i / (n - 1) if n > 1 else 0.5
-        truth.append(-(x - peak) ** 2 + 0.05 * rng.random())
+        truth.append(1.0 - (x - peak) ** 2 + 0.05 * rng.random())
     return truth, max(range(n), key=lambda i: truth[i])
 
 
@@ -94,7 +97,7 @@ def run_full(truth: list[float], rounds: int, budget: int, sigma: float,
 
 
 def run_sh(truth: list[float], rounds: int, budget: int, sigma: float,
-           rng: random.Random) -> int:
+           rng: random.Random) -> tuple[int, int]:
     """The WP16 halving sweep: worst half eliminated after each completed
     round, NOISE-GATED (a first round with one reading per variant cuts
     nobody; a variant within the job's own noise floor of the cut line
@@ -102,11 +105,15 @@ def run_sh(truth: list[float], rounds: int, budget: int, sigma: float,
     stopped at the pass budget, survivors re-funded up to 2x the recipe's
     rounds. The sim's floor mirrors lever_pricing_run.noise_floor: pooled
     per-round relative spread (here ~sigma) x 3 x sqrt(2) x 1.2533 / sqrt(R),
-    never below the 0.5% default."""
+    never below the 0.5% default. Returns (winner, eliminated count) — the
+    count lets the acceptance assert the rule actually ran: a budget that
+    cannot fund ROUNDS completed rounds on the wide grid leaves the gate
+    unreachable and SH degenerates into the plain wide sweep."""
     n = len(truth)
     readings: dict[int, list[float]] = {v: [] for v in range(n)}
     alive = list(range(n))
     spent = 0
+    cuts = 0
     for rnd in range(rounds * 2):
         if spent + len(alive) > budget:
             break
@@ -122,11 +129,26 @@ def run_sh(truth: list[float], rounds: int, budget: int, sigma: float,
             r_min = min(len(readings[v]) for v in alive)
             floor = max(0.5, 5.3259 * sigma * 100.0 / (r_min ** 0.5))
             boundary = score(readings[keep[-1]])
-            alive = keep + [v for v in cut
-                            if boundary is not None
-                            and 100.0 * (boundary / score(readings[v]) - 1.0) <= floor]
+            survivors = [v for v in cut
+                         if boundary is not None
+                         and 100.0 * (boundary / score(readings[v]) - 1.0) <= floor]
+            cuts += len(cut) - len(survivors)
+            alive = keep + survivors
     scored = [(score(readings[v]), v) for v in range(n) if readings[v]]
-    return max(scored, key=lambda sv: (sv[0] is not None, sv[0]))[1]
+    winner = max(scored, key=lambda sv: (sv[0] is not None, sv[0]))[1]
+    return winner, cuts
+
+
+def cell_budget(width: int) -> int:
+    """The bench budget every arm of a ``width`` cell plays at: four plain
+    sweeps — enough to fund the SH arm's whole walk, ROUNDS rounds over the
+    2V wide grid plus the eliminated half's share re-funding the survivors
+    up to 2x the recipe's rounds. The old ``width * ROUNDS`` bought the wide
+    grid a single round, the elimination gate (ROUNDS completed rounds, two
+    readings per survivor) was unreachable in every cell, and SH was
+    process-identical to the plain wide sweep the rule-cost gate compared it
+    against — the gate read noise, not the rule."""
+    return 2 * 2 * width * ROUNDS
 
 
 def main(argv=None) -> int:
@@ -134,15 +156,15 @@ def main(argv=None) -> int:
     print(f"halving backtest: {trials} trials/cell, recipe rounds={ROUNDS}, "
           f"equal bench budget per trial\n")
     print(f"{'grid':>10} {'sigma':>7} {'budget':>7} {'fullV obj':>10} {'SH obj':>8} "
-          f"{'full2V obj':>10} {'rule loss':>10}  gates")
+          f"{'full2V obj':>10} {'wins/losses':>11}  {'cuts':<6} gates")
     ok_all = True
     for width in GRIDS:
         n_wide = width * 2
-        budget = width * ROUNDS          # every procedure plays at this budget
+        budget = cell_budget(width)      # every procedure plays at this budget
         for sigma in SIGMAS:
             fullv_rec = sh_rec = full2v_rec = 0
             fullv_obj = sh_obj = full2v_obj = 0.0
-            losses = wins = 0
+            losses = wins = sh_cuts_total = 0
             for _ in range(trials):
                 truth_wide, best_wide = surface(n_wide, random.Random())
                 lo, hi = min(truth_wide), max(truth_wide)
@@ -153,7 +175,8 @@ def main(argv=None) -> int:
                 truth = truth_wide[::2]  # the narrow grid: its even points
                 best_narrow = max(range(len(truth)), key=lambda i: truth[i])
                 w = run_full(truth, ROUNDS, budget, sigma, random.Random())
-                s = run_sh(truth_wide, ROUNDS, budget, sigma, random.Random())
+                s, sh_cuts = run_sh(truth_wide, ROUNDS, budget, sigma, random.Random())
+                sh_cuts_total += sh_cuts
                 r2 = ROUNDS * 2          # a plain full sweep can only afford
                 r2 = max(1, budget // n_wide)   # budget // (2V) rounds on 2V pts
                 f2 = run_full(truth_wide, r2, budget, sigma, random.Random())
@@ -175,14 +198,18 @@ def main(argv=None) -> int:
             # procedure, so paired >5%-of-range swings happen in BOTH
             # directions (their rate tracks the cell's noise, not the rule —
             # the counts print beside the verdict); what the rule must not
-            # carry is a systematic loss (the mean) or a skewed tail.
-            gate_rule = (sh_obj >= full2v_obj - 0.01
+            # carry is a systematic loss (the mean) or a skewed tail — and
+            # the rule itself must have RUN: a cell whose SH arm never
+            # eliminated is two copies of the plain sweep, and the gate
+            # would compare noise with itself (vacuous).
+            gate_rule = (sh_cuts_total > 0
+                         and sh_obj >= full2v_obj - 0.01
                          and abs(wins - losses) <= 0.02 * trials)
             gate_bonus = sh_obj > fullv_obj
             ok_all &= gate_rule and gate_bonus
             print(f"{width:>4} vs {2 * width:<4} {sigma:>7.1%} {budget:>7} "
                   f"{fullv_obj:>10.4f} {sh_obj:>8.4f} {full2v_obj:>10.4f} "
-                  f"{wins:>4}/{losses:<4}    "
+                  f"{wins:>4}/{losses:<4}    cuts={sh_cuts_total:<6} "
                   f"rule:{'PASS' if gate_rule else 'FAIL'} "
                   f"bonus:{'PASS' if gate_bonus else 'FAIL'}"
                   f"  (rec: fullV {fullv_rec / trials:.1%}, SH {sh_rec / trials:.1%}, "
@@ -195,7 +222,10 @@ def main(argv=None) -> int:
     print("GATE rule: at equal budget and equal grid, SH's mean objective is "
           "within 0.01 of the full grid's, and its paired tail is symmetric "
           "(|wins - losses| <= 2% of trials; the swings' rate tracks the cell's "
-          "noise — elimination only routes the budget, it never decides).")
+          "noise — elimination only routes the budget, it never decides) — and "
+          "the elimination gate must have fired at all (cuts > 0: a cell where "
+          "SH never halved is two copies of the plain sweep and FAILS as "
+          "vacuous, the gate would compare noise with itself).")
     print("GATE bonus: SH(2V) beats the current full(V) sweep in mean true "
           "objective — the freed budget affords the wider grid.")
     print("RESULT:", "PASS" if ok_all else "FAIL")

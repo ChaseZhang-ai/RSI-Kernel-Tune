@@ -105,7 +105,7 @@ _NO_DEF = {"BRA", "BRX", "JMP", "EXIT", "RET", "NOP", "CALL", "YIELD",
            "NANOSLEEP", "DEPBAR", "LDGDEPBAR", "WARPGROUP",
            "STS", "STG", "ST", "STL", "STSM", "RED", "ATOM", "ATOMG",
            "LDGSTS", "ARRIVES", "UTMALDG", "UTMASTG", "UTMACCTL",
-           "SYNCS", "USYNCS", "CCTL", "EXIT"}
+           "SYNCS", "USYNCS", "CCTL"}
 _FP_FAMS = {"FFMA", "FMUL", "FADD", "FSEL", "FMNMX", "HFMA2", "HMUL2", "HADD2",
             "MUFU"}
 _COPY_FAMS = {"LDGSTS", "UTMALDG"}

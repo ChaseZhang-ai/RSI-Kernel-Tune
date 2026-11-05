@@ -87,15 +87,20 @@ FRESH_RECHECK_ENV = "RKT_FRESH_RECHECK"
 # fresh child still runs after all windows — attached as `memo_fallback` (the
 # unseen-input hard gate: the cache's miss path must compute honestly) instead of
 # `fresh_recheck`. Absent (the house pattern) or 0/off = STRICT, today's behavior
-# byte for byte. The flag is harness-side only: it is read here before the kernel
-# imports, and the fence refuses a kernel that reads the environment.
+# byte for byte. The flag is harness-side only: run_bench pins its bench-start
+# value before the kernel imports and every read goes through the pin (the
+# guard-knobs block), so the in-process kernel cannot flip it; and for the
+# sealed/binary reference forms the fence refuses a kernel that reads the
+# environment at all.
 MEMO_LANE_ENV = "RKT_MEMO_LANE"
 
 
 def _memo_lane() -> bool:
     """The lane switch: RKT_MEMO_LANE=1 is the MEMO industrial lane; absent (the
-    house pattern: absent means off) or 0/off is STRICT."""
-    return os.environ.get(MEMO_LANE_ENV, "").strip().lower() not in ("", "0", "off")
+    house pattern: absent means off) or 0/off is STRICT. Read through the
+    bench-start pin (see the guard-knobs block) so the in-process kernel cannot
+    re-route the recheck verdict into the MEMO branch mid-run."""
+    return (_guard_env_get(MEMO_LANE_ENV) or "").strip().lower() not in ("", "0", "off")
 
 
 def _recheck_seed_shift() -> int:
@@ -103,10 +108,10 @@ def _recheck_seed_shift() -> int:
     generator seeds: in the child, drawn inputs must differ in content from the
     timed draw (the same shift cannot fire in the parent — the env is child-only,
     and the default shift is 0 outside a recheck)."""
-    if not os.environ.get(FRESH_RECHECK_ENV):
+    if not _guard_env_get(FRESH_RECHECK_ENV):
         return 0
     try:
-        return int(os.environ.get(FRESH_SEED_ENV, 7919))
+        return int(_guard_env_get(FRESH_SEED_ENV) or 7919)
     except ValueError:
         return 7919
 
@@ -410,7 +415,7 @@ def gate_degraded(block) -> "bool | None":
     if not isinstance(rows, list) or not rows:
         return None
     try:
-        ratio = float(os.environ.get(GATE_DEGRADED_RATIO_ENV) or GATE_DEGRADED_RATIO)
+        ratio = float(_guard_env_get(GATE_DEGRADED_RATIO_ENV) or GATE_DEGRADED_RATIO)
     except ValueError:
         ratio = GATE_DEGRADED_RATIO
     unavailable = sum(1 for r in rows
@@ -1219,7 +1224,7 @@ CLOCK_ENV = "LB_CLOCK_STATE"
 
 
 def clock_state() -> str:
-    return os.environ.get(CLOCK_ENV) or "unknown (not launched through gpu_entry.sh)"
+    return _guard_env_get(CLOCK_ENV) or "unknown (not launched through gpu_entry.sh)"
 
 
 def _side_windows(fn, dps: bool, problem: dict, inp: list, device) -> dict:
@@ -1343,7 +1348,7 @@ def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
     """One fresh-process correctness run over the SAME card: returns the parsed
     verdict, or None when the child could not produce one (env failure — a 'no
     reading', never counted as a fail)."""
-    env = dict(os.environ)
+    env = _guard_env_apply(dict(os.environ))
     env[FRESH_RECHECK_ENV] = "1"
     if seed is not None:
         env[FRESH_SEED_ENV] = str(seed)
@@ -1382,7 +1387,7 @@ def _fresh_recheck_block(problem: dict) -> "dict | None":
     on a MEMO card (RKT_MEMO_LANE) the caller attaches this same block as
     ``memo_fallback`` instead of ``fresh_recheck`` (docs/industrial-lane.md
     §6.3); nothing here reads the lane."""
-    if os.environ.get(FRESH_RECHECK_ENV):
+    if _guard_env_get(FRESH_RECHECK_ENV):
         return None                      # a child never nests
     mode = _fresh_recheck_mode(problem)
     child = _fresh_child(problem, seed=None)
@@ -1394,7 +1399,8 @@ def _fresh_recheck_block(problem: dict) -> "dict | None":
             impl = None
         if impl is not None:
             block["nondeterminism"] = _nondeterminism_fingerprint(
-                problem, impl, dps, os.environ.get("RKT_FRESH_RECHECK_DEVICE", "cuda"))
+                problem, impl, dps,
+                _guard_env_get("RKT_FRESH_RECHECK_DEVICE") or "cuda")
             fp = block["nondeterminism"]
             if fp.get("status") == "ran" and \
                     isinstance(fp.get("max_diff"), (int, float)) and fp["max_diff"] > 0.0:
@@ -1408,7 +1414,7 @@ def _run_fresh_recheck_child(problem: dict, args) -> int:
     timing. Exit code stays 0: the parent reads the verdict, not the rc. The
     device is the job's GPU; RKT_FRESH_RECHECK_DEVICE exists so the protocol can
     be rehearsed on a CPU box (tests) without touching the GPU path."""
-    device = os.environ.get("RKT_FRESH_RECHECK_DEVICE", "cuda")
+    device = _guard_env_get("RKT_FRESH_RECHECK_DEVICE") or "cuda"
     try:
         # the kernel's re-entry into the child is inside the try: a load that
         # fails here (a fresh process re-importing a kernel whose module level
@@ -1514,14 +1520,14 @@ def _replay_probe_enabled() -> bool:
     """The switch: ``RKT_REPLAY_PROBE=0`` (or ``off``) turns the probe fully off
     — the pre-WP29 behavior, byte for byte; anything else, including unset, is
     ON (the 2026-11-04 user adjudication)."""
-    return os.environ.get(REPLAY_PROBE_ENV, "").strip().lower() not in ("0", "off")
+    return (_guard_env_get(REPLAY_PROBE_ENV) or "").strip().lower() not in ("0", "off")
 
 
 def _replay_probe_ratio() -> float:
     """The suspected threshold: ``RKT_REPLAY_PROBE_RATIO`` overrides; an
     unreadable value keeps the conservative default."""
     try:
-        return float(os.environ.get(REPLAY_PROBE_RATIO_ENV) or REPLAY_PROBE_RATIO_DEFAULT)
+        return float(_guard_env_get(REPLAY_PROBE_RATIO_ENV) or REPLAY_PROBE_RATIO_DEFAULT)
     except ValueError:
         return REPLAY_PROBE_RATIO_DEFAULT
 
@@ -1533,9 +1539,68 @@ def _replay_probe_timeout_s() -> int:
     closed, so a bare ``int()`` would waste the whole eval before the JSON
     is emitted."""
     try:
-        return int(os.environ.get(REPLAY_PROBE_TIMEOUT_ENV) or REPLAY_PROBE_TIMEOUT_S)
+        return int(_guard_env_get(REPLAY_PROBE_TIMEOUT_ENV) or REPLAY_PROBE_TIMEOUT_S)
     except ValueError:
         return REPLAY_PROBE_TIMEOUT_S
+
+
+# --- the guard knobs are pinned at bench start ------------------------------------
+#
+# The kernel module is exec'd into THIS process (a source-reference card has no
+# kernel fence — kernel_fence guards only the sealed/binary reference forms), so
+# between bench start and the post-window reads the kernel code could flip any
+# RKT_* switch through os.environ: RKT_REPLAY_PROBE=0 (or an infinite
+# RKT_REPLAY_PROBE_RATIO) stops the WP29 probe from ever spawning or convicting,
+# a set RKT_FRESH_RECHECK silently skips the WP9 recheck (the child's "never
+# nests" guard reads it in the parent), a mutated RKT_FRESH_SEED changes the
+# recheck child's layer-2 draw shift (a content-keyed cache would then see the
+# judged content again), RKT_MEMO_LANE=1 on a STRICT card re-routes the recheck
+# verdict into the MEMO branch. run_bench pins every knob this file reads from
+# the environment at entry — BEFORE any kernel code runs — and every guard read
+# consults the pin: the conviction chain sees exactly what the harness was
+# configured with, not what the kernel left in the process environment.
+GUARD_ENV_KEYS = (
+    FRESH_RECHECK_ENV, FRESH_SEED_ENV, MEMO_LANE_ENV,
+    REPLAY_PROBE_ENV, REPLAY_PROBE_RATIO_ENV, REPLAY_PROBE_TIMEOUT_ENV,
+    REPLAY_PROBE_DEVICE_ENV, "RKT_FRESH_RECHECK_TIMEOUT_S",
+    "RKT_FRESH_RECHECK_DEVICE", GATE_DEGRADED_RATIO_ENV, CLOCK_ENV,
+)
+_GUARD_ENV: "dict[str, str | None] | None" = None
+
+
+def _pin_guard_env() -> None:
+    """Snapshot the guard knobs (run_bench entry, before the kernel imports)."""
+    global _GUARD_ENV
+    _GUARD_ENV = {k: os.environ.get(k) for k in GUARD_ENV_KEYS}
+
+
+def _unpin_guard_env() -> None:
+    """Back to live reads (the pin is scoped to one run_bench call)."""
+    global _GUARD_ENV
+    _GUARD_ENV = None
+
+
+def _guard_env_get(key: str) -> "str | None":
+    """A guard knob read: the pinned bench-start value while a bench run is
+    active, the live environment otherwise (direct readers, tests)."""
+    if _GUARD_ENV is not None and key in _GUARD_ENV:
+        return _GUARD_ENV[key]
+    return os.environ.get(key)
+
+
+def _guard_env_apply(env: dict) -> dict:
+    """Force the pinned knob values into a child-spawn environment: a child
+    inherits what the harness configured, not what the kernel mutated (the
+    recheck child's layer-2 shift rides the ambient RKT_FRESH_SEED when the
+    parent pins no explicit seed, so the ambient value must be the pinned one)."""
+    if _GUARD_ENV is None:
+        return env
+    for k, v in _GUARD_ENV.items():
+        if v is None:
+            env.pop(k, None)
+        else:
+            env[k] = v
+    return env
 
 
 def _probe_draw_seed(group: dict, group_index: int, offset: int) -> int:
@@ -1549,10 +1614,18 @@ def _probe_draw_seed(group: dict, group_index: int, offset: int) -> int:
 def _probe_task_inputs(view: dict, group: dict, device, seed: int) -> list:
     """``task_inputs`` pinned to an explicit probe seed: the draw shift is the
     one seam ``task_inputs`` reads (the recheck child rides it too), so the
-    probe pins the env around the call and restores it. The judged and recheck
-    draws never run through this path."""
+    probe pins the env around the call and restores it — live env AND the
+    bench-start guard pin, both: the shift read goes through the pin (the
+    fresh-recheck child's kernel must not be able to move its layer-2 shift),
+    so the probe's own harness-side override has to write the pin too or every
+    probe draw would land on the same pinned shift and the probe would time
+    one repeated draw. The judged and recheck draws never run this path."""
     saved = os.environ.get(FRESH_SEED_ENV)
-    os.environ[FRESH_SEED_ENV] = str(seed - int(group.get("seed", 0)))
+    saved_pin = _GUARD_ENV.get(FRESH_SEED_ENV) if _GUARD_ENV is not None else None
+    drawn = str(seed - int(group.get("seed", 0)))
+    os.environ[FRESH_SEED_ENV] = drawn
+    if _GUARD_ENV is not None:
+        _GUARD_ENV[FRESH_SEED_ENV] = drawn
     try:
         return task_inputs(view, group, device)
     finally:
@@ -1560,6 +1633,11 @@ def _probe_task_inputs(view: dict, group: dict, device, seed: int) -> list:
             os.environ.pop(FRESH_SEED_ENV, None)
         else:
             os.environ[FRESH_SEED_ENV] = saved
+        if _GUARD_ENV is not None:
+            if saved_pin is None:
+                _GUARD_ENV[FRESH_SEED_ENV] = None
+            else:
+                _GUARD_ENV[FRESH_SEED_ENV] = saved_pin
 
 
 def _probe_check_finite(inp: list) -> None:
@@ -1653,7 +1731,7 @@ def _run_replay_probe_child(problem: dict) -> int:
     included — reads ``unavailable``: a probe that cannot speak never convicts
     (the fresh_recheck unavailable posture)."""
     try:
-        device = os.environ.get(REPLAY_PROBE_DEVICE_ENV, "cuda")
+        device = _guard_env_get(REPLAY_PROBE_DEVICE_ENV) or "cuda"
         impl, dps = _impl(problem, "kernel")
         shapes = []
         for view in _task_shapes(problem):
@@ -1694,7 +1772,7 @@ def _probe_child(problem: dict) -> dict:
     one (env failure — a no-reading, never counted as a fail). The fresh-recheck
     child's spawn shape, with the probe's seed shift on the draw env and the
     probe's own child marker (no nesting)."""
-    env = dict(os.environ)
+    env = _guard_env_apply(dict(os.environ))
     env[FRESH_RECHECK_ENV] = "1"   # the draw-shift gate the child's task_inputs reads
     env[FRESH_SEED_ENV] = str(REPLAY_PROBE_SEED_SHIFT)
     env[REPLAY_PROBE_CHILD_ENV] = "1"
@@ -2470,6 +2548,19 @@ def run_bench(argv=None, problem_path=None) -> int:
     p.add_argument("--replay-probe", action="store_true",
                    help=argparse.SUPPRESS)
     args = p.parse_args(argv)
+    # Pin the guard knobs BEFORE anything in this process can run kernel code:
+    # the conviction chain (WP9 recheck, WP29 probe, the lane switch, the gate
+    # accounting) reads them through the pin from here on (see the
+    # guard-knobs block at the pin's definition).
+    _pin_guard_env()
+    try:
+        return _run_bench(args, problem_path)
+    finally:
+        _unpin_guard_env()
+
+
+def _run_bench(args, problem_path) -> int:
+    """run_bench's body, under the pinned guard environment."""
     problem = load_problem(problem_path)
     if args.fresh_recheck:
         return _run_fresh_recheck_child(problem, args)

@@ -2868,7 +2868,14 @@ def _run_probe_manifest_batch(ctx: LoopContext, be, branch: str,
                               paths: list[str]) -> "list[tuple[str, str]] | None":
     """One batched job over the manifest's scripts; None when the log carries
     no begin markers (the job never really ran — the caller falls back)."""
-    log = be.submit_gpu(branch, _probe_batch_mode(paths))
+    try:
+        log = be.submit_gpu(branch, _probe_batch_mode(paths))
+    except BackendError as e:
+        # same local degradation as the single-script probe: a wholesale job
+        # failure falls back to the per-script path instead of ending the run
+        _log(f"meta: probe manifest batch job failed ({e}) — falling back "
+             f"to the per-script path")
+        return None
     return _split_probe_batch_log(log, paths)
 
 
@@ -14157,7 +14164,9 @@ def _declared_construction(change: str) -> str | None:
     placeholder (``[PLACEHOLDER: …]``). Read
     by run_inner_iteration to scaffold such a row while the lineage's green state
     is still unknown, instead of buying a full eval that can only say
-    "under construction"."""
+    "under construction". A malformed declaration — ``part 0 of n`` (no step was
+    built), what _open_package_tail already refuses to price on — is None here
+    too: the row prices like any other instead of scaffolding for free."""
     m = _pkg_decl(change)
     if m and _pkg_step_ok(int(m.group(1)), int(m.group(2))):
         return f"part {m.group(1)} of {m.group(2)}"
@@ -16270,7 +16279,7 @@ def _save_ref_struct_table(ctx: LoopContext, log: str) -> None:
         return
     dst = ctx.recon_path.parent / _REF_STRUCT_TABLE_NAME
     try:
-        dst.write_text(m.group(1))
+        dst.write_text(m.group(1), encoding="utf-8")
     except OSError as e:
         _log(f"meta/recon: could not persist {_REF_STRUCT_TABLE_NAME} to {dst}: {e}")
 
@@ -16279,7 +16288,7 @@ def _read_ref_struct_table(ctx: LoopContext) -> str | None:
     if ctx.recon_path is None:
         return None
     try:
-        return (ctx.recon_path.parent / _REF_STRUCT_TABLE_NAME).read_text()
+        return (ctx.recon_path.parent / _REF_STRUCT_TABLE_NAME).read_text(encoding="utf-8")
     except OSError:
         return None
 
@@ -16364,7 +16373,7 @@ def _save_ref_stall_ledger(ctx: LoopContext, log: str) -> None:
             continue
         dst = ev / name
         try:
-            dst.write_text(m.group(1))
+            dst.write_text(m.group(1), encoding="utf-8")
         except OSError as e:
             _log(f"meta/recon: could not persist {name} to {dst}: {e}")
 
@@ -16624,7 +16633,7 @@ def _save_ref_pm_timeline(ctx: LoopContext, log: str) -> None:
         return
     dst = ev / _REF_PM_TIMELINE_NAME
     try:
-        dst.write_text(m.group(1))
+        dst.write_text(m.group(1), encoding="utf-8")
     except OSError as e:
         _log(f"meta/recon: could not persist {_REF_PM_TIMELINE_NAME} to {dst}: {e}")
 

@@ -129,6 +129,15 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     ended a phase that was still alive. RECON_REQUEST carries the same hazard
     with a caller gate instead (next paragraph).
 
+    The two student markers are matched only at the start of a line. A
+    whole-text search also matched the marker *quoted mid-line* — a record turn
+    citing ``PROBE_REQUEST: ...`` inside its ``change:`` line as the way a
+    decision was verified, or citing an earlier ``EXHAUSTED: ...`` — and routed
+    the record to the probe branch (a GPU job on a path quoted from prose) or
+    ended the phase. Same family of accident as the RECON_REQUEST echo below,
+    guarded the same way: the marker vocabulary counts only in the line shape
+    the prompt actually demands.
+
     RECON_REQUEST is only a valid shape for the reconnaissance caller
     (``allow_recon=True``). Recognizing it everywhere let a student turn that
     merely echoed the marker — likely in a blackbox run, where the vocabulary
@@ -913,8 +922,14 @@ class ProbeContract:
 def _contracts(text: str) -> tuple[ProbeContract, ...]:
     out = []
     for i, m in enumerate(_PROBE_VERDICT_RE.finditer(text), start=1):
+        # The spelled-out past tense is the same verdict ("PROBE PASSED"). The
+        # bare PASS|FAIL match used to leave the tail of the word (``ED ...``)
+        # in the note and the max_diff unread — a PASS line then failed its own
+        # audit with "no max_diff=..." while the diff sat in the note, and a
+        # FAIL line logged its diff as unreported.
+        verdict = "PASS" if m.group(1).startswith("PASS") else "FAIL"
         note = m.group(3).strip().lstrip(_PROBE_NOTE_LEAD).strip()
-        out.append(ProbeContract(i, m.group(1), m.group(2) or None, note))
+        out.append(ProbeContract(i, verdict, m.group(2) or None, note))
     return tuple(out)
 
 

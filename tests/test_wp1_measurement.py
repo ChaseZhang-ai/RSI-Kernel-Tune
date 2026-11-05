@@ -107,6 +107,7 @@ def test_digest_shows_spread_but_never_the_raw_arrays():
     rec = IterationRecord(iter=1, decision_id="D", change="c", correctness=True,
                           verdict="KEEP", device_median_ms=ev.device_median_ms,
                           workloads=ev.workloads)
+    src_w = ev.workloads  # captured before the digest: the source of truth
     digest = build_digest([rec], {"value": 0.5})
     shown = digest["achieved"]["workloads"]
     assert shown, "the digest keeps the per-workload breakdown"

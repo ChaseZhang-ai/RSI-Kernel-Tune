@@ -303,3 +303,27 @@ def test_snapshot_restore_round_trip():
     ra, (rb, seven), rg, s = P.restore(snap)
     assert not torch.equal(ra, a) and torch.equal(rb, torch.arange(4))
     assert seven == 7 and s == "x" and rg.requires_grad and rg.dtype == g.dtype
+
+
+def test_measure_reports_a_length_mismatch_instead_of_truncating():
+    """``zip(outs, refs, truths)`` without strict silently measured only the first
+    n outputs when the lists disagreed in length: the extra outputs got zero
+    rows, zero unavailable rows, zero errors — a hand-written bench passed on
+    outputs that were never compared. strict=True turns the mismatch into an
+    unavailable row (measure never raises; its why names the zip mismatch),
+    beside the rows the aligned prefix legitimately measured."""
+    exact = torch.ones(4)
+
+    # the kernel returned more outputs than the reference: the third one spoke up
+    rec = P.PrecisionRecorder()
+    rec.measure("case0", [exact, exact, exact], [exact, exact], [exact, exact, exact])
+    assert [r["status"] for r in rec.rows] == ["pass", "pass", "unavailable"]
+    assert "zip() argument" in rec.rows[-1]["why"]
+    assert rec.rows[-1]["case"] == "case0"
+    assert rec.block()["status"] == "pass"          # the block still renders
+
+    # the reference longer than the kernel's output list: the same report
+    rec = P.PrecisionRecorder()
+    rec.measure("case0", [exact, exact], [exact, exact, exact], [exact, exact])
+    assert rec.rows[-1]["status"] == "unavailable"
+    assert "zip() argument" in rec.rows[-1]["why"]

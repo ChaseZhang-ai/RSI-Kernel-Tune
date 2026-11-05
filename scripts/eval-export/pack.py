@@ -632,10 +632,16 @@ def preflight_compile(src: bytes, kfile: str, work: Path, report: Report) -> Non
              "    sys.exit(0)\n"
              "print(json.dumps({'ok': True, 'kind': '', 'err': ''}))\n")
     try:
+        # a bad knob value falls back to the default (as with every env knob):
+        # a mis-typed PK_EVAL_EXPORT_IMPORT_TIMEOUT must not escape as a raw
+        # ValueError and break the export's exit-code contract
+        try:
+            timeout = int(os.environ.get("PK_EVAL_EXPORT_IMPORT_TIMEOUT", "300"))
+        except ValueError:
+            timeout = 300
         r = subprocess.run([sys.executable, "-I", "-c", probe, str(work / kfile)],
                            capture_output=True, text=True,
-                           timeout=int(os.environ.get("PK_EVAL_EXPORT_IMPORT_TIMEOUT",
-                                                      "300")), check=False)
+                           timeout=timeout, check=False)
     except subprocess.TimeoutExpired:
         report.add("compile", "SKIP", f"importing {kfile} did not settle within the "
                    f"time budget (module-level JIT build?); the target machine decides")

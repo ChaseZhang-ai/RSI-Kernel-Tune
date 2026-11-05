@@ -719,12 +719,31 @@ produced_by = "cache"
      "dtype 'float16', declared 'bf16'"),
     ({"outputs": dict(PREP_OK["outputs"], h_states={"shape": [4, 128, 128], "dtype": "fp32"})},
      "undeclared tensor 'h_states'"),
+    ({"outputs": dict(PREP_OK["outputs"], A={"shape": "4x32x64", "dtype": "bf16"})},
+     "malformed shape '4x32x64'"),
+    ({"outputs": dict(PREP_OK["outputs"], A={"shape": 128, "dtype": "bf16"})},
+     "malformed shape 128"),
     (dict(PREP_OK, mutated=["A"]), "mutated the prep tensor(s) A"),
 ])
 def test_prep_report_is_held_to_the_declaration(report, needle):
     from peregrine_kernel.window_contract import check_prep_report
     problems = check_prep_report(parse_window_contract(SYMMETRIZED), report)
     assert any(needle in p for p in problems), problems
+
+
+def test_a_non_list_prep_shape_is_a_refusal_line_not_a_crash():
+    # a scalar / string / non-int-list shape in the bench's prep block is
+    # malformed input at this layer: a structured problem line naming the tensor
+    # and the fix, like every other prep mismatch -- never a TypeError escaping
+    # as a stopped run
+    from peregrine_kernel.window_contract import check_prep_report
+    c = parse_window_contract(SYMMETRIZED)
+    for shape in (128, "4x32x64", [4, "wide"], {"m": 4}):
+        report = {"outputs": dict(PREP_OK["outputs"],
+                                  A={"shape": shape, "dtype": "bf16"})}
+        problems = check_prep_report(c, report)
+        assert problems and all(isinstance(p, str) for p in problems), problems
+        assert any("malformed shape" in p and "'A'" in p for p in problems), problems
 
 
 def test_prep_check_is_vacuous_without_symmetrized_inputs():

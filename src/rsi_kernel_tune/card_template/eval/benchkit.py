@@ -1552,14 +1552,17 @@ def _replay_probe_enabled() -> bool:
 
 
 def _replay_probe_ratio() -> float:
-    """The suspected threshold: ``RKT_REPLAY_PROBE_RATIO`` overrides; an
-    unreadable value keeps the conservative default. Snapshot-read like the
-    switch: a kernel that flips the environment at its own import must not
-    raise its own conviction threshold."""
+    """The suspected threshold: ``RKT_REPLAY_PROBE_RATIO`` overrides; a value
+    that is unreadable — or readable but not a threshold (zero, negative,
+    inf/nan: everything suspects, or nothing ever does) — keeps the
+    conservative default. Snapshot-read like the switch: a kernel that flips
+    the environment at its own import must not raise its own conviction
+    threshold."""
     try:
-        return float(_defensive_env(REPLAY_PROBE_RATIO_ENV) or REPLAY_PROBE_RATIO_DEFAULT)
+        v = float(_defensive_env(REPLAY_PROBE_RATIO_ENV) or REPLAY_PROBE_RATIO_DEFAULT)
     except ValueError:
         return REPLAY_PROBE_RATIO_DEFAULT
+    return v if math.isfinite(v) and v > 0 else REPLAY_PROBE_RATIO_DEFAULT
 
 
 def _replay_probe_timeout_s() -> int:

@@ -163,6 +163,24 @@ def test_kernel_env_write_cannot_unshift_the_recheck_child(tmp_path):
     _tampered_child_fails(tmp_path)
 
 
+def test_replay_probe_ratio_rejects_non_threshold_values(monkeypatch):
+    """Zero, negative and inf/nan parse but are not thresholds: everything
+    suspects (or nothing ever does) under them — an honest kernel would read
+    suspected (a hard suspicious REVERT) or a cheat would sail through on
+    status pass — so they keep the conservative default like junk does."""
+    bk = _benchkit()
+    payload = {"shapes": [{"name": "w0", "probe_median_ms": 0.6}]}
+    bk._probe_child = lambda problem: payload
+    blocks = [{"name": "w0", "device_median_ms": 0.5}]
+    for bad in ("0", "-1", "inf", "-inf", "nan"):
+        monkeypatch.setenv(bk.REPLAY_PROBE_RATIO_ENV, bad)
+        assert bk._replay_probe_ratio() == bk.REPLAY_PROBE_RATIO_DEFAULT, bad
+        block = bk._replay_probe_block({}, blocks)
+        assert block["status"] == "pass", bad
+    monkeypatch.setenv(bk.REPLAY_PROBE_RATIO_ENV, "5.0")
+    assert bk._replay_probe_ratio() == 5.0    # a real override still applies
+
+
 def test_probe_task_input_pins_reach_the_shift_reader(monkeypatch):
     """The probe child's per-call pin writes the live env AND the snapshot (the
     shift reads go through the snapshot), and restores both — a shift the spawn

@@ -19,8 +19,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record
-from peregrine_kernel.loop.driver import LoopContext, _paired_reanchor
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
+from rsi_kernel_tune.loop.driver import LoopContext, _paired_reanchor
 
 
 def _reanchor_ctx(tmp_path: Path) -> LoopContext:

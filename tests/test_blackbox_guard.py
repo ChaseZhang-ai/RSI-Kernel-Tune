@@ -75,7 +75,7 @@ def test_the_template_closed_reference_is_on_the_base_list(tmp_path):
     reference's source, not its behaviour."""
     for cmd in ("python3 -c 'import closed_ref; print(closed_ref.unseal)'",
                 "cat eval/ref_bin/ref_payload.bin",
-                "python3 -c 'import os; print(os.environ[\"PK_REF_KEY\"])'"):
+                "python3 -c 'import os; print(os.environ[\"RKT_REF_KEY\"])'"):
         res = run_guard(tmp_path, cmd)
         assert res.returncode == 3, cmd
         assert "BLACKBOX-GUARD REFUSED" in res.stdout
@@ -331,7 +331,7 @@ def test_every_driver_seeded_tool_passes_the_guard(tmp_path):
     run a sanctioned probe."""
     import importlib
 
-    from peregrine_kernel.loop.driver import PRICING_SEEDED_MODULES, RECON_SEEDED_MODULES
+    from rsi_kernel_tune.loop.driver import PRICING_SEEDED_MODULES, RECON_SEEDED_MODULES
     notes = {}
     for name in dict.fromkeys(RECON_SEEDED_MODULES + PRICING_SEEDED_MODULES):
         path = Path(importlib.import_module(name).__file__)

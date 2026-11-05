@@ -2,7 +2,7 @@
 
 import subprocess
 
-from peregrine_kernel.inner.workspace import can_resolve, setup_student_workspace
+from rsi_kernel_tune.inner.workspace import can_resolve, setup_student_workspace
 
 
 def _git(*args, cwd):

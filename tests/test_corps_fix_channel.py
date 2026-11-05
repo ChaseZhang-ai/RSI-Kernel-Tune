@@ -25,10 +25,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from peregrine_kernel.loop import cli  # noqa: E402
-from peregrine_kernel.loop.cli import RunnerLostError  # noqa: E402
-from peregrine_kernel.loop.driver import BackendError  # noqa: E402
-from peregrine_kernel.submit import direct, jobs  # noqa: E402
+from rsi_kernel_tune.loop import cli  # noqa: E402
+from rsi_kernel_tune.loop.cli import RunnerLostError  # noqa: E402
+from rsi_kernel_tune.loop.driver import BackendError  # noqa: E402
+from rsi_kernel_tune.submit import direct, jobs  # noqa: E402
 
 
 # --- BUG-SEED-10: an interrupted agent turn ends its whole process group ------------
@@ -221,7 +221,7 @@ def test_a_poll_that_never_reaches_terminal_counts_toward_giving_up(monkeypatch,
     monkeypatch.setattr(cli, "_forge", fake_forge)
     be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0, poll_timeout_s=0.5)
     monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
-    rec_path = ws / ".git" / "pk-inflight.json"
+    rec_path = ws / ".git" / "rkt-inflight.json"
     rec_path.write_text(_json.dumps({"job": "7", "branch": "br", "mode": "all",
                                      "sha": "abc"}))
     for attempt in range(1, cli._INFLIGHT_LOG_ATTEMPTS + 1):
@@ -241,8 +241,8 @@ def test_a_poll_that_never_reaches_terminal_counts_toward_giving_up(monkeypatch,
 from test_harness_guard import _backend, _card, _commit, _git, _tree  # noqa: E402
 from test_loop_driver import EVAL, FakeBackend, NCU, REC, _ctx  # noqa: E402
 
-from peregrine_kernel.loop.driver import run_inner_iteration  # noqa: E402
-from peregrine_kernel.inner.trajectory import load_records  # noqa: E402
+from rsi_kernel_tune.loop.driver import run_inner_iteration  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import load_records  # noqa: E402
 
 
 def _overlay_backend(ws, card):
@@ -351,7 +351,7 @@ def test_measurable_reference_declarations_still_declare():
 def test_label_only_run_preflights_as_na(tmp_path):
     """A fresh target-ms-only run whose [loop] only labels a reference preflights as
     "n/a" — it used to be refused with EXIT_WINDOW_UNDECLARED."""
-    from peregrine_kernel.loop.cli import _window_preflight
+    from rsi_kernel_tune.loop.cli import _window_preflight
     (tmp_path / "window.toml").write_text("")       # absent contract, no reference
     state, contract, problems = _window_preflight(
         tmp_path, {"loop": {"ref_name": "cuDNN", "ref_shape": "B=1"}}, resuming=False)

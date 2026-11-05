@@ -14,7 +14,7 @@ sys.path.insert(0, str(REPO / "src"))
 
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx  # noqa: E402
 
-from peregrine_kernel.loop import driver
+from rsi_kernel_tune.loop import driver
 
 _MILESTONE_PATCH = "\n### D0.9 loosened\nx\n"
 _PATCH_REPLY = "patch_class: structural\nchanged_entries: [D0.9]\n"

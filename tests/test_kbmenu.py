@@ -19,8 +19,8 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 
-from peregrine_kernel.loop import kbmenu
-from peregrine_kernel.loop.driver import (
+from rsi_kernel_tune.loop import kbmenu
+from rsi_kernel_tune.loop.driver import (
     _wp12_kb_menu_block,
     _wp12_kb_menu_on,
     _wp12_readings,
@@ -258,7 +258,7 @@ def test_stale_reads_meta_step_order_and_ignores_uncited_records():
 
 
 def test_stale_accepts_meta_record_objects():
-    from peregrine_kernel.meta_trajectory import MetaRecord
+    from rsi_kernel_tune.meta_trajectory import MetaRecord
     recs = [MetaRecord(meta_step=1, cause_class="R1", deficient_locus="D1.1",
                        patch_class="structural", changed_entries=["D1.1"],
                        patch_direction="d", reopen_price="+3% via KB:wgedge",
@@ -430,7 +430,7 @@ def test_harvest_prompt_carries_the_three_wp12_sections():
 def test_kbmenu_is_the_single_synthesizer():
     """Contract C7: kbmenu.py is the only injection synth — the driver imports
     it instead of re-implementing the render."""
-    src = (REPO / "src" / "peregrine_kernel" / "loop" / "driver.py").read_text(encoding="utf-8")
-    assert "from peregrine_kernel.loop import kbmenu" in src
+    src = (REPO / "src" / "rsi_kernel_tune" / "loop" / "driver.py").read_text(encoding="utf-8")
+    assert "from rsi_kernel_tune.loop import kbmenu" in src
     # and no second header string anywhere in the driver
     assert src.count("deterministic retrieval aid") <= 1

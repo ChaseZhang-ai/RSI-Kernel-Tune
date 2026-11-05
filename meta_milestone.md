@@ -286,7 +286,7 @@ skipping**. The decisions inside one milestone need not be serial, as long as th
   max_diff of many consecutive correctness FAILs was bit-identical, and even with every component
   probe PASSing the fault could not be located. This item does not apply to single-kernel operators.
 - **The ref baseline is not a milestone** (template A.4): it is measured **before** distillation
-  (`peregrine <op> baseline`, archived as `operators/<op>/ref_baseline.json`) and injected into the
+  (`rsi-kernel-tune <op> baseline`, archived as `operators/<op>/ref_baseline.json`) and injected into the
   distill prompt as an authoring input. For how the gate numbers are anchored, see the next item.
   The phase order therefore goes straight from M0 to M1.
 - **Two references, split anchoring (template A.4)**: `arch_baseline.json` = **architecture
@@ -660,7 +660,7 @@ Every `operators/<op>/milestone.md` should contain the following sections (fixed
   twice the reference — compliant line by line, over budget in total; this number is what catches
   the total. It is a sass-derived static quantity and adds no NCU line.
 
-**What the machine check rejects** (`src/peregrine_kernel/milestone.py`): a missing section, a §3
+**What the machine check rejects** (`src/rsi_kernel_tune/milestone.py`): a missing section, a §3
 decision missing its five-tuple, no `D<x>.<y>`, no `[MEASURED]`/`[ESTIMATE]` mark, §3 without a
 "mechanism-verification line", a `[SOURCE: RS]` row missing the `[VERIFY: sass-derived]` line or the
 paired spill line, an RS ruling that exists only in prose without `[SOURCE:]` tags,
@@ -679,7 +679,7 @@ an out-of-vocabulary spelling is reported separately as an "unknown value" rathe
 
 **Shape-regime decision lines (WP14 vocabulary)**: a §3 decision line — an M0 topology contract line
 included — may carry one of two shape-keyed declarations, both machine-checked by the driver
-(`src/peregrine_kernel/milestone.py`, new names only; a milestone carrying neither validates exactly as before):
+(`src/rsi_kernel_tune/milestone.py`, new names only; a milestone carrying neither validates exactly as before):
 - `regime: <axis-predicate>` — a **per-regime decision**: the predicate is a **pure function of the
   problem's shape axes**, spelled as conjunctions of `<axis> (<|<=|==|>=|>|!=) <number>` (e.g.
   `regime: m >= 1024`) — nothing else parses, by design (no data content, no timing reading, no

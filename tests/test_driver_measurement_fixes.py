@@ -11,10 +11,10 @@ import json
 
 import pytest
 
-import peregrine_kernel.loop.driver as drv
-from peregrine_kernel.baseline import RefBaseline
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
-from peregrine_kernel.loop.parse import parse_eval
+import rsi_kernel_tune.loop.driver as drv
+from rsi_kernel_tune.baseline import RefBaseline
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record, load_records
+from rsi_kernel_tune.loop.parse import parse_eval
 
 from test_loop_driver import EVAL_DW, FakeBackend, _ctx
 

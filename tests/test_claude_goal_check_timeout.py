@@ -34,7 +34,7 @@ def _turn_dir(tmp_path: Path) -> Path:
     td.mkdir()
     (td / "spec.json").write_text(json.dumps(
         {"kind": "caller", "role": "student", "reply": str(td / "reply.md"),
-         "check": "true", "condition": "PEREGRINE TURN. Deliver the reply."}))
+         "check": "true", "condition": "RSI-KERNEL-TUNE TURN. Deliver the reply."}))
     return td
 
 
@@ -42,7 +42,7 @@ def _leg(tmp_path: Path, td: Path, **env) -> "m.GoalLeg":
     cfg = tmp_path / "cfg"
     cfg.mkdir(exist_ok=True)
     return m.GoalLeg("claude-test-1", "test-model", [], "prompt", env={
-        "PK_GOAL_TURN_DIR": str(td), "CLAUDE_CONFIG_DIR": str(cfg), **env})
+        "RKT_GOAL_TURN_DIR": str(td), "CLAUDE_CONFIG_DIR": str(cfg), **env})
 
 
 def _boom(*_a, **_k) -> None:
@@ -63,7 +63,7 @@ def test_a_hung_check_at_the_deadline_still_finishes_the_leg_and_writes_the_sess
     # shutdown path — session.json freshly written by save_session, result.json
     # with the outcome — instead of dying before either.
     td = _turn_dir(tmp_path)
-    leg = _leg(tmp_path, td, PK_GOAL_DEADLINE=str(time.time() - 100))
+    leg = _leg(tmp_path, td, RKT_GOAL_DEADLINE=str(time.time() - 100))
     monkeypatch.setattr(m.subprocess, "run", _boom)
     monkeypatch.setattr(m.time, "sleep", lambda _s: None)   # launch's pidfile wait
     monkeypatch.setattr(leg.tmux, "run",

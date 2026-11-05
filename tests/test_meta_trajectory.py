@@ -1,6 +1,6 @@
 """Tests for the meta-loop trajectory (meta_status.jsonl) — the meta agent's memory."""
 
-from peregrine_kernel.meta_trajectory import (
+from rsi_kernel_tune.meta_trajectory import (
     MetaRecord,
     append_meta_record,
     load_meta_records,
@@ -74,7 +74,7 @@ def test_reflect_summary_flags_reverted_directions(tmp_path):
 
 
 def test_reflect_summary_names_a_refused_unpriced_reopen():
-    from peregrine_kernel.meta_trajectory import MetaRecord, reflect_summary
+    from rsi_kernel_tune.meta_trajectory import MetaRecord, reflect_summary
     r = MetaRecord(meta_step=1, cause_class="R1", deficient_locus="D0.2",
                    patch_class="unpriced-reopen", changed_entries=[],
                    patch_direction="flip the axis", outcome="UNPRICED_REOPEN")
@@ -87,7 +87,7 @@ def test_reflect_summary_records_an_infeasible_stop_as_a_bare_fact():
     else: no word on what a human made of the stop and no pointer to
     human-written direction — either would feed a human meta decision back
     into the run under test."""
-    from peregrine_kernel.meta_trajectory import MetaRecord, reflect_summary
+    from rsi_kernel_tune.meta_trajectory import MetaRecord, reflect_summary
     r = MetaRecord(meta_step=4, cause_class="INFEASIBLE", deficient_locus="none",
                    patch_class="infeasible-stop", changed_entries=[],
                    patch_direction="re-distil a new candidate", outcome="INFEASIBLE_STOP")
@@ -103,7 +103,7 @@ def test_reflect_summary_empty_is_none_marker():
 
 
 def test_probe_readings_roundtrip_and_tolerate_old_records(tmp_path):
-    from peregrine_kernel.meta_trajectory import (MetaRecord, append_meta_record,
+    from rsi_kernel_tune.meta_trajectory import (MetaRecord, append_meta_record,
                                             load_meta_records)
     p = tmp_path / "meta_status.jsonl"
     rec = MetaRecord(meta_step=3, cause_class="R1", deficient_locus="D0.14",
@@ -124,7 +124,7 @@ def test_probe_readings_roundtrip_and_tolerate_old_records(tmp_path):
 
 
 def test_reflect_summary_carries_the_measured_readings():
-    from peregrine_kernel.meta_trajectory import MetaRecord, reflect_summary
+    from rsi_kernel_tune.meta_trajectory import MetaRecord, reflect_summary
     readings = [{"path": "notes/exposure.py", "round": 1, "contract": i,
                  "verdict": "PASS" if i == 3 else "FAIL",
                  "reading": "ref_exposed=106.3,student_exposed=159.6" if i == 3 else "n/a",

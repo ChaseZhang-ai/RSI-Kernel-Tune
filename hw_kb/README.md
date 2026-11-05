@@ -16,6 +16,6 @@ hw_kb/
 ```
 
 A run reads and writes exactly one tree, `hw_kb/<language>/<arch>/`, picked by the task's `language`
-and `arch` (`src/peregrine_kernel/loop/lang_mode.py`). The two language trees are independent: a reading
+and `arch` (`src/rsi_kernel_tune/loop/lang_mode.py`). The two language trees are independent: a reading
 certified with one language's probe is not carried over to the other. See each tree's README for
 the rules.

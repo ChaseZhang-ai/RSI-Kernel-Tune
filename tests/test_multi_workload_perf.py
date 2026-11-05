@@ -2,7 +2,7 @@
 verdict is the geometric mean.
 
 Covers the template helpers (``measure_windows_workloads`` /
-``workloads_performance`` in ``src/peregrine_kernel/card_template/eval/timing.py``, stub-torch
+``workloads_performance`` in ``src/rsi_kernel_tune/card_template/eval/timing.py``, stub-torch
 harness as ``test_template_timing.py``), the eval-JSON parse, the confirmation's
 per-workload medians, the reference-baseline parse, and the ``loop start``
 static preflight.
@@ -17,11 +17,11 @@ import pytest
 
 from test_template_timing import FakeGpu, load_timing
 
-from peregrine_kernel.baseline_cli import parse_ref_stdout
-from peregrine_kernel.inner.trajectory import IterationRecord, build_digest
-from peregrine_kernel.loop.driver import _confirm_workload_medians
-from peregrine_kernel.loop.parse import describe_workload_readings, parse_eval
-from peregrine_kernel.window_contract import PERF_WORKLOADS, bench_workloads_findings
+from rsi_kernel_tune.baseline_cli import parse_ref_stdout
+from rsi_kernel_tune.inner.trajectory import IterationRecord, build_digest
+from rsi_kernel_tune.loop.driver import _confirm_workload_medians
+from rsi_kernel_tune.loop.parse import describe_workload_readings, parse_eval
+from rsi_kernel_tune.window_contract import PERF_WORKLOADS, bench_workloads_findings
 
 
 def _cost(gpu: FakeGpu, ms: float):
@@ -311,7 +311,7 @@ def test_measure_paired_burn_in_feeds_the_prep_tensors():
 def test_the_driver_holds_every_workloads_prep_block_to_the_declaration():
     from test_window_contract import PREP_OK, SYMMETRIZED
 
-    from peregrine_kernel.window_contract import check_prep_report, parse_window_contract
+    from rsi_kernel_tune.window_contract import check_prep_report, parse_window_contract
     contract = parse_window_contract(SYMMETRIZED)
     bad = dict(PREP_OK["outputs"], A={"shape": [4, 32, 32], "dtype": "bf16"})
     report = dict(PREP_OK, workloads=[dict(PREP_OK, name="a"),
@@ -327,7 +327,7 @@ def test_the_driver_holds_every_workloads_prep_block_to_the_declaration():
 # --- the absolute target: the reference must cover the same workloads -------------
 
 def test_workloads_mismatch_compares_count_then_names():
-    from peregrine_kernel.baseline import workloads_mismatch
+    from rsi_kernel_tune.baseline import workloads_mismatch
     assert workloads_mismatch(1, [], 1, []) is None
     assert workloads_mismatch(3, ["a", "b", "c"], 3, ["c", "b", "a"]) is None
     assert workloads_mismatch(3, [], 3, ["a", "b", "c"]) is None   # unnamed: count only
@@ -351,7 +351,7 @@ def test_ref_baseline_records_which_workloads_its_geomean_covers():
 
 
 def test_ref_baseline_workloads_survive_the_archive_round_trip(tmp_path):
-    from peregrine_kernel.baseline import RefBaseline, load_baseline, save_baseline
+    from rsi_kernel_tune.baseline import RefBaseline, load_baseline, save_baseline
     save_baseline(tmp_path, RefBaseline(op="demo", ms=2.0, ms_device=1.9, n_workloads=3,
                                         workloads=["a", "b", "c"]))
     back = load_baseline(tmp_path)
@@ -360,7 +360,7 @@ def test_ref_baseline_workloads_survive_the_archive_round_trip(tmp_path):
 
 
 def test_declared_arch_ref_is_one_input_set_unless_its_workloads_are_named():
-    from peregrine_kernel.loop.cli import _declared_arch_baseline
+    from rsi_kernel_tune.loop.cli import _declared_arch_baseline
     cfg = {"loop": {"arch_ref_ms": 2.0, "arch_ref_device_ms": 1.9}}
     assert _declared_arch_baseline("demo", cfg).n_workloads == 1
     cfg["loop"]["arch_ref_workloads"] = ["a", "b", "c"]
@@ -379,8 +379,8 @@ _SINGLE_BENCH = "res = measure_paired(k, r)\n"
 
 
 def test_loop_start_flags_a_single_input_archive_under_a_multi_workload_bench(tmp_path):
-    from peregrine_kernel.baseline import ROLE_ARCHITECTURE, RefBaseline
-    from peregrine_kernel.loop.cli import _target_workloads_problems
+    from rsi_kernel_tune.baseline import ROLE_ARCHITECTURE, RefBaseline
+    from rsi_kernel_tune.loop.cli import _target_workloads_problems
     op_dir = _card(tmp_path, _MULTI_BENCH)
     single = RefBaseline(op="demo", ms=2.0)
     multi = RefBaseline(op="demo", ms=2.0, n_workloads=3, workloads=["a", "b", "c"],
@@ -397,7 +397,7 @@ def test_loop_start_flags_a_single_input_archive_under_a_multi_workload_bench(tm
 
 
 def test_the_finish_ratio_refuses_ref_runs_over_other_workloads():
-    from peregrine_kernel.loop.cli import _fresh_ref_workloads_mismatch
+    from rsi_kernel_tune.loop.cli import _fresh_ref_workloads_mismatch
     confirm = {"workloads": [{"name": n} for n in ("a", "b", "c")]}
     single_runs = [{"ms": 1.0, "ms_device": 0.9}]
     assert "one input set" in _fresh_ref_workloads_mismatch(single_runs, confirm)
@@ -423,7 +423,7 @@ def test_an_absolute_hit_against_a_single_input_archive_does_not_stop_the_run(tm
     from test_false_win_guard import PushingBackend, _ctx_with_anchor
     from test_loop_driver import NCU, REC
 
-    from peregrine_kernel.loop.driver import run_inner_loop
+    from rsi_kernel_tune.loop.driver import run_inner_loop
     calls = []
     be = PushingBackend([REC("D1", 1.85), REC("D2", 1.85)],
                         [EVAL_WL(1.85), NCU, EVAL_WL(1.85), NCU])
@@ -440,8 +440,8 @@ def test_target_mismatch_reads_the_best_keeps_workloads(tmp_path):
 
     from test_loop_driver import FakeBackend, _ctx
 
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
-    from peregrine_kernel.loop.driver import _target_workloads_mismatch
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.loop.driver import _target_workloads_mismatch
     ctx = _ctx(tmp_path, FakeBackend([], []))
     assert _target_workloads_mismatch(ctx) is None          # nothing kept yet
     append_record(ctx.status_path, IterationRecord(
@@ -458,8 +458,8 @@ def test_target_mismatch_reads_the_best_keeps_workloads(tmp_path):
 def test_phantom_gap_skips_the_absolute_residual_under_a_mismatch(tmp_path, monkeypatch):
     from test_loop_driver import FakeBackend, _ctx
 
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
-    from peregrine_kernel.loop import driver
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.loop import driver
     calls, paired = [], []
     ctx = _ctx(tmp_path, FakeBackend([], []), target_ms=1.0)
     ctx.gate_window = "device"
@@ -483,7 +483,7 @@ def test_phantom_gap_skips_the_absolute_residual_under_a_mismatch(tmp_path, monk
 
 def test_the_workload_count_warning_is_a_plain_bench_contract(tmp_path):
     from types import SimpleNamespace
-    from peregrine_kernel.loop.driver import _too_few_workloads
+    from rsi_kernel_tune.loop.driver import _too_few_workloads
     ctx = SimpleNamespace(workspace=tmp_path)
     assert _too_few_workloads(ctx, SimpleNamespace(n_workloads=2))
     assert not _too_few_workloads(ctx, SimpleNamespace(n_workloads=PERF_WORKLOADS))

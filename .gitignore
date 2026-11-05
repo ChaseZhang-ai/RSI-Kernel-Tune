@@ -8,7 +8,7 @@ __pycache__/
 
 # Runs: one directory per run, never repo content.
 .artifacts/
-# Operator trees made by hand (`peregrine init <op> --kernel-file ...`); a run keeps its own.
+# Operator trees made by hand (`rsi-kernel-tune init <op> --kernel-file ...`); a run keeps its own.
 /operators/
 # This machine: GPU, ssh host, credentials. Never committed.
 local.env

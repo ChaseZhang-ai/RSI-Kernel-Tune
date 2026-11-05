@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """Regression tests for the audit-corps R3F fix wave over the benchkit/cardkit surface.
@@ -32,8 +32,8 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-EVAL_SRC = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
-CARDKIT = REPO / "src" / "peregrine_kernel" / "cardkit.py"
+EVAL_SRC = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval"
+CARDKIT = REPO / "src" / "rsi_kernel_tune" / "cardkit.py"
 
 
 def _benchkit():
@@ -50,7 +50,7 @@ def _fence_card(tmp_path: Path, kfile: str, body: bytes, module: str) -> dict:
     (the only kind the fence polices) naming a module the kernel imports."""
     (tmp_path / "eval" / "problem").mkdir(parents=True, exist_ok=True)
     problem = {
-        "schema": 1, "suite": "peregrine_kernel",
+        "schema": 1, "suite": "rsi_kernel_tune",
         "definition": {"name": "rmsnorm_h64", "op_type": "rmsnorm",
                        "inputs": {}, "outputs": {}, "reference": "def run(**kw):\n    pass\n"},
         "workload": {"uuid": "w0", "axes": {}, "input_groups": []},
@@ -103,7 +103,7 @@ def test_bench_kernels_the_fence_reports_for_a_readable_kernel(tmp_path):
 # --- BUG-CH-G-03 -------------------------------------------------------------------
 
 _GROUP_PROBLEM = {
-    "schema": 1, "suite": "peregrine_kernel",
+    "schema": 1, "suite": "rsi_kernel_tune",
     "definition": {"name": "rmsnorm_h64", "op_type": "rmsnorm", "inputs": {},
                    "outputs": {}, "reference": "def run(**kw):\n    pass\n"},
     "group": [
@@ -176,7 +176,7 @@ def _render_gpu_entry() -> str:
     spec = importlib.util.spec_from_file_location("corps_r3f_cardkit", CARDKIT)
     ck = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ck)
-    return ck.render_gpu_entry(name="t", suite="peregrine_kernel", arch="sm100")
+    return ck.render_gpu_entry(name="t", suite="rsi_kernel_tune", arch="sm100")
 
 
 @pytest.mark.parametrize("task,refused", [

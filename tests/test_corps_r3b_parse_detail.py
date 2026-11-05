@@ -12,7 +12,7 @@ net, ending a hours-long run as ``error``. The sister consumer of the same field
 guard on the ranking key while the row still displays verbatim.
 """
 
-from peregrine_kernel.loop.parse import (
+from rsi_kernel_tune.loop.parse import (
     _correctness_error,
     _correctness_fail_detail,
     parse_eval,

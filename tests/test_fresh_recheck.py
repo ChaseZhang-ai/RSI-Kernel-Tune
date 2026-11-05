@@ -12,7 +12,7 @@ elsewhere. The recheck re-runs the correctness protocol in a FRESH PROCESS after
 all windows close — pointers move, module state resets — and a second layer
 re-draws generated inputs at a different seed so content-keyed caches miss too.
 
-Runs on CPU: the child device is PK_FRESH_RECHECK_DEVICE=cpu (the GPU job keeps
+Runs on CPU: the child device is RKT_FRESH_RECHECK_DEVICE=cpu (the GPU job keeps
 cuda); torch is required.
 """
 
@@ -29,7 +29,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 REPO = Path(__file__).resolve().parents[1]
-EVAL_SRC = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
+EVAL_SRC = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval"
 
 # A "cache cheat", in the shape the recheck exists for: the module computes the
 # correct answer ONCE (the correctness call — the first, stateless moment) and
@@ -84,7 +84,7 @@ def make_inputs(axes_and_scalars, group=None, seed=0, device="cpu"):
 '''
 
 PROBLEM = {
-    "schema": 1, "suite": "peregrine_kernel",
+    "schema": 1, "suite": "rsi_kernel_tune",
     "definition": {"name": "rmsnorm_h64", "op_type": "rmsnorm",
                    "inputs": {"hidden_states": {"shape": ["batch_size", "hidden_size"], "dtype": "float32"},
                               "weight": {"shape": ["hidden_size"], "dtype": "float32"}},
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
 def _card(tmp_path: Path, kernel: str, problem: dict = PROBLEM) -> Path:
     """A minimal self-contained card: eval/benchkit.py + eval/bench.py + problem.json
-    + kernel.py — what a generated card carries (no peregrine_kernel import in the job)."""
+    + kernel.py — what a generated card carries (no rsi_kernel_tune import in the job)."""
     (tmp_path / "eval").mkdir(parents=True, exist_ok=True)
     shutil.copy2(EVAL_SRC / "benchkit.py", tmp_path / "eval" / "benchkit.py")
     shutil.copy2(EVAL_SRC / "timing.py", tmp_path / "eval" / "timing.py")
@@ -128,8 +128,8 @@ def _card(tmp_path: Path, kernel: str, problem: dict = PROBLEM) -> Path:
 def _run_card(card: Path, *extra: str, **env_over) -> subprocess.CompletedProcess:
     import os
     env = {**os.environ, "PYTHONPATH": os_pathsep(card),
-           "PK_FRESH_RECHECK_DEVICE": "cpu",
-           "PK_FRESH_RECHECK": "1",   # what the production parent exports
+           "RKT_FRESH_RECHECK_DEVICE": "cpu",
+           "RKT_FRESH_RECHECK": "1",   # what the production parent exports
            **env_over}
     return subprocess.run([sys.executable, str(card / "eval" / "bench.py"), *extra],
                           capture_output=True, text=True, env=env, cwd=str(card),
@@ -214,7 +214,7 @@ def test_child_never_nests_and_prints_exactly_one_verdict(tmp_path):
 
 
 def test_parse_carries_fresh_recheck_into_evalresult():
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.parse import parse_eval
     ev = parse_eval("=== JSON ===\n"
                     + json.dumps({"correctness": {"pass": True},
                                   "performance": {"device_median_ms": 1.0},
@@ -232,9 +232,9 @@ def test_parse_carries_fresh_recheck_into_evalresult():
 def test_driver_reverts_and_marks_suspicious_on_a_fresh_recheck_fail(tmp_path):
     """The driver's consumption: a fail is a hard REVERT whose row carries
     suspicious=True — and the loop buys no further jobs on that tree."""
-    from peregrine_kernel.inner.trajectory import load_records
+    from rsi_kernel_tune.inner.trajectory import load_records
     from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx
-    from peregrine_kernel.loop.driver import run_inner_loop
+    from rsi_kernel_tune.loop.driver import run_inner_loop
 
     fail_json = ("=== JSON ===\n"
                  + json.dumps({"correctness": {"pass": True},

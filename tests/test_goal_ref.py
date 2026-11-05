@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.loop import goal_ref as gr
-from peregrine_kernel.loop.parse import parse_eval
+from rsi_kernel_tune.loop import goal_ref as gr
+from rsi_kernel_tune.loop.parse import parse_eval
 
 SRC = Path(gr.__file__).resolve().parents[2]
 
@@ -75,13 +75,13 @@ class StubGPU:
 AGENT = textwrap.dedent('''\
     import json, os, pathlib, subprocess, sys, time
     sys.path.insert(0, {src!r})
-    from peregrine_kernel.loop import goal_ref
+    from rsi_kernel_tune.loop import goal_ref
     ws = pathlib.Path.cwd()
-    spec = json.loads((pathlib.Path(os.environ["PK_GOAL_TURN_DIR"]) / "spec.json").read_text())
+    spec = json.loads((pathlib.Path(os.environ["RKT_GOAL_TURN_DIR"]) / "spec.json").read_text())
     trace = pathlib.Path({trace!r})
     with open(str(trace) + ".env", "a") as f:
         f.write(json.dumps({{k: os.environ.get(k) for k in
-                            ("PK_GOAL_DEADLINE",)}}) + "\\n")
+                            ("RKT_GOAL_DEADLINE",)}}) + "\\n")
     def run(cmd):
         r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         with open(trace, "a") as f:
@@ -125,7 +125,7 @@ def _gen(tmp_path: Path, kernels: list[str], *, hours: float = 1.0, linger: floa
         agent_cmd=f"{sys.executable} {agent}", policy=None, make_backend=make_backend,
         settings=gr.Settings(hours=hours, accept_runs=2), poll_s=0.05,
         kill_grace_s=kill_grace_s, report_s=report_s, log=lambda s: None,
-        extra_env={"PK_GOALREF_POLL_S": "0.05", "PK_GOALREF_WAIT_S": "60"})
+        extra_env={"RKT_GOALREF_POLL_S": "0.05", "RKT_GOALREF_WAIT_S": "60"})
     return g, gpus, trace
 
 
@@ -225,7 +225,7 @@ def test_library_calls_are_found_and_the_stub_contract_text_is_not():
 def test_the_condition_fits_and_names_the_check(tmp_path):
     ws = tmp_path / "goal_ref" / "ws"
     text = gr.condition_text(ws=ws, kernel_file="kernel.py", deadline=time.time(),
-                             reply=ws / ".pk-turn" / "goalref" / "reply.md")
+                             reply=ws / ".rkt-turn" / "goalref" / "reply.md")
     assert len(text) <= gr.CONDITION_MAX
     assert gr.command("check", str(ws.parent)) in text and gr.OK_LINE in text
 
@@ -336,7 +336,7 @@ def test_the_session_keeps_a_report_window_past_the_deadline(tmp_path):
     assert state["status"] == "accepted"
     assert [a["rc"] for a in state["attempts"]] == [0]      # not killed at the deadline
     env = json.loads(Path(str(trace) + ".env").read_text().splitlines()[0])
-    assert int(env["PK_GOAL_DEADLINE"]) == int(state["deadline"] + 600)
+    assert int(env["RKT_GOAL_DEADLINE"]) == int(state["deadline"] + 600)
 
 
 def test_a_candidate_rewritten_after_its_evaluation_is_not_accepted(tmp_path):
@@ -402,7 +402,7 @@ def test_the_eval_record_is_the_drivers_parse(tmp_path):
 # -- the loop CLI's side ------------------------------------------------------------------
 
 def test_the_student_never_reads_a_generated_reference(tmp_path):
-    from peregrine_kernel.loop.cli import _teacher_only_trees
+    from rsi_kernel_tune.loop.cli import _teacher_only_trees
     assert not set(gr.teacher_only_paths(tmp_path, "demo")) & set(
         _teacher_only_trees({}, tmp_path, "demo", "source", []))     # none generated here
     for p in gr.teacher_only_paths(tmp_path, "demo"):
@@ -417,7 +417,7 @@ def test_the_student_never_reads_a_generated_reference(tmp_path):
 def test_a_declared_oracle_stays_denied_when_the_generated_one_replaces_it():
     """"always" (or a reuse) drops the declared oracle from --oracle and from cfg; the
     student's deny list keeps it."""
-    from peregrine_kernel.loop.cli import _student_denied_oracle
+    from rsi_kernel_tune.loop.cli import _student_denied_oracle
     declared = ["/refs/real/kernel.py"]
     generated = {"loop": {"oracle": ["/run/goal_ref/reference/kernel.py"]}}
     assert _student_denied_oracle("source", None, generated, declared) == [
@@ -427,7 +427,7 @@ def test_a_declared_oracle_stays_denied_when_the_generated_one_replaces_it():
 
 
 def test_a_previous_runs_generated_reference_is_contamination(tmp_path):
-    from peregrine_kernel.loop.cli import fresh_start_contamination
+    from rsi_kernel_tune.loop.cli import fresh_start_contamination
     op_dir = tmp_path / "op"
     (op_dir / "student").mkdir(parents=True)
     st = op_dir / "student" / "status.jsonl"
@@ -440,7 +440,7 @@ def test_a_previous_runs_generated_reference_is_contamination(tmp_path):
 
 def test_the_session_needs_a_goal_capable_agent_command(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    from peregrine_kernel.loop.cli import _goal_ref_agent_problem
+    from rsi_kernel_tune.loop.cli import _goal_ref_agent_problem
     monkeypatch.chdir(tmp_path)
     assert "no --agent-cmd" in _goal_ref_agent_problem(
         SimpleNamespace(agent_cmd=None, teacher_agent_cmd=None))
@@ -462,7 +462,7 @@ def test_an_orphaned_leg_is_ended_only_when_it_is_ours(tmp_path):
     try:
         state = {"attempts": [{"n": 1, "pgid": proc.pid}, {"n": 2, "pgid": other.pid}]}
         gr.save_state(g.op_dir, {"status": "generating"})
-        import peregrine_kernel.loop.goal_ref as mod
+        import rsi_kernel_tune.loop.goal_ref as mod
         orig = mod.time.sleep
         mod.time.sleep = lambda s: orig(min(s, 1.0))
         try:

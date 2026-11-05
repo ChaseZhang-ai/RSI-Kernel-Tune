@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from peregrine_kernel.loop.kb_lint import derive_reference_tokens, lint_kb_dir, lint_text
+from rsi_kernel_tune.loop.kb_lint import derive_reference_tokens, lint_kb_dir, lint_text
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -147,7 +147,7 @@ def test_missing_kb_dir_is_a_finding(tmp_path):
 
 
 # --- experiment narrative (check 4 + the other exam surfaces) ---------------
-from peregrine_kernel.loop.kb_lint import lint_exam_surfaces, lint_narrative_text  # noqa: E402
+from rsi_kernel_tune.loop.kb_lint import lint_exam_surfaces, lint_narrative_text  # noqa: E402
 
 
 def test_narrative_arm_date_flagged():
@@ -188,7 +188,7 @@ def test_kb_lint_text_includes_narrative_check():
 def test_exam_surfaces_python_docstrings_exempt(tmp_path):
     (tmp_path / "meta").mkdir()
     (tmp_path / "meta" / "p.md").write_text("Generic wording, no dates.\n", encoding="utf-8")
-    py = tmp_path / "src" / "peregrine_kernel"
+    py = tmp_path / "src" / "rsi_kernel_tune"
     py.mkdir(parents=True)
     (py / "m.py").write_text(
         '"""The 0902 run docstring may carry a date."""\n'
@@ -198,7 +198,7 @@ def test_exam_surfaces_python_docstrings_exempt(tmp_path):
         '    return "prompt body\\nthe second line mentions 0902 dsa_sparse"\n',
         encoding="utf-8")
     found = lint_exam_surfaces(tmp_path)
-    assert len(found) == 1 and found[0].startswith("src/peregrine_kernel/m.py:6:")  # 2nd line of the constant
+    assert len(found) == 1 and found[0].startswith("src/rsi_kernel_tune/m.py:6:")  # 2nd line of the constant
 
 
 def test_shipped_exam_surfaces_have_no_experiment_narrative():
@@ -260,7 +260,7 @@ def test_derive_tokens_reports_missing_paths_and_a_summary(tmp_path):
 
 
 def test_kb_lint_cli_prints_derived_tokens_and_missing_oracle_paths(tmp_path, capsys):
-    from peregrine_kernel.loop.kb_lint import main
+    from rsi_kernel_tune.loop.kb_lint import main
     kb = tmp_path / "hw_kb"
     kb.mkdir()
     (kb / "clean.md").write_text("# clean\n\n- cites only the official docs.\n")

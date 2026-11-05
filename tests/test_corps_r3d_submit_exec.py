@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.submit import direct, jobs as ds
-from peregrine_kernel.submit.config import load_config
+from rsi_kernel_tune.submit import direct, jobs as ds
+from rsi_kernel_tune.submit.config import load_config
 
 ENTRY_OK = """#!/bin/bash
 echo "entry task=$1 gpu=$CUDA_VISIBLE_DEVICES timeout=$TASK_TIMEOUT"
@@ -123,7 +123,7 @@ def _ssh_run(cfg, fake):
 
 
 def test_checked_env_key_accepts_identifiers_only():
-    assert direct._checked_env_key("PK_FOO") == "PK_FOO"
+    assert direct._checked_env_key("RKT_FOO") == "RKT_FOO"
     assert direct._checked_env_key("_a1") == "_a1"
     for bad in ("A;id", "A B", "", "1A", "A-B", "A.B", "a=1"):
         with pytest.raises(ValueError, match="not a valid shell identifier"):

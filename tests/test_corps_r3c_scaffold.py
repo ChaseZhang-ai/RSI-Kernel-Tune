@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel import scaffold
+from rsi_kernel_tune import scaffold
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -23,8 +23,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 def base(tmp_path: Path) -> Path:
     """An isolated main-repo root holding copies of the real templates."""
     shutil.copytree(REPO_ROOT / "meta", tmp_path / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "peregrine_kernel" / "card_template",
-                    tmp_path / "src" / "peregrine_kernel" / "card_template")
+    shutil.copytree(REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template",
+                    tmp_path / "src" / "rsi_kernel_tune" / "card_template")
     return tmp_path
 
 
@@ -43,8 +43,8 @@ def test_no_git_into_the_live_repo_is_refused_until_named(tmp_path, capsys, monk
 def test_the_explicit_opt_in_creates_the_card(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(scaffold, "_repo_root", lambda: tmp_path)
     shutil.copytree(REPO_ROOT / "meta", tmp_path / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "peregrine_kernel" / "card_template",
-                    tmp_path / "src" / "peregrine_kernel" / "card_template")
+    shutil.copytree(REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template",
+                    tmp_path / "src" / "rsi_kernel_tune" / "card_template")
     rc = scaffold.main(["demo_op", "--no-git", "--allow-unguarded-harness"])
     assert rc == 0
     assert (tmp_path / "operators" / "demo_op" / "README.md").is_file()
@@ -55,8 +55,8 @@ def test_the_explicit_opt_in_creates_the_card(tmp_path, capsys, monkeypatch):
 def test_a_staging_base_dir_is_warned_not_refused(tmp_path, capsys):
     base = tmp_path / "staging"
     shutil.copytree(REPO_ROOT / "meta", base / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "peregrine_kernel" / "card_template",
-                    base / "src" / "peregrine_kernel" / "card_template")
+    shutil.copytree(REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template",
+                    base / "src" / "rsi_kernel_tune" / "card_template")
     rc = scaffold.main(["demo_op", "--base-dir", str(base), "--no-git"])
     assert rc == 0
     err = capsys.readouterr().err
@@ -67,8 +67,8 @@ def test_a_staging_base_dir_is_warned_not_refused(tmp_path, capsys):
 def test_the_default_still_inits_git(tmp_path, monkeypatch):
     monkeypatch.setattr(scaffold, "_repo_root", lambda: tmp_path)
     shutil.copytree(REPO_ROOT / "meta", tmp_path / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "peregrine_kernel" / "card_template",
-                    tmp_path / "src" / "peregrine_kernel" / "card_template")
+    shutil.copytree(REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template",
+                    tmp_path / "src" / "rsi_kernel_tune" / "card_template")
     rc = scaffold.main(["demo_op"])
     assert rc == 0
     assert (tmp_path / "operators" / "demo_op" / ".git").is_dir()

@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.loop import agent_policy as ap
-from peregrine_kernel.loop import agentctx as ac
+from rsi_kernel_tune.loop import agent_policy as ap
+from rsi_kernel_tune.loop import agentctx as ac
 
 GW = "https://gw.example/llm"
 

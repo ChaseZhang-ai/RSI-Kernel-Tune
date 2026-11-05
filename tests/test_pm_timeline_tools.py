@@ -1,8 +1,8 @@
 """The PM-sampling phase timeline: rendering, phase stats, verdict gate."""
 from collections import OrderedDict
 
-from peregrine_kernel.loop.driver import _PM_TIMELINE_RE, _PMTL_OK, _PMTL_WAIVED
-from peregrine_kernel.skills import pm_timeline_tools as pmt
+from rsi_kernel_tune.loop.driver import _PM_TIMELINE_RE, _PMTL_OK, _PMTL_WAIVED
+from rsi_kernel_tune.skills import pm_timeline_tools as pmt
 
 STALL = "pmsampling:smsp__warps_issue_stalled_barrier.avg"
 TENSOR = "pmsampling:sm__pipe_tensor_cycles_active_realtime.avg.pct_of_peak_sustained_elapsed"
@@ -107,7 +107,7 @@ def test_reader_api_breakage_is_loud_not_empty():
 
 
 def test_pm_timeline_run_cmd_captures_a_choosable_launch_set():
-    from peregrine_kernel.skills import pm_timeline_run as ptr
+    from rsi_kernel_tune.skills import pm_timeline_run as ptr
     cmd = " ".join(ptr.build_cmd(ptr.INTERVAL))
     # dominant-by-duration selection is only a real check with >1 captured
     # launch (with 1 it is the identity and a mis-aim gets a green verdict),

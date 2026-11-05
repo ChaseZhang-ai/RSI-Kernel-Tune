@@ -3,7 +3,7 @@
 Three operator-agnostic measurement recipes for the verdict-probe channel: the
 questions a human expert would reach for before committing a diagnosis, pre-written
 so the teacher spends one probe round instead of one authoring round + one probe
-round. Each recipe = a script (this directory, self-contained — no peregrine_kernel
+round. Each recipe = a script (this directory, self-contained — no rsi_kernel_tune
 import, torch only on the GPU path) + a README (symptoms it fits, how to read it,
 what it costs).
 

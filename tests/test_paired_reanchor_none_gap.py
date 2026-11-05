@@ -14,8 +14,8 @@ import json
 
 from test_loop_driver import _ConfirmBackend, _reanchor_ctx
 
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record
-from peregrine_kernel.loop.driver import (_paired_reanchor, _phantom_gap_reanchor,
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
+from rsi_kernel_tune.loop.driver import (_paired_reanchor, _phantom_gap_reanchor,
                                           _target_workloads_mismatch)
 
 

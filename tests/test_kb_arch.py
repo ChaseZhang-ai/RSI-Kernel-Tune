@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.loop import cli
-from peregrine_kernel.loop.cli import _kb_arch_problem, _resolve_kb_arch
-from peregrine_kernel.loop.driver import (
+from rsi_kernel_tune.loop import cli
+from rsi_kernel_tune.loop.cli import _kb_arch_problem, _resolve_kb_arch
+from rsi_kernel_tune.loop.driver import (
     _KB_CERT_MARK,
     _bindings,
     _kb_certify_lint_gate,
@@ -25,7 +25,7 @@ from peregrine_kernel.loop.driver import (
     kb_read_dir,
     render_prompt,
 )
-from peregrine_kernel.loop.kb_lint import lint_kb_dir
+from rsi_kernel_tune.loop.kb_lint import lint_kb_dir
 from test_loop_driver import REPO, FakeBackend, _ctx
 
 # Every prompt the driver renders with _bindings and that names the KB.

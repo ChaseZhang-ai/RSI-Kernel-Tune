@@ -25,7 +25,7 @@ descriptor is spelled `desc[...]`/`gdesc[...]`.)
 
 ## Tool and output line
 
-`src/peregrine_kernel/inner/sass_census.py` (the driver vendors it into recon `notes/` together with
+`src/rsi_kernel_tune/inner/sass_census.py` (the driver vendors it into recon `notes/` together with
 sass_tools): counts the A-slot form over the dominant kernel's SASS dump and prints one machine-read
 verdict line:
 

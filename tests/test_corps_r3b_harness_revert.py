@@ -11,7 +11,7 @@ this pins the same caliber on the driver side, revert included.
 import subprocess
 from pathlib import Path
 
-from peregrine_kernel.loop import cli
+from rsi_kernel_tune.loop import cli
 
 ACCENT = "bénch.py"
 

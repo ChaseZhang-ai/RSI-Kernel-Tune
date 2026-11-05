@@ -65,7 +65,7 @@ a gate number, the M0 freeze or any stopping judgment** — unmeasured claims st
 {ARCH_REF}
 ```
 
-  `REF_BASELINE` — **the measured hardware ground truth of the library baseline** (the archive of `peregrine <op> baseline`, with per-kernel
+  `REF_BASELINE` — **the measured hardware ground truth of the library baseline** (the archive of `rsi-kernel-tune <op> baseline`, with per-kernel
   NCU signatures). "Is it better than the off-the-shelf library" is answered by it. It is **not** what this run is reproducing.
 
 ```

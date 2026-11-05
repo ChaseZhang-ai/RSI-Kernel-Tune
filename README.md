@@ -1,4 +1,4 @@
-# Peregrine-Kernel
+# RSI-Kernel-Tune
 
 **A self-evolving GPU kernel-optimization framework**: give it an operator (a description, a
 reference implementation, a correctness tolerance, and inputs) and it iteratively produces
@@ -10,7 +10,7 @@ shared across operators.
 
 **English** | License: [Apache-2.0](LICENSE) | Python >= 3.11
 
-Peregrine-Kernel is a fork of [OpenBMB/ForgeKernel](https://github.com/OpenBMB/ForgeKernel)
+**RSI-Kernel-Tune** is a fork of [OpenBMB/ForgeKernel](https://github.com/OpenBMB/ForgeKernel)
 (baseline commit `5030503`); the upstream acknowledgment and license obligations are preserved
 below and in [NOTICE](NOTICE).
 
@@ -45,17 +45,17 @@ below and in [NOTICE](NOTICE).
 ## Quick start
 
 ```bash
-peregrine init myop                     # tasks/myop/ scaffold: fill description.md / shapes.json / reference/
-peregrine new tasks/myop --dry-run      # plan preview (judge, calibration, loop config)
-peregrine new tasks/myop                # create the run directory
-peregrine run .artifacts/myop_<id>      # judge -> card -> calibrate -> distill -> student iterations -> report
-peregrine export .artifacts/myop_<id>   # export the confirmed best kernel
+rsi-kernel-tune init myop                       # tasks/myop/ scaffold: fill description.md / shapes.json / reference/
+rsi-kernel-tune new tasks/myop --dry-run        # plan preview (judge, calibration, loop config)
+rsi-kernel-tune new tasks/myop                  # create the run directory
+rsi-kernel-tune run .artifacts/myop_<id>        # judge -> card -> calibrate -> distill -> student iterations -> report
+rsi-kernel-tune export .artifacts/myop_<id>     # export the confirmed best kernel
 ```
 
 - Tests run without installing: `python3 -m pytest tests/ -q` (`pyproject.toml` sets
   `pythonpath=["src"]`).
 - Scaffold a task from a published kernel's frozen contract (the published kernel is sealed
-  as a black-box reference): `peregrine init myop --from-kernels --axes '{"seqs": 64}'`.
+  as a black-box reference): `rsi-kernel-tune init myop --from-kernels --axes '{"seqs": 64}'`.
 - GPU jobs (evaluation, NCU, reference acquisition) submit through the backend configured in
   `submit.toml` (`local.env`); see [docs/](docs/README.md).
 - The measurement clock is declarable (`task.toml [protocol]`): a declared lock is verified
@@ -65,7 +65,7 @@ peregrine export .artifacts/myop_<id>   # export the confirmed best kernel
 
 `kernels/` releases the published-kernel corpus (26 kernels, upstream artifact release with
 honest provenance records). It is prior/teaching material, and via
-`peregrine init --from-kernels` it is also the framework's own task corpus.
+`rsi-kernel-tune init --from-kernels` it is also the framework's own task corpus.
 
 ## Documentation
 

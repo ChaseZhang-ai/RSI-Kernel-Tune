@@ -6,8 +6,8 @@ import subprocess
 
 import pytest
 
-from peregrine_kernel.loop import cli
-from peregrine_kernel.loop.driver import BackendError
+from rsi_kernel_tune.loop import cli
+from rsi_kernel_tune.loop.driver import BackendError
 
 
 def _git(ws, *args, inp=None):

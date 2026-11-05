@@ -11,13 +11,13 @@ reference_hours = 8         # writing a reference when the task has none
 
 # --- WP12 ----------------------------------------------------------------
 # [loop] kb_menu (default true): the deterministic KB-MENU block (KB-HINTS /
-# LEVER-MENU / CALIBRATION; synthesizer src/peregrine_kernel/loop/kbmenu.py —
+# LEVER-MENU / CALIBRATION; synthesizer src/rsi_kernel_tune/loop/kbmenu.py —
 # contract C7's single implementation) appended to the teacher's diagnose
 # prompt after REMOVE_CANDIDATES (contract C3's render order). Retrieval aid
 # only: no unmeasured number, no gate reads it.
 # The key is set on the CARD layer (operators/<op>/loop.toml), like every
 # [loop] key: that file is read free-form (driver._wp5_cfg_sections), while
-# this global file's table vocabulary is closed (peregrine_kernel.task._KEYS) and
+# this global file's table vocabulary is closed (rsi_kernel_tune.task._KEYS) and
 # WP12 does not grow it. kb_menu = false on a card runs the loop without the
 # menu; an absent key leaves it on.
 
@@ -48,7 +48,7 @@ reference_hours = 8         # writing a reference when the task has none
 # Since WP15 the DEFAULT on the local delivery is ON (the backtest printout is
 # the flip record). Set sprt_early_stop = false on a card to restore the old
 # default. An SSH delivery keeps the conservative default (the env does not
-# cross the wire): arming it there requires PK_SPRT_EARLY_STOP = "1" in the
+# cross the wire): arming it there requires RKT_SPRT_EARLY_STOP = "1" in the
 # tree's submit.toml [env] — the driver WARNs at startup when the config arms
 # the flag but [env] does not declare it (jobs would run full sampling while
 # the run log claims early stop).
@@ -57,7 +57,7 @@ reference_hours = 8         # writing a reference when the task has none
 # safe under the C14 coupling — a win-stopped reading is a truncated draw that
 # must pass the driver's watermark confirmation before it enters the
 # watermark, the plateau window or lever pricing. Arming it exports
-# PK_SPRT_WIN_STOP / PK_SPRT_WIN_MARGIN into local job environments.
+# RKT_SPRT_WIN_STOP / RKT_SPRT_WIN_MARGIN into local job environments.
 #
 # [loop] confirm_job_mode (default "all"): the gpu_entry mode confirmation
 # jobs submit. A card whose eval entry provides a cheaper gate-only mode
@@ -86,12 +86,12 @@ reference_hours = 8         # writing a reference when the task has none
 #                                                # probe round for the CANDIDATES
 #                                                # queue-head certification (task 5;
 #                                                # 0 = off — the historical behavior)
-# Job-side kill switches (env, read by the seeded tools): PK_SCREENING_INPROC=0
+# Job-side kill switches (env, read by the seeded tools): RKT_SCREENING_INPROC=0
 # puts every screening bench back on the per-call subprocess (the historical
-# path); PK_SCREENING_CLOCK_GUARD=1 turns on the opt-in gpu_state clock guard.
+# path); RKT_SCREENING_CLOCK_GUARD=1 turns on the opt-in gpu_state clock guard.
 # --- WP16 ----------------------------------------------------------------
 # Active search & population governance. This global file's table vocabulary
-# stays closed (peregrine_kernel.task._KEYS) — the WP16 keys are read from the CARD
+# stays closed (rsi_kernel_tune.task._KEYS) — the WP16 keys are read from the CARD
 # layer's [loop] table (free-form, driver._wp16_apply_cfg, the WP5 shape):
 #   [loop] pattern_search_budget  = 2   # driver-run shrink-grid searches per run
 #                                       # at a STAGNATION / phase-exhaustion

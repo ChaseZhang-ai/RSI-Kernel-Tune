@@ -15,8 +15,8 @@ sys.path.insert(0, str(REPO / "src"))
 
 from test_loop_driver import (FakeBackend, _MILESTONE, _ctx, _patching)
 
-from peregrine_kernel.loop import driver
-from peregrine_kernel.meta_trajectory import load_meta_records
+from rsi_kernel_tune.loop import driver
+from rsi_kernel_tune.meta_trajectory import load_meta_records
 
 _MILESTONE_PATCH = "\n### D0.9 loosened\nx\n"
 _PATCH_REPLY = "patch_class: structural\nchanged_entries: [D0.9]\n"

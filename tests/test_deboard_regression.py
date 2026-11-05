@@ -8,8 +8,8 @@
 2. cardkit import smoke: every consumer imports; the clock-lock refusal marker stays in
    sync between the gpu_entry template (emitter) and submit/jobs (reader); a [protocol]
    card pins and refuses; a card without one runs unlocked.
-3. The normal task path walks end to end with no board path: peregrine init (plain and
-   --from-kernels) -> load -> peregrine new --dry-run -> card + loop.toml generation.
+3. The normal task path walks end to end with no board path: rsi-kernel-tune init (plain and
+   --from-kernels) -> load -> rsi-kernel-tune new --dry-run -> card + loop.toml generation.
 """
 
 from __future__ import annotations
@@ -66,10 +66,10 @@ def test_the_only_outside_hits_are_the_documented_ones():
 # --- cardkit import smoke ---------------------------------------------------------------
 
 def test_cardkit_and_its_consumers_import():
-    import peregrine_kernel.cardkit as ck  # noqa: F401
-    import peregrine_kernel.launch         # noqa: F401
-    import peregrine_kernel.taskcard       # noqa: F401
-    import peregrine_kernel                # the CLI dispatch (no leaderboard branch)
+    import rsi_kernel_tune.cardkit as ck  # noqa: F401
+    import rsi_kernel_tune.launch         # noqa: F401
+    import rsi_kernel_tune.taskcard       # noqa: F401
+    import rsi_kernel_tune                # the CLI dispatch (no leaderboard branch)
     for name in ("GPU_ENTRY_TEMPLATE", "BENCH_TEMPLATE", "NCU_TEMPLATE",
                  "_WP11_CACHE_BLOCK", "_WP11_ALLNCU_CASE", "PROBLEM_FILE", "PROBLEM_DIR",
                  "render_gpu_entry", "cuda_kernel_flags", "is_cuda_kernel_file", "_cpp_param"):
@@ -77,7 +77,7 @@ def test_cardkit_and_its_consumers_import():
 
 
 def test_eval_template_engine_is_benchkit_with_the_new_layout():
-    ev = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
+    ev = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval"
     assert (ev / "benchkit.py").is_file()
     assert not (ev / "leaderboard.py").exists()
     spec = __import__("importlib.util", fromlist=["util"]).spec_from_file_location(
@@ -90,9 +90,9 @@ def test_eval_template_engine_is_benchkit_with_the_new_layout():
 
 def test_clock_lock_refusal_marker_stays_in_sync_with_the_template():
     """jobs.py reads what the gpu_entry template prints: one wording, start of line."""
-    from peregrine_kernel import cardkit
-    from peregrine_kernel.submit.jobs import CLOCK_LOCK_REFUSED_MARKER, clock_lock_refusal
-    entry = cardkit.render_gpu_entry(name="op", suite="peregrine_kernel", arch="sm_100a",
+    from rsi_kernel_tune import cardkit
+    from rsi_kernel_tune.submit.jobs import CLOCK_LOCK_REFUSED_MARKER, clock_lock_refusal
+    entry = cardkit.render_gpu_entry(name="op", suite="rsi_kernel_tune", arch="sm_100a",
                                      clock="1500", mem_clock="3996", require_lock="1",
                                      clock_note="n")
     assert CLOCK_LOCK_REFUSED_MARKER in entry
@@ -113,16 +113,16 @@ REF_PY = "import torch\n\ndef run(x, w):\n    return x * torch.rsqrt(x.pow(2).me
 
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
-    monkeypatch.setenv("PEREGRINE_RUNS_DIR", str(tmp_path / "runs"))
-    monkeypatch.setenv("PEREGRINE_LOCK_DIR", str(tmp_path / "locks"))
-    monkeypatch.delenv("PEREGRINE_OPERATORS_DIR", raising=False)
-    monkeypatch.setenv("PK_DELIVERY", "local")
-    monkeypatch.setenv("PK_GPU", "0")
+    monkeypatch.setenv("RSI-KERNEL-TUNE_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("RSI-KERNEL-TUNE_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("RSI-KERNEL-TUNE_OPERATORS_DIR", raising=False)
+    monkeypatch.setenv("RKT_DELIVERY", "local")
+    monkeypatch.setenv("RKT_GPU", "0")
     return tmp_path
 
 
 def _make_task(repo: Path, toml: str = TASK_TOML) -> Path:
-    from peregrine_kernel import launch
+    from rsi_kernel_tune import launch
     d = repo / "tasks" / "rmsnorm"
     d.mkdir(parents=True)
     (d / "task.toml").write_text(toml)
@@ -136,8 +136,8 @@ def _make_task(repo: Path, toml: str = TASK_TOML) -> Path:
 
 def test_protocol_declared_card_pins_and_its_task_loads(repo):
     """[protocol] rides task.toml -> the rendered gpu_entry pins and verifies the lock."""
-    from peregrine_kernel import cardkit, taskcard
-    from peregrine_kernel.task import load_task
+    from rsi_kernel_tune import cardkit, taskcard
+    from rsi_kernel_tune.task import load_task
     task = load_task(_make_task(repo))
     assert task.protocol.sm_clock_mhz == 1500 and task.protocol.mem_clock_mhz == 3996
     entry = cardkit.render_gpu_entry(
@@ -148,19 +148,19 @@ def test_protocol_declared_card_pins_and_its_task_loads(repo):
     assert 'LB_MEM_CLOCK_MHZ="${LB_MEM_CLOCK_MHZ-3996}"' in entry
     assert 'LB_REQUIRE_CLOCK_LOCK="${LB_REQUIRE_CLOCK_LOCK:-1}"' in entry
     # a task without [protocol] runs unlocked, exactly as before
-    unlocked = cardkit.render_gpu_entry(name="op", suite="peregrine_kernel", arch="sm_100a")
+    unlocked = cardkit.render_gpu_entry(name="op", suite="rsi_kernel_tune", arch="sm_100a")
     assert 'LB_SM_CLOCK_MHZ="${LB_SM_CLOCK_MHZ-}"' in unlocked
     assert 'LB_REQUIRE_CLOCK_LOCK="${LB_REQUIRE_CLOCK_LOCK:-0}"' in unlocked
 
 
 def test_plain_task_dry_run_and_card_generation_walk_through(repo, capsys):
-    """peregrine new --dry-run plans the run; write_card + write_loop_toml generate a card
+    """rsi-kernel-tune new --dry-run plans the run; write_card + write_loop_toml generate a card
     with no board path anywhere (eval/problem layout, benchkit engine, strict default)."""
     import tomllib
-    from peregrine_kernel import judge as judge_mod, launch, taskcard
-    from peregrine_kernel.localenv import load_machine
-    from peregrine_kernel.runs import new_run
-    from peregrine_kernel.task import load_task
+    from rsi_kernel_tune import judge as judge_mod, launch, taskcard
+    from rsi_kernel_tune.localenv import load_machine
+    from rsi_kernel_tune.runs import new_run
+    from rsi_kernel_tune.task import load_task
     d = _make_task(repo)
     task = load_task(d)
     machine = load_machine(repo, environ={})
@@ -189,7 +189,7 @@ def test_plain_task_dry_run_and_card_generation_walk_through(repo, capsys):
     loop = tomllib.loads(taskcard.write_loop_toml(run, task, op_dir, deny=[]).read_text())["loop"]
     assert loop["ref_mode"] == "sealref" and loop["oracle_mode"] == "blackbox"
     # precision defaults strict on the generated card (WP24), and the bench measures
-    from peregrine_kernel.loop import precision_gate as pg
+    from rsi_kernel_tune.loop import precision_gate as pg
     contract, defaulted = pg.resolve_contract({}, op_dir)
     assert (contract, defaulted) == ("strict", True)
     assert pg.bench_findings(op_dir) == []
@@ -197,10 +197,10 @@ def test_plain_task_dry_run_and_card_generation_walk_through(repo, capsys):
 
 def test_from_kernels_scaffolds_a_task_from_a_published_kernel(repo, monkeypatch, capsys):
     """The task supply loop (WP24 P1): a published kernel becomes a normal task whose
-    reference is the kernel itself, sealed by `peregrine run`; the plan dry-runs."""
-    from peregrine_kernel import launch
-    from peregrine_kernel.task import load_task
-    from peregrine_kernel import launch as _launch
+    reference is the kernel itself, sealed by `rsi-kernel-tune run`; the plan dry-runs."""
+    from rsi_kernel_tune import launch
+    from rsi_kernel_tune.task import load_task
+    from rsi_kernel_tune import launch as _launch
     monkeypatch.setattr(_launch, "repo_root", lambda: repo)
     (repo / "kernels" / "attention" / "rms_h64" / "sm90").mkdir(parents=True)
     (repo / "kernels" / "attention" / "rms_h64" / "sm90" / "kernel.py").write_text(
@@ -230,7 +230,7 @@ def test_from_kernels_scaffolds_a_task_from_a_published_kernel(repo, monkeypatch
     assert task.mode == "blackbox" and task.arch == "sm90"
     assert task.shapes[0].axes == {"seqs": 64}
     import tomllib
-    from peregrine_kernel.localenv import load_machine
+    from rsi_kernel_tune.localenv import load_machine
     assert launch.cmd_new([str(d), "--dry-run"]) == 0
     assert "mode blackbox" in capsys.readouterr().out
     # a CUDA C++ published kernel is refused until the binref route returns (P2 backlog)
@@ -240,8 +240,8 @@ def test_from_kernels_scaffolds_a_task_from_a_published_kernel(repo, monkeypatch
 
 
 def test_cli_has_no_board_surface():
-    from peregrine_kernel import __main__ as cli_main
-    import peregrine_kernel.launch as launch
+    from rsi_kernel_tune import __main__ as cli_main
+    import rsi_kernel_tune.launch as launch
     assert not hasattr(launch, "new_board_task")
     # cmd_export survives the de-board only as the run's kernel-source export:
     # it must never come back as the board's export_solution surface, whatever
@@ -252,4 +252,4 @@ def test_cli_has_no_board_surface():
     src = Path(cli_main.__file__).read_text()
     assert "leaderboard" not in src.lower()
     assert "leaderboard" not in Path(launch.__file__).read_text().lower()
-    assert "leaderboard" not in Path(sys.modules["peregrine_kernel.taskcard"].__file__).read_text().lower()
+    assert "leaderboard" not in Path(sys.modules["rsi_kernel_tune.taskcard"].__file__).read_text().lower()

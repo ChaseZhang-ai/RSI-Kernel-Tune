@@ -12,7 +12,7 @@ def test_judge_axis_check_spans_every_shapes_axes(tmp_path):
     or, ordered the other way, a bogus one slipped past. The check now sees the
     union."""
     import json
-    from peregrine_kernel import judge
+    from rsi_kernel_tune import judge
 
     class _Shape:
         inputs = ()
@@ -50,7 +50,7 @@ def test_prep_report_holds_a_malformed_shape_without_crashing(tmp_path):
     carrying a non-number): the whole prep block went unheld because the check
     died instead of naming the tensor. Bad shapes are problems now."""
     from test_window_contract import SYMMETRIZED
-    from peregrine_kernel.window_contract import check_prep_report, parse_window_contract
+    from rsi_kernel_tune.window_contract import check_prep_report, parse_window_contract
     contract = parse_window_contract(SYMMETRIZED)
     gc = {"shape": [4, 32], "dtype": "torch.float32"}       # g_cumsum, always well-formed
     ok = {"outputs": {"A": {"shape": [4, 32, 64], "dtype": "bfloat16"}, "g_cumsum": gc}}

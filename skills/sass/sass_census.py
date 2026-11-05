@@ -40,7 +40,7 @@ from typing import Dict, Iterable, Optional, Union
 try:  # vendored alongside this file in a job tree ("import sass_tools" via sys.path)
     import sass_tools  # type: ignore
 except ImportError:  # harness-side import path
-    from peregrine_kernel.skills import sass_tools
+    from rsi_kernel_tune.skills import sass_tools
 
 # Families whose instructions carry MMA operand lists worth classifying. Mirrors
 # sass_tools.SM90_TENSOR_FAMILIES's MMA subset — TMA/…GMMA-adjacent movement ops

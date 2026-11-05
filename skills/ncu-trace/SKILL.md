@@ -8,7 +8,7 @@
 ## Invariant: the student records NCU every round (no more `profiler={}`)
 
 In every round's GPU eval the inner driver **must, besides correctness/perf, also run one NCU profile**
-(the operator's `gpu_entry.sh ncu` task) and parse it with `peregrine_kernel.inner.ncu.profiler_from_ncu(csv)` into a
+(the operator's `gpu_entry.sh ncu` task) and parse it with `rsi_kernel_tune.inner.ncu.profiler_from_ncu(csv)` into a
 compact key-metrics dict written to that round's `IterationRecord.profiler`. **Without this step the meta agent
 can only aggregate student prose — the root cause of past diagnoses leaning too heavily on student signals.**
 
@@ -28,8 +28,8 @@ kernel and keeps only the decision-relevant metrics (below).
 ## How to use it (the meta agent calls it directly)
 
 ```bash
-peregrine <op> ncu-report       # a direct summary: one bottleneck verdict per round + key metrics tagged by severity
-peregrine <op> ncu-trace        # the raw per-iteration metric evolution table (when you need to see how values change)
+rsi-kernel-tune <op> ncu-report       # a direct summary: one bottleneck verdict per round + key metrics tagged by severity
+rsi-kernel-tune <op> ncu-trace        # the raw per-iteration metric evolution table (when you need to see how values change)
 ```
 
 - **Look at `ncu-report` first**: it compresses dozens of NCU metrics into "one verdict per round (e.g. SMEM

@@ -15,8 +15,8 @@ publish-handoff pair — cross-role object identity is the load-bearing claim
 import io
 import re
 
-from peregrine_kernel.skills import orch_tools as OT
-from peregrine_kernel.skills.sass_tools import parse_sass
+from rsi_kernel_tune.skills import orch_tools as OT
+from rsi_kernel_tune.skills.sass_tools import parse_sass
 
 PROLOGUE = """
         /*0010*/  LDC R1, c[0x0][0x28] ;

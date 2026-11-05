@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """WP20R task 3: the red-team asset boundary (contract C16), pinned as a

@@ -1,7 +1,7 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""ssh job verdicts and process hygiene in peregrine_kernel.submit.direct.
+"""ssh job verdicts and process hygiene in rsi_kernel_tune.submit.direct.
 
 Ported from the upstream fix-wave tests (audit-r2-2026-11-05), adapted to this
 tree's DirectRunner. One test per fix:
@@ -26,9 +26,9 @@ import re
 import subprocess
 from pathlib import Path
 
-from peregrine_kernel.submit import direct
-from peregrine_kernel.submit import jobs as ds
-from peregrine_kernel.submit.config import SubmitConfig
+from rsi_kernel_tune.submit import direct
+from rsi_kernel_tune.submit import jobs as ds
+from rsi_kernel_tune.submit.config import SubmitConfig
 
 
 class _SshFake:

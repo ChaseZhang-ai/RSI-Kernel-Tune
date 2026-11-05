@@ -1,5 +1,5 @@
 """Regression tests ported from the R2 audit's lifecycle fix batch (renamed to
-peregrine_kernel), kept beside the fixes they pin:
+rsi_kernel_tune), kept beside the fixes they pin:
 
 * creation entry points validate the task name (no path escape, no reserved name);
 * git failures around committing are loud, not silent skips;
@@ -11,7 +11,7 @@ peregrine_kernel), kept beside the fixes they pin:
 * the run status tolerates a torn final line.
 
 The board-lane tests the archived batch also carried are not ported: that card
-lane is gone from peregrine_kernel (see CHANGES).
+lane is gone from rsi_kernel_tune (see CHANGES).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from peregrine_kernel import launch
+from rsi_kernel_tune import launch
 
 from test_launch import (  # noqa: F401 -- the repo fixture and the end-to-end stand-ins
     _confirmed, _loop_ends, _start, _task, _Teacher, repo,
@@ -44,7 +44,7 @@ def test_init_refuses_an_illegal_or_reserved_task_name(tmp_path, monkeypatch):
 def test_commit_loudly_refuses_when_git_status_fails(tmp_path, monkeypatch):
     import subprocess
 
-    from peregrine_kernel import taskcard
+    from rsi_kernel_tune import taskcard
     tree = tmp_path / "card"
     tree.mkdir()
     subprocess.run(["git", "-C", str(tree), "init", "-q", "-b", "main"], check=True,
@@ -88,7 +88,7 @@ def test_entered_closes_the_run_log_handles(tmp_path):
 
 
 def test_status_skips_a_half_written_line(tmp_path):
-    from peregrine_kernel import launch as _launch
+    from rsi_kernel_tune import launch as _launch
     op_dir = tmp_path / "ops" / "op"
     (op_dir / "student").mkdir(parents=True)
     (op_dir / "student" / "status.jsonl").write_text(
@@ -116,8 +116,8 @@ def test_stop_at_target_with_a_confirmed_best_still_completes(repo, monkeypatch)
     assert rec["status"] == "done" and rec["target_met"] is True
 
 def _confirmed_run(repo, monkeypatch, stop, confirm):
-    from peregrine_kernel.loop import cli as loop_cli
-    from peregrine_kernel.runs import list_runs
+    from rsi_kernel_tune.loop import cli as loop_cli
+    from rsi_kernel_tune.runs import list_runs
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
         "match": True, "tolerance": {"y": 2e-6}, "problems": []})
@@ -129,14 +129,14 @@ def _confirmed_run(repo, monkeypatch, stop, confirm):
 # -- PORT union: milestone required-section presence / order ----------------------
 
 def test_a_missing_section_4_is_still_reported():
-    from peregrine_kernel.milestone import validate_milestone
+    from rsi_kernel_tune.milestone import validate_milestone
     from test_milestone import VALID
     text = VALID.replace("## 4. Known dead ends", "## 4b. Dead ends live elsewhere")
     assert any("missing required section: ## 4." in x for x in validate_milestone(text))
 
 
 def test_sections_out_of_order_are_still_reported():
-    from peregrine_kernel.milestone import validate_milestone
+    from rsi_kernel_tune.milestone import validate_milestone
     from test_milestone import VALID
     sec5 = "## 5. Global correctness / performance gate\natol=5, rtol=0.05; MFU ≥95% target.\n\n"
     sec6 = "## 6. Rules\nOne variable per round; anti-plagiarism clause; INFEASIBLE clause.\n\n"

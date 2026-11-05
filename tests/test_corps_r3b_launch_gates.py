@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.loop import cli
+from rsi_kernel_tune.loop import cli
 
 SENTINEL = cli._LAUNCH_SENTINEL_NAME
 

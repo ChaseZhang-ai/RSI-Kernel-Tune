@@ -1,4 +1,4 @@
-"""``src/peregrine_kernel/card_template/eval/closed_ref.py``: a single-file reference sealed into
+"""``src/rsi_kernel_tune/card_template/eval/closed_ref.py``: a single-file reference sealed into
 an opaque payload and imported IN MEMORY on the node.
 
 Copied verbatim into a card's eval/ and into the reference tree, so it is loaded
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 CLOSED_REF_PY = (Path(__file__).resolve().parents[1]
-                 / "src" / "peregrine_kernel" / "card_template" / "eval" / "closed_ref.py")
+                 / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "closed_ref.py")
 
 REFERENCE_SOURCE = '''"""A pretend reference kernel: the thing an earlier run produced."""
 
@@ -135,21 +135,21 @@ def test_a_keyed_payload_without_its_env_var_says_which_variable(closed_ref, tmp
                                                                 monkeypatch):
     key = closed_ref.generate_key()
     path = _payload(closed_ref, tmp_path, key)
-    monkeypatch.delenv("PK_REF_KEY", raising=False)
+    monkeypatch.delenv("RKT_REF_KEY", raising=False)
     with pytest.raises(PermissionError) as exc:
         closed_ref.load(str(path), name="_closed_ref_test_d")
-    assert "PK_REF_KEY" in str(exc.value)
-    monkeypatch.setenv("PK_REF_KEY", key)
+    assert "RKT_REF_KEY" in str(exc.value)
+    monkeypatch.setenv("RKT_REF_KEY", key)
     module = closed_ref.load(str(path), name="_closed_ref_test_d")
     assert module.SECRET_TILE_M == 128
 
 
 def test_without_the_env_var_the_key_is_read_from_the_key_file_beside_the_payload(
         closed_ref, tmp_path, monkeypatch):
-    """Where gpu_entry.sh moves the key (peregrine_kernel.sealref.key_preamble)."""
+    """Where gpu_entry.sh moves the key (rsi_kernel_tune.sealref.key_preamble)."""
     key = closed_ref.generate_key()
     path = _payload(closed_ref, tmp_path, key)
-    monkeypatch.delenv("PK_REF_KEY", raising=False)
+    monkeypatch.delenv("RKT_REF_KEY", raising=False)
     assert closed_ref.key_file(str(path)) == str(tmp_path / "ref_bin" / "ref_payload.key")
     (tmp_path / "ref_bin" / "ref_payload.key").write_text(key + "\n")
     module = closed_ref.load(str(path), name="_closed_ref_test_kf")

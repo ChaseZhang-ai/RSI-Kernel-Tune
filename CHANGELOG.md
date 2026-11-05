@@ -1,12 +1,15 @@
 # Changelog
 
-Peregrine-Kernel — a self-evolving GPU kernel optimization framework, developed as a fork of
+RSI-Kernel-Tune — a self-evolving GPU kernel optimization framework, developed as a fork of
 OpenBMB/ForgeKernel (@5030503) across three improvement generations plus a deboarding
 correction. Each entry below is an English digest of the corresponding work package's
 delivery document; the original per-package documents (Chinese) were removed from the tree
 by WP25's Englishization adjudication and remain permanently recoverable from git history
 (`CHANGES-WP<n>.md` at the repository root for gen 2/3, `docs/wp-changes/CHANGES-WP<n>.md`
-for gen 1 — see any pre-WP25 commit).
+for gen 1 — see any pre-WP25 commit). The same convention applied to the post-WP25
+per-package records (`CHANGES-M*`, `CHANGES-WP20R/25/27/29`, `CHANGES-corps-fix*` at the
+repository root): distilled into the digests below and removed by the RSI-Kernel-Tune
+rebrand commit — the originals are permanent in git history.
 
 Full-suite regression counts quoted per entry are the package's own acceptance evidence at
 its time; the tree's current state is 2692 tests green (the M3 lane-wiring merge, 2026-11-04,
@@ -241,7 +244,7 @@ Namespace migration to Peregrine-Kernel (`peregrine_kernel` package, `peregrine`
 and after); legal exemption surface pinned by `tests/test_branding.py`; README rewritten;
 docs restructured; `CHANGELOG.md` (this file) and `docs/backlog.md` created; the repository
 tree made 100% English (the Chinese per-package history files were distilled here and
-removed — git history keeps them). See `CHANGES-WP25.md` for the full mapping tables,
+removed — git history keeps them). See `CHANGES-WP25.md` (git history) for the full mapping tables,
 replacement counts and evidence.
 
 ### WP20R — Red-team shrink (2601 passed on the branch; baseline 2594 at the WP25 merge)
@@ -253,7 +256,7 @@ and recorded as **open row G1** (`docs/wp20r-known-gaps.md` — a fixture assert
 documented behavior so the hole stays regression-visible). New
 `tests/test_redteam_asset_boundary.py` pins contract C16 permanently: technique
 markers never leave `tests/` + the CHANGES records, the matrix never skips, and it
-never shrinks below its delivery size. `CHANGES-WP20R.md` carries the
+never shrinks below its delivery size. `CHANGES-WP20R.md` (git history) carries the
 attack → defense → status table (the paper's measurement-integrity material).
 
 ### WP27 — External evaluation export (2615 passed on the branch; +21)
@@ -317,7 +320,62 @@ surfacing in a STRICT run is refused as contamination; `self_evolve` inherits an
 stamps the lane, and a mismatching carry is dropped with a log line. STRICT
 byte-goldens re-verified on GPU (E1/E2); the same delivery passes clean as MEMO
 (E3) and is caught at x87.19 as STRICT (E4). Adjudication notes and the one
-procedural `_STRIP_FIELDS` registration are recorded in `CHANGES-M3.md` §4-5.
+procedural `_STRIP_FIELDS` registration are recorded in `CHANGES-M3.md` §4-5
+(git history after the rebrand removal).
 
-<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+### corps-fix — the audit-corps correction wave (closeout: 2915 passed; baseline 2692 at `8977b63`)
+
+The 2026-11-05 audit-corps correction round against the post-M3 main: the fix ledger's 61
+legacy findings (BUG-SEED-01..50, BUG-COORD-1, BUG-C1/C3/C5/C11, BUG-TST-01) were
+re-adjudicated on the current tree with fresh file:line evidence and minimal reproductions
+(verdicts: 9 already fixed here, 3 mechanisms removed, 52 alive), plus new-generation bugs
+found while re-convicting. Fixes landed in parallel file-disjoint branches — driver/parse
+measurement and adjudication, loop CLI/launch admission, guards and the adversarial surface
+(the root-`sitecustomize.py` tree hijack, P0), submit/ssh delivery (the flock queue wait no
+longer charged to the job deadline), the monitor/resume/trajectory batch (hook dump
+traceability, pid-keyed call records, torn-tail tolerance), the parse line (NaN as an
+absent reading, line-anchored probe markers), self_evolve and eval-export hardening — one
+commit per bug, each with a red-before/green-after regression test. A reconciliation
+branch merged the lines zero-conflict and verified the dispositions; the repair ledger's
+section records remain the authoritative disposition of record. No frozen surface was
+touched.
+
+### corps-fix-r3 — the R3 fix wave (50 open entries dispositioned: 49 fixed, 1 verified already fixed)
+
+Merged the eight file-disjoint R3 fixer branches (`feat/corps-fix-r3a` … `r3h`) closing the
+31 R3 recon findings (BUG-CH-*) and the 19 new C-class findings of the RECON-R2 audit
+(BUG-CORPS-C-*): driver-level fixes (WP18 PRICED_NULL stamp collisions, non-dict teacher
+levers, sweep `rounds` validation, Stouffer live-row reads, anchored gate-row matching),
+loop CLI/parse fixes (dry-run no longer persists a hand-written baseline, harness revert
+consumes `-z` quotepath-escaped diffs, dead resumed sessions dropped after one hard
+failure, UTF-8-pinned config reads), guards/adversarial hardening, submit/monitor/trajectory
+fixes, and eval-export/backtest shell hardening — each with a red-before/green-after
+regression test and one `fix(audit-corps)` commit (merge commits grouped per fixer branch).
+
+### Rebrand — RSI-Kernel-Tune (this package; 3343 passed, zero behavior change)
+
+The GitHub repository was renamed to `RSI-Kernel-Tune`; this package migrates every brand
+token of the Peregrine-Kernel era to the new name — a purely mechanical rename with zero
+semantic change (the full suite green before and after; golden anchors pin behavior):
+`src/peregrine_kernel/` -> `src/rsi_kernel_tune/` (imports `rsi_kernel_tune.*`), pyproject
+`name` -> `rsi-kernel-tune`, console script `peregrine` -> `rsi-kernel-tune`, command-form
+references and the `[peregrine]` log prefix -> `rsi-kernel-tune` / `[rsi-kernel-tune]`, the
+`PK_*` env prefix -> `RKT_*`, `pk_*` / `pk-*` identifiers and runtime file names
+(`pk_monitor_hook.py` -> `rkt_monitor_hook.py`, `.pk-jobs` -> `.rkt-jobs`, the timeline
+probe's `_pk_tl_*` CUDA symbols -> `_rkt_tl_*`) -> `rkt_*` / `rkt-*`, brand prose
+Peregrine-Kernel -> RSI-Kernel-Tune, and the uppercase prompt labels
+(`PEREGRINE TURN`, `PEREGRINE ...` markers) -> `RSI-KERNEL-TUNE ...`. The full-name env
+vars became `RSI-KERNEL-TUNE_{OPERATORS,RUNS,LOCK}_DIR` (consumed only via `os.environ` in
+the harness and its tests; no shell-export site exists). Legal exemption surface preserved
+verbatim: LICENSE, NOTICE, the README fork declaration ("**RSI-Kernel-Tune** is a fork of
+OpenBMB/ForgeKernel", baseline `5030503`), the upstream `kernels/` corpus, the frozen
+`fk-cuda-cflags` cardkit/benchkit directive, and the `docs/design/v1-launch.md` archive;
+CHANGELOG historical entries keep the names of their time. `tests/test_branding.py` now
+hunts the old forms (`peregrine`, `PEREGRINE`, `PK_`, `pk_`, `pk-`) with a zero-hit gate
+outside that exemption surface, plus an import smoke and a CLI smoke
+(`rsi-kernel-tune --version` -> `rsi_kernel_tune <ver>`). The root `CHANGES-*.md` records
+were distilled into the digests above and removed from the tree (git history keeps them).
+Recorded mapping counts are in the rebrand commit message.
+
+<!-- SPDX-FileCopyrightText: Copyright 2026 The RSI-Kernel-Tune Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->

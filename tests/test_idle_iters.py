@@ -24,17 +24,17 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx, _patching  # noqa: E402
 
-from peregrine_kernel.inner.trajectory import IterationRecord as IR  # noqa: E402
-from peregrine_kernel.inner.trajectory import append_record, load_records  # noqa: E402
-from peregrine_kernel.loop.driver import (  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import IterationRecord as IR  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import append_record, load_records  # noqa: E402
+from rsi_kernel_tune.loop.driver import (  # noqa: E402
     _fruitless_reopen_streak, run_inner_iteration, run_inner_loop, run_meta_step,
     run_two_layer,
 )
-from peregrine_kernel.meta_trajectory import (  # noqa: E402
+from rsi_kernel_tune.meta_trajectory import (  # noqa: E402
     MetaRecord, append_meta_record, load_meta_records, reflect_summary,
     update_last_outcome,
 )
-from peregrine_kernel.resume import Decision  # noqa: E402
+from rsi_kernel_tune.resume import Decision  # noqa: E402
 
 
 class TreeBackend(FakeBackend):
@@ -462,7 +462,7 @@ def test_wp5_reachability_state_is_threaded_from_diagnoses(tmp_path):
     # §1c line with the machine gate's parsers: BLOCKED + floor_opt above
     # target x 1.20 sets the verified flag; OPEN clears it; a diagnosis with no
     # line clears the flag and leaves the last stated floor sticky.
-    from peregrine_kernel.loop.driver import _wp5_note_reachability
+    from rsi_kernel_tune.loop.driver import _wp5_note_reachability
     ctx = _ctx(tmp_path, FakeBackend([], []))      # fixture target_ms = 1.9 -> bar = 2.28
     _wp5_note_reachability(ctx, _R1 + "reachability: floor_opt=3.0 ms target=0.1 ms -> BLOCKED")
     assert ctx.wp5_reach_blocked is True           # 3.0 > 2.28 = max(0.1, 1.9) x 1.20
@@ -491,7 +491,7 @@ def test_reading_of_round_trips_and_old_rows_read_none(tmp_path):
 
 
 def test_loop_toml_reuse_mode_parsing():
-    from peregrine_kernel.loop.cli import _reuse_mode
+    from rsi_kernel_tune.loop.cli import _reuse_mode
     assert _reuse_mode("all") == "all" and _reuse_mode(" Gate ") == "gate"
     assert _reuse_mode(True) == "all" and _reuse_mode(False) == "off" and _reuse_mode("off") == "off"
     with pytest.raises(SystemExit):
@@ -499,7 +499,7 @@ def test_loop_toml_reuse_mode_parsing():
 
 
 def test_real_backend_lists_a_commits_changes(tmp_path):
-    from peregrine_kernel.loop.cli import RealBackend
+    from rsi_kernel_tune.loop.cli import RealBackend
 
     def git(*a):
         return subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c",

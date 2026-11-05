@@ -25,8 +25,8 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.submit import direct, jobs as ds
-from peregrine_kernel.submit.config import SubmitConfig
+from rsi_kernel_tune.submit import direct, jobs as ds
+from rsi_kernel_tune.submit.config import SubmitConfig
 
 
 def _op(base: Path, name: str = "op", *, with_inputs: bool = True,

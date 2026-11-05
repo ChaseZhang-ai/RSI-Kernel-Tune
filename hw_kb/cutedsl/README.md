@@ -2,7 +2,7 @@
 
 > This is the knowledge base for **CuTe DSL mode**. CUDA mode (loop language `cuda-sol`, single-file
 > CUDA C++ student) reads and writes a separate, independent tree, `hw_kb/cuda/` (see its README and
-> `src/peregrine_kernel/loop/lang_mode.py`).
+> `src/rsi_kernel_tune/loop/lang_mode.py`).
 
 An **operator-agnostic** library of hardware-interface examples. It is the **only** one of the three
 artifacts that is allowed to contain code — because "how to issue an MMA / how to write a DMA
@@ -22,7 +22,7 @@ descriptor" is a hardware mechanism, not the algorithm of some operator.
   this repo's probes. The reference implementation's (oracle's) file names, function names, line
   numbers, paraphrased content and measured footprints all go to `docs/kb-provenance/<entry name>.md`
   (for human review; never in an agent read set). The rationale and the full discipline are in
-  `docs/kb-provenance/README.md`; the mechanical gate is `src/peregrine_kernel/loop/kb_lint.py`.
+  `docs/kb-provenance/README.md`; the mechanical gate is `src/rsi_kernel_tune/loop/kb_lint.py`.
 
 ## Layout
 
@@ -50,7 +50,7 @@ provenance — that line is.**
 `hw_kb/cutedsl/<kb_arch>/`: `KB:<entry>` references resolve only inside that tree, the three leak lints (start /
 certification / harvest) and the quarantine scan only that tree, and the write-side prompts register new
 recipes in that tree's `index.md`. `kb_arch` comes from `[loop] kb_arch` in `operators/<op>/loop.toml`
-(or `peregrine loop --kb-arch`), default `sm90`; the tree it points to must exist and have an `index.md`,
+(or `rsi-kernel-tune loop --kb-arch`), default `sm90`; the tree it points to must exist and have an `index.md`,
 otherwise the run is refused at start (exit 14). Opening a tree for a new architecture = create the
 directory + write an `index.md` following the rules above; no code change needed.
 

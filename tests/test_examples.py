@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from peregrine_kernel import __main__ as forge_main
-from peregrine_kernel import __version__
-from peregrine_kernel.task import load_task
+from rsi_kernel_tune import __main__ as forge_main
+from rsi_kernel_tune import __version__
+from rsi_kernel_tune.task import load_task
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,6 +27,6 @@ def test_the_task_template_is_a_valid_task_but_for_its_name():
 def test_forge_alone_prints_its_usage_and_version(capsys):
     assert forge_main.main([]) == 0
     out = capsys.readouterr().out
-    assert "peregrine new tasks/<op>" in out and "peregrine run .artifacts/<op>_<id>" in out
+    assert "rsi-kernel-tune new tasks/<op>" in out and "rsi-kernel-tune run .artifacts/<op>_<id>" in out
     assert forge_main.main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == f"peregrine_kernel {__version__}"
+    assert capsys.readouterr().out.strip() == f"rsi_kernel_tune {__version__}"

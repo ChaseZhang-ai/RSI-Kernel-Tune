@@ -12,15 +12,15 @@ import json
 
 import pytest
 
-from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
-from peregrine_kernel.loop.driver import (
+from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
+from rsi_kernel_tune.loop.driver import (
     _cluster_scale,
     _confirm_suspicious_watermark,
     _judge_patch,
     _PendingPatch,
     run_inner_iteration,
 )
-from peregrine_kernel.loop.parse import parse_eval
+from rsi_kernel_tune.loop.parse import parse_eval
 
 from test_cluster_aware import ClusterBackend
 from test_loop_driver import EVAL_DW, NCU, REC, FakeBackend, _ctx
@@ -77,8 +77,8 @@ def test_watermark_confirmation_past_the_old_best_does_not_confirm(tmp_path, cap
     old best — the jump did not replicate. It used to be confirmed and the
     median (99.45) banked as a gain; now it settles unconfirmed and the row is
     marked low-confidence."""
-    from peregrine_kernel.loop.driver import _confirm_suspicious_watermark
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.driver import _confirm_suspicious_watermark
+    from rsi_kernel_tune.loop.parse import parse_eval
     be = FakeBackend([], [EVAL_DW(105.0, 100.9)])   # the confirmation job's draw
     ctx = _ctx(tmp_path, be)
     ctx.gate_window = "device"
@@ -97,8 +97,8 @@ def test_watermark_confirmation_past_the_old_best_does_not_confirm(tmp_path, cap
 def test_watermark_confirmation_below_the_old_best_still_confirms(tmp_path, capsys):
     """The dissent rule only bites past the old best: a confirmation draw that
     agrees inside the margin AND clears the old best confirms as before."""
-    from peregrine_kernel.loop.driver import _confirm_suspicious_watermark
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.driver import _confirm_suspicious_watermark
+    from rsi_kernel_tune.loop.parse import parse_eval
     be = FakeBackend([], [EVAL_DW(105.0, 99.0)])
     ctx = _ctx(tmp_path, be)
     ctx.gate_window = "device"
@@ -174,7 +174,7 @@ def test_keep_probe_survives_a_bad_byte_in_the_student_probe(tmp_path, capsys):
     whole run. Adapted at the merge: the kept read is errors="replace" (the
     content survives with the bad byte replaced) -- the probe is carried over
     and the run never stops on a decode error."""
-    from peregrine_kernel.loop.driver import _keep_probe_across_reset
+    from rsi_kernel_tune.loop.driver import _keep_probe_across_reset
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     probe = tmp_path / "notes" / "p.py"
@@ -191,7 +191,7 @@ def test_restore_kept_probe_drops_a_workspace_copy_that_cannot_decode(tmp_path):
     """The restore comparison read gets the same hardening: an undecodable
     workspace copy is not the kept text — the kept copy is dropped and the
     student's file is left alone, without an exception."""
-    from peregrine_kernel.loop.driver import _restore_kept_probes
+    from rsi_kernel_tune.loop.driver import _restore_kept_probes
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     probe = tmp_path / "notes" / "p.py"
@@ -208,7 +208,7 @@ def test_kept_probe_write_is_explicitly_utf8(tmp_path, monkeypatch):
     turn the keep/restore round-trip into an UnicodeEncodeError crash (and so
     the bytes on disk are the text that was kept)."""
     import pathlib
-    from peregrine_kernel.loop.driver import _restore_probe_after_reset
+    from rsi_kernel_tune.loop.driver import _restore_probe_after_reset
     captured = {}
     real_write = pathlib.Path.write_text
 

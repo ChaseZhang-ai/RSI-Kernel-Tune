@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """WP29: the replay probe — the parent-side integration tests (the G1 fix).
@@ -14,9 +14,9 @@ median dwarfing the judged median reads `suspected` — a reward-hack reading
 the driver turns into a fresh_recheck-same suspicious REVERT.
 
 This file pins the parent-side contract: the eval JSON parse, the block
-assembly (suspected / pass / unavailable), the switch (PK_REPLAY_PROBE,
+assembly (suspected / pass / unavailable), the switch (RKT_REPLAY_PROBE,
 default on per the 2026-11-04 user adjudication) and threshold
-(PK_REPLAY_PROBE_RATIO, default 3.0), the switch-off byte-golden, and the
+(RKT_REPLAY_PROBE_RATIO, default 3.0), the switch-off byte-golden, and the
 driver's REVERT consumption. The attack fixtures and the child-level
 measurements live in tests/redteam/test_redteam_recon.py; the real-GPU
 end-to-end run is pasted in CHANGES-WP29.md.
@@ -36,7 +36,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 REPO = Path(__file__).resolve().parents[1]
-EVAL_SRC = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
+EVAL_SRC = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval"
 
 
 def _benchkit():
@@ -54,7 +54,7 @@ ARGS = SimpleNamespace(impl="kernel")
 
 
 def test_parse_carries_replay_probe_into_evalresult():
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.parse import parse_eval
     ev = parse_eval("=== JSON ===\n"
                     + json.dumps({"correctness": {"pass": True},
                                   "performance": {"device_median_ms": 1.0},
@@ -100,9 +100,9 @@ def test_block_ratio_env_overrides_and_junk_falls_back(monkeypatch):
     bk = _benchkit()
     payload = {"shapes": [{"name": "w0", "probe_median_ms": 2.0}]}
     monkeypatch.setattr(bk, "_probe_child", lambda problem: payload)
-    monkeypatch.setenv("PK_REPLAY_PROBE_RATIO", "5.0")
+    monkeypatch.setenv("RKT_REPLAY_PROBE_RATIO", "5.0")
     assert bk._replay_probe_block({}, BLOCKS)["status"] == "pass"
-    monkeypatch.setenv("PK_REPLAY_PROBE_RATIO", "junk")
+    monkeypatch.setenv("RKT_REPLAY_PROBE_RATIO", "junk")
     block = bk._replay_probe_block({}, BLOCKS)
     assert block["ratio_threshold"] == 3.0 and block["status"] == "suspected"
 
@@ -131,7 +131,7 @@ def test_block_unavailable_when_the_judged_median_is_missing(monkeypatch):
 
 
 def test_switch_off_buys_no_child_and_writes_no_block(monkeypatch):
-    """PK_REPLAY_PROBE=0: the pre-WP29 behavior — no probe child spawn, no
+    """RKT_REPLAY_PROBE=0: the pre-WP29 behavior — no probe child spawn, no
     block, nothing to parse downstream."""
     bk = _benchkit()
 
@@ -139,7 +139,7 @@ def test_switch_off_buys_no_child_and_writes_no_block(monkeypatch):
         raise AssertionError("the probe child must not be bought with the switch off")
 
     monkeypatch.setattr(bk, "_probe_child", _must_not_spawn)
-    monkeypatch.setenv("PK_REPLAY_PROBE", "0")
+    monkeypatch.setenv("RKT_REPLAY_PROBE", "0")
     result = {"correctness": {"pass": True},
               "performance": {"device_median_ms": 0.5}}
     bk._maybe_replay_probe(result, {}, ARGS, BLOCKS)
@@ -175,7 +175,7 @@ def test_probe_never_engages_on_a_fresh_recheck_fail_or_before_perf(monkeypatch)
 
 def test_switch_off_matches_the_pre_wp29_bench_byte_for_byte(tmp_path):
     """The switch-off golden, on the path a CPU box can exercise end to end:
-    with the probe ON (default) and OFF (PK_REPLAY_PROBE=0) the bench's stdout
+    with the probe ON (default) and OFF (RKT_REPLAY_PROBE=0) the bench's stdout
     is byte-identical — the probe engages only after timing windows (a GPU
     job); the perf-path no-child guarantee is pinned by
     test_switch_off_buys_no_child_and_writes_no_block, and the GPU-side
@@ -183,7 +183,7 @@ def test_switch_off_matches_the_pre_wp29_bench_byte_for_byte(tmp_path):
     from test_fresh_recheck import HONEST_KERNEL, _card, _run_card
     card = _card(tmp_path / "golden", HONEST_KERNEL)
     on = _run_card(card, "--mode", "correctness")
-    off = _run_card(card, "--mode", "correctness", PK_REPLAY_PROBE="0")
+    off = _run_card(card, "--mode", "correctness", RKT_REPLAY_PROBE="0")
     assert off.returncode == on.returncode == 0
     assert off.stdout == on.stdout
     assert "REPLAY-PROBE" not in on.stdout
@@ -193,9 +193,9 @@ def test_driver_reverts_and_marks_suspicious_on_a_replay_probe_suspected(tmp_pat
     """The driver's consumption: a suspected probe is a hard REVERT whose row
     carries suspicious=True and the block with BOTH latency numbers — the
     fresh_recheck-same shape, zero new judgment logic."""
-    from peregrine_kernel.inner.trajectory import load_records
+    from rsi_kernel_tune.inner.trajectory import load_records
     from test_loop_driver import NCU, REC, FakeBackend, _ctx
-    from peregrine_kernel.loop.driver import run_inner_loop
+    from rsi_kernel_tune.loop.driver import run_inner_loop
 
     fail_json = ("=== JSON ===\n"
                  + json.dumps({"correctness": {"pass": True},
@@ -227,9 +227,9 @@ def test_driver_reverts_and_marks_suspicious_on_a_replay_probe_suspected(tmp_pat
 def test_driver_keeps_an_unavailable_or_passing_probe_quiet(tmp_path):
     """`unavailable` never convicts and `pass` is not a verdict: either way the
     row is an ordinary reading and the record carries no replay_probe block."""
-    from peregrine_kernel.inner.trajectory import load_records
+    from rsi_kernel_tune.inner.trajectory import load_records
     from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx
-    from peregrine_kernel.loop.driver import run_inner_loop
+    from rsi_kernel_tune.loop.driver import run_inner_loop
 
     for status in ("unavailable", "pass"):
         eval_json = ("=== JSON ===\n"

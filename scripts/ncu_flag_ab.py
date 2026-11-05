@@ -83,7 +83,7 @@ def profile(op_dir: Path, flags: list[str], launch_count: int, metrics: str) -> 
 
 def _read(out: str, key: str):
     """One key-metric value off the profiled dominant kernel (None = not reported)."""
-    from peregrine_kernel.inner.ncu import profiler_from_ncu
+    from rsi_kernel_tune.inner.ncu import profiler_from_ncu
     prof = profiler_from_ncu(out)
     return prof.get(key) if prof else None
 

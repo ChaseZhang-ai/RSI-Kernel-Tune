@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
-from peregrine_kernel.meta_trajectory import append_meta_record, load_meta_records
-from peregrine_kernel.loop.driver import (
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record, load_records
+from rsi_kernel_tune.meta_trajectory import append_meta_record, load_meta_records
+from rsi_kernel_tune.loop.driver import (
     IterationRecord as _Rec,  # noqa: F401  (import shape check only)
     _mc_timings_rows,
     _milestone_multi_candidate,
@@ -129,7 +129,7 @@ def test_stagnation_counts_perf_reverts_and_additive_patch_outcomes(tmp_path):
         _row(3, "D3.1", 2.610, None, verdict="REVERT", correctness=True),
     ]
     _write_rows(tmp_path, rows)
-    from peregrine_kernel.meta_trajectory import MetaRecord
+    from rsi_kernel_tune.meta_trajectory import MetaRecord
     meta = [
         MetaRecord(meta_step=1, cause_class="G2", deficient_locus="D2.3",
                    patch_class="structural", changed_entries=[], patch_direction="split",
@@ -152,7 +152,7 @@ def test_stagnation_block_injected_into_the_diagnose_prompt_and_override_recorde
     section, per the C3 render order), and the teacher's `stagnation_override:`
     line is recorded into the meta trajectory for the next diagnosis to count."""
     from test_loop_driver import FakeBackend, _DIAG, _MILESTONE, _patching
-    from peregrine_kernel.loop.driver import run_meta_step
+    from rsi_kernel_tune.loop.driver import run_meta_step
 
     ctx = _stag_ctx(tmp_path, None)
     rows = _flat_rows()
@@ -197,7 +197,7 @@ def test_stagnation_k_reads_as_loop_config_with_the_wp1_precedent():
     card loop.toml's [loop] is the override surface, the global layer takes
     [target]/[budget] only), default 3, plus its multi_candidate_max neighbour."""
     import dataclasses
-    from peregrine_kernel.loop import driver as drv
+    from rsi_kernel_tune.loop import driver as drv
     names = {f.name: f.default for f in dataclasses.fields(drv.LoopContext)}
     assert names["stagnation_k"] == 3 and names["multi_candidate_max"] == 3
 
@@ -219,7 +219,7 @@ def _card_benchkit_module():
     import importlib.util
     import sys
     import types
-    path = REPO / "src" / "peregrine_kernel" / "card_template" / "eval" / "benchkit.py"
+    path = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "benchkit.py"
     created = None
     if importlib.util.find_spec("torch") is None:
         created = types.ModuleType("torch")
@@ -386,7 +386,7 @@ def test_mc_variant_files_are_named_after_the_kernel_stem(tmp_path):
     for rel in ("flash_attn_dsl/flash_bwd_v0.py", "flash_attn_dsl/flash_bwd_v1.py"):
         (tmp_path / rel).write_text("x = 1\n", encoding="utf-8")
     (tmp_path / "flash_attn_dsl/flash_bwd_v3.py").write_text("x = 3\n", encoding="utf-8")
-    from peregrine_kernel.loop.driver import _mc_variant_files
+    from rsi_kernel_tune.loop.driver import _mc_variant_files
     assert _mc_variant_files(ctx, 2) == ["flash_attn_dsl/flash_bwd_v0.py",
                                          "flash_attn_dsl/flash_bwd_v1.py"]
     assert _mc_variant_files(ctx, 3)[2:] == []                 # v2 missing -> only two exist
@@ -397,7 +397,7 @@ def test_mc_delivery_full_chain_winner_applied_and_banked(tmp_path):
     source becomes the kernel file, the variants are archived, and the record
     banks the objective variant table; the winner alone took the standard gate."""
     from test_loop_driver import EVAL, FakeBackend, NCU, REC, _ctx, run_inner_iteration
-    from peregrine_kernel.loop.driver import _MC_CMD
+    from rsi_kernel_tune.loop.driver import _MC_CMD
     v0, v1 = "def fwd_v0():\n    return 0\n", "def fwd_v1():\n    return 1\n"
     be = FakeBackend(
         [_mc_student(tmp_path, {"flash_attn_dsl/flash_bwd_v0.py": v0,
@@ -540,7 +540,7 @@ def test_mc_prescreen_job_failure_keeps_banked_sha_at_the_push_head(tmp_path):
 
         def submit_gpu(self, branch: str, mode: str) -> str:
             if "mc_prescreen" in mode:
-                from peregrine_kernel.loop.driver import BackendError
+                from rsi_kernel_tune.loop.driver import BackendError
                 raise BackendError("node gone")
             return super().submit_gpu(branch, mode)
 
@@ -596,7 +596,7 @@ def test_mc_delivery_authorized_but_no_variant_files_is_the_old_path(tmp_path):
 def test_mc_gate_rows_and_reopens_never_fan_out(tmp_path):
     """A `multi_candidate:` field is for a decision's implementations: a gate row
     (or a REOPEN row) at an authorized id is bookkeeping, never a fan-out."""
-    from peregrine_kernel.loop.driver import _mc_deliver
+    from rsi_kernel_tune.loop.driver import _mc_deliver
     from test_loop_driver import FakeBackend, REC, _ctx
 
     class _Rec2:
@@ -614,7 +614,7 @@ def test_mc_prescreen_script_runs_end_to_end_against_a_stubbed_timing_kernel(tmp
     line, and the tree restored byte-for-byte."""
     import subprocess
     import sys
-    from peregrine_kernel.loop.driver import _MC_PRESCREEN_SRC
+    from rsi_kernel_tune.loop.driver import _MC_PRESCREEN_SRC
     (tmp_path / "notes").mkdir()
     (tmp_path / "notes" / "mc_prescreen.py").write_text(_MC_PRESCREEN_SRC, encoding="utf-8")
     (tmp_path / "notes" / "lever_pricing_run.py").write_text(
@@ -708,7 +708,7 @@ def test_stagnation_injection_is_minimal_block_or_nothing(tmp_path):
     EXACTLY the STAGNATION block — nothing else moved."""
     import tempfile
     from test_loop_driver import FakeBackend, _DIAG, _MILESTONE, _patching
-    from peregrine_kernel.loop.driver import _stagnation_block, _stagnation_report, run_meta_step
+    from rsi_kernel_tune.loop.driver import _stagnation_block, _stagnation_report, run_meta_step
 
     prompts = []
     tmpdirs = []

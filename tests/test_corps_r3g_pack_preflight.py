@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """FIX-R3G regression pins for BUG-CH-J-02 / BUG-CH-J-03
@@ -42,7 +42,7 @@ FAKE_IO = "_r3g_pack_preflight_fake_io"
 
 @pytest.fixture(scope="module")
 def pack():
-    spec = importlib.util.spec_from_file_location("pk_corps_r3g_pack", PACK)
+    spec = importlib.util.spec_from_file_location("rkt_corps_r3g_pack", PACK)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

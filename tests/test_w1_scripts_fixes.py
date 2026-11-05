@@ -112,7 +112,7 @@ def test_a_trailing_recipe_flag_without_a_value_is_a_fail_verdict(script, flag, 
 # --- W1-LIF-07 / SEED-27: scripts/self_evolve.py chain robustness -----------------------
 
 from test_task import _kb  # noqa: E402  (the shared hermetic KB helper)
-from peregrine_kernel.task import load_task  # noqa: E402
+from rsi_kernel_tune.task import load_task  # noqa: E402
 
 SE = _load("self_evolve_w1", "scripts/self_evolve.py")
 KERNEL = "import torch\n\ndef run(x, w):\n    return x * w\n"
@@ -171,7 +171,7 @@ def _evolve(tmp_path, monkeypatch):
 
 
 def test_a_harness_failure_is_not_a_natural_chain_stop(tmp_path, monkeypatch, capsys):
-    """W1-LIF-07: `peregrine new`/`peregrine run` failing used to exit 0 at gen>1 —
+    """W1-LIF-07: `rsi-kernel-tune new`/`rsi-kernel-tune run` failing used to exit 0 at gen>1 —
     byte-for-byte the natural chain break. An infrastructure failure gets its own
     reason line and exit 3."""
     root, state = _evolve(tmp_path, monkeypatch)
@@ -184,7 +184,7 @@ def test_a_harness_failure_is_not_a_natural_chain_stop(tmp_path, monkeypatch, ca
 
     root2, state2 = _evolve(tmp_path, monkeypatch)
     first2 = _gen_task(root2, name="rms2")   # a fresh chain beside the first
-    state2["gains"] += [1.30, 1.30]       # gen 2 runs, its `peregrine run` fails
+    state2["gains"] += [1.30, 1.30]       # gen 2 runs, its `rsi-kernel-tune run` fails
     state2["run_seq"] += [0, 5]
     rc = SE.main([str(first2), "--max-gen", "4"])
     assert rc == 3, rc
@@ -200,11 +200,11 @@ def test_a_natural_chain_break_still_exits_zero(tmp_path, monkeypatch):
 # --- P3-13: a broken --from-json archive is a clean error, not a traceback --------------
 
 def test_from_json_with_a_broken_archive_is_a_clean_error(tmp_path, monkeypatch, capsys):
-    from peregrine_kernel.baseline_cli import main
+    from rsi_kernel_tune.baseline_cli import main
 
     ops = tmp_path / "operators" / "someop"
     ops.mkdir(parents=True)
-    monkeypatch.setenv("PEREGRINE_OPERATORS_DIR", str(tmp_path / "operators"))
+    monkeypatch.setenv("RSI-KERNEL-TUNE_OPERATORS_DIR", str(tmp_path / "operators"))
     bad = tmp_path / "bad.json"
     bad.write_text("{not json", encoding="utf-8")
     rc = main(["someop", "--from-json", str(bad)])

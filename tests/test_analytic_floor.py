@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 
-from peregrine_kernel.loop import analytic_floor as af
+from rsi_kernel_tune.loop import analytic_floor as af
 
 
 def _problem(**over) -> dict:

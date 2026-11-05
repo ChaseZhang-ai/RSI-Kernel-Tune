@@ -16,7 +16,7 @@ Usage (wrap every real run in the GPU lock):
     python scripts/energize_ab.py --item A4 --runs-dir .artifacts --report-only
 
 Skeleton notes: the batch section of `--mode task-set` is a commented placeholder
-(WP23 connects it to whatever runner is current — usually two `peregrine run`
+(WP23 connects it to whatever runner is current — usually two `rsi-kernel-tune run`
 rounds, one off and one on); `--report-only` extracts the wall-clock composition
 tables and the verdict comparison from completed run archives into a markdown
 report. Numbers produced on the 3060 are chain evidence only; writing performance
@@ -40,8 +40,8 @@ ITEMS: dict[str, dict] = {
             "depends": ["scripts/ncu_flag_ab.py", "CUDA torch venv"]},
     "A3": {"title": "SPRT early-stop default", "switch": "[loop] sprt_early_stop",
             "rollback": "--sprt-early-stop=false (default false is the rollback)", "depends": ["WP15/WP19 merged"]},
-    "A4": {"title": "build cache default", "switch": "PK_BUILD_CACHE",
-            "rollback": "PK_BUILD_CACHE=0 (one line)",
+    "A4": {"title": "build cache default", "switch": "RKT_BUILD_CACHE",
+            "rollback": "RKT_BUILD_CACHE=0 (one line)",
             "depends": ["build log of the same kernel rebuilt across jobs",
                         "key-coverage cases (header change must miss / comment change must hit)"]},
     "A5": {"title": "floor_stop / floor_margin", "switch": "[target] floor_margin / [loop] floor_stop",
@@ -90,7 +90,7 @@ def run_item(args: argparse.Namespace) -> int:
     if not args.execute:
         print("[energize-ab] dry skeleton (--execute assembles the real run; real runs must be wrapped in with-lock gpu):")
     for side, flag in (("A (off / baseline)", None), ("B (on / flipped)", item["switch"])):
-        cmd = (f"peregrine run <runs-dir>/<{'off' if side.startswith('A') else 'on'}>-run  "
+        cmd = (f"rsi-kernel-tune run <runs-dir>/<{'off' if side.startswith('A') else 'on'}>-run  "
                f"# {side}"
                + (f"  env/key: {flag}" if flag else ""))
         print(f"  {cmd}")

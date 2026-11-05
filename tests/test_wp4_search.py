@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.loop.driver import _lever_price_block, parse_lever_prices
+from rsi_kernel_tune.loop.driver import _lever_price_block, parse_lever_prices
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "wp4"
 
@@ -112,7 +112,7 @@ def test_landable_keeps_the_student_line_teacher_free(tmp_path):
                      [_STALL_LOG_OK, _PRICE_LOG_SUBSETS])
     ctx = _lever_ctx(tmp_path, be)
     ctx.milestone.write_text(_MILESTONE, encoding="utf-8")
-    from peregrine_kernel.loop.driver import run_meta_step
+    from rsi_kernel_tune.loop.driver import run_meta_step
     run_meta_step(ctx)
     diag = be.prompts[1]
     # the all-pos combination of the subsets fixture (+12.30% over a 0.5% floor)
@@ -130,7 +130,7 @@ SWEEP_LOG = (FIXTURES / "sweep_job_output.txt").read_text(encoding="utf-8")
 SWEEP_CMD_EXPECT = "cmd:python3 notes/sweep_run.py notes/__sweep_D1.1.json"
 # (kept verbatim above: the expected submit line is exactly the brief's cmd shape)
 
-from peregrine_kernel.loop.driver import (  # noqa: E402
+from rsi_kernel_tune.loop.driver import (  # noqa: E402
     _canonical_recipe_hash,
     _milestone_sweep_recipe,
     _sweep_spec_refused,
@@ -280,8 +280,8 @@ def test_sweep_winner_delivery_is_judged_by_the_standard_gate(tmp_path):
 
 # --- task 3: slow-decision bookkeeping + REMOVE_CANDIDATES -----------------------
 
-from peregrine_kernel.inner.trajectory import IterationRecord, load_records  # noqa: E402
-from peregrine_kernel.loop import driver as _drv  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import IterationRecord, load_records  # noqa: E402
+from rsi_kernel_tune.loop import driver as _drv  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -366,7 +366,7 @@ def test_the_legacy_threshold_is_the_only_threshold_when_pinned(monkeypatch):
 def test_resolvable_diff_is_imported_directly_from_wp1():
     """C1 integrated: the driver has no shim — its threshold reader IS WP1's
     parse.resolvable_diff, imported directly (not a module-local fallback)."""
-    from peregrine_kernel.loop import parse as parse_mod
+    from rsi_kernel_tune.loop import parse as parse_mod
     assert _drv.resolvable_diff is parse_mod.resolvable_diff
 
 
@@ -408,8 +408,8 @@ def test_the_direct_import_holds_in_a_fresh_interpreter():
 
     repo = Path(__file__).resolve().parents[1]
     code = (
-        "import peregrine_kernel.loop.parse as p\n"
-        "from peregrine_kernel.loop import driver as d\n"
+        "import rsi_kernel_tune.loop.parse as p\n"
+        "from rsi_kernel_tune.loop import driver as d\n"
         "assert d.resolvable_diff is p.resolvable_diff\n"
         "print('direct-import-ok')\n")
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,

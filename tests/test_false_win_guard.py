@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 
-from peregrine_kernel.loop.driver import _confirm_apparent_target, run_inner_loop
+from rsi_kernel_tune.loop.driver import _confirm_apparent_target, run_inner_loop
 
 from test_loop_driver import _EVAL_CONFIRM, EVAL, NCU, REC, FakeBackend, _ctx
 

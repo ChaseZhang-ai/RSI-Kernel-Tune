@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from peregrine_kernel.baseline import (
+from rsi_kernel_tune.baseline import (
     BASIS_CUPTI,
     HOST_FREE_BASES,
     BASIS_GRAPH,
@@ -17,7 +17,7 @@ from peregrine_kernel.baseline import (
     load_baseline,
     save_baseline,
 )
-from peregrine_kernel.baseline_cli import _looks_like_ncu_csv, _measure, parse_ref_stdout
+from rsi_kernel_tune.baseline_cli import _looks_like_ncu_csv, _measure, parse_ref_stdout
 
 
 def _b(**kw) -> RefBaseline:
@@ -35,7 +35,7 @@ def test_save_then_load_round_trips(tmp_path):
 
 
 def test_absent_baseline_is_none_not_an_error(tmp_path):
-    """Nothing has measured yet — the normal state before `peregrine <op> baseline`."""
+    """Nothing has measured yet — the normal state before `rsi-kernel-tune <op> baseline`."""
     assert load_baseline(tmp_path) is None
 
 
@@ -109,7 +109,7 @@ def test_the_architecture_roles_refusal_prescribes_the_declared_fix():
     """An architecture reference may exist only as declared loop.toml values —
     declared BECAUSE it cannot be run — so telling that operator to re-measure
     is a dead end. Its refusal must name arch_ref_device_ms instead."""
-    from peregrine_kernel.baseline import ROLE_ARCHITECTURE
+    from rsi_kernel_tune.baseline import ROLE_ARCHITECTURE
     with pytest.raises(ValueError, match="arch_ref_device_ms"):
         _b(ms=1.978, role=ROLE_ARCHITECTURE).target_ms(1.0, gate_window="device")
 
@@ -248,7 +248,7 @@ class _FakeBackend:
 
 
 def _patch_backend(monkeypatch, fake):
-    import peregrine_kernel.loop.cli as loop_cli
+    import rsi_kernel_tune.loop.cli as loop_cli
     monkeypatch.setattr(loop_cli, "RealBackend", lambda *a, **k: fake)
 
 
@@ -484,7 +484,7 @@ def test_ref_stdout_without_the_new_keys_is_unchanged():
 def test_a_new_archive_records_the_plain_basis_by_default():
     # device_median_ms IS the pipelined batch window by the timing contract, so a
     # script that does not declare a basis still gets a recorded (not blank) one.
-    from peregrine_kernel.baseline_cli import _archived_basis
+    from rsi_kernel_tune.baseline_cli import _archived_basis
     assert _archived_basis(dict(ms_device=0.4)) == BASIS_PLAIN
     assert _archived_basis(dict(ms_device=0.4, device_window_basis="cuda_graph")) == BASIS_GRAPH
     assert _archived_basis(dict()) == ""

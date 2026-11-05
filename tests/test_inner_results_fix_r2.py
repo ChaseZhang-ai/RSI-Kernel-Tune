@@ -6,7 +6,7 @@ JSON scan surviving braces inside string values.
 
 from __future__ import annotations
 
-from peregrine_kernel.inner.results import parse_correctness, parse_perf
+from rsi_kernel_tune.inner.results import parse_correctness, parse_perf
 
 
 def test_parse_correctness_zero_failed_summary_is_not_a_fail():

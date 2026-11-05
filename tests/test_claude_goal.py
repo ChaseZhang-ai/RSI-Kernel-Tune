@@ -71,12 +71,12 @@ def env(tmp_path):
     ws.mkdir()
     tag = f"tag{os.getpid()}x{time.time_ns() % 10**8}"
     e = {k: v for k, v in os.environ.items()
-         if k not in ("TMUX", "TMUX_PANE", "PK_GOAL_TURN_DIR", "PK_GOAL_DEADLINE", "PK_GOAL_TIMEOUT")}
-    e.update(PK_CLAUDE_BIN=str(stub), CLAUDE_CONFIG_DIR=str(tmp_path / "cfg"),
-             PK_GOAL_TMUX_SOCKET=_socket(), PK_GOAL_POLL_S="0.2", PK_GOAL_SETTLE_S="0.6",
-             PK_GOAL_STARTUP_S="20", PK_GOAL_TIMEOUT="60", ROLE="student",
+         if k not in ("TMUX", "TMUX_PANE", "RKT_GOAL_TURN_DIR", "RKT_GOAL_DEADLINE", "RKT_GOAL_TIMEOUT")}
+    e.update(RKT_CLAUDE_BIN=str(stub), CLAUDE_CONFIG_DIR=str(tmp_path / "cfg"),
+             RKT_GOAL_TMUX_SOCKET=_socket(), RKT_GOAL_POLL_S="0.2", RKT_GOAL_SETTLE_S="0.6",
+             RKT_GOAL_STARTUP_S="20", RKT_GOAL_TIMEOUT="60", ROLE="student",
              STUB_SERVED_MODEL="claude-test-1", STUB_ARGV_LOG=str(tmp_path / "argv.log"),
-             STUB_LINES_LOG=str(tmp_path / "lines.log"), PK_FALLBACK_LOG=str(tmp_path / "fb.log"),
+             STUB_LINES_LOG=str(tmp_path / "lines.log"), RKT_FALLBACK_LOG=str(tmp_path / "fb.log"),
              STUB_TAG=tag)
     (tmp_path / "cfg").mkdir()
     yield {"env": e, "ws": ws, "tmp": tmp_path, "tag": tag}
@@ -112,7 +112,7 @@ def _turn_dir(ctx):
     reply = td / "reply.md"
     check = f"{_PY} {td / 'check.py'} {reply}"
     spec = {"kind": "caller", "role": "student", "reply": str(reply), "check": check,
-            "condition": (f"PEREGRINE TURN. Write the reply to `{reply}`, then run "
+            "condition": (f"RSI-KERNEL-TUNE TURN. Write the reply to `{reply}`, then run "
                           f"`{check}`; met when it printed TURN-DELIVERABLE-OK.")}
     (td / "spec.json").write_text(json.dumps(spec))
     return td
@@ -125,7 +125,7 @@ def test_a_met_goal_hands_back_the_reply_and_leaves_nothing_running(env):
     assert r.stderr == ""                     # the loop scans stderr for failure text
     assert _sessions() == [] and _stub_procs(env["tag"]) == []
     argv = json.loads((env["tmp"] / "argv.log").read_text().splitlines()[0])
-    assert argv[-1].startswith("/goal PEREGRINE TURN")       # /goal is the first prompt
+    assert argv[-1].startswith("/goal RSI-KERNEL-TUNE TURN")       # /goal is the first prompt
     assert "--append-system-prompt-file" in argv and "--session-id" in argv
     prompt_file = Path(argv[argv.index("--append-system-prompt-file") + 1])
     assert prompt_file.read_text().endswith("do the thing")
@@ -133,7 +133,7 @@ def test_a_met_goal_hands_back_the_reply_and_leaves_nothing_running(env):
 
 def test_a_caller_prepared_turn_is_checked_with_the_callers_check(env):
     td = _turn_dir(env)
-    r = _run(env, PK_GOAL_TURN_DIR=str(td), STUB_REPLY="decision_id: D1.1\nchange: x\nfiles_touched: k.py\n")
+    r = _run(env, RKT_GOAL_TURN_DIR=str(td), STUB_REPLY="decision_id: D1.1\nchange: x\nfiles_touched: k.py\n")
     assert r.returncode == 0, r.stderr
     assert r.stdout.startswith("decision_id: D1.1")
     res = json.loads((td / "result.json").read_text().splitlines()[-1])
@@ -146,7 +146,7 @@ def test_a_reply_the_callers_check_rejects_is_not_delivered(env):
     stub then delivers the same unparseable reply), and after the bounded retries the leg
     fails instead of handing the caller a reply it would only reject."""
     td = _turn_dir(env)
-    r = _run(env, "false_met", PK_GOAL_TURN_DIR=str(td), STUB_REPLY="prose only, no marker\n")
+    r = _run(env, "false_met", RKT_GOAL_TURN_DIR=str(td), STUB_REPLY="prose only, no marker\n")
     assert r.returncode == 1
     assert "check still fails" in r.stdout + r.stderr
     assert "TURN-DELIVERABLE-MISSING" in r.stdout
@@ -156,7 +156,7 @@ def test_a_judge_fooled_without_a_reply_gets_the_goal_resent(env):
     r = _run(env, "false_met")
     assert r.returncode == 0, r.stderr
     assert r.stdout == "EXHAUSTED: stub reply\n"
-    assert "/goal PEREGRINE" in (env["tmp"] / "lines.log").read_text()
+    assert "/goal RSI-KERNEL-TUNE" in (env["tmp"] / "lines.log").read_text()
 
 
 def test_a_served_model_mismatch_exits_75_with_the_reply(env):
@@ -169,14 +169,14 @@ def test_a_served_model_mismatch_exits_75_with_the_reply(env):
 
 def test_a_usage_limit_ends_the_leg_with_the_cli_text_and_the_next_attempt_resumes(env):
     td = _turn_dir(env)
-    r = _run(env, "resume_ok", PK_GOAL_TURN_DIR=str(td))
+    r = _run(env, "resume_ok", RKT_GOAL_TURN_DIR=str(td))
     assert r.returncode == 1
-    # the CLI's own words, on both streams: PK_FAIL_RE / the hold's patterns read them
+    # the CLI's own words, on both streams: RKT_FAIL_RE / the hold's patterns read them
     assert "You've hit your session limit" in r.stdout
     assert "hit your session limit" in r.stderr
     st = json.loads((td / "session.json").read_text())
     assert st["resumable"] is True
-    r2 = _run(env, "resume_ok", PK_GOAL_TURN_DIR=str(td))
+    r2 = _run(env, "resume_ok", RKT_GOAL_TURN_DIR=str(td))
     assert r2.returncode == 0, r2.stderr
     argvs = [json.loads(x) for x in (env["tmp"] / "argv.log").read_text().splitlines()]
     assert "--resume" in argvs[1] and argvs[1][argvs[1].index("--resume") + 1] == st["sid"]
@@ -184,8 +184,8 @@ def test_a_usage_limit_ends_the_leg_with_the_cli_text_and_the_next_attempt_resum
 
 def test_a_fresh_attempt_does_not_resume_after_a_non_limit_failure(env):
     td = _turn_dir(env)
-    assert _run(env, "cleared", PK_GOAL_TURN_DIR=str(td)).returncode == 1
-    assert _run(env, "ok", PK_GOAL_TURN_DIR=str(td)).returncode == 0
+    assert _run(env, "cleared", RKT_GOAL_TURN_DIR=str(td)).returncode == 1
+    assert _run(env, "ok", RKT_GOAL_TURN_DIR=str(td)).returncode == 0
     argvs = [json.loads(x) for x in (env["tmp"] / "argv.log").read_text().splitlines()]
     assert "--resume" not in argvs[1] and "--session-id" in argvs[1]
 
@@ -198,15 +198,15 @@ def test_an_unrecoverable_clear_reports_the_auth_text(env):
 
 def test_a_rate_limit_pause_is_nudged_and_the_turn_completes(env):
     # a rate-limited pause waits 60 s (doubling) before its nudge; the knob shortens it
-    r = _run(env, "pause_then_ok", PK_GOAL_RATE_WAIT_S="0.5")
+    r = _run(env, "pause_then_ok", RKT_GOAL_RATE_WAIT_S="0.5")
     assert r.returncode == 0, r.stderr
     assert r.stdout == "EXHAUSTED: stub reply\n"
-    assert "/goal PEREGRINE" in (env["tmp"] / "lines.log").read_text()
+    assert "/goal RSI-KERNEL-TUNE" in (env["tmp"] / "lines.log").read_text()
 
 
 def test_the_deadline_kills_the_session_and_exits_124(env):
     t0 = time.time()
-    r = _run(env, "hang", PK_GOAL_TIMEOUT="3")
+    r = _run(env, "hang", RKT_GOAL_TIMEOUT="3")
     assert r.returncode == 124
     assert time.time() - t0 < 30
     assert "deadline" in r.stderr
@@ -275,7 +275,7 @@ def test_only_the_bottom_most_goal_status_counts():
     paused = "x\nGoal paused · the request was rate limited · send a message to retry\n"
     assert m.classify_pane(paused) == ("paused", "the request was rate limited")
     # a resolved pause scrolled up: the newer "Goal set" supersedes it
-    assert m.classify_pane(paused + "❯ /goal ...\n  ⎿  Goal set: PEREGRINE\n") == ("", "")
+    assert m.classify_pane(paused + "❯ /goal ...\n  ⎿  Goal set: RSI-KERNEL-TUNE\n") == ("", "")
     assert m.classify_pane("Goal still active · the API was unavailable · retrying in 1 min (1/3)")[0] == "still"
     assert m.classify_pane('Goal cleared after an unrecoverable error (context limit reached): "x"')[0:2] == \
         ("cleared", "context limit reached")
@@ -325,7 +325,7 @@ def test_agent_claude_dispatches_a_goal_turn(tmp_path):
     d = _scripts_copy(tmp_path)
     r = subprocess.run(["bash", str(d / "agent-claude.sh"), "claude-opus-5-5", "high"],
                        input="prompt", capture_output=True, text=True,
-                       env=dict(os.environ, PK_AGENT_DRIVER="goal"))
+                       env=dict(os.environ, RKT_AGENT_DRIVER="goal"))
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == ("GOAL claude-opus-5-5 claude-opus-5-5 "
                                 "--dangerously-skip-permissions --effort high")
@@ -338,7 +338,7 @@ def test_without_a_goal_request_agent_claude_runs_claude_p(tmp_path):
     fake.chmod(0o755)
     r = subprocess.run(["bash", str(d / "agent-claude.sh"), "m"], input="prompt",
                        capture_output=True, text=True,
-                       env=dict(os.environ, PK_CLAUDE_BIN=str(fake)))
+                       env=dict(os.environ, RKT_CLAUDE_BIN=str(fake)))
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "P -p --model m --dangerously-skip-permissions"
 
@@ -348,14 +348,14 @@ def test_the_agent_scripts_pass_the_agent_policys_command_scan():
     directory before claude starts (the project settings would not load); the agent
     scripts must not trip it."""
     sys.path.insert(0, str(_ROOT / "src"))
-    from peregrine_kernel.loop.agent_policy import command_findings
+    from rsi_kernel_tune.loop.agent_policy import command_findings
     for f in ("agent-claude.sh", "claude-goal.sh"):
         assert command_findings([f"bash {_ROOT / 'scripts' / f} m m"], {}) == [], f
 
 
 def test_goal_leg_findings():
     sys.path.insert(0, str(_ROOT / "src"))
-    from peregrine_kernel.loop.cli import goal_leg_findings
+    from rsi_kernel_tune.loop.cli import goal_leg_findings
     scripts = _ROOT / "scripts"
     assert goal_leg_findings([f"bash {scripts / 'agent-claude.sh'} m high 600"], {}) == []
     assert goal_leg_findings([f"bash {scripts / 'claude-goal.sh'} m m"], {}) == []
@@ -368,7 +368,7 @@ def test_a_limit_after_the_deliverable_is_complete_delivers(env):
     """The usage limit hit after the agent wrote and checked its reply (the judge never got
     to say so): the check is the authority, the turn is delivered, not retried."""
     td = _turn_dir(env)
-    r = _run(env, "limit", PK_GOAL_TURN_DIR=str(td), STUB_REPLY_BEFORE_LIMIT="1",
+    r = _run(env, "limit", RKT_GOAL_TURN_DIR=str(td), STUB_REPLY_BEFORE_LIMIT="1",
              STUB_REPLY="EXHAUSTED: already done\n")
     assert r.returncode == 0, r.stdout + r.stderr
     assert r.stdout == "EXHAUSTED: already done\n"

@@ -28,7 +28,7 @@ if str(TESTS) not in sys.path:
 def _reset_wp20_driver_state():
     """The edge-band recheck's once-per-run state is module-level; every test
     starts from an empty set (and leaves it empty)."""
-    from peregrine_kernel.loop import driver as _driver
+    from rsi_kernel_tune.loop import driver as _driver
     _driver._JUDGE_EDGE_RECHECKED.clear()
     yield
     _driver._JUDGE_EDGE_RECHECKED.clear()

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from peregrine_kernel.baseline import BASIS_CUPTI, BASIS_GRAPH, BASIS_PLAIN
-from peregrine_kernel.timing_audit import (
+from rsi_kernel_tune.baseline import BASIS_CUPTI, BASIS_GRAPH, BASIS_PLAIN
+from rsi_kernel_tune.timing_audit import (
     HOST_BOUND_RATIO_WARN,
     classify,
     host_bound_ratio,

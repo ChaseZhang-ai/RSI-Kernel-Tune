@@ -1,7 +1,7 @@
 """WP12: the probe-recipe library (skills/probe-recipes/).
 
 Three operator-agnostic measurement recipes for the verdict-probe channel.
-Each is self-contained (no peregrine_kernel import, torch only on the lazy GPU
+Each is self-contained (no rsi_kernel_tune import, torch only on the lazy GPU
 path), so the unit tests drive the PURE halves — curve reading, phase split,
 bandwidth arithmetic, and the printed block — with mocked timings, and run
 every script's `--help` in a subprocess (acceptance: --help works without a
@@ -214,9 +214,9 @@ def test_shared_line_vocabulary():
         assert all("PASS" not in ln or ln.startswith("PROBE") for ln in block)
 
 
-def test_scripts_never_import_peregrine_kernel():
+def test_scripts_never_import_rsi_kernel_tune():
     for s in SCRIPTS:
         src = (RECIPES / s).read_text(encoding="utf-8")
-        assert "peregrine_kernel" not in src, s     # self-contained in the job
+        assert "rsi_kernel_tune" not in src, s     # self-contained in the job
         assert "import torch" in src and "\nimport torch" not in src.split("def ")[0], \
             f"{s}: torch must stay off the module-import path (lazy, GPU path only)"

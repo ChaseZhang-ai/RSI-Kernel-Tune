@@ -14,8 +14,8 @@ anywhere: the delivery is evaluated and priced normally.
 
 from __future__ import annotations
 
-from peregrine_kernel.inner.trajectory import IterationRecord as IR
-from peregrine_kernel.loop.driver import (_PKG_MAX_STEPS, _declared_construction,
+from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
+from rsi_kernel_tune.loop.driver import (_PKG_MAX_STEPS, _declared_construction,
                                           _open_package_tail, _pkg_decl)
 
 

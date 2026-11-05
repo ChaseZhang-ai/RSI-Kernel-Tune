@@ -1,6 +1,6 @@
 # Correctness monitor
 
-Every operator tree decides correctness with its own judge: the trees `peregrine run` generates from a
+Every operator tree decides correctness with its own judge: the trees `rsi-kernel-tune run` generates from a
 task use the judge the teacher wrote and calibrated against the reference, a leaderboard task uses the
 board's judge, and a hand-made tree uses its own `eval/bench.py` -- each with its own reference, its
 own tolerance and its own inputs; the driver reads only `correctness.pass`. Trees differ in how strict
@@ -64,39 +64,39 @@ The result is only recorded: in the operator tree's `correctness_monitor.jsonl` 
 `.artifacts/<op>_<id>/operators/<op>/correctness_monitor.jsonl`), and at the finish also in the
 `correctness_monitor` field of `best_confirmation.json`. **It is not fed to any agent, does not change
 KEEP/REVERT, and does not affect when the loop stops.** The one exception is outside the loop: when the
-loop did not stop at its target, `peregrine run` counts the best kernel's final confirmation as meeting the
-target only if the monitor raised no alarm on that kernel (this decides `peregrine run`'s exit code).
+loop did not stop at its target, `rsi-kernel-tune run` counts the best kernel's final confirmation as meeting the
+target only if the monitor raised no alarm on that kernel (this decides `rsi-kernel-tune run`'s exit code).
 
 ## How to run it
 
-**Automatically at the finish**: after the confirmation step, `peregrine run` runs one monitor job on the
+**Automatically at the finish**: after the confirmation step, `rsi-kernel-tune run` runs one monitor job on the
 confirmed sha (or, without a confirmation, on the best green KEEP) with all default profiles; this is
-not configurable. When the loop is run directly on a hand-made tree (`peregrine <op> loop`), `[loop]
+not configurable. When the loop is run directly on a hand-made tree (`rsi-kernel-tune <op> loop`), `[loop]
 correctness_monitor` in its `loop.toml` (default `"best"`; `"off"` turns it off) and `[loop]
 correctness_monitor_profiles` (the profile list) control this step.
 
 **On any sha, at any time**:
 
 ```bash
-# a run's trees: first point peregrine at the run's operators/
-export PEREGRINE_OPERATORS_DIR=.artifacts/<op>_<id>/operators
-peregrine <op> monitor --workspace .artifacts/<op>_<id>/ws            # default: the sha in best_confirmation.json, else the workspace HEAD
-peregrine <op> monitor --workspace .artifacts/<op>_<id>/ws --sha ae8f882 --profiles base,seed1,zero_block
-peregrine <op> monitor --workspace .artifacts/<op>_<id>/ws --dry-run  # print the overlaid tree, branch and job command only
+# a run's trees: first point rsi-kernel-tune at the run's operators/
+export RSI-KERNEL-TUNE_OPERATORS_DIR=.artifacts/<op>_<id>/operators
+rsi-kernel-tune <op> monitor --workspace .artifacts/<op>_<id>/ws            # default: the sha in best_confirmation.json, else the workspace HEAD
+rsi-kernel-tune <op> monitor --workspace .artifacts/<op>_<id>/ws --sha ae8f882 --profiles base,seed1,zero_block
+rsi-kernel-tune <op> monitor --workspace .artifacts/<op>_<id>/ws --dry-run  # print the overlaid tree, branch and job command only
 ```
 
 Exit codes: 0 ok, 1 warn, 2 alarm, 3 could not run.
 
 ## Mechanism
 
-- The runtime (`src/peregrine_kernel/monitor/runtime/`) rides into the job tree's `.pk_monitor/` as an
+- The runtime (`src/rsi_kernel_tune/monitor/runtime/`) rides into the job tree's `.rkt_monitor/` as an
   overlay commit (the tree under test is unchanged); the job is
-  `gpu_entry.sh cmd python3 .pk_monitor/run.py ...`.
+  `gpu_entry.sh cmd python3 .rkt_monitor/run.py ...`.
 - `run.py` uses only the standard library (the `python3` on the job's PATH may have no torch). For
-  each profile it runs `bash gpu_entry.sh correctness` once with `.pk_monitor/hook/` first on
+  each profile it runs `bash gpu_entry.sh correctness` once with `.rkt_monitor/hook/` first on
   PYTHONPATH; when the bench starts under the tree's own interpreter it loads the `sitecustomize.py`
   there, which installs the hooks and then hands over to the image's own `sitecustomize`.
-- The hooks act only when `PK_MON_PROFILE` is set. They give the `kernel` module another module class:
+- The hooks act only when `RKT_MON_PROFILE` is set. They give the `kernel` module another module class:
   a public function taken from **outside** the module comes back wrapped, while calls inside the module
   through its globals, and objects handed to the JIT compiler, are untouched. Nothing is recorded during
   CUDA graph capture, and at most the first 64 calls are recorded. The wrapper summarises the tensor
@@ -115,7 +115,7 @@ Exit codes: 0 ok, 1 warn, 2 alarm, 3 could not run.
   the reproducibility check are the exceptions; they do not depend on the judge.
 - On trees whose inputs do not come from the torch RNG / `torch.full` (real workload files, numpy
   draws), the stress profiles do not apply.
-- On the trees `peregrine run` generates from a task, the profiles reshape the input groups the judge's
+- On the trees `rsi-kernel-tune run` generates from a task, the profiles reshape the input groups the judge's
   `make_inputs` draws (the hook treats the judge, which the bench compiles from source, as bench code),
   and the kernel the bench loads by file path is handed to the hook, so its outputs are watched too.
   Input groups read from files are left as they are.

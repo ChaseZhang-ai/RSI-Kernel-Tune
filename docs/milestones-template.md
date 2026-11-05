@@ -1,5 +1,5 @@
 <!--
-  Peregrine-Kernel's milestones meta-template.
+  RSI-Kernel-Tune's milestones meta-template.
 
   It started from an external blueprint specification and has since evolved in place for
   this repo (the reader is now the teacher, the free-optimization phase was removed, the L0
@@ -289,7 +289,7 @@ feedback, and locking them early only locks them wrong.
 
 ### A.4 ref baseline (an input prerequisite for writing the instance, not a milestone)
 
-**The ref baseline is measured before the instance file is written** (`peregrine <op> baseline`,
+**The ref baseline is measured before the instance file is written** (`rsi-kernel-tune <op> baseline`,
 archived in `operators/<op>/ref_baseline.json`) and injected as an input at writing time. It is
 **not** a milestone handed to the loop to execute — writing it as M0.x would require the instance
 file to write gates anchored to hardware ground truth before it has any hardware ground truth,

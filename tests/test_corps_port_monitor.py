@@ -28,8 +28,8 @@ from __future__ import annotations
 
 import json
 
-from peregrine_kernel.monitor import MARKER, PROFILE_MARKER, classify, parse_log
-from peregrine_kernel.resume import Decision, compute_reopen
+from rsi_kernel_tune.monitor import MARKER, PROFILE_MARKER, classify, parse_log
+from rsi_kernel_tune.resume import Decision, compute_reopen
 
 
 # --- a killed final JSON still yields the finished profiles --------------------

@@ -8,7 +8,7 @@ One line per document. Historical per-package change documents were distilled in
 | Path | Content |
 |---|---|
 | [blackbox-mode.md](blackbox-mode.md) | Sealed black-box references: what gets sealed, who can read what, and the known failure modes of the guard |
-| [correctness-monitor.md](correctness-monitor.md) | The advisory correctness monitor riding into GPU jobs (`.pk_monitor/` tree, stressed-input checks, output watch) |
+| [correctness-monitor.md](correctness-monitor.md) | The advisory correctness monitor riding into GPU jobs (`.rkt_monitor/` tree, stressed-input checks, output watch) |
 | [energize-protocol.md](energize-protocol.md) | The energize-and-harvest protocol: the acceptance A/B matrix, one-default-at-a-time flipping, JustGoal comparisons |
 | [backlog.md](backlog.md) | The single ledger of frozen / deferred / rejected items (do not re-propose) |
 | [external-eval.md](external-eval.md) | The external evaluation export lane: suite submission formats and protocols, the packager (`scripts/eval-export/`), the leased-card self-evaluation discipline, and the lane's boundary rules |
@@ -40,5 +40,5 @@ One line per document. Historical per-package change documents were distilled in
 |---|---|
 | [paper/README.md](paper/README.md) | Placeholder for the paper engineering bundle (tables, experiment matrix, reproduction notes) |
 
-<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+<!-- SPDX-FileCopyrightText: Copyright 2026 The RSI-Kernel-Tune Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->

@@ -28,8 +28,8 @@ import textwrap
 from pathlib import Path
 from types import SimpleNamespace
 
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
-from peregrine_kernel.loop.driver import (
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record, load_records
+from rsi_kernel_tune.loop.driver import (
     BackendError,
     _declared_construction,
     _open_package_tail,
@@ -41,7 +41,7 @@ from peregrine_kernel.loop.driver import (
     _save_ref_role_exposure,
     _save_ref_struct_table,
 )
-from peregrine_kernel.loop.driver import run_inner_loop
+from rsi_kernel_tune.loop.driver import run_inner_loop
 from test_loop_driver import (
     EVAL,
     NCU,
@@ -61,7 +61,7 @@ _CHILD = textwrap.dedent("""
     import tempfile
     from pathlib import Path
     from types import SimpleNamespace
-    from peregrine_kernel.loop import driver
+    from rsi_kernel_tune.loop import driver
 
     class RBE:
         def commit(self, msg):
@@ -182,7 +182,7 @@ def test_a_flaked_verdict_probe_degrades_instead_of_ending_the_run(tmp_path, cap
     the BackendError climb into run_two_layer and clean-stop the whole run.
     Both verdict-probe paths now degrade the same way, and the caller's
     per-script fallback consumes the degraded verdict without dying."""
-    from peregrine_kernel.loop.driver import (
+    from rsi_kernel_tune.loop.driver import (
         _probe_label,
         _probe_log_suffix,
         _verdict_probe_feedback,

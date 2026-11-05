@@ -14,8 +14,8 @@ import dataclasses
 import json
 from pathlib import Path
 
-from peregrine_kernel.loop import agent_policy as ap
-from peregrine_kernel.loop import goal_ref as gr
+from rsi_kernel_tune.loop import agent_policy as ap
+from rsi_kernel_tune.loop import goal_ref as gr
 
 
 def _policy(tmp_path: Path) -> ap.AgentPolicy:
@@ -40,7 +40,7 @@ def test_a_wrapped_cluster_command_is_denied_for_an_online_student(tmp_path):
     deny = _policy(tmp_path).settings("student", ws)["permissions"]["deny"]
     for rule in ("Bash(bash *-c *ssh*)", "Bash(bash *-c *scp*)",
                  "Bash(sh *-c *rsync*)", "Bash(zsh *-c *ssh*)",
-                 "Bash(bash *-c *python* -m peregrine_kernel.submit*)"):
+                 "Bash(bash *-c *python* -m rsi_kernel_tune.submit*)"):
         assert rule in deny, rule
 
 

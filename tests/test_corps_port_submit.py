@@ -4,7 +4,7 @@ Source: the audit-r2-2026-11-05 archive's untracked test directory (legacy-snaps
 naming), file test_cli_submit_fixes.py (written against the archived legacy
 snapshot). Ported per the correction order of 2026-11-05: every assertion was
 re-checked against the latest semantics, mechanical renames applied (legacy
-package name -> ``peregrine_kernel``, ``FK_*`` -> ``PK_*``), and coordinates
+package name -> ``rsi_kernel_tune``, ``FK_*`` -> ``RKT_*``), and coordinates
 re-anchored.
 
 Subset rationale (full inventory in the porting report of CHANGES-corps-fix.md):
@@ -25,9 +25,9 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.submit import direct
-from peregrine_kernel.submit import jobs as ds
-from peregrine_kernel.submit.config import SubmitConfig
+from rsi_kernel_tune.submit import direct
+from rsi_kernel_tune.submit import jobs as ds
+from rsi_kernel_tune.submit.config import SubmitConfig
 
 from test_direct_delivery import _FakeSsh, _ssh_cfg, _ssh_run
 

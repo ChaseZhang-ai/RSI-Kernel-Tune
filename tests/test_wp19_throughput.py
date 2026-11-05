@@ -25,9 +25,9 @@ import os
 import tempfile
 from pathlib import Path
 
-from peregrine_kernel.inner.trajectory import load_records
-from peregrine_kernel.loop import driver
-from peregrine_kernel.submit import direct
+from rsi_kernel_tune.inner.trajectory import load_records
+from rsi_kernel_tune.loop import driver
+from rsi_kernel_tune.submit import direct
 
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx, _MILESTONE
 from test_wp11_throughput import _WP11_TELEMETRY
@@ -94,7 +94,7 @@ def _baseline_scenario(tmp_path: Path) -> list[dict]:
 def _meta_scenario(tmp_path: Path) -> list[dict]:
     """One meta step (diagnosis then milestone patch) with every switch at its
     default. Returns the meta-trajectory records as dicts."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     patch = _patching(tmp_path, _MILESTONE_PATCH, _PATCH_REPLY)
     be = FakeBackend([_DIAGNOSIS, patch], [])
     ctx = _ctx(tmp_path, be)
@@ -232,13 +232,13 @@ _GOLDEN_META = [{'best_after': None,
 
 # --- task 1: the narrowed build-cache key (shell contract) ----------------------
 
-from peregrine_kernel.cardkit import (_WP11_ALLNCU_CASE, _WP11_CACHE_BLOCK,
+from rsi_kernel_tune.cardkit import (_WP11_ALLNCU_CASE, _WP11_CACHE_BLOCK,
                                  GPU_ENTRY_TEMPLATE)
 
 
 def _rendered_gpu_entry() -> str:
     return GPU_ENTRY_TEMPLATE.format(
-        name="t", suite="peregrine_kernel", arch="sm_100a", clock="", mem_clock="",
+        name="t", suite="rsi_kernel_tune", arch="sm_100a", clock="", mem_clock="",
         require_lock="0", clock_note="n",
         wp11_cache_block=_WP11_CACHE_BLOCK, wp11_allncu_case=_WP11_ALLNCU_CASE)
 
@@ -278,8 +278,8 @@ _WP19_KEY_HARNESS = r"""
 set -uo pipefail
 harness_script="$1"
 source "$harness_script"
-export PK_BUILD_CACHE="${PK_BUILD_CACHE:-1}" PK_TREE_SHA256="${PK_TREE_SHA256:-shaX}"
-key="$(pk_build_cache_key)" && echo "KEY:$key"
+export RKT_BUILD_CACHE="${RKT_BUILD_CACHE:-1}" RKT_TREE_SHA256="${RKT_TREE_SHA256:-shaX}"
+key="$(rkt_build_cache_key)" && echo "KEY:$key"
 """
 
 _BASH_ENV = None
@@ -310,7 +310,7 @@ def test_narrowed_key_comment_hit_and_header_miss(tmp_path):
     # C11 hard acceptance: a comment change must HIT (key unchanged), a header change must MISS (key changes)
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
-    narrow = {"PK_BUILD_CACHE_KEY_NARROW": 1}
+    narrow = {"RKT_BUILD_CACHE_KEY_NARROW": 1}
     k0 = _key_of(tree, script, **narrow)
     # a kernel comment changes: same compiled content -> the SAME narrowed key
     (tree / "kernel.cu").write_text(
@@ -321,9 +321,9 @@ def test_narrowed_key_comment_hit_and_header_miss(tmp_path):
     # iteration): still the same key
     (tree / "notes" / "probe.sh").write_text("echo other\n", encoding="utf-8")
     assert _key_of(tree, script, **narrow) == k0
-    # a different PK_TREE_SHA256 (a fresh tree of the same content): same key —
+    # a different RKT_TREE_SHA256 (a fresh tree of the same content): same key —
     # this is the cross-tree/probe-vs-eval reuse the narrowing exists for
-    assert _key_of(tree, script, PK_TREE_SHA256="shaY", **narrow) == k0
+    assert _key_of(tree, script, RKT_TREE_SHA256="shaY", **narrow) == k0
     # the quoted include changes: a different compile -> a different key
     (tree / "util.cuh").write_text("#define TILE 64\n", encoding="utf-8")
     assert _key_of(tree, script, **narrow) != k0
@@ -336,25 +336,25 @@ def test_narrowed_key_comment_hit_and_header_miss(tmp_path):
 
 
 def test_narrowed_key_off_by_default_is_the_whole_tree_key(tmp_path):
-    # Default state: with PK_BUILD_CACHE_KEY_NARROW unset the key is byte-identical
-    # to the old path (whole-tree sha). The whole-tree key's input is PK_TREE_SHA256
+    # Default state: with RKT_BUILD_CACHE_KEY_NARROW unset the key is byte-identical
+    # to the old path (whole-tree sha). The whole-tree key's input is RKT_TREE_SHA256
     # (recomputed by the runner on every commit): a comment change means a new commit,
     # a new tree sha, a new key — the old semantics necessarily miss; under the
     # narrowed semantics comments are not in the key, so the same compiled content
     # hits across commits.
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
-    k0 = _key_of(tree, script, PK_BUILD_CACHE_KEY_NARROW=1)   # narrowed, original content
+    k0 = _key_of(tree, script, RKT_BUILD_CACHE_KEY_NARROW=1)   # narrowed, original content
     k_off = _key_of(tree, script)                             # whole-tree, shaX
     assert k0 != k_off
     (tree / "kernel.cu").write_text(
         "// fk-cuda-cflags: -O3\n// comment changed\n#include \"util.cuh\"\n__global__ void k(){}\n",
         encoding="utf-8")
     # the runner re-addresses the tree after the commit (a fresh payload sha):
-    assert _key_of(tree, script, PK_TREE_SHA256="shaZ") != k_off
+    assert _key_of(tree, script, RKT_TREE_SHA256="shaZ") != k_off
     # old semantics: the new commit is a fresh miss; narrowed: the same key
-    assert _key_of(tree, script, PK_BUILD_CACHE_KEY_NARROW=1) == k0
-    assert _key_of(tree, script, PK_TREE_SHA256="shaZ", PK_BUILD_CACHE_KEY_NARROW=1) == k0
+    assert _key_of(tree, script, RKT_BUILD_CACHE_KEY_NARROW=1) == k0
+    assert _key_of(tree, script, RKT_TREE_SHA256="shaZ", RKT_BUILD_CACHE_KEY_NARROW=1) == k0
 
 
 def test_narrowed_key_walk_trouble_falls_back(tmp_path):
@@ -362,7 +362,7 @@ def test_narrowed_key_walk_trouble_falls_back(tmp_path):
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
     k_off = _key_of(tree, script)
-    narrow = {"PK_BUILD_CACHE_KEY_NARROW": 1}
+    narrow = {"RKT_BUILD_CACHE_KEY_NARROW": 1}
     (tree / "missing.cuh").write_text("#define X\n", encoding="utf-8")
     (tree / "kernel.cu").write_text(
         "// fk-cuda-cflags: -O3\n#include \"missing.cuh\"\n__global__ void k(){}\n",
@@ -383,7 +383,7 @@ def test_narrowed_key_walk_trouble_falls_back(tmp_path):
 
 
 def test_narrowed_key_cache_roundtrip_across_trees(tmp_path):
-    # The narrowing value itself: same compiled content, different tree (different PK_TREE_SHA256) -> HIT, no rebuild
+    # The narrowing value itself: same compiled content, different tree (different RKT_TREE_SHA256) -> HIT, no rebuild
     import subprocess
     tree = _key_tree(tmp_path / "tree")
     script = _cache_functions_script(tree)
@@ -394,17 +394,17 @@ def test_narrowed_key_cache_roundtrip_across_trees(tmp_path):
 set -uo pipefail
 harness_script="$1"; home="$2"; treesha="$3"; store="$4"
 source "$harness_script"
-export PK_BUILD_CACHE=1 PK_BUILD_CACHE_KEY_NARROW=1 PK_TREE_SHA256="$treesha"
+export RKT_BUILD_CACHE=1 RKT_BUILD_CACHE_KEY_NARROW=1 RKT_TREE_SHA256="$treesha"
 export HOME="$home"
 mkdir -p "$HOME"
-key="$(pk_build_cache_key)"
-if PK_CACHE_ENTRY="$(pk_build_cache_brain verify "$store" "$key" 2>/dev/null)" && [ -n "$PK_CACHE_ENTRY" ]; then
+key="$(rkt_build_cache_key)"
+if RKT_CACHE_ENTRY="$(rkt_build_cache_brain verify "$store" "$key" 2>/dev/null)" && [ -n "$RKT_CACHE_ENTRY" ]; then
   echo "HIT $key"
 else
   staging="$store/staging.t"
-  rm -rf "$staging"; mkdir -p "$staging/pk_kernel_abc"
-  echo fakeso > "$staging/pk_kernel_abc/pk_kernel_abc.so"
-  pk_build_cache_brain promote "$store" "$key" "$staging" && echo "BUILT $key"
+  rm -rf "$staging"; mkdir -p "$staging/rkt_kernel_abc"
+  echo fakeso > "$staging/rkt_kernel_abc/rkt_kernel_abc.so"
+  rkt_build_cache_brain promote "$store" "$key" "$staging" && echo "BUILT $key"
 fi
 """
     h = tmp_path / "roundtrip.sh"
@@ -423,7 +423,7 @@ fi
     assert "HIT" in r2.stdout, r2.stdout[-400:]
     assert r2.stdout.split("HIT ", 1)[1].split()[0] == key_a
     # the tampered artifact is still refused (the manifest recheck is intact)
-    so = store / key_a / "pk_kernel_abc" / "pk_kernel_abc.so"
+    so = store / key_a / "rkt_kernel_abc" / "rkt_kernel_abc.so"
     so.write_text("tampered\n", encoding="utf-8")
     r3 = subprocess.run(["bash", str(h), str(script), str(home), "shaB", str(store)],
                         capture_output=True, text=True, env=_bash_env(), cwd=tree,
@@ -544,7 +544,7 @@ def test_b6_rendered_template_carries_preflight_and_valid_bash(tmp_path):
     p.write_text(text, encoding="utf-8")
     subprocess.run(["bash", "-n", str(p)], check=True)
     assert "cuda_compile_preflight_maybe" in text
-    assert "PK_CUDA_PRECHECK:-0" in text          # default OFF
+    assert "RKT_CUDA_PRECHECK:-0" in text          # default OFF
     # only the timing tasks run it; a probe's cmd task keeps the ordinary path
     assert "perf|all|cardref|allncu) cuda_compile_preflight" in text
 
@@ -590,7 +590,7 @@ def _run_precheck(tmp_path: Path, tree: Path, task: str, **env):
 
 
 def test_b6_preflight_off_by_default(tmp_path):
-    # PK_CUDA_PRECHECK unset: no preflight output at all (the baseline job shape)
+    # RKT_CUDA_PRECHECK unset: no preflight output at all (the baseline job shape)
     tree = _precheck_tree(tmp_path, "BROKEN kernel")
     r = _run_precheck(tmp_path, tree, "all")
     assert r.returncode == 0 and "cuda preflight" not in r.stdout
@@ -598,7 +598,7 @@ def test_b6_preflight_off_by_default(tmp_path):
 
 def test_b6_preflight_fails_fast_on_broken_kernel(tmp_path):
     tree = _precheck_tree(tmp_path, "BROKEN kernel")
-    r = _run_precheck(tmp_path, tree, "all", PK_CUDA_PRECHECK=1)
+    r = _run_precheck(tmp_path, tree, "all", RKT_CUDA_PRECHECK=1)
     assert r.returncode != 0, r.stdout
     assert "failing before the timing protocol" in r.stdout
     assert "fake error" in r.stderr or "fake error" in r.stdout
@@ -606,7 +606,7 @@ def test_b6_preflight_fails_fast_on_broken_kernel(tmp_path):
 
 def test_b6_preflight_passes_and_continues_on_good_kernel(tmp_path):
     tree = _precheck_tree(tmp_path, "__global__ void k(){}")
-    r = _run_precheck(tmp_path, tree, "all", PK_CUDA_PRECHECK=1)
+    r = _run_precheck(tmp_path, tree, "all", RKT_CUDA_PRECHECK=1)
     assert r.returncode == 0, r.stderr
     assert "build OK" in r.stdout
 
@@ -622,8 +622,8 @@ def test_b6_preflight_timeout_is_not_a_failure(tmp_path):
     (tree / "eval" / "problem").joinpath("problem.json").write_text(
         '{"kernel_file": "kernel.cu", "entry": "run"}', encoding="utf-8")
     (tree / "kernel.cu").write_text("__global__ void k(){}\n", encoding="utf-8")
-    r = _run_precheck(tmp_path, tree, "perf", PK_CUDA_PRECHECK=1,
-                      PK_CUDA_PRECHECK_TIMEOUT=1)
+    r = _run_precheck(tmp_path, tree, "perf", RKT_CUDA_PRECHECK=1,
+                      RKT_CUDA_PRECHECK_TIMEOUT=1)
     assert r.returncode == 0, r.stderr
     assert "timed out" in r.stdout
 
@@ -631,7 +631,7 @@ def test_b6_preflight_timeout_is_not_a_failure(tmp_path):
 def test_b6_preflight_skips_non_timing_tasks_and_python_kernels(tmp_path):
     tree = _precheck_tree(tmp_path, "BROKEN kernel")
     for task in ("cmd", "ncu", "ref"):
-        r = _run_precheck(tmp_path, tree, task, PK_CUDA_PRECHECK=1)
+        r = _run_precheck(tmp_path, tree, task, RKT_CUDA_PRECHECK=1)
         assert r.returncode == 0, (task, r.stdout)
         assert "cuda preflight" not in r.stdout
     # a python kernel: the pre-pass is a CUDA-build concept, never runs
@@ -643,7 +643,7 @@ def test_b6_preflight_skips_non_timing_tasks_and_python_kernels(tmp_path):
     (pytree / "eval" / "problem").joinpath("problem.json").write_text(
         '{"kernel_file": "kernel.py", "entry": "run"}', encoding="utf-8")
     (pytree / "kernel.py").write_text("x = 1\n", encoding="utf-8")
-    r = _run_precheck(tmp_path, pytree, "all", PK_CUDA_PRECHECK=1)
+    r = _run_precheck(tmp_path, pytree, "all", RKT_CUDA_PRECHECK=1)
     assert r.returncode == 0 and "cuda preflight" not in r.stdout
 
 
@@ -681,7 +681,7 @@ def test_b6_driver_ast_preflight_silent_on_good_kernel_and_cuda_mode(tmp_path, c
 
 # --- task 2: the probe batch manifest -------------------------------------------
 
-from peregrine_kernel.loop.parse import parse_student_turn, parse_probe_verdict
+from rsi_kernel_tune.loop.parse import parse_student_turn, parse_probe_verdict
 
 
 def test_t2_manifest_marker_parses_and_probe_request_wins():
@@ -696,8 +696,8 @@ def test_t2_manifest_marker_parses_and_probe_request_wins():
 def test_t2_batch_mode_markers_and_isolation():
     mode = driver._probe_batch_mode(["a.py", "b.py"])
     assert mode.startswith("cmd:")
-    assert 'echo "=== pk-probe-batch begin: a.py ==="' in mode
-    assert 'echo "=== pk-probe-batch end: b.py rc=$? ==="' in mode
+    assert 'echo "=== rkt-probe-batch begin: a.py ==="' in mode
+    assert 'echo "=== rkt-probe-batch end: b.py rc=$? ==="' in mode
     # the clock reset re-stated inline (the cmd task's child bash has no
     # gpu_entry functions) + a settle sleep between scripts
     assert mode.count("-rgc") == 2 and mode.count("-rmc") == 2
@@ -772,8 +772,8 @@ def test_t2_meta_batch_one_job_per_script_verdicts(tmp_path):
     driver.run_meta_step(ctx)
     submits = [m for c in be.calls if c[0] == "gpu" for m in [c[1]]]
     assert len(submits) == 1, f"4->1: one batch job, got {submits}"
-    assert submits[0].startswith("cmd:") and "pk-probe-batch" in submits[0]
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    assert submits[0].startswith("cmd:") and "rkt-probe-batch" in submits[0]
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     recs = load_meta_records(ctx.meta_status_path)
     assert recs[0].probe_rounds == 1                       # one round = one job
     readings = recs[0].probe_readings
@@ -790,7 +790,7 @@ def test_t2_meta_batch_single_script_dnf_does_not_condemn(tmp_path):
         + driver._PROBE_BATCH_END.format(path="s1.py", rc="0") + "\n")
     ctx, be, scripts = _manifest_meta_ctx(tmp_path, batch_log)
     driver.run_meta_step(ctx)
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     recs = load_meta_records(ctx.meta_status_path)
     readings = recs[0].probe_readings
     # a no-verdict script is "ran, no reading" (the standing semantics — no
@@ -811,7 +811,7 @@ def test_t2_meta_batch_wholesale_failure_falls_back(tmp_path):
     driver.run_meta_step(ctx)
     submits = [c[1] for c in be.calls if c[0] == "gpu"]
     assert len(submits) == 3                    # 1 failed batch + 2 fallback jobs
-    assert submits[0].startswith("cmd:") and "pk-probe-batch" in submits[0]
+    assert submits[0].startswith("cmd:") and "rkt-probe-batch" in submits[0]
     assert submits[1] == "cmd:python3 s0.py" and submits[2] == "cmd:python3 s1.py"
 
 
@@ -847,12 +847,12 @@ def test_t2_default_state_leaves_existing_probes_alone(tmp_path):
 
 
 def test_t2_wp19_apply_cfg_reads_probe_manifest(tmp_path, monkeypatch):
-    from peregrine_kernel.loop.driver import _wp19_apply_cfg
+    from rsi_kernel_tune.loop.driver import _wp19_apply_cfg
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     _wp19_apply_cfg(ctx)
     assert ctx.probe_manifest is True                     # default: mechanism on
-    import peregrine_kernel.paths as paths_mod
+    import rsi_kernel_tune.paths as paths_mod
     gcfg = tmp_path / "global_config"
     gcfg.mkdir(exist_ok=True)
     (gcfg / "loop.toml").write_text("[loop]\nprobe_manifest = false\n", encoding="utf-8")
@@ -865,7 +865,7 @@ def test_t2_wp19_apply_cfg_reads_probe_manifest(tmp_path, monkeypatch):
 
 
 def test_t2_kb_manifest_one_job_all_pass_certifies(tmp_path):
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     (tmp_path / "s0.py").write_text("print('probe')\n", encoding="utf-8")
     (tmp_path / "s1.py").write_text("print('probe')\n", encoding="utf-8")
     (tmp_path / "batch.txt").write_text("s0.py\ns1.py\n", encoding="utf-8")
@@ -880,7 +880,7 @@ def test_t2_kb_manifest_one_job_all_pass_certifies(tmp_path):
     probes = {}
     res = driver._kb_certify_rounds(ctx, "diagnosis text", probes)
     submits = [c[1] for c in be.calls if c[0] == "gpu"]
-    assert len(submits) == 1 and "pk-probe-batch" in submits[0]   # 4->1
+    assert len(submits) == 1 and "rkt-probe-batch" in submits[0]   # 4->1
     assert res.certified is True and res.probe == "batch.txt"
     assert set(probes) == {"s0.py", "s1.py"}                      # per-script bookkeeping
 
@@ -922,7 +922,7 @@ def test_t2_kb_manifest_fail_feedback_and_fallback(tmp_path):
     (ws2 / "s1.py").write_text("print('probe')\n", encoding="utf-8")
     res2 = driver._kb_certify_rounds(ctx2, "diagnosis text", {})
     submits2 = [c[1] for c in be2.calls if c[0] == "gpu"]
-    assert submits2[0].startswith("cmd:") and "pk-probe-batch" in submits2[0]
+    assert submits2[0].startswith("cmd:") and "rkt-probe-batch" in submits2[0]
     assert submits2[1] == "cmd:python3 s0.py"               # the old path, per script
 
 
@@ -1021,7 +1021,7 @@ def test_t5_r1_gates_cofire_in_one_prompt(tmp_path):
 
 # --- task 4: student digest binding (C13) + teacher NCU bounding ----------------
 
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
 
 
 def _t4_records(ctx, n=6):
@@ -1102,7 +1102,7 @@ def test_t4_student_prompt_binding_swap_is_render_local(tmp_path):
 
 
 def test_t4_teacher_ncu_bound_off_is_full_history(tmp_path, monkeypatch):
-    import peregrine_kernel.inner.ncu as ncu_mod
+    import rsi_kernel_tune.inner.ncu as ncu_mod
     seen = {}
     monkeypatch.setattr(ncu_mod, "render_ncu_trace",
                         lambda recs: seen.setdefault("n", len(recs)) or "")
@@ -1114,7 +1114,7 @@ def test_t4_teacher_ncu_bound_off_is_full_history(tmp_path, monkeypatch):
 
 
 def test_t4_teacher_ncu_bound_best_plus_tail(tmp_path, monkeypatch):
-    import peregrine_kernel.inner.ncu as ncu_mod
+    import rsi_kernel_tune.inner.ncu as ncu_mod
     seen = {}
     monkeypatch.setattr(ncu_mod, "render_ncu_trace",
                         lambda recs: seen.setdefault("iters", [r.iter for r in recs]) or "")
@@ -1131,7 +1131,7 @@ def test_t4_teacher_ncu_bound_best_plus_tail(tmp_path, monkeypatch):
 
 
 def test_t4_wp19_apply_cfg_reads_context_keys(tmp_path, monkeypatch):
-    import peregrine_kernel.paths as paths_mod
+    import rsi_kernel_tune.paths as paths_mod
     gcfg = tmp_path / "global_config"
     gcfg.mkdir(exist_ok=True)
     (gcfg / "loop.toml").write_text(
@@ -1153,7 +1153,7 @@ def test_t4_wp19_apply_cfg_reads_context_keys(tmp_path, monkeypatch):
 
 # --- task 3: the background measurement lane (C15) ------------------------------
 
-from peregrine_kernel.loop.driver import BackgroundLane, LaneTask, _lane_temperature_check
+from rsi_kernel_tune.loop.driver import BackgroundLane, LaneTask, _lane_temperature_check
 
 
 def _task(kind="confirm", log_box=None):
@@ -1348,25 +1348,25 @@ def test_t6_agent_claude_script_flags_gated_by_env(tmp_path):
     stub.chmod(0o755)
     r0 = subprocess.run(
         ["bash", str(script), "m", "", "10"], capture_output=True, text=True,
-        env={**_bash_env(), "PK_CLAUDE_BIN": f"bash {stub}", "PK_AGENT_PY": "echo"},
+        env={**_bash_env(), "RKT_CLAUDE_BIN": f"bash {stub}", "RKT_AGENT_PY": "echo"},
         timeout=30)
     assert "--session-id" not in r0.stdout and "--resume" not in r0.stdout
     r1 = subprocess.run(
         ["bash", str(script), "m", "", "10"], capture_output=True, text=True,
-        env={**_bash_env(), "PK_CLAUDE_BIN": f"bash {stub}", "PK_AGENT_PY": "echo",
-             "PK_AGENT_SESSION_ID": "s1", "PK_AGENT_SESSION_MODE": "create"},
+        env={**_bash_env(), "RKT_CLAUDE_BIN": f"bash {stub}", "RKT_AGENT_PY": "echo",
+             "RKT_AGENT_SESSION_ID": "s1", "RKT_AGENT_SESSION_MODE": "create"},
         timeout=30)
     assert "--session-id s1" in r1.stdout
     r2 = subprocess.run(
         ["bash", str(script), "m", "", "10"], capture_output=True, text=True,
-        env={**_bash_env(), "PK_CLAUDE_BIN": f"bash {stub}", "PK_AGENT_PY": "echo",
-             "PK_AGENT_SESSION_ID": "s1", "PK_AGENT_SESSION_MODE": "resume"},
+        env={**_bash_env(), "RKT_CLAUDE_BIN": f"bash {stub}", "RKT_AGENT_PY": "echo",
+             "RKT_AGENT_SESSION_ID": "s1", "RKT_AGENT_SESSION_MODE": "resume"},
         timeout=30)
     assert "--resume s1" in r2.stdout
 
 
 def _t6_backend(tmp_path, outputs):
-    from peregrine_kernel.loop.cli import RealBackend
+    from rsi_kernel_tune.loop.cli import RealBackend
     be = RealBackend.__new__(RealBackend)
     be.op = "demo"
     be.workspace = tmp_path
@@ -1398,19 +1398,19 @@ def test_t6_session_file_lifecycle_create_then_resume(tmp_path):
     import uuid as _uuid
     be = _t6_backend(tmp_path, ["first", "second"])
     env1 = be._session_env("teacher")
-    assert env1["PK_AGENT_SESSION_MODE"] == "create"
-    sid = env1["PK_AGENT_SESSION_ID"]
+    assert env1["RKT_AGENT_SESSION_MODE"] == "create"
+    sid = env1["RKT_AGENT_SESSION_ID"]
     env2 = be._session_env("teacher")
-    assert env2 == {"PK_AGENT_SESSION_ID": sid, "PK_AGENT_SESSION_MODE": "resume"}
+    assert env2 == {"RKT_AGENT_SESSION_ID": sid, "RKT_AGENT_SESSION_MODE": "resume"}
     # a distinct scope gets its own session
     be.agent_session_scope = "meta1"
     env3 = be._session_env("teacher")
-    assert env3["PK_AGENT_SESSION_MODE"] == "create"
-    assert env3["PK_AGENT_SESSION_ID"] != sid
+    assert env3["RKT_AGENT_SESSION_MODE"] == "create"
+    assert env3["RKT_AGENT_SESSION_ID"] != sid
     # roles never share a session file
     be.agent_session_scope = "meta0"
     env4 = be._session_env("student")
-    assert env4["PK_AGENT_SESSION_MODE"] == "create"
+    assert env4["RKT_AGENT_SESSION_MODE"] == "create"
 
 
 def test_t6_resume_off_is_env_free(tmp_path):
@@ -1429,8 +1429,8 @@ def test_t6_retry_reenters_session_with_error_tail(tmp_path):
     assert len(be._prompts) == 2
     cmd1, prompt1 = be._prompts[0]
     cmd2, prompt2 = be._prompts[1]
-    assert "PK_AGENT_SESSION_MODE=create" in cmd1
-    assert "PK_AGENT_SESSION_MODE=resume" in cmd2      # the retry re-enters
+    assert "RKT_AGENT_SESSION_MODE=create" in cmd1
+    assert "RKT_AGENT_SESSION_MODE=resume" in cmd2      # the retry re-enters
     assert "## Previous attempt failed" in prompt2 and "boom" in prompt2
     assert "## Previous attempt failed" not in prompt1
 
@@ -1441,14 +1441,14 @@ def test_t6_resume_off_retry_prompt_is_untouched(tmp_path):
     out = be.run_agent("do the thing", role="teacher")
     assert out == "recovered"
     cmd2, prompt2 = be._prompts[1]
-    assert "PK_AGENT_SESSION" not in cmd2
+    assert "RKT_AGENT_SESSION" not in cmd2
     assert "## Previous attempt failed" not in prompt2   # byte-identical baseline retry
 
 
 def test_t6_offline_layers_ride_every_resumed_turn(tmp_path):
     # the four offline layers are rewritten per turn by agent_policy.install —
     # resume does not bypass it: the install+notice still run before the prompt
-    from peregrine_kernel.loop.agent_policy import AgentPolicy
+    from rsi_kernel_tune.loop.agent_policy import AgentPolicy
     calls = []
     be = _t6_backend(tmp_path, ["ok"])
     class _P:
@@ -1481,7 +1481,7 @@ def test_t6_capability_verification_recorded():
 def _t7_census_text(ms=2.34, sha=None):
     src = "def run(x):\n    return x\n"
     sha = sha or driver._reference_kernel_sha(src)
-    return (f"<!-- pk-ref-census\nreference_kernel_sha256: {sha}\n"
+    return (f"<!-- rkt-ref-census\nreference_kernel_sha256: {sha}\n"
             f"parent_best_sha: abc123\nwindow: device\nmedian_ms: {ms}\n"
             f'ratios: [1.01, 1.02]\npricing_log_sha256: deadbeef\n-->\n'
             "## stall_ledger\n\nSTALL LEDGER BODY\n\n"
@@ -1689,7 +1689,7 @@ def test_t8_floor_stop_exit_prints_the_composition(tmp_path, capsys, monkeypatch
     # B-N-B15: the floor_stop door prints the same wall-clock table as the others
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record as _ar
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record as _ar
     _ar(ctx.status_path, IR(iter=1, decision_id="D1", change="c", correctness=True,
                             verdict="KEEP", metric_before=2.0, bwd_median_ms=1.9,
                             device_median_ms=1.9, eval_job_s=100.0))
@@ -1706,7 +1706,7 @@ def test_t8_run_level_buckets_print_and_calibrate(tmp_path, capsys):
     # the calibration suggestion is output, never applied
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record as _ar
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record as _ar
     _ar(ctx.status_path, IR(iter=1, decision_id="D1", change="c", correctness=True,
                             verdict="KEEP", metric_before=2.0, bwd_median_ms=1.9,
                             device_median_ms=1.9, eval_job_s=10.0))
@@ -1736,7 +1736,7 @@ def test_t8_teacher_bucket_lands_outside_records(tmp_path):
 
 
 def test_t8_prewarm_runs_without_the_build_cache(tmp_path):
-    # C-T6: the prewarm is decoupled — it runs with PK_BUILD_CACHE unset
+    # C-T6: the prewarm is decoupled — it runs with RKT_BUILD_CACHE unset
     import subprocess
     tree = tmp_path / "tree"
     (tree / "eval" / "problem").mkdir(parents=True)
@@ -1750,8 +1750,8 @@ set -uo pipefail
 harness_script="$1"; workdir="$2"
 source "$harness_script"
 cd "$workdir"
-unset PK_BUILD_CACHE 2>/dev/null || true
-out="$(pk_build_cache_prewarm)"; rc=$?
+unset RKT_BUILD_CACHE 2>/dev/null || true
+out="$(rkt_build_cache_prewarm)"; rc=$?
 echo "RC=$rc OUT=[$out]"
 """
     h = tmp_path / "prewarm.sh"

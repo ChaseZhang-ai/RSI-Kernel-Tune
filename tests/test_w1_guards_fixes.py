@@ -9,14 +9,14 @@
  W1-unique P3-8 cases live here.)
 
 Ported from the R2 audit's untracked test batch, rewritten for the
-peregrine_kernel tree. CPU only.
+rsi_kernel_tune tree. CPU only.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from peregrine_kernel.loop import goal_ref as gr  # noqa: E402
+from rsi_kernel_tune.loop import goal_ref as gr  # noqa: E402
 
 
 # -- goal-ref: the declared reference lands each reading under its own window's key ----

@@ -1,5 +1,5 @@
 # rmsnorm -- an example task: fuse a PyTorch RMSNorm (nine kernel launches a call) into one
-# CuTe DSL kernel on a Blackwell GPU. `peregrine new tasks/rmsnorm`, then `peregrine run` the run it
+# CuTe DSL kernel on a Blackwell GPU. `rsi-kernel-tune new tasks/rmsnorm`, then `rsi-kernel-tune run` the run it
 # creates. Everything not written here comes from global_config/.
 
 [task]

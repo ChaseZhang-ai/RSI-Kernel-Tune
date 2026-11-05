@@ -22,7 +22,7 @@ from test_loop_driver import (  # noqa: E402
     EVAL, NCU, REC, _MILESTONE, _E2EFake, FakeBackend, _ctx,
 )
 
-from peregrine_kernel.loop.driver import (  # noqa: E402
+from rsi_kernel_tune.loop.driver import (  # noqa: E402
     BackendError, _arch_probe_ms, _arch_probe_stamp, _parse_arch_probe_requests,
     _run_arch_probes, resolvable_diff, run_two_layer,
 )

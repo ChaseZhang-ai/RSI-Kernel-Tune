@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """Red-team matrix, the recon form of the seed-change family (attack 2b): a
@@ -30,7 +30,7 @@ fresh_recheck-same suspicious REVERT. Gap record: docs/wp20r-known-gaps.md
 (G1 CLOSED); the package record: CHANGES-WP29.md.
 
 Unit-level on CPU (the parent bench's device is cuda by construction): the
-probe child runs the production protocol with PK_REPLAY_PROBE_DEVICE=cpu, and
+probe child runs the production protocol with RKT_REPLAY_PROBE_DEVICE=cpu, and
 the parent-side assembly is driven with a measured replay-path median standing
 in for what the timed windows read (the amortized shape of the device window).
 The full parent flow on the real GPU is pasted in CHANGES-WP29.md.
@@ -51,7 +51,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 REPO = Path(__file__).resolve().parents[2]
-EVAL_SRC = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
+EVAL_SRC = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval"
 
 from test_fresh_recheck import (  # noqa: E402  (path set up by conftest)
     HONEST_KERNEL, PROBLEM, _VERDICT, _card, _park, _run_card, os_pathsep,
@@ -164,10 +164,10 @@ def _run_probe_child(card: Path, *extra: str, **over) -> subprocess.CompletedPro
     included), rehearsed on CPU."""
     import os
     env = {**os.environ, "PYTHONPATH": os_pathsep(card),
-           "PK_REPLAY_PROBE_DEVICE": "cpu",
-           "PK_REPLAY_PROBE_CHILD": "1",   # what the production parent exports
-           "PK_FRESH_RECHECK": "1",        # the draw-shift gate the child reads
-           "PK_FRESH_SEED": str(_benchkit().REPLAY_PROBE_SEED_SHIFT),
+           "RKT_REPLAY_PROBE_DEVICE": "cpu",
+           "RKT_REPLAY_PROBE_CHILD": "1",   # what the production parent exports
+           "RKT_FRESH_RECHECK": "1",        # the draw-shift gate the child reads
+           "RKT_FRESH_SEED": str(_benchkit().REPLAY_PROBE_SEED_SHIFT),
            **over}
     return subprocess.run(
         [sys.executable, str(card / "eval" / "bench.py"), "--mode", "correctness",
@@ -290,14 +290,14 @@ def test_attack2b_the_stream_sentinel_reads_ok_on_a_replay_shaped_call(monkeypat
 def test_wp29_replay_probe_flips_the_recon_form_to_suspected(tmp_path, monkeypatch):
     """THE FLIP (open row G1 closes): the recon cheat that re-passed every
     value check is caught by the replay probe. The REAL probe child (the
-    production protocol, PK_REPLAY_PROBE_DEVICE=cpu rehearsal) measures the
+    production protocol, RKT_REPLAY_PROBE_DEVICE=cpu rehearsal) measures the
     cheat's honest miss path on fresh draws; the parent's assembly compares it
     against the replay speed the timed windows measured (measured here,
     amortized like the device window). The verdict lands `suspected` — the
     fresh_recheck-same REVERT evidence."""
     card = _card(tmp_path / "caught", RECON_MEMORY_CHEAT_KERNEL)
     replay_ms = _replay_median_ms(RECON_MEMORY_CHEAT_KERNEL)
-    monkeypatch.setenv("PK_REPLAY_PROBE_DEVICE", "cpu")
+    monkeypatch.setenv("RKT_REPLAY_PROBE_DEVICE", "cpu")
     # the parent side, loaded from the CARD copy exactly as the parent bench
     # runs it (the child spawn resolves the card's own bench.py / problem.json)
     spec = importlib.util.spec_from_file_location(
@@ -340,7 +340,7 @@ def test_wp29_replay_probe_passes_an_honest_kernel(tmp_path, monkeypatch):
     test stands in for the timed windows), and the probe reads `pass`."""
     card = _card(tmp_path / "honest", HONEST_KERNEL)
     judged_ms = _honest_amortized_ms(HONEST_KERNEL)
-    monkeypatch.setenv("PK_REPLAY_PROBE_DEVICE", "cpu")
+    monkeypatch.setenv("RKT_REPLAY_PROBE_DEVICE", "cpu")
     spec = importlib.util.spec_from_file_location(
         "redteam_recon_benchkit_card_honest", card / "eval" / "benchkit.py")
     bk = importlib.util.module_from_spec(spec)
@@ -365,7 +365,7 @@ def test_wp29_replay_probe_passes_a_data_sensitive_honest_kernel(tmp_path, monke
     reading."""
     card = _card(tmp_path / "data_sensitive", DATA_SENSITIVE_HONEST_KERNEL)
     judged_ms = _honest_amortized_ms(DATA_SENSITIVE_HONEST_KERNEL)
-    monkeypatch.setenv("PK_REPLAY_PROBE_DEVICE", "cpu")
+    monkeypatch.setenv("RKT_REPLAY_PROBE_DEVICE", "cpu")
     spec = importlib.util.spec_from_file_location(
         "redteam_recon_benchkit_card_ds", card / "eval" / "benchkit.py")
     bk = importlib.util.module_from_spec(spec)
@@ -388,7 +388,7 @@ def test_wp29_probe_degrades_to_unavailable_when_the_miss_path_crashes(
     parent's block convicts nobody (the fresh_recheck unavailable posture:
     a probe that cannot speak never fails an eval)."""
     card = _card(tmp_path / "crash", CRASH_ON_MISS_KERNEL)
-    monkeypatch.setenv("PK_REPLAY_PROBE_DEVICE", "cpu")
+    monkeypatch.setenv("RKT_REPLAY_PROBE_DEVICE", "cpu")
     payload = _probe_payload(_run_probe_child(card))
     assert payload["status"] == "unavailable"
     assert "RuntimeError" in payload.get("detail", "")
@@ -413,7 +413,7 @@ def test_wp29_probe_reads_unavailable_on_file_based_inputs(tmp_path, monkeypatch
     problem["workload"]["input_groups"] = [
         {"name": "g0", "kind": "file", "path": "inputs.safetensors"}]
     card = _card(tmp_path / "file_based", HONEST_KERNEL, problem=problem)
-    monkeypatch.setenv("PK_REPLAY_PROBE_DEVICE", "cpu")
+    monkeypatch.setenv("RKT_REPLAY_PROBE_DEVICE", "cpu")
     payload = _probe_payload(_run_probe_child(card))
     shape = payload["shapes"][0]
     assert shape["status"] == "unavailable"

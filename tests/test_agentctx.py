@@ -10,7 +10,7 @@ original flat model list + global window could not tell apart.
 import json
 from pathlib import Path
 
-from peregrine_kernel.loop.agentctx import (
+from rsi_kernel_tune.loop.agentctx import (
     inspect_agent_cmd,
     window_findings,
 )

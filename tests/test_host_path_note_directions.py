@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import pytest
 
-from peregrine_kernel.baseline import BASIS_CUPTI
-from peregrine_kernel.timing_audit import host_path_feedback, host_path_note
+from rsi_kernel_tune.baseline import BASIS_CUPTI
+from rsi_kernel_tune.timing_audit import host_path_feedback, host_path_note
 
 # A span-basis reading the note fires on (share of the window >= the 0.5 warn ratio).
 DEVICE_MS = 0.01522

@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """Unit tests for the MEMO-lane memoization demo fixture (``tests/fixtures/memo_demo.py``).
@@ -35,7 +35,7 @@ from pathlib import Path
 import torch
 
 _FIXTURE = Path(__file__).resolve().parent / "fixtures" / "memo_demo.py"
-_SPEC = importlib.util.spec_from_file_location("peregrine_tests_memo_demo", _FIXTURE)
+_SPEC = importlib.util.spec_from_file_location("rsi-kernel-tune_tests_memo_demo", _FIXTURE)
 assert _SPEC is not None and _SPEC.loader is not None
 memo_demo = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = memo_demo

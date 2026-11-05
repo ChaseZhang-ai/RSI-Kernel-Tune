@@ -2,7 +2,7 @@
 
 import pytest
 
-from peregrine_kernel.inner import (
+from rsi_kernel_tune.inner import (
     IterationRecord,
     append_record,
     build_digest,
@@ -180,7 +180,7 @@ def test_constant_output_flag_fires_on_bit_identical_diffs():
     scored outputs never changed — a broken handoff, not a numeric bug. Rows
     without a diff (probe-blocked, build errors) neither extend nor break the
     streak: the live pattern (bwd-mha, four alternating iterations) interleaved both."""
-    from peregrine_kernel.inner.trajectory import constant_output_flag
+    from rsi_kernel_tune.inner.trajectory import constant_output_flag
 
     records = [
         _fail(9),
@@ -201,7 +201,7 @@ def test_constant_output_flag_fires_on_bit_identical_diffs():
 def test_constant_output_flag_stays_quiet_when_diffs_move():
     """Diffs that change with the code are a live numeric bug — the ordinary,
     debuggable case. A KEEP also clears the streak: outputs demonstrably respond."""
-    from peregrine_kernel.inner.trajectory import constant_output_flag
+    from rsi_kernel_tune.inner.trajectory import constant_output_flag
 
     assert constant_output_flag([_fail(1), _fail(2, _DIFF_B), _fail(3)]) is None
     assert constant_output_flag([_fail(1), _fail(2)]) is None  # below min repeats

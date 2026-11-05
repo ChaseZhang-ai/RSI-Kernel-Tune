@@ -20,8 +20,8 @@ sys.path.insert(0, str(REPO / "src"))
 
 from test_loop_driver import FakeBackend, _ctx
 
-from peregrine_kernel.inner.trajectory import IterationRecord
-from peregrine_kernel.loop import driver
+from rsi_kernel_tune.inner.trajectory import IterationRecord
+from rsi_kernel_tune.loop import driver
 
 
 # --- BUG-CH-D-01 -----------------------------------------------------------

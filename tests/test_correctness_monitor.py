@@ -1,4 +1,4 @@
-"""Correctness monitor (peregrine_kernel.monitor): the job-side runner and hook driven
+"""Correctness monitor (rsi_kernel_tune.monitor): the job-side runner and hook driven
 end to end on a toy card (CPU torch; skipped without it), the harness-side
 classification, the job mode and the overlay/submit path."""
 
@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel import monitor
+from rsi_kernel_tune import monitor
 
 GPU_ENTRY = """#!/bin/bash
 set -euo pipefail
 W="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$W"
 export PYTHONPATH="$W:$W/eval:${PYTHONPATH:-}"
-PY="${PK_PYTHON:-python3}"
+PY="${RKT_PYTHON:-python3}"
 TASK="${1:-help}"
 shift || true
 case "$TASK" in
@@ -108,7 +108,7 @@ BENCH_NO_RNG = BENCH.replace(
     "    v = torch.linspace(-2, 2, 96 * D).view(96, D).sin() / 10\n")
 
 
-# Per-row key counts, the shape of topk_length: the bench fills them to the maximum,
+# Per-row key counts, the shape of torkt_length: the bench fills them to the maximum,
 # so an empty row never reaches the kernel on the card's own inputs.
 BENCH_LEN = BENCH.replace(
     "def reference(q, k, v):\n    o = torch.softmax(q @ k.T * 64 ** -0.5, -1) @ v\n",
@@ -167,7 +167,7 @@ BENCH_TASK = BENCH.replace(
     "    spec = importlib.util.spec_from_file_location('lb_card_kernel', os.path.abspath('kernel.py'))\n"
     "    mod = importlib.util.module_from_spec(spec)\n"
     "    spec.loader.exec_module(mod)\n"
-    "    hook = sys.modules.get('pk_monitor_hook')\n"
+    "    hook = sys.modules.get('rkt_monitor_hook')\n"
     "    if hook is not None and hasattr(hook, 'watch_loaded'):\n"
     "        hook.watch_loaded(mod, os.path.abspath('kernel.py'))\n"
     "    fn = mod.call\n")
@@ -184,7 +184,7 @@ KERNEL_DPS_ZERO_GROUP_NAN = KERNEL_DPS_OK.replace(
 KERNEL_DPS_RACE = KERNEL_DPS_OK.replace(
     "    out.copy_(_pack(",
     "    import os\n"
-    "    f = 1.01 if os.environ.get('PK_MON_PROFILE') == 'repeat' else 1.0\n"
+    "    f = 1.01 if os.environ.get('RKT_MON_PROFILE') == 'repeat' else 1.0\n"
     "    out.copy_(f * _pack(")
 
 
@@ -204,9 +204,9 @@ def _card(tmp_path: Path, kernel: str, bench: str = BENCH, cardref: bool = True)
 
 
 def _run(root: Path, profiles: str) -> dict:
-    env = dict(os.environ, PK_PYTHON=sys.executable)
+    env = dict(os.environ, RKT_PYTHON=sys.executable)
     env.pop("PYTHONPATH", None)
-    p = subprocess.run([sys.executable, str(root / ".pk_monitor" / "run.py"),
+    p = subprocess.run([sys.executable, str(root / ".rkt_monitor" / "run.py"),
                         "--profiles", profiles, "--budget-s", "600"],
                        cwd=root, env=env, capture_output=True, text=True, timeout=600)
     assert p.returncode == 0, p.stderr
@@ -272,9 +272,9 @@ def test_load_entry_hands_the_kernel_to_the_monitor_hook(tmp_path, monkeypatch):
     finally:
         sys.path.pop(0)
     seen = []
-    fake = type(sys)("pk_monitor_hook")
+    fake = type(sys)("rkt_monitor_hook")
     fake.watch_loaded = lambda mod, origin: seen.append((mod.__name__, origin))
-    monkeypatch.setitem(sys.modules, "pk_monitor_hook", fake)
+    monkeypatch.setitem(sys.modules, "rkt_monitor_hook", fake)
     (tmp_path / "kernel.py").write_text("def run(x):\n    return x\n")
     fn = lb_eval.load_entry(tmp_path / "kernel.py", "run")
     assert fn(3) == 3
@@ -374,7 +374,7 @@ def test_hook_reads_arguments_before_the_call_and_reports_the_written_ones(tmp_p
         kernel.fill_ret(x, torch.zeros(4))
         kernel.bump_(torch.ones(4))
     ''')
-    env = dict(os.environ, PK_MON_PROFILE="base", PK_MON_OUT=str(out),
+    env = dict(os.environ, RKT_MON_PROFILE="base", RKT_MON_OUT=str(out),
                PYTHONPATH=f"{monitor.RUNTIME_DIR / 'hook'}{os.pathsep}{root}")
     p = subprocess.run([sys.executable, "-c", code], cwd=root, env=env, capture_output=True,
                        text=True, timeout=120)
@@ -412,10 +412,10 @@ def test_hook_leaves_the_kernels_internal_calls_alone(tmp_path):
         call(x); kernel.call(x)
         assert kernel.Thing.__name__ == "Thing"
         assert kernel.CALLS == ["helper", "helper"]
-        assert getattr(kernel.call, "__pk_monitor__", False)
+        assert getattr(kernel.call, "__rkt_monitor__", False)
         assert kernel.call.__wrapped__.__name__ == "call"
     ''')
-    env = dict(os.environ, PK_MON_PROFILE="base", PK_MON_OUT=str(out),
+    env = dict(os.environ, RKT_MON_PROFILE="base", RKT_MON_OUT=str(out),
                PYTHONPATH=f"{monitor.RUNTIME_DIR / 'hook'}{os.pathsep}{root}")
     p = subprocess.run([sys.executable, "-c", code], cwd=root, env=env, capture_output=True,
                        text=True, timeout=120)
@@ -430,9 +430,9 @@ def test_sitecustomize_hands_over_to_the_images_own(tmp_path):
     image.mkdir()
     marker = tmp_path / "marker"
     (image / "sitecustomize.py").write_text(f"open({str(marker)!r}, 'w').write('ran')\n")
-    env = dict(os.environ, PK_MON_PROFILE="base", PK_MON_OUT=str(tmp_path / "out"),
+    env = dict(os.environ, RKT_MON_PROFILE="base", RKT_MON_OUT=str(tmp_path / "out"),
                PYTHONPATH=f"{monitor.RUNTIME_DIR / 'hook'}{os.pathsep}{image}")
-    p = subprocess.run([sys.executable, "-c", "import sys; print('pk_monitor_hook' in sys.modules)"],
+    p = subprocess.run([sys.executable, "-c", "import sys; print('rkt_monitor_hook' in sys.modules)"],
                        env=env, capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr
     assert p.stdout.strip() == "True"
@@ -441,9 +441,9 @@ def test_sitecustomize_hands_over_to_the_images_own(tmp_path):
 
 def test_without_a_profile_the_hook_does_nothing(tmp_path):
     env = dict(os.environ, PYTHONPATH=str(monitor.RUNTIME_DIR / "hook"))
-    env.pop("PK_MON_PROFILE", None)
+    env.pop("RKT_MON_PROFILE", None)
     p = subprocess.run([sys.executable, "-c",
-                        "import sys, pk_monitor_hook as h; print(h._state.get('installed'), "
+                        "import sys, rkt_monitor_hook as h; print(h._state.get('installed'), "
                         "any(type(f).__name__ == '_KernelFinder' for f in sys.meta_path))"],
                        env=env, capture_output=True, text=True, timeout=60)
     assert p.stdout.strip() == "None False", p.stderr
@@ -549,7 +549,7 @@ def test_classify_base_failure_and_missing_result():
 # --- job mode, overlay, run ----------------------------------------------------------
 def test_job_mode_is_quote_free_and_rejects_unknown_profiles():
     mode = monitor.job_mode(("base", "seed1"), "kernel.py", 1200)
-    assert mode == ("cmd:python3 .pk_monitor/run.py --profiles base,seed1 "
+    assert mode == ("cmd:python3 .rkt_monitor/run.py --profiles base,seed1 "
                     "--kernel kernel.py --budget-s 1200")
     assert not any(c in mode for c in "'\"")
     with pytest.raises(ValueError):
@@ -611,7 +611,7 @@ def test_a_cut_short_job_is_read_from_its_profile_blocks():
 def test_finish_monitor_records_next_to_the_confirmation(tmp_path):
     from types import SimpleNamespace
 
-    from peregrine_kernel.loop.cli import _run_finish_monitor
+    from rsi_kernel_tune.loop.cli import _run_finish_monitor
     result = {"profiles": [_rec("base", card_pass=False)], "complete": True}
     be = _Backend(monitor.MARKER + "\n" + json.dumps(result) + "\n")
     ctx = SimpleNamespace(branch_prefix="op-run", status_path=tmp_path / "status.jsonl")
@@ -628,7 +628,7 @@ def test_finish_monitor_records_next_to_the_confirmation(tmp_path):
 def test_finish_monitor_never_raises(tmp_path):
     from types import SimpleNamespace
 
-    from peregrine_kernel.loop.cli import _run_finish_monitor
+    from rsi_kernel_tune.loop.cli import _run_finish_monitor
 
     class Broken(_Backend):
         def submit_gpu(self, branch, mode):

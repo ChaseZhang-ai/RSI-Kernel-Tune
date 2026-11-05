@@ -1,9 +1,9 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """The probe child's timeout knob survives a junk env value (the WP29 fix).
 
-The exposure: ``_probe_child`` read ``PK_REPLAY_PROBE_TIMEOUT_S`` with a bare
+The exposure: ``_probe_child`` read ``RKT_REPLAY_PROBE_TIMEOUT_S`` with a bare
 ``int()`` and no ``ValueError`` guard. A mistyped operator value ("30m",
 "1,800", "600s" -- submit.toml [env] passes values through unscrubbed) raised
 in ``subprocess.run``'s argument evaluation, which happens AFTER every timing
@@ -25,7 +25,7 @@ from types import SimpleNamespace
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-EVAL_SRC = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
+EVAL_SRC = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval"
 
 torch = pytest.importorskip("torch")
 
@@ -56,7 +56,7 @@ def _stub_child_run(bk, runs):
 
 
 def test_junk_probe_timeout_keeps_the_default_and_the_bench_completes(monkeypatch):
-    """The regression: a junk PK_REPLAY_PROBE_TIMEOUT_S must not raise out of
+    """The regression: a junk RKT_REPLAY_PROBE_TIMEOUT_S must not raise out of
     ``_probe_child`` (which would crash the bench after all windows closed).
     The child spawn must receive the conservative default."""
     bk = _benchkit()

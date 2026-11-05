@@ -10,10 +10,10 @@ caller, resubmits a few times, then stops with ClockLockRefusedError (a NoRunErr
 
 import pytest
 
-from peregrine_kernel.loop import cli
-from peregrine_kernel.loop.driver import NoRunError
-from peregrine_kernel.loop.parse import parse_eval
-from peregrine_kernel.submit import jobs
+from rsi_kernel_tune.loop import cli
+from rsi_kernel_tune.loop.driver import NoRunError
+from rsi_kernel_tune.loop.parse import parse_eval
+from rsi_kernel_tune.submit import jobs
 
 REFUSED_LOG = """\
 === gpu_entry.sh (010_gemm_n6144_k4096) ===

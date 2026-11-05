@@ -21,7 +21,7 @@ the snapshot file waits for fixes owned by other lines:
 
 from __future__ import annotations
 
-from peregrine_kernel.inner.trajectory import (
+from rsi_kernel_tune.inner.trajectory import (
     IterationRecord,
     build_digest,
 )
@@ -54,8 +54,8 @@ def test_digest_carries_the_clock_telemetry_header():
 
 import json
 
-from peregrine_kernel import monitor
-from peregrine_kernel.inner.results import parse_perf
+from rsi_kernel_tune import monitor
+from rsi_kernel_tune.inner.results import parse_perf
 
 
 def _p_rec(profile, card_pass=True, *, calls=()):

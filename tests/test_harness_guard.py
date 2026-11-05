@@ -10,9 +10,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx  # noqa: E402
 
-from peregrine_kernel.inner.trajectory import load_records  # noqa: E402
-from peregrine_kernel.loop import cli, harness_guard  # noqa: E402
-from peregrine_kernel.loop.driver import run_inner_iteration  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import load_records  # noqa: E402
+from rsi_kernel_tune.loop import cli, harness_guard  # noqa: E402
+from rsi_kernel_tune.loop.driver import run_inner_iteration  # noqa: E402
 
 
 # --- what counts as harness ----------------------------------------------------------
@@ -196,7 +196,7 @@ def test_preflight_card_that_is_not_a_git_repo_warns(tmp_path, capsys):
 
 
 def test_a_card_inside_another_repository_is_not_its_own_git_repo(tmp_path, capsys):
-    """operators/<op> under Peregrine-Kernel without its own `git init`: `rev-parse` succeeds
+    """operators/<op> under RSI-Kernel-Tune without its own `git init`: `rev-parse` succeeds
     from the parent, but the card tracks nothing there -- read as an empty harness, every
     job tree would lose gpu_entry.sh and eval/."""
     parent = tmp_path / "fk"

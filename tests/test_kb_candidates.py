@@ -9,7 +9,7 @@ both harvest prompts carry the queue-hit trigger.
 import re
 from pathlib import Path
 
-from peregrine_kernel.loop.kb_lint import lint_kb_dir
+from rsi_kernel_tune.loop.kb_lint import lint_kb_dir
 from test_loop_driver import REPO
 
 QUEUE = REPO / "hw_kb" / "CANDIDATES.md"
@@ -91,7 +91,7 @@ def test_harvest_prompts_carry_the_queue_hit_trigger():
 
 def test_queue_hit_trigger_survives_rendering():
     import tempfile
-    from peregrine_kernel.loop.driver import _bindings, _meta_prompt, render_prompt
+    from rsi_kernel_tune.loop.driver import _bindings, _meta_prompt, render_prompt
     from test_loop_driver import FakeBackend, _ctx
     root = Path(tempfile.mkdtemp())
     (root / "sm90").mkdir()

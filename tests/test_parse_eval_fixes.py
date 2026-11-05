@@ -16,8 +16,8 @@ Four ledger bugs, one test section each:
 
 from __future__ import annotations
 
-from peregrine_kernel.inner.trajectory import GATE_WINDOW_DEVICE, IterationRecord, gate_ms
-from peregrine_kernel.loop.parse import (Exhausted, ProbeRequest, Record,
+from rsi_kernel_tune.inner.trajectory import GATE_WINDOW_DEVICE, IterationRecord, gate_ms
+from rsi_kernel_tune.loop.parse import (Exhausted, ProbeRequest, Record,
                                          parse_eval, parse_student_turn,
                                          resolvable_diff)
 

@@ -23,7 +23,7 @@ sys.path.insert(0, str(REPO / "src"))
 from test_loop_driver import (EVAL, NCU, FakeBackend, _ctx,               \
                                run_inner_iteration)  # noqa: E402
 
-from peregrine_kernel.loop import driver
+from rsi_kernel_tune.loop import driver
 
 _REC = lambda did, change, kf="flash_attn_dsl/flash_bwd.py": (  # noqa: E731
     f"decision_id: {did}\nchange: {change}\nfiles_touched: {kf}\n")

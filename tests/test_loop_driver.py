@@ -12,8 +12,8 @@ from pathlib import Path
 import json
 import pytest
 
-from peregrine_kernel.baseline import RefBaseline
-from peregrine_kernel.loop.driver import (
+from rsi_kernel_tune.baseline import RefBaseline
+from rsi_kernel_tune.loop.driver import (
     LoopContext,
     MetaResult,
     run_best_confirmation,
@@ -23,8 +23,8 @@ from peregrine_kernel.loop.driver import (
     run_meta_step,
     run_two_layer,
 )
-from peregrine_kernel.resume import Decision
-from peregrine_kernel.inner.trajectory import load_records
+from rsi_kernel_tune.resume import Decision
+from rsi_kernel_tune.inner.trajectory import load_records
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -398,7 +398,7 @@ def test_resolve_target_trusts_only_a_window_matched_ssot(tmp_path):
     # derive it from the e2e reading — on a device-gated run that number gates
     # ~one host tax loose, so the driver only takes a §0 target whose
     # target_window annotation matches the run's gate window.
-    from peregrine_kernel.loop.driver import _resolve_target
+    from rsi_kernel_tune.loop.driver import _resolve_target
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=1.7)
     ctx.gate_window = "e2e"
@@ -416,8 +416,8 @@ def test_resolve_target_trusts_only_a_window_matched_ssot(tmp_path):
 
 
 def test_seed_target_writes_the_window_annotation(tmp_path):
-    from peregrine_kernel.loop.driver import _seed_target_ms
-    from peregrine_kernel.milestone import parse_target_ms, parse_target_window
+    from rsi_kernel_tune.loop.driver import _seed_target_ms
+    from rsi_kernel_tune.milestone import parse_target_ms, parse_target_window
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=1.7)
     ctx.gate_window = "device"
@@ -502,7 +502,7 @@ def test_plateau_is_scoped_to_post_resume_segment(tmp_path):
     # iteration must NOT immediately re-plateau on the pre-meta history. The segment
     # (records[start_iter:]) needs > window points before plateau can fire, so each
     # patch gets a real proving window instead of meta firing every iteration.
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
     be = FakeBackend([REC("E", 2.61)], [EVAL(2.61), NCU])
     ctx = _ctx(tmp_path, be, target_ms=1.0)  # _ctx wipes status; populate AFTER
     for i, ms in enumerate([2.66, 2.62, 2.61, 2.60]):
@@ -515,7 +515,7 @@ def test_plateau_is_scoped_to_post_resume_segment(tmp_path):
 
 def test_plateau_fires_after_full_window_in_segment(tmp_path):
     # after a resume, plateau still fires once the SEGMENT accumulates a full stalled window
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
     be = FakeBackend([REC("E", 2.70), REC("F", 2.71), REC("G", 2.72), REC("H", 2.73)],
                      [EVAL(2.70), NCU, EVAL(2.71), NCU, EVAL(2.72), NCU, EVAL(2.73), NCU])
     ctx = _ctx(tmp_path, be, target_ms=1.0)  # _ctx wipes status; populate AFTER
@@ -651,7 +651,7 @@ def test_a_patch_claiming_a_decision_the_file_does_not_have_is_caught(tmp_path):
 
 
 def test_the_ledger_records_whether_the_patch_landed(tmp_path):
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     diagnosis = "cause_class: R1\ndeficient_locus: D1.1"
     reply = "patch_class: structural\nchanged_entries: [D0.9]\npatch: ...\n"
     be = FakeBackend([diagnosis, _patching(tmp_path, "\n### D0.9 loosened\nx\ny\n", reply)], [])
@@ -664,7 +664,7 @@ def test_the_ledger_records_whether_the_patch_landed(tmp_path):
 
 def test_meta_step_records_meta_trajectory(tmp_path):
     # a milestone patch appends a PENDING MetaRecord carrying the diagnosis + patch
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     diagnosis = ("cause_class: R1\ndeficient_locus: D1.4\n"
                  "patch_direction: shrink tile_m 128->64\n")
     patch = _patching(tmp_path, "\n### D1.4 shrunk\nx\n",
@@ -684,7 +684,7 @@ def test_meta_step_records_meta_trajectory(tmp_path):
 
 
 def test_meta_step_g3_records_certified_outcome(tmp_path):
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     be = FakeBackend(
         ["cause_class: G3\ndeficient_locus: KB:swizzle\npatch_direction: certify flat-tv",
          "PROBE_REQUEST: notes/kb_probe.py", "RECIPE_CERTIFIED: hw_kb/cutedsl/sm90/swizzle.md"],
@@ -698,7 +698,7 @@ def test_meta_step_g3_records_certified_outcome(tmp_path):
 
 def test_meta_step_injects_reflection_into_diagnose(tmp_path):
     # a prior REVERT_PATCH is surfaced to the diagnose agent so it does not repeat it
-    from peregrine_kernel.meta_trajectory import MetaRecord, append_meta_record
+    from rsi_kernel_tune.meta_trajectory import MetaRecord, append_meta_record
     append_meta_record(tmp_path / "meta_status.jsonl",
                        MetaRecord(meta_step=0, cause_class="R1", deficient_locus="D1.4",
                                   patch_class="structural", changed_entries=["D1.4"],
@@ -800,7 +800,7 @@ def test_kb_certify_captures_recipe_path(tmp_path):
 def test_student_prompt_injects_fresh_recipe(tmp_path):
     # after a G3 KB certify, the student must be actively pointed at the new recipe
     # (passive "look in KB_DIR" was not enough — the live run's student ignored it).
-    from peregrine_kernel.loop.driver import _student_prompt
+    from rsi_kernel_tune.loop.driver import _student_prompt
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     ctx.fresh_recipe = "hw_kb/cutedsl/sm90/stmatrix_epilogue.md"
@@ -835,7 +835,7 @@ def test_two_layer_points_student_at_certified_recipe(tmp_path):
 def test_parse_cause_class_extracts_enum_even_with_trailing_prose(tmp_path):
     # the meta agent sometimes editorializes in the field ("R1 (atypical: …"); the strict
     # extractor must pull the clean enum so routing + records stay clean.
-    from peregrine_kernel.loop.driver import _parse_cause_class
+    from rsi_kernel_tune.loop.driver import _parse_cause_class
     assert _parse_cause_class("cause_class: R1（atypical: the taxonomy has no target cell）") == "R1"
     assert _parse_cause_class("cause_class: G3\ndeficient_locus: KB:x") == "G3"
     assert _parse_cause_class("cause_class: R2 missing optimization") == "R2"
@@ -844,7 +844,7 @@ def test_parse_cause_class_extracts_enum_even_with_trailing_prose(tmp_path):
 
 def test_meta_step_records_clean_enum_cause_class(tmp_path):
     # even when the agent adds prose, the recorded MetaRecord.cause_class is the enum
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     be = FakeBackend(["cause_class: R1 (atypical: target unreachable)\ndeficient_locus: D1.1\n"
                       "patch_direction: cut regs",
                       _patching(tmp_path, "\n### D1.1 loosened\nx\n",
@@ -871,7 +871,7 @@ def test_meta_step_reprompts_diagnose_on_invalid_cause_class(tmp_path):
 
 def test_language_binding_and_student_prompt_injection(tmp_path):
     # {LANGUAGE} is bound and the student prompt tells the student which language to write in
-    from peregrine_kernel.loop.driver import _bindings, _student_prompt
+    from rsi_kernel_tune.loop.driver import _bindings, _student_prompt
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     ctx.language = "cutedsl"
@@ -889,7 +889,7 @@ def test_resolve_target_reads_milestone_then_cli(tmp_path):
     # target SSOT: a machine-readable target_ms in the milestone wins; the CLI
     # --target-ms is only the seed/fallback. This makes meta's §0 target edit LIVE
     # (it was inert before — the loop only ever read ctx.target_ms).
-    from peregrine_kernel.loop.driver import _resolve_target
+    from rsi_kernel_tune.loop.driver import _resolve_target
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.40)  # CLI seed
     ctx.milestone.write_text(
@@ -913,8 +913,8 @@ def test_inner_loop_target_from_milestone(tmp_path):
 
     # the diagnose prompt must carry the rendered NCU report (hardware truth) inline,
     # so the meta agent diagnoses from measured metrics — not from perf numbers alone.
-    # (the meta agent runs in the student workspace and cannot fetch it via ./peregrine.)
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
+    # (the meta agent runs in the student workspace and cannot fetch it via ./rsi-kernel-tune.)
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
     be = FakeBackend(["cause_class: R1\ndeficient_locus: D1.1\npatch_direction: cut regs",
                       _patching(tmp_path, "\n### D1.1 loosened\nx\n",
                                 "patch_class: structural\nchanged_entries: [D1.1]\n")], [])
@@ -1068,7 +1068,7 @@ def test_inner_loop_stops_stuck_on_consecutive_reverts(tmp_path):
 
 
 def test_inner_loop_stops_cleanly_on_agent_failure(tmp_path):
-    from peregrine_kernel.loop.driver import AgentError
+    from rsi_kernel_tune.loop.driver import AgentError
 
     class Boom(FakeBackend):
         def run_agent(self, prompt):
@@ -1079,7 +1079,7 @@ def test_inner_loop_stops_cleanly_on_agent_failure(tmp_path):
 
 
 def test_inner_loop_stops_cleanly_on_backend_failure(tmp_path):
-    from peregrine_kernel.loop.driver import BackendError
+    from rsi_kernel_tune.loop.driver import BackendError
 
     class Boom(FakeBackend):
         def push_branch(self, branch):
@@ -1098,8 +1098,8 @@ def test_inner_loop_safety_net_on_unexpected_error(tmp_path):
 
 
 def test_resolve_resume_additive_keeps_head(tmp_path):
-    from peregrine_kernel.loop.driver import MetaResult, _resolve_resume
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import MetaResult, _resolve_resume
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
     recs = [IR(iter=0, decision_id="D1.1", change="x", correctness=True, verdict="KEEP",
                bwd_median_ms=2.6, sha="shaKEEP")]
     be = FakeBackend([], [])
@@ -1111,8 +1111,8 @@ def test_resolve_resume_additive_keeps_head(tmp_path):
 
 
 def test_resolve_resume_foundation_restart_to_baseline(tmp_path):
-    from peregrine_kernel.loop.driver import MetaResult, _resolve_resume
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import MetaResult, _resolve_resume
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
     recs = [IR(iter=0, decision_id="D1.1", change="x", correctness=True, verdict="KEEP",
                bwd_median_ms=2.6, sha="shaKEEP")]
     ctx = _ctx(tmp_path, FakeBackend([], []))
@@ -1122,8 +1122,8 @@ def test_resolve_resume_foundation_restart_to_baseline(tmp_path):
 
 
 def test_resolve_resume_structural_to_prefix_sha(tmp_path):
-    from peregrine_kernel.loop.driver import MetaResult, _resolve_resume
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import MetaResult, _resolve_resume
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
     recs = [IR(iter=0, decision_id="D1.1", change="x", correctness=True, verdict="KEEP",
                bwd_median_ms=2.6, sha="shaA"),
             IR(iter=1, decision_id="D2.3", change="y", correctness=True, verdict="KEEP",
@@ -1139,8 +1139,8 @@ def test_best_keep_profiler_is_strict_about_which_keep_it_reads():
     # retries. The reconciliation must then stay silent (None), never fall back
     # to an older profiled KEEP — that kernel no longer exists, and stamping
     # OVERLAP-BOUND on it would steer the diagnosis at a ghost.
-    from peregrine_kernel.loop.driver import _best_keep_profiler
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _best_keep_profiler
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
     old = IR(iter=3, decision_id="D1.1", change="x", correctness=True, verdict="KEEP",
              bwd_median_ms=2.9, device_median_ms=2.9,
              profiler={"tensor_pct": 40.0, "time_ns": 2_900_000})
@@ -1217,7 +1217,7 @@ def test_a_patch_that_never_lands_costs_no_inner_segment(tmp_path):
     # "exhausted" on the restored state — the redundant turn observed in a past run.
     # (WP5: a never-landed patch is a FORMAT bounce, retried unbilled by default;
     #  meta_format_retry = 1 restores the bill-every-bounce shape this fixture scripts.)
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
     be = _E2EFake(
@@ -1246,7 +1246,7 @@ def test_an_intercepted_patch_retries_the_meta_step_not_the_segment(tmp_path):
     # first patch is a FORMAT bounce — meta_format_retry = 2 makes this exact bounce
     # free (unbilled), and max_meta = 1 then stops after the landed patch's segment;
     # the full two-free-bounces shape is covered by the test_wp5_* group below.)
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
     good = _MILESTONE + "\n<!-- GOOD_PATCH_MARKER -->\n"
@@ -1279,7 +1279,7 @@ def test_wp5_format_bounces_are_unbilled_until_the_cap(tmp_path):
     # billing meta_steps; the 3rd ([loop] meta_format_retry = 3) re-arms billing
     # and stops the retrying — the run ends meta_budget with exactly one billed
     # step, not three.
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
     diag = "cause_class: R2\ndeficient_locus: M1\npatch_direction: add one"
@@ -1305,7 +1305,7 @@ def test_wp5_free_format_bounce_then_landed_patch_bills_once(tmp_path):
     # bounce 1 is free, the retried step lands a conformant patch and is billed
     # once: the run stops on target with meta_steps == 1, proving the bounce
     # never consumed meta budget.
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
     good = _MILESTONE + "\n<!-- GOOD_PATCH_MARKER -->\n"
@@ -1330,8 +1330,8 @@ def test_wp5_substantive_rejection_bills_immediately(tmp_path):
     # a patch that LANDS but breaks a content rule (D2.3 made to depend on an
     # undefined decision) is a substantive rejection: it bills on the first
     # bounce — no free retry — and the run stops at the cap.
-    from peregrine_kernel.meta_trajectory import load_meta_records
-    from peregrine_kernel.loop.driver import _substantive_violations
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.loop.driver import _substantive_violations
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
     bad = _MILESTONE.replace("- Depends on: D1.1", "- Depends on: D9.9")
@@ -1377,7 +1377,7 @@ def test_wp5_format_violation_taxonomy():
     # the classifier splits the validators' messages: mechanical schema/format
     # failures are free-bounce material, content-rule violations are substantive,
     # and an unknown message classifies substantive (fail-closed to billing).
-    from peregrine_kernel.loop.driver import _substantive_violations
+    from rsi_kernel_tune.loop.driver import _substantive_violations
     fmt = ["The patch never reached the file: the milestone file is byte-identical to "
            "before the patch. You must rewrite the milestone file itself.",
            "missing required section: ## 3. Decision details",
@@ -1400,7 +1400,7 @@ def test_wp5_effective_meta_cap_matrix(tmp_path):
     # the lift arithmetic: max_meta stays the floor, the wall clock lifts toward
     # meta_ext_cap, only upward; off / unaffordable / dead shapes fall back to
     # the configured cap (the pre-WP5 behavior).
-    from peregrine_kernel.loop.driver import _wp5_effective_meta_cap
+    from rsi_kernel_tune.loop.driver import _wp5_effective_meta_cap
     ctx = _ctx(tmp_path, FakeBackend([], []))
     now = 1000.0
     ctx.now = lambda: now
@@ -1561,7 +1561,7 @@ def test_wp5_stop_fields_carry_wp2_sol_side_evidence(tmp_path):
     # ride the stop summary with the corroboration flag; absent -> absent, and
     # the channel never blocks on the fields being missing.
     from types import SimpleNamespace
-    from peregrine_kernel.loop.driver import _wp5_sol_pcts, _wp5_stop_fields
+    from rsi_kernel_tune.loop.driver import _wp5_sol_pcts, _wp5_stop_fields
     keep = SimpleNamespace(verdict="KEEP", compute_sol_pct=55.0, memory_sol_pct=61.0,
                            device_median_ms=2.5, bwd_median_ms=None, cluster="")
     plain = SimpleNamespace(verdict="KEEP", device_median_ms=None, bwd_median_ms=None,
@@ -1626,8 +1626,8 @@ def test_resume_ref_finds_a_decision_inside_a_bundle(tmp_path):
     # delivery granularity is the agent's choice: a structural patch resuming after
     # D2.3 must find the bundle commit that carried it — the exact-match miss fell
     # back to baseline_ref, a silent full restart discarding every kept iteration
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
-    from peregrine_kernel.loop.driver import _ref_for_decision
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _ref_for_decision
     rows = [IR(iter=0, decision_id="D1.1", change="x", correctness=True,
                verdict="KEEP", bwd_median_ms=2.7, sha="s0"),
             IR(iter=1, decision_id="D2.3+D2.4", change="x", correctness=True,
@@ -1641,7 +1641,7 @@ def test_resume_ref_finds_a_decision_inside_a_bundle(tmp_path):
 def test_two_layer_reverts_unhelpful_patch(tmp_path):
     # a schema-valid patch that yields no measured improvement is rolled back:
     # milestone restored to the pre-patch snapshot + outcome recorded REVERT_PATCH.
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "m.md"
     bad = _MILESTONE + "\n<!-- BAD_PATCH_MARKER -->\n"
     be = _E2EFake(
@@ -1668,8 +1668,8 @@ def test_a_sub_noise_patch_gain_is_not_attribution(tmp_path):
     # 2.66 -> 2.655 is a 0.19% "gain" — inside the ~1.37% measurement noise. A
     # useless patch must not earn KEEP_PATCH (whose milestone edit is permanent)
     # off one lucky draw: it reverts, milestone restored, workspace reset.
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.meta_status_path = None
@@ -1685,8 +1685,8 @@ def test_a_sub_noise_patch_gain_is_not_attribution(tmp_path):
 def test_a_supra_noise_patch_gain_is_kept(tmp_path):
     # 2.66 -> 2.40 is 9.8% — clearly past the 6% cross-job band the absolute
     # branch prices in (see _judge_patch), so the patch is credited
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.meta_status_path = None
@@ -1701,7 +1701,7 @@ def test_a_supra_noise_patch_gain_is_kept(tmp_path):
 
 
 def _ratio_rows(ctx, rows):
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
     for i, (ms, ratio) in enumerate(rows):
         append_record(ctx.status_path, IR(iter=i, decision_id=f"D{i}", change="x",
                                           correctness=True, verdict="KEEP",
@@ -1713,7 +1713,7 @@ def test_patch_judged_on_same_job_ratio_not_a_lucky_ms_best(tmp_path):
     """The live case: the pre-patch best was a draw 1.5% fast (2.05934 ms,
     ratio 1.0398); the rebuild lifted the same-job ratio to 1.0747 but read only
     0.14% faster in ms than that draw. Judged in ratio it is a gain."""
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.meta_status_path = None
@@ -1728,7 +1728,7 @@ def test_patch_judged_on_same_job_ratio_not_a_lucky_ms_best(tmp_path):
 def test_patch_ms_gain_on_a_fast_node_is_not_a_ratio_gain(tmp_path):
     """The other direction: a segment that read 3% faster in ms because its job
     drew a fast node, with the same-job ratio flat, is refuted."""
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.meta_status_path = None
@@ -1742,7 +1742,7 @@ def test_patch_ms_gain_on_a_fast_node_is_not_a_ratio_gain(tmp_path):
 def test_patch_ratio_bar_ignores_rows_of_a_reverted_segment(tmp_path):
     """Rows inside a segment an earlier REVERT_PATCH voided describe a tree that
     is gone; their ratio does not set the bar for the next patch."""
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.meta_status_path = None
@@ -1757,7 +1757,7 @@ def test_patch_ratio_bar_ignores_rows_of_a_reverted_segment(tmp_path):
 def test_two_layer_reflects_then_lands_good_patch(tmp_path):    # THE end-to-end goal: meta step 1's patch does not help -> REVERT_PATCH; meta step 2
     # SEES that revert in its diagnose prompt (reflection) and lands a DIFFERENT patch
     # that improves -> KEEP_PATCH. Proves the meta agent correctly patches AND reflects.
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "m.md"
     bad = _MILESTONE + "\n<!-- BAD_PATCH_MARKER -->\n"
     good = _MILESTONE + "\n<!-- GOOD_PATCH_MARKER -->\n"
@@ -1814,7 +1814,7 @@ x
 
 
 def test_needs_authoring_detects_empty_skeleton(tmp_path):
-    from peregrine_kernel.loop.driver import _needs_authoring
+    from rsi_kernel_tune.loop.driver import _needs_authoring
     skel = tmp_path / "m.md"
     skel.write_text(_SKELETON, encoding="utf-8")
     ctx = _ctx(tmp_path, FakeBackend([], []))
@@ -1834,7 +1834,7 @@ def test_needs_authoring_when_milestone_does_not_exist(tmp_path):
     a missing file read as "conformant" the loop would skip distillation and hand the
     student a milestone that is not there.
     """
-    from peregrine_kernel.loop.driver import _needs_authoring
+    from rsi_kernel_tune.loop.driver import _needs_authoring
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.milestone = tmp_path / "never-written.md"
     ctx.oracle_path = tmp_path / "oracle.cu"
@@ -1845,7 +1845,7 @@ def test_needs_authoring_when_milestone_does_not_exist(tmp_path):
 
 def test_missing_milestone_is_a_violation_not_a_pass(tmp_path):
     """The post-patch gate must not read a deleted milestone as schema-clean."""
-    from peregrine_kernel.loop.driver import _validate_milestone_file
+    from rsi_kernel_tune.loop.driver import _validate_milestone_file
     assert _validate_milestone_file(tmp_path / "gone.md")
 
 
@@ -1867,7 +1867,7 @@ def test_distill_refuses_without_a_ref_baseline(tmp_path):
 
 def test_distill_prompt_carries_the_measured_baseline(tmp_path):
     """The teacher can only anchor gates to numbers it is actually given."""
-    from peregrine_kernel.loop.driver import run_distill_step
+    from rsi_kernel_tune.loop.driver import run_distill_step
     ms = tmp_path / "distilled.md"
     be = _E2EFake(agent_outputs=["authored"], gpu_logs=[],
                   milestone_path=ms, patch_writes=[_MILESTONE])
@@ -1882,7 +1882,7 @@ def test_distill_prompt_carries_the_measured_baseline(tmp_path):
 
 
 def test_needs_authoring_false_without_oracle(tmp_path):
-    from peregrine_kernel.loop.driver import _needs_authoring
+    from rsi_kernel_tune.loop.driver import _needs_authoring
     skel = tmp_path / "m.md"
     skel.write_text(_SKELETON, encoding="utf-8")
     ctx = _ctx(tmp_path, FakeBackend([], []))
@@ -1900,7 +1900,7 @@ def test_blackbox_distills_without_an_oracle_path(tmp_path):
     looks exactly like a normal resume. A run whose whole premise is "the teacher
     never read the reference" would have produced no milestone at all.
     """
-    from peregrine_kernel.loop.driver import _needs_authoring
+    from rsi_kernel_tune.loop.driver import _needs_authoring
     skel = tmp_path / "m.md"
     skel.write_text(_SKELETON, encoding="utf-8")
     ctx = _ctx(tmp_path, FakeBackend([], []))
@@ -1916,7 +1916,7 @@ def test_blackbox_binding_says_withheld_not_missing(tmp_path):
     """A teacher told the oracle is "not provided" reads that as a missing input and
     either stalls on it or invents a substitute. It is not missing — it is withheld,
     and the reference is still there to be run and profiled."""
-    from peregrine_kernel.loop.driver import _bindings
+    from rsi_kernel_tune.loop.driver import _bindings
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.oracle_path = "/ref/gemm_sm90.py"
     ctx.oracle_mode = "blackbox"
@@ -1933,7 +1933,7 @@ def test_arch_ref_absent_reads_differently_under_blackbox(tmp_path):
     coincidence be stated. Telling that teacher the target "is NOT what this run
     reproduces" is simply false, and invites it to invent a second anchor.
     """
-    from peregrine_kernel.loop.driver import _bindings
+    from rsi_kernel_tune.loop.driver import _bindings
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.arch_baseline = None
     ctx.oracle_mode = "blackbox"
@@ -1945,8 +1945,8 @@ def test_arch_ref_absent_reads_differently_under_blackbox(tmp_path):
 def test_run_distill_step_seeds_target_ms(tmp_path):
     # after authoring, if the milestone has no machine-readable target_ms, distill
     # seeds it from the CLI target so the SSOT lives in the milestone from the start.
-    from peregrine_kernel.loop.driver import run_distill_step
-    from peregrine_kernel.milestone import parse_target_ms
+    from rsi_kernel_tune.loop.driver import run_distill_step
+    from rsi_kernel_tune.milestone import parse_target_ms
     ms = tmp_path / "m.md"
     ms.write_text(_SKELETON, encoding="utf-8")
     be = _E2EFake(agent_outputs=["authored"], gpu_logs=[],
@@ -1961,8 +1961,8 @@ def test_run_distill_step_seeds_target_ms(tmp_path):
 
 
 def test_run_distill_step_authors_and_records(tmp_path):
-    from peregrine_kernel.loop.driver import run_distill_step
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.loop.driver import run_distill_step
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "distilled.md"  # does not exist: nothing scaffolds a milestone
     # the distill agent 'writes' a full §9 milestone (fake writes it on the author call)
     be = _E2EFake(agent_outputs=["milestone authored: see file"],
@@ -1991,7 +1991,7 @@ def test_distill_that_writes_nothing_is_reported_not_passed(tmp_path):
     no-file round must raise AgentError (transient, watchdog-restartable) instead
     of grinding on toward distill_malformed.
     """
-    from peregrine_kernel.loop.driver import AgentError, run_distill_step
+    from rsi_kernel_tune.loop.driver import AgentError, run_distill_step
     be = FakeBackend(["API Error: upstream stream ended without a terminal frame"] * 4, [])
     ctx = _ctx(tmp_path, be)
     ctx.milestone = tmp_path / "never-written.md"
@@ -2008,7 +2008,7 @@ def test_distill_survives_agent_deleting_milestone_mid_revision(tmp_path):
     the next validation hit FileNotFoundError, and the run died distill_malformed.
     The draft snapshot must restore the previous round's file and keep re-prompting —
     the delete round is a wasted round, not a dead run."""
-    from peregrine_kernel.loop.driver import run_distill_step
+    from rsi_kernel_tune.loop.driver import run_distill_step
 
     def writes_draft(prompt):
         (tmp_path / "resilient.md").write_text("# draft, not §9-conformant", encoding="utf-8")
@@ -2039,7 +2039,7 @@ def test_two_layer_authors_before_first_inner_loop(tmp_path):
     # THE distillation flow, from the real entry state: no milestone file exists at all
     # (nothing scaffolds one) -> meta authors it from the oracle FIRST, then the inner
     # loop runs against the authored milestone.
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "distilled.md"
     be = _E2EFake(
         agent_outputs=["authored milestone",              # distill (writes _MILESTONE)
@@ -2063,7 +2063,7 @@ def test_exhausted_milestone_routes_to_meta(tmp_path):
     # the phase order ends at Mk, so the student has no free lever left: running out of
     # milestone decisions below target must hand control to the meta loop (extend the
     # decision graph) rather than end the run with the meta budget unspent
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
     be = _E2EFake(
@@ -2114,7 +2114,7 @@ def test_conformant_v1_starts_the_inner_loop(tmp_path):
 
 def test_gate_flags_missing_mechanism_line_per_milestone(tmp_path):
     # one gate for the whole file is not enough: each structural milestone needs its own
-    from peregrine_kernel.milestone import validate_milestone
+    from rsi_kernel_tune.milestone import validate_milestone
     broken = _MILESTONE.replace("- Mechanism-verification line: tensor pipe active % ≥60%\n", "")
     v = validate_milestone(broken)
     assert any("milestone D1" in x and "mechanism-verification line" in x for x in v)
@@ -2123,19 +2123,19 @@ def test_gate_flags_missing_mechanism_line_per_milestone(tmp_path):
 
 def test_gate_flags_dangling_dependency(tmp_path):
     # a dangling dep silently reads as "no dependency" -> prefix reuse under-invalidates
-    from peregrine_kernel.milestone import validate_milestone
+    from rsi_kernel_tune.milestone import validate_milestone
     broken = _MILESTONE.replace("- Depends on: D1.1", "- Depends on: D9.9")
     assert any("depends on undefined decision D9.9" in x for x in validate_milestone(broken))
 
 
 def test_gate_flags_unsourced_perf_number(tmp_path):
-    from peregrine_kernel.milestone import validate_milestone
+    from rsi_kernel_tune.milestone import validate_milestone
     broken = _MILESTONE.replace("≤1 ms [ESTIMATE]", "≤1 ms")
     assert any("performance number without" in x for x in validate_milestone(broken))
 
 
 def test_gate_flags_out_of_order_sections(tmp_path):
-    from peregrine_kernel.milestone import validate_milestone
+    from rsi_kernel_tune.milestone import validate_milestone
     swapped = _MILESTONE.replace("## 4. Known dead ends\nx\n", "").replace(
         "## 6. Rules", "## 4. Known dead ends\nx\n\n## 6. Rules")
     assert any("out of order" in x for x in validate_milestone(swapped))
@@ -2148,7 +2148,7 @@ def test_gate_flags_out_of_order_sections(tmp_path):
 # said to dominate cannot be a sliver of the time it dominates.
 
 def test_mis_aimed_profile_is_flagged():
-    from peregrine_kernel.loop.driver import _check_profile_covers_the_kernel
+    from rsi_kernel_tune.loop.driver import _check_profile_covers_the_kernel
     # the real numbers from that run: preprocess captured, main kernel absent
     warn = _check_profile_covers_the_kernel({"time_ns": 117216, "kernel_count": 1}, 4.0097)
     assert warn and "mis-aimed" in warn
@@ -2165,7 +2165,7 @@ def test_mis_aimed_profile_is_flagged_in_the_shape_profiler_from_ncu_emits():
     ref_ncu_cmd profiles 24 — which turns this very incident from 0.029 into 0.70
     and silences the alarm. So the regression has to be stated in the real shape.
     """
-    from peregrine_kernel.loop.driver import _check_profile_covers_the_kernel
+    from rsi_kernel_tune.loop.driver import _check_profile_covers_the_kernel
     digest = {"time_ns": 117216, "kernel_count": 1,
               "dominant_launches": 24, "total_launches": 24,
               "total_time_ns": 117216 * 24}
@@ -2177,7 +2177,7 @@ def test_mis_aimed_profile_is_flagged_in_the_shape_profiler_from_ncu_emits():
 
 def test_a_healthy_multi_launch_profile_reads_near_one():
     """A kernel that really does fill the window must not read as 22x coverage."""
-    from peregrine_kernel.timing_audit import ncu_coverage
+    from rsi_kernel_tune.timing_audit import ncu_coverage
     digest = {"time_ns": 950_000, "kernel_count": 1,
               "dominant_launches": 24, "total_launches": 24,
               "total_time_ns": 950_000 * 24}
@@ -2185,7 +2185,7 @@ def test_a_healthy_multi_launch_profile_reads_near_one():
 
 
 def test_a_dominant_kernel_profile_is_not_flagged():
-    from peregrine_kernel.loop.driver import _check_profile_covers_the_kernel
+    from rsi_kernel_tune.loop.driver import _check_profile_covers_the_kernel
     # the architecture reference's own split: 2.077 ms of a 2.107 ms backward
     assert _check_profile_covers_the_kernel(
         {"time_ns": 2077216, "kernel_count": 3}, 2.1074) is None
@@ -2194,7 +2194,7 @@ def test_a_dominant_kernel_profile_is_not_flagged():
 def test_the_check_is_silent_without_both_numbers():
     """A correctness-broken iteration has no timing and legitimately no profile;
     neither is evidence of mis-aiming."""
-    from peregrine_kernel.loop.driver import _check_profile_covers_the_kernel
+    from rsi_kernel_tune.loop.driver import _check_profile_covers_the_kernel
     assert _check_profile_covers_the_kernel({}, 4.0) is None
     assert _check_profile_covers_the_kernel({"time_ns": 117216}, None) is None
 
@@ -2251,8 +2251,8 @@ def test_direct_inner_loop_callers_keep_evaluate_everything(tmp_path):
 
 
 def test_green_seeding_from_the_resumed_checkpoint(tmp_path):
-    from peregrine_kernel.inner.trajectory import IterationRecord
-    from peregrine_kernel.loop.driver import _green_at_ref
+    from rsi_kernel_tune.inner.trajectory import IterationRecord
+    from rsi_kernel_tune.loop.driver import _green_at_ref
     records = [
         IterationRecord(iter=0, decision_id="D0.1", change="c", correctness=None,
                         verdict="NEUTRAL", sha="sha1"),
@@ -2271,7 +2271,7 @@ def test_recon_runs_the_teacher_script_and_feeds_the_output_back(tmp_path):
     lost-job retry, bounded polling and archiver lag are already solved once in the
     backend, and an agent reimplementing them gets them wrong.
     """
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def write_up(prompt):  # artifacts must be written THIS session to count
         (tmp_path / "recon-report.md").write_text(
@@ -2304,7 +2304,7 @@ def test_recon_request_for_a_missing_script_costs_no_job(tmp_path):
     """A teacher once echoed the prompt's own `notes/<name>.py` placeholder and a GPU
     job was spent learning "can't open file". The driver re-prompts instead; the
     rejected request never reaches the reconnaissance backend."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def write_up(prompt):  # fresh write-up so the request-less finish is accepted
         (tmp_path / "recon-report.md").write_text(
@@ -2330,7 +2330,7 @@ def test_recon_write_up_turns_fire_until_the_artifacts_exist(tmp_path):
     """Observed live: 12 rounds of probing, zero artifacts, and distillation went on
     to read a report nobody had written. Probing over means writing begins — the
     teacher gets write-up turns until both files exist, and no GPU job is spent."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def write_up(prompt):
         assert "can no longer send RECON_REQUEST" in prompt
@@ -2361,7 +2361,7 @@ def test_recon_finish_rejects_stale_artifacts_from_a_previous_run(tmp_path):
     """The default recon path ships with a populated report in-tree (a previous
     operator's), so existence alone must not let a request-less turn finish
     reconnaissance — the write-up has to be (re)written this session."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     # stale residue: written BEFORE the recon session starts, waivers included —
     # under the old existence-only gate this satisfied a finish outright
@@ -2393,7 +2393,7 @@ def test_recon_finish_rejects_stale_artifacts_from_a_previous_run(tmp_path):
 
 def test_recon_artifacts_written_freshness_floor(tmp_path):
     from types import SimpleNamespace
-    from peregrine_kernel.loop.driver import _recon_artifacts_written
+    from rsi_kernel_tune.loop.driver import _recon_artifacts_written
     ctx = SimpleNamespace(recon_path=tmp_path / "report.md")
     assert not _recon_artifacts_written(ctx)            # missing files
     ctx.recon_path.write_text("r")
@@ -2409,7 +2409,7 @@ def test_a_truncated_turn_is_not_a_finish(tmp_path):
     artifacts — and the loop read it as a deliberate finish, forfeiting 10 of 12
     budget rounds. A request-less turn only finishes once both artifacts exist;
     otherwise it is re-prompted and the reconnaissance continues."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def finish(prompt):
         (tmp_path / "recon-report.md").write_text("observations [MEASURED, job 1]")
@@ -2440,7 +2440,7 @@ def test_recon_seeds_sass_tools_and_persists_job_logs(tmp_path):
     """The toolkit rides the committed tree — delivery is ``git archive`` — so no
     probe hand-rolls a parser again; and every probe's fed-back output lands in
     ``notes/`` instead of living only in the job logs."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
     def done(prompt):  # write-up happens this session; the SASS-OK log opened the gate
         (tmp_path / "recon-report.md").write_text("observations")  # deliberately no waiver
         (tmp_path / "candidates.md").write_text("A|B")
@@ -2470,7 +2470,7 @@ def test_recon_finish_without_sass_evidence_is_bounced_to_a_choice(tmp_path):
     missing while its own report named the single round that would have closed
     four open gaps; nothing objected. Now the finish bounces until either a job
     log carries the tool's SASS-OK verdict or the report owns the absence."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def fresh_writeup(prompt):  # artifacts written this session, but no evidence
         (tmp_path / "recon-report.md").write_text("observations")
@@ -2502,7 +2502,7 @@ def test_sass_ok_regex_accepts_demangled_kernel_names_with_spaces():
     first one so the full-field anchor never matches. The teacher delivered, the
     driver saw nothing, and the deadlock burned every write-up turn. The fixture
     is the real line from that run's job log, verbatim."""
-    from peregrine_kernel.loop.driver import _SASS_OK, _STALL_OK
+    from rsi_kernel_tune.loop.driver import _SASS_OK, _STALL_OK
     real = ("SASS-OK kernel=void sparse_attn_fwd_kernel<KernelTemplate<512, 1>, "
             "KernelTemplate<512, 1>::TmaP instructions=3520 opcodes=108")
     assert _SASS_OK.search(real) is not None
@@ -2520,7 +2520,7 @@ def test_verdict_near_miss_is_surfaced_and_mismatch_line_closes_the_gate(tmp_pat
     show BOTH sides of the disagreement (the actual line, verbatim) and offer the
     third legal state — `SASS-DELIVERED-MISMATCH:` — which closes the gate the
     way a waiver would, while reading as a checker defect for the human audit."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     seen = {}
 
@@ -2559,7 +2559,7 @@ def test_recon_never_runs_through_the_student_tree(tmp_path):
     """Reconnaissance output is exactly what the student must not see, and the student's
     job receives its operator tree as a tarball. Submitting through that backend would
     put the analysis in the student's job."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
     teacher = FakeBackend(["RECON_REQUEST: notes/x.py", "done"], [])
     recon = FakeBackend([], ["ok"])
     ctx = _ctx(tmp_path, teacher)
@@ -2569,7 +2569,7 @@ def test_recon_never_runs_through_the_student_tree(tmp_path):
 
 
 def test_recon_without_a_backend_degrades_rather_than_crashing(tmp_path):
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.recon_backend = None
     assert run_recon_step(ctx).finished is False
@@ -2578,7 +2578,7 @@ def test_recon_without_a_backend_degrades_rather_than_crashing(tmp_path):
 def test_blackbox_mode_gets_its_own_distill_brief(tmp_path):
     """The source-mode prompt is left untouched so a control run runs the instructions
     it would have run without this experiment existing."""
-    from peregrine_kernel.loop.driver import _distill_prompt_path
+    from rsi_kernel_tune.loop.driver import _distill_prompt_path
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.oracle_mode = "source"
     assert _distill_prompt_path(ctx).name == "distill_prompt.md"
@@ -2610,7 +2610,7 @@ def test_inner_loop_already_green_segment_never_audits(tmp_path):
 
 
 def test_m0_audit_clean_resumes_without_spending_meta_budget(tmp_path):
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     agent = [REC("A", 2.66),                                # M0 gate lands -> first_green
              "cause_class: OK\npatch_direction: M0 signature reconciles with the reference",  # audit
              REC("B", 1.8)]                                 # resumed segment hits target
@@ -2628,7 +2628,7 @@ def test_m0_audit_clean_resumes_without_spending_meta_budget(tmp_path):
 
 
 def test_m0_audit_defect_patches_and_the_rebuild_is_audited_again(tmp_path):
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     agent = [REC("A", 2.66),                                # M0 gate -> first_green
              "cause_class: R1\ndeficient_locus: D1.1\npatch_direction: pin the atom",
              _patching(tmp_path, "\n### D1.1 atom pinned\nx\n",
@@ -2654,7 +2654,7 @@ def test_m0_audit_fires_on_the_m0_gate_of_an_in_place_reopen(tmp_path):
     tree, so the green-flip trigger cannot fire; the rebuilt foundation's M0
     close is the segment's first M0-gate KEEP, and the audit keys on that row
     — one audit per reopen, then the segment resumes."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     dag = [Decision(id="D0.1"), Decision(id="D0.2", depends_on=["D0.1"]),
            Decision(id="D1.1", depends_on=["D0.2"])]
     agent = [REC("D0.1", 2.66),                             # M0 lands -> first_green
@@ -2704,7 +2704,7 @@ def test_m0_audit_patch_is_not_judged_at_the_rebuilds_first_green(tmp_path):
     best_after (2.9) is still worse than best_before (2.66) — judging there would
     revert a correct foundation for running out of runway. The judgment belongs to the
     next actionable stop, after the rebuild's segment has actually run."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     agent = [REC("A", 2.66),
              "cause_class: R1\ndeficient_locus: D1.1\npatch_direction: pin the atom",
              _patching(tmp_path, "\n### D1.1 atom pinned\nx\n",
@@ -2723,7 +2723,7 @@ def test_m0_audit_patch_is_not_judged_at_the_rebuilds_first_green(tmp_path):
 
 
 def test_m0_audit_skipped_when_meta_budget_is_exhausted(tmp_path):
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     agent = [REC("A", 2.66), REC("B", 1.8)]                 # no audit reply queued
     gpu = [EVAL(2.66), NCU, EVAL(1.8), NCU]
     be = FakeBackend(agent, gpu)
@@ -2740,7 +2740,7 @@ def test_recon_finish_without_sched_live_evidence_is_bounced_to_a_choice(tmp_pat
     not name which chain flies over which elementwise segment, or its register
     price — so a finish with SASS-OK but neither SCHED nor LIVE evidence must
     bounce, naming both waiver spellings."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def fresh_writeup(prompt):  # artifacts written this session; SCHED/LIVE still silent
         (tmp_path / "recon-report.md").write_text("observations [MEASURED, job 1]")
@@ -2786,7 +2786,7 @@ _M0_DAG = [Decision(id="D0.1"), Decision(id="D0.2", depends_on=["D0.1"]),
 
 
 def test_parse_list_strips_the_quotes_teachers_put_around_ids():
-    from peregrine_kernel.loop.driver import _parse_list
+    from rsi_kernel_tune.loop.driver import _parse_list
     out = _parse_list('patch_class: structural\nchanged_entries: ["D0.1", \'D0.3\', `D1.1`, D0.gate, ]\n',
                       "changed_entries")
     assert out == ["D0.1", "D0.3", "D1.1", "D0.gate"]
@@ -2813,7 +2813,7 @@ def test_a_foundation_rebuild_after_a_plateau_patch_scaffolds_and_is_audited(tmp
     not evaluated, and nothing is reset), and the rebuild's first green is an M0 close,
     audited like the first one. The lineage having been green before the patch does not
     make the rebuilt tree green."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     agent = [REC("M0-gate", 2.66), _AUDIT_OK, "EXHAUSTED: no more decisions",
              "cause_class: R1\ndeficient_locus: D1.1\npatch_direction: pin the atom",
              _patching(tmp_path, "\n### D1.1 atom pinned\nx\n",
@@ -2873,7 +2873,7 @@ def test_a_joined_audit_patch_reopens_in_place_and_its_m0_close_is_audited(tmp_p
     closure is redone ON the green best tree — the segment enters green, the redo is
     evaluated, and the M0 re-close is audited through audit_on_gate. The run that showed
     the closure redone pre-green ran a harness from before in-place reopening."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     agent = _two_audits(tmp_path, [REC("D0.3", 2.45), REC("M0-gate", 2.4), _AUDIT_OK,
                                    REC("D1.1", 1.8)])
     gpu = [EVAL(0.0, ok=False), NCU, EVAL(2.66), NCU, EVAL(0.0, ok=False), NCU,
@@ -2899,7 +2899,7 @@ def test_recon_completion_marker_survives_a_restart(tmp_path):
     residue, and all 12 rounds burned on re-affirmation turns before the WARNING
     path let distillation proceed anyway. The completion marker makes the second
     session skip straight to distillation without a single teacher turn."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def write_up(prompt):
         (tmp_path / "recon-report.md").write_text(
@@ -2934,7 +2934,7 @@ def test_recon_completion_marker_is_distrusted_when_artifacts_change(tmp_path):
     pre-fix behavior, never a wrongly-skipped phase."""
     import os
 
-    from peregrine_kernel.loop.driver import _load_recon_state, _save_recon_state
+    from rsi_kernel_tune.loop.driver import _load_recon_state, _save_recon_state
 
     report = tmp_path / "recon-report.md"
     candidates = tmp_path / "candidates.md"
@@ -2975,7 +2975,7 @@ def test_recon_marker_saved_when_budget_exhausts_but_write_up_stands(tmp_path):
     observed session took (12 runs, write-up landed on a guard turn), and the one the
     restart then re-litigated. Incompleteness (the WARNING branch) must NOT be
     persisted: a fresh session's turns are the only remaining chance to finish."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def write_up(prompt):
         (tmp_path / "recon-report.md").write_text(
@@ -3003,7 +3003,7 @@ def test_recon_marker_saved_when_budget_exhausts_but_write_up_stands(tmp_path):
 def test_kb_tripwire_battle_accumulates_across_iterations(tmp_path):
     # the fight spans two iterations: 2 FAIL rounds in the first, the PASS in the
     # second. The bill is per probe *path*, so the battle reads 3 rounds.
-    from peregrine_kernel.loop.driver import kb_harvest_debt
+    from rsi_kernel_tune.loop.driver import kb_harvest_debt
     be = FakeBackend(
         ["PROBE_REQUEST: notes/p.py", "PROBE_REQUEST: notes/p.py", REC("D2.3", 2.6),
          "PROBE_REQUEST: notes/p.py", REC("D2.4", 2.5)],
@@ -3021,7 +3021,7 @@ def test_kb_tripwire_battle_accumulates_across_iterations(tmp_path):
 
 
 def test_kb_tripwire_cheap_or_lost_fights_owe_nothing(tmp_path):
-    from peregrine_kernel.loop.driver import ProbeBattle, kb_harvest_debt
+    from rsi_kernel_tune.loop.driver import ProbeBattle, kb_harvest_debt
     be = FakeBackend(
         ["PROBE_REQUEST: notes/cheap.py", REC("D2.3", 2.6)],
         ["PROBE PASS max_diff=0.0", EVAL(2.6), NCU],
@@ -3036,7 +3036,7 @@ def test_kb_tripwire_cheap_or_lost_fights_owe_nothing(tmp_path):
 
 
 def test_kb_tripwire_disabled_by_zero(tmp_path):
-    from peregrine_kernel.loop.driver import ProbeBattle, kb_harvest_debt, run_kb_harvest
+    from rsi_kernel_tune.loop.driver import ProbeBattle, kb_harvest_debt, run_kb_harvest
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     ctx.kb_tripwire_rounds = 0
@@ -3048,7 +3048,7 @@ def test_kb_tripwire_disabled_by_zero(tmp_path):
 
 
 def test_kb_harvest_one_turn_no_gpu_parses_recipes(tmp_path):
-    from peregrine_kernel.loop.driver import ProbeBattle, run_kb_harvest
+    from rsi_kernel_tune.loop.driver import ProbeBattle, run_kb_harvest
     be = FakeBackend(
         ["wrote two recipes.\nRECIPE_RECORDED: hw_kb/cutedsl/sm90/foo.md\n"
          "RECIPE_RECORDED: hw_kb/cutedsl/sm90/bar.md"],
@@ -3071,7 +3071,7 @@ def test_kb_harvest_one_turn_no_gpu_parses_recipes(tmp_path):
 
 
 def test_kb_harvest_agent_error_degrades_to_status_quo(tmp_path):
-    from peregrine_kernel.loop.driver import AgentError, ProbeBattle, run_kb_harvest
+    from rsi_kernel_tune.loop.driver import AgentError, ProbeBattle, run_kb_harvest
 
     class DeadAgentBackend(FakeBackend):
         def run_agent(self, prompt: str) -> str:
@@ -3089,7 +3089,7 @@ def test_kb_tripwire_cheap_win_plus_reprobes_is_not_a_phantom_epic(tmp_path):
     # a 1-round win, then a later 2-round re-fight on the same path: the bill is
     # the dearest single fight (2), never the 3-round sum — the harvest prompt
     # must not report a battle that never happened.
-    from peregrine_kernel.loop.driver import kb_harvest_debt
+    from rsi_kernel_tune.loop.driver import kb_harvest_debt
     be = FakeBackend(
         ["PROBE_REQUEST: notes/p.py", REC("D2.3", 2.6),
          "PROBE_REQUEST: notes/p.py", "PROBE_REQUEST: notes/p.py", REC("D2.4", 2.5)],
@@ -3128,7 +3128,7 @@ def test_kb_harvest_missing_template_degrades_not_raises(tmp_path):
     # version skew: the prompt template is absent. The promise is total — the
     # caller sits before the harvest report and publish_kb, so this must return
     # [] instead of raising FileNotFoundError.
-    from peregrine_kernel.loop.driver import ProbeBattle, run_kb_harvest
+    from rsi_kernel_tune.loop.driver import ProbeBattle, run_kb_harvest
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     ctx.meta_dir = tmp_path / "no-such-meta"  # kb_harvest_prompt.md cannot exist
@@ -3146,8 +3146,8 @@ def test_a_metricless_segment_holds_the_patch(tmp_path):
     # correctness-FAIL gate attempt, zero measured KEEPs. Rolling that back would
     # convert "ran out of runway" into "never happened" (a failure mode seen in
     # earlier runs), so the verdict is HOLD_PATCH: milestone kept, workspace kept.
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.meta_status_path = None
@@ -3168,7 +3168,7 @@ def test_a_metricless_segment_holds_the_patch(tmp_path):
 def test_an_empty_segment_holds_the_patch(tmp_path):
     # zero rows after the patch (instant EXHAUSTED) is the degenerate metric-less
     # segment: unattributable, held — not refuted.
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.meta_status_path = None
@@ -3182,7 +3182,7 @@ def test_an_empty_segment_holds_the_patch(tmp_path):
 # --- HOLD_PATCH: a declared multi-iter package in flight is construction ----
 
 def _pkg_ctx(tmp_path):
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.meta_status_path = None
@@ -3192,7 +3192,7 @@ def _pkg_ctx(tmp_path):
 
 
 def _pkg_row(i, change, verdict="KEEP", ms=4.4):
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
     measured = verdict == "KEEP"
     return IR(iter=i, decision_id=f"D0.{i}", change=change,
               correctness=measured or None if verdict != "REVERT" else False,
@@ -3207,7 +3207,7 @@ def test_a_declared_package_in_flight_holds_the_patch(tmp_path):
     # "part 1 of 3": an unfinished companion-group step. Its reading is a
     # construction fact, not a refutation — HOLD, nothing rolled back. Trailing
     # failed attempts at the next part (within the slack) do not void the plea.
-    from peregrine_kernel.inner.trajectory import append_record
+    from rsi_kernel_tune.inner.trajectory import append_record
     ctx, be, pending, judge = _pkg_ctx(tmp_path)
     append_record(ctx.status_path, _pkg_row(0, "D0.5 smem access atoms, part 1 of 3. sdS write side"))
     append_record(ctx.status_path, _pkg_row(1, "part 2 of 3 attempt", verdict="REVERT"))
@@ -3218,7 +3218,7 @@ def test_a_declared_package_in_flight_holds_the_patch(tmp_path):
 def test_a_completed_package_with_no_gain_is_reverted(tmp_path):
     # "part 3 of 3" means the package is delivered: from here the ordinary law
     # applies, and a finished package that moved nothing is a refuted patch.
-    from peregrine_kernel.inner.trajectory import append_record
+    from rsi_kernel_tune.inner.trajectory import append_record
     ctx, be, pending, judge = _pkg_ctx(tmp_path)
     for k in (1, 2, 3):
         append_record(ctx.status_path, _pkg_row(k, f"exchange face, part {k} of 3"))
@@ -3229,7 +3229,7 @@ def test_a_completed_package_with_no_gain_is_reverted(tmp_path):
 def test_a_later_undeclared_keep_forfeits_the_package_exemption(tmp_path):
     # the student landed part 1 of 3, then moved on to unrelated work without
     # declaring: the package is abandoned, the plea lapses with it.
-    from peregrine_kernel.inner.trajectory import append_record
+    from rsi_kernel_tune.inner.trajectory import append_record
     ctx, be, pending, judge = _pkg_ctx(tmp_path)
     append_record(ctx.status_path, _pkg_row(0, "atoms, part 1 of 3"))
     append_record(ctx.status_path, _pkg_row(1, "unrelated elementwise refit"))
@@ -3241,7 +3241,7 @@ def test_package_keep_budget_bounds_the_exemption(tmp_path):
     # "part k of n" grants at most n declared KEEP rows of grace. A fourth
     # declared row against n=3 is the budget spent: back to normal pricing —
     # re-declaring step 1 forever must not extend the plea.
-    from peregrine_kernel.inner.trajectory import append_record
+    from rsi_kernel_tune.inner.trajectory import append_record
     ctx, be, pending, judge = _pkg_ctx(tmp_path)
     for i in range(4):
         append_record(ctx.status_path, _pkg_row(i, "atoms again, part 1 of 3"))
@@ -3252,7 +3252,7 @@ def test_package_keep_budget_bounds_the_exemption(tmp_path):
 def test_package_cap_rejects_oversized_declarations(tmp_path):
     # a coupled group wider than the cap should be re-cut, not pleaded: the
     # declaration is rejected outright and the segment is priced normally.
-    from peregrine_kernel.inner.trajectory import append_record
+    from rsi_kernel_tune.inner.trajectory import append_record
     ctx, be, pending, judge = _pkg_ctx(tmp_path)
     append_record(ctx.status_path, _pkg_row(0, "grand rewrite, part 1 of 9"))
     assert judge(ctx, pending) == "REVERT_PATCH"
@@ -3262,7 +3262,7 @@ def test_package_cap_rejects_oversized_declarations(tmp_path):
 def test_trailing_failures_beyond_the_slack_lapse_the_package(tmp_path):
     # four failed attempts since the last delivered step is past what the split
     # discipline tolerates: the package has stalled, the plea goes stale.
-    from peregrine_kernel.inner.trajectory import append_record
+    from rsi_kernel_tune.inner.trajectory import append_record
     ctx, be, pending, judge = _pkg_ctx(tmp_path)
     append_record(ctx.status_path, _pkg_row(0, "atoms, part 1 of 3"))
     for i in range(1, 5):
@@ -3275,7 +3275,7 @@ def test_a_mention_outside_the_opening_sentence_is_not_a_declaration(tmp_path):
     # the contract is "the change's first sentence": a KEEP whose prose merely mentions a
     # part-of split deeper in (here: describing the ref's tiling) is ordinary
     # work, and an ordinary measured KEEP with no gain stays a refutation.
-    from peregrine_kernel.inner.trajectory import append_record
+    from rsi_kernel_tune.inner.trajectory import append_record
     ctx, be, pending, judge = _pkg_ctx(tmp_path)
     append_record(ctx.status_path, _pkg_row(
         0, "Refit of the K-loop tiling. Mirrors the ref's part 2 of 4 split of K."))
@@ -3286,7 +3286,7 @@ def test_a_mention_outside_the_opening_sentence_is_not_a_declaration(tmp_path):
 def test_a_package_step_that_sets_a_new_best_is_still_credited(tmp_path):
     # the exemption defers refutation, never credit: a package whose step already
     # beats the pre-patch best beyond the noise margin earns KEEP_PATCH as usual.
-    from peregrine_kernel.inner.trajectory import append_record
+    from rsi_kernel_tune.inner.trajectory import append_record
     ctx, be, pending, judge = _pkg_ctx(tmp_path)
     append_record(ctx.status_path, _pkg_row(0, "atoms, part 2 of 3", ms=2.20))
     assert judge(ctx, pending) == "KEEP_PATCH"
@@ -3297,7 +3297,7 @@ def test_hold_then_join_one_rollback_restores_the_state_before_both(tmp_path):
     # patch1's segment is metric-less (instant EXHAUSTED) -> HOLD_PATCH keeps the
     # transaction open. patch2 joins it. The joint segment runs measured KEEPs with
     # no gain -> ONE rollback restores the milestone from before BOTH patches.
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
     bad1 = _MILESTONE + "\n<!-- PATCH1_MARKER -->\n"
@@ -3330,7 +3330,7 @@ def test_a_malformed_retry_must_not_reset_a_held_workspace(tmp_path):
     # milestone only — resetting the workspace to good_ref would wipe the held
     # construction over a patch that never even existed, and leave the milestone
     # (still carrying patch1) prescribing work the workspace no longer has.
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     ms = tmp_path / "m.md"
     ms.write_text(_MILESTONE, encoding="utf-8")
     held = _MILESTONE + "\n<!-- PATCH1_MARKER -->\n"
@@ -3363,7 +3363,7 @@ def test_meta_step_runs_verdict_probe_then_diagnoses(tmp_path):
     # The teacher asks for one GPU experiment; the driver runs it on the -metaprobe
     # branch and feeds the log readings back; the diagnosis that follows is recorded
     # with the probe accounted for.
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     probe_log = ("variant A/base = 1.060 (3 rounds: 1.068/1.046/1.069)\n"
                  "PROBE FAIL max_diff=n/a\n")
     diagnosis = ("cause_class: R1\ndeficient_locus: D1.4\n"
@@ -3430,7 +3430,7 @@ def test_verdict_probe_without_verdict_line_still_feeds_readings_back(tmp_path):
 
 def test_m0_audit_supports_verdict_probes(tmp_path):
     # The audit variant shares the machinery: probe first, then AUDIT_CLEAN.
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     be = FakeBackend(
         ["PROBE_REQUEST: notes/mech.py",
          "cause_class: OK\npatch_direction: signatures reconcile\n"],
@@ -3577,7 +3577,7 @@ def test_lever_pricing_round_runs_before_the_diagnosis_and_prices_the_table(tmp_
     best tree, seeds the tool, commits, runs ONE pricing job, and the diagnose
     prompt carries the measured table with its reading rules before any
     cause_class is asked for."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     be = FakeBackend([_lever_design(tmp_path), _DIAG,
                       _patching(tmp_path, "\n### D6 added\nx\n",
                                 "patch_class: additive\nchanged_entries: []\n")],
@@ -3638,7 +3638,7 @@ def test_teacher_subsets_are_priced_rendered_and_citable(tmp_path):
     prompt as a subset table, the auto all-pos reading replaces a stack dragged
     down by one harmful lever, a subset is a legal `lever:` reopen price,
     and a subset inherits its members' decisions."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD, _verify_reopen_price
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD, _verify_reopen_price
     be = FakeBackend([_lever_design_with_subsets(tmp_path), _DIAG,
                       _patching(tmp_path, "\n### D6 added\nx\n",
                                 "patch_class: additive\nchanged_entries: []\n")],
@@ -3666,7 +3666,7 @@ def test_teacher_subsets_are_priced_rendered_and_citable(tmp_path):
 
 def test_lever_pricing_round_is_skipped_when_the_teacher_has_no_levers(tmp_path):
     """`LEVERS: none` (or no file) costs no job and the diagnosis proceeds as before."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     be = FakeBackend(["LEVERS: none", _DIAG,
                       _patching(tmp_path, "\n### D6 added\nx\n",
                                 "patch_class: additive\nchanged_entries: []\n")],
@@ -3680,7 +3680,7 @@ def test_lever_pricing_round_is_skipped_when_the_teacher_has_no_levers(tmp_path)
 def test_lever_pricing_refused_edit_is_reprompted_then_dropped(tmp_path):
     """PRICE-FAIL (an `old` that is not unique) re-prompts the design once
     (_LEVER_PRICE_RETRIES); a second failure leaves the diagnosis without a table."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     def design(prompt):
         _lever_design(tmp_path, 1)(prompt)
         # the tree the job archives: the pre-check reads it and would refuse a
@@ -3705,7 +3705,7 @@ def test_lever_spec_is_checked_locally_before_the_job(tmp_path):
     """A subset that shadows a lever, or an `old` that does not apply on the
     best tree, is refused by the driver with the tool's own reason and the
     design turn re-prompted — no GPU job is spent to learn it."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
 
     def bad_then_good(prompt):
         (tmp_path / "notes").mkdir(exist_ok=True)
@@ -3733,7 +3733,7 @@ def test_lever_edit_that_does_not_apply_is_refused_before_the_job(tmp_path):
     """An `old` that occurs twice on the best tree is the tool's classic
     PRICE-FAIL; the driver now reads it off the tree first — twice refused,
     the diagnosis runs without a table and no job was submitted."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
 
     def dup(prompt):
         (tmp_path / "notes").mkdir(exist_ok=True)
@@ -3758,7 +3758,7 @@ def test_lever_pricing_log_without_a_verdict_is_not_a_table(tmp_path):
     teacher does not cite priced_by= for levers it just designed — and nothing
     is banked. A `broken` lever (its variants did not pass) reaches the prompt
     with its own reading rule."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD, _lever_price_block
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD, _lever_price_block
     cut = ("PRICE variants: base +ring all\nPRICE ROUND 0 base pass=True device=3.41\n"
            "$ python3 notes/stall_price_run.py --pm")
     be = FakeBackend([_lever_design(tmp_path, 1), _DIAG,
@@ -3783,7 +3783,7 @@ def test_lever_pricing_timing_copy_without_the_closing_line_is_not_a_table(tmp_p
     columns). An archive cut between the two copies holds LEVER rows and no
     verdict: NOT a table (the rows would be banked and reused on every later
     entry with the role columns None). The re-bought job's whole log is."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     timed_cut = _PRICE_LOG_OK.split("PRICE-OK")[0] + "PRICE-TIMED levers=3 rounds=1\n"
     be = FakeBackend([_lever_design(tmp_path), _DIAG,
                       _patching(tmp_path, "\n### D6 added\nx\n",
@@ -3799,7 +3799,7 @@ def test_lever_pricing_timing_copy_without_the_closing_line_is_not_a_table(tmp_p
 def test_lever_pricing_crashed_tool_is_not_resubmitted(tmp_path):
     """A traceback in a verdict-less log is the tool crashing, which a second
     job would repeat: no resubmit, no table, the reason names the crash."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     be = FakeBackend([_lever_design(tmp_path, 1), _DIAG,
                       _patching(tmp_path, "\n### D6 added\nx\n",
                                 "patch_class: additive\nchanged_entries: []\n")],
@@ -3816,7 +3816,7 @@ def test_price_log_verdict_reads_the_tool_closing_lines_not_the_rows():
     PRICE-* line by design); PRICE-TIMED is one only on a whole archive; LEVER
     rows alone are not; the closing entry line counts only as the last line and
     for the outer task."""
-    from peregrine_kernel.loop.driver import _price_log_settled, _price_log_verdict, archive_is_whole
+    from rsi_kernel_tune.loop.driver import _price_log_settled, _price_log_verdict, archive_is_whole
     assert _price_log_verdict("ABLATE ROUND 0\nABLATE-FAIL reason=base-hung (x)\n") == "ABLATE-FAIL"
     assert _price_log_verdict("ABLATE no_bar delta=+9.20%\nABLATE-OK ablations=1 rounds=3 base_ncu_ns=1\n") == "ABLATE-OK"
     assert _price_log_verdict("PRICE-FAIL reason=no-levers\n") == "PRICE-FAIL"
@@ -3848,7 +3848,7 @@ def test_ablation_only_fail_is_its_own_verdict_not_a_cut_archive(tmp_path, capsy
     """An ablation-only spec whose base hangs prints ABLATE-FAIL and no PRICE-*
     line by design: that is a verdict, not an incomplete archive — one job,
     no resubmit, the ABLATE-FAIL reason in the log, no 'produced no table' block."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
 
     def agent(prompt):
         (tmp_path / "notes").mkdir(exist_ok=True)
@@ -3897,7 +3897,7 @@ def test_lever_pricing_runs_at_the_audit_too(tmp_path):
     """The M0 audit is where structural reopens are decided, so it prices too:
     design turn (on the audit's own prompt) -> one pricing job -> the audit
     verdict reads the measured table."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     be = FakeBackend([_lever_design(tmp_path),
                       "cause_class: OK\npatch_direction: signatures reconcile\n"],
                      [_STALL_LOG_OK, _PRICE_LOG_OK])
@@ -3910,7 +3910,7 @@ def test_lever_pricing_runs_at_the_audit_too(tmp_path):
 
 
 def test_lever_pricing_is_off_when_disabled(tmp_path):
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     be2 = FakeBackend([_DIAG, _patching(tmp_path, "\n### D6 added\nx\n",
                                         "patch_class: additive\nchanged_entries: []\n")],
                       [_STALL_LOG_OK])
@@ -3954,7 +3954,7 @@ def _lever_design_attributed(tmp_path, decisions=("D1.1", "D1.1")):
 
 
 def _phased_ctx(tmp_path, be):
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
     ctx = _lever_ctx(tmp_path, be)
     ctx.milestone.write_text(_MILESTONE_PHASED, encoding="utf-8")
     ctx.decisions_dag = []          # parse the phased milestone, not the fixture DAG
@@ -3968,8 +3968,8 @@ _AUDIT_OK = "cause_class: OK\npatch_direction: signatures reconcile\n"
 
 
 def test_phase_exhaustion_reads_the_current_phase_off_the_table():
-    from peregrine_kernel.loop.driver import _phase_exhaustion, _current_phase
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _phase_exhaustion, _current_phase
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
 
     class _C:  # just enough context for _milestone_dag
         decisions_dag = [Decision("D1.1", frozenset()), Decision("D1.2", frozenset({"D1.1"})),
@@ -4042,7 +4042,7 @@ def test_phase_close_rides_student_turns_until_the_gate_row(tmp_path):
     prompt shows it; a KEEP gate row retires it; a FAILED gate row reduces it
     to the "do not re-walk the priced knobs" half (the phase is open again but
     the table still describes this best tree) until a KEEP moves the tree."""
-    from peregrine_kernel.loop.driver import _apply_phase_close, _student_prompt
+    from rsi_kernel_tune.loop.driver import _apply_phase_close, _student_prompt
     ctx = _ctx(tmp_path, FakeBackend([], []))
     meta = MetaResult("", "audit-clean", [], None, [],
                       phase_close={"gate": "M1-gate", "phase": "M1", "verdict": "close",
@@ -4116,7 +4116,7 @@ def test_r1_without_a_measured_price_is_bounced_then_refused(tmp_path):
     """An R1 that cites no driver-measured price is bounced once with the three
     routes (verdict probe / price table / certified KB); a second unpriced R1 is
     refused: no patch turn, milestone untouched, the step recorded UNPRICED_REOPEN."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     be = FakeBackend([_R1, _R1], [])
     ctx = _priced_ctx(tmp_path, be)
     before = ctx.milestone.read_text(encoding="utf-8")
@@ -4133,7 +4133,7 @@ def test_r1_without_a_measured_price_is_bounced_then_refused(tmp_path):
 def test_r1_priced_by_a_verdict_probe_reopens(tmp_path):
     """The bounce invites a verdict probe; an R1 that cites that probe's reading
     (`reopen_price: … via probe:<path>#<n>`) passes the gate and patches."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     priced = _R1 + "reopen_price: +6.1% via probe:notes/axis.py#1\n"
     be = FakeBackend([_R1, "PROBE_REQUEST: notes/axis.py", priced,
                       _patching(tmp_path, "\n### D1.1 axis flipped\nx\n",
@@ -4164,7 +4164,7 @@ def test_reopen_price_sources_are_machine_checked(tmp_path):
     that exists AND is GPU-certified; the delta is the teacher's reading and is
     not re-derived. Teachers gloss the name in fullwidth parens and vary the
     case / suffix; none of that is a reason to refuse a real source."""
-    from peregrine_kernel.loop.driver import _verify_reopen_price
+    from rsi_kernel_tune.loop.driver import _verify_reopen_price
     ctx = _priced_ctx(tmp_path, FakeBackend([], []))
     table = [{"kind": "lever", "name": "ring", "add_pct": 8.56, "remove_pct": -8.1, "cls": "independent"},
              {"kind": "stack", "all_pct": 13.1}]
@@ -4202,7 +4202,7 @@ def test_structural_patch_off_a_non_r1_diagnosis_needs_a_price_too(tmp_path):
     """The rule is on the reopen, not the enum: a G1 diagnosis whose patch declares
     structural without a cited price is withdrawn — milestone restored, recorded
     UNPRICED_REOPEN — while the same patch with a KB-cited price lands."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     g1 = "cause_class: G1\ndeficient_locus: D1.1\npatch_direction: re-tile\n"
     be = FakeBackend([g1, _patching(tmp_path, "\n### D1.1 re-tiled\nx\n",
                                     "patch_class: structural\nchanged_entries: [D1.1]\n")], [])
@@ -4240,7 +4240,7 @@ def test_m0_audit_refuses_an_unpriced_reopen_and_resumes_the_segment(tmp_path):
     """Observed shape: first green -> audit -> R1 on an inferred masking window.
     Unpriced twice, the reopen is refused: nothing is redone (no REOPEN row), the
     segment resumes on the built foundation, the refusal is in the meta memory."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     dag = [Decision(id="D0.1"), Decision(id="D0.2", depends_on=["D0.1"]),
            Decision(id="D1.1", depends_on=["D0.2"])]
     r1 = "cause_class: R1\ndeficient_locus: D0.2\npatch_direction: flip the split axis\n"
@@ -4261,7 +4261,7 @@ def test_plateau_unpriced_reopen_retries_the_meta_step_not_the_segment(tmp_path)
     """Plateau path: the refusal costs a meta step and goes straight back to
     diagnose — no student turn and no restart in between — and that diagnosis
     reads the refused reopen in its reflection."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     dag = [Decision(id="A", depends_on=[])]
     r1 = "cause_class: R1\ndeficient_locus: A\npatch_direction: flip\n"
     agent = [REC("A", 2.66), REC("B", 2.70), REC("C", 2.68), REC("D", 2.69),   # plateau
@@ -4313,7 +4313,7 @@ def test_stall_pricing_selfcheck_failure_degrades_the_ledger(tmp_path):
 
 
 def test_stall_pricing_job_failure_never_blocks_the_diagnosis(tmp_path):
-    from peregrine_kernel.loop.driver import BackendError
+    from rsi_kernel_tune.loop.driver import BackendError
 
     class _Failing(FakeBackend):
         def submit_gpu(self, branch, mode):
@@ -4382,7 +4382,7 @@ def test_stubborn_missing_reachability_is_accepted_after_one_demand(tmp_path):
 
 
 def test_stall_pricing_targets_the_best_sha_when_the_backend_can_push_refs(tmp_path):
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
 
     class _RefPushing(FakeBackend):
         def push_ref(self, ref, branch):
@@ -4412,7 +4412,7 @@ def test_stall_pricing_targets_the_best_sha_when_the_backend_can_push_refs(tmp_p
 
 
 def test_seed_ws_stall_tools_vendors_once_and_commits(tmp_path):
-    from peregrine_kernel.loop.driver import _seed_ws_stall_tools
+    from rsi_kernel_tune.loop.driver import _seed_ws_stall_tools
 
     be = FakeBackend([], [])
     ctx = _stall_ctx(tmp_path, be)
@@ -4433,7 +4433,7 @@ def test_recon_finish_without_stall_evidence_is_bounced_to_a_choice(tmp_path):
     """The fourth evidence channel gets the same deliver-or-waive gate: a finish
     with the three static verdicts but no measured pricing must bounce, naming
     the STALL-WAIVED spelling."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def fresh_writeup(prompt):
         (tmp_path / "recon-report.md").write_text("observations [MEASURED, job 1]")
@@ -4480,7 +4480,7 @@ def test_recon_orch_delivery_persists_the_ref_dossier(tmp_path):
     path (same contract as the ref stall ledger) — and the channel stays
     advisory: the run below finishes with every gated channel waived and NO
     orch waiver line, which must not block the finish."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def writeup(prompt):
         (tmp_path / "recon-report.md").write_text(
@@ -4508,7 +4508,7 @@ def test_recon_orch_delivery_persists_the_ref_dossier(tmp_path):
 def test_recon_orch_verdict_without_brackets_banks_nothing(tmp_path):
     """A hand-typed ORCH-OK line with no dossier brackets must not write an
     empty/garbage file — the bank requires the bracketed body."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def writeup(prompt):
         (tmp_path / "recon-report.md").write_text(
@@ -4551,7 +4551,7 @@ def test_banked_ref_dossier_is_not_overwritten_by_a_smaller_kernels_log(tmp_path
     blueprint for the whole run. Across logs the same preference holds as
     within one: a banked OK dossier of a bigger kernel stays; an equal or
     bigger one supersedes."""
-    from peregrine_kernel.loop.driver import _save_ref_orch_dossier
+    from rsi_kernel_tune.loop.driver import _save_ref_orch_dossier
 
     ctx = _stall_ctx(tmp_path, FakeBackend([], []))
     ctx.recon_path = tmp_path / "recon-report.md"
@@ -4572,7 +4572,7 @@ def test_banked_ref_dossier_is_not_overwritten_by_a_smaller_kernels_log(tmp_path
 def test_recon_stall_delivery_persists_the_ref_ledger_for_diagnosis(tmp_path):
     """A delivered STALL-OK saves the ref's ledger where the diagnose step can
     re-read it, and the next plateau diagnosis carries it."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def writeup(prompt):
         (tmp_path / "recon-report.md").write_text("obs [MEASURED, job 1]\n"
@@ -4646,7 +4646,7 @@ class _ConfirmBackend(FakeBackend):
 
 
 def _confirm_ctx(tmp_path, be):
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
     ctx = _ctx(tmp_path, be)
     ctx.gate_window = "device"
     append_record(ctx.status_path, IterationRecord(
@@ -4708,7 +4708,7 @@ def test_best_confirmation_short_run_is_reported_not_padded(tmp_path):
 
 
 def test_best_confirmation_gives_up_after_consecutive_backend_errors(tmp_path):
-    from peregrine_kernel.loop.driver import BackendError
+    from rsi_kernel_tune.loop.driver import BackendError
 
     class _Down(_ConfirmBackend):
         def submit_gpu(self, branch, mode):
@@ -4721,8 +4721,8 @@ def test_best_confirmation_gives_up_after_consecutive_backend_errors(tmp_path):
 
 
 def test_single_ref_contract_drops_in_job_readings_on_out_of_job_ref_arms(tmp_path):
-    from peregrine_kernel.loop.driver import _enforce_single_ref
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.driver import _enforce_single_ref
+    from rsi_kernel_tune.loop.parse import parse_eval
 
     log = _EVAL_CONFIRM(2.0, 2.1)  # bench smuggled an in-job comparator
     ctx = _confirm_ctx(tmp_path, _ConfirmBackend([], []))
@@ -4828,7 +4828,7 @@ def test_watermark_within_noise_improvement_confirms_once_a1(tmp_path):
 
 
 def test_watermark_confirmation_infra_failure_keeps_the_reading(tmp_path):
-    from peregrine_kernel.loop.driver import BackendError
+    from rsi_kernel_tune.loop.driver import BackendError
 
     class _FlakyConfirm(FakeBackend):
         def submit_gpu(self, branch, mode):
@@ -4843,7 +4843,7 @@ def test_watermark_confirmation_infra_failure_keeps_the_reading(tmp_path):
 
 
 def _seed_best_keep(ctx, ms=2.0, t_ns=280000):
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
     append_record(ctx.status_path, IterationRecord(
         iter=0, decision_id="D1", change="a", correctness=True, verdict="KEEP",
         bwd_median_ms=ms, device_median_ms=ms, profiler={"time_ns": t_ns}, sha="shabest"))
@@ -4853,8 +4853,8 @@ def test_watermark_ncu_regression_triggers_confirmation_below_the_margin(tmp_pat
     # A worse kernel on a fast node: device reading improves 1.5% (under the 3%
     # margin) while its clock-locked NCU time regressed 10.7% vs the sitting best.
     # The free cross-signal must trigger the confirmation the margin alone misses.
-    from peregrine_kernel.loop.driver import _confirm_suspicious_watermark
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.driver import _confirm_suspicious_watermark
+    from rsi_kernel_tune.loop.parse import parse_eval
     be = FakeBackend([], [EVAL_DW(2.4, 2.05), EVAL_DW(2.4, 2.06)])
     ctx = _wm_ctx(tmp_path, be)
     _seed_best_keep(ctx, ms=2.0, t_ns=280000)
@@ -4869,8 +4869,8 @@ def test_watermark_ncu_regression_triggers_confirmation_below_the_margin(tmp_pat
 def test_watermark_ncu_consistent_small_improvement_confirms_once_a1(tmp_path):
     # WP15 A1: the NCU clock is consistent, the gain is inside the data-poor
     # band — the old free pass is gone; the near-best routine confirms once.
-    from peregrine_kernel.loop.driver import _confirm_suspicious_watermark
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.driver import _confirm_suspicious_watermark
+    from rsi_kernel_tune.loop.parse import parse_eval
     be = FakeBackend([], [EVAL_DW(2.4, 2.0)])
     ctx = _wm_ctx(tmp_path, be)
     _seed_best_keep(ctx, ms=2.0, t_ns=280000)
@@ -4888,8 +4888,8 @@ def test_watermark_tiebreak_failure_does_not_reinstate_the_outlier(tmp_path):
     tie-break job settles on the median of what was measured — returning the
     original reading would let the very outlier the dissent disproved take the
     watermark after all."""
-    from peregrine_kernel.loop.driver import BackendError, _confirm_suspicious_watermark
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.driver import BackendError, _confirm_suspicious_watermark
+    from rsi_kernel_tune.loop.parse import parse_eval
 
     class _DiesOnTieBreak(FakeBackend):
         def submit_gpu(self, branch, mode):
@@ -4910,9 +4910,9 @@ def test_watermark_ncu_trigger_is_not_cleared_by_ms_agreement_alone(tmp_path, mo
     the suspect, so band-consistent ms readings are near coin-flip likely even
     for a genuinely worse kernel. The alarm came from the kernel clock — the
     confirmation must re-profile, and an uncleared regression tie-breaks."""
-    from peregrine_kernel.loop import driver
-    from peregrine_kernel.loop.driver import _confirm_suspicious_watermark
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop import driver
+    from rsi_kernel_tune.loop.driver import _confirm_suspicious_watermark
+    from rsi_kernel_tune.loop.parse import parse_eval
     monkeypatch.setattr(driver, "_ncu_profiler",
                         lambda ctx, branch, correctness: {"time_ns": 315000})
     be = FakeBackend([], [EVAL_DW(2.36, 1.98), EVAL_DW(2.4, 2.05)])
@@ -4928,9 +4928,9 @@ def test_watermark_ncu_trigger_is_not_cleared_by_ms_agreement_alone(tmp_path, mo
 def test_watermark_ncu_trigger_cleared_by_the_reprofile_confirms(tmp_path, monkeypatch):
     # Same setup, but the re-profiled kernel clock recovered — the jump is real
     # and the median of the two draws stands, with no tie-break job spent.
-    from peregrine_kernel.loop import driver
-    from peregrine_kernel.loop.driver import _confirm_suspicious_watermark
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop import driver
+    from rsi_kernel_tune.loop.driver import _confirm_suspicious_watermark
+    from rsi_kernel_tune.loop.parse import parse_eval
     monkeypatch.setattr(driver, "_ncu_profiler",
                         lambda ctx, branch, correctness: {"time_ns": 282000})
     be = FakeBackend([], [EVAL_DW(2.36, 1.98)])
@@ -4970,7 +4970,7 @@ _SEG_BLOCK_REF = (
 
 
 def test_align_segment_table_puts_same_anchor_side_by_side():
-    from peregrine_kernel.loop.driver import align_segment_table
+    from rsi_kernel_tune.loop.driver import align_segment_table
     table = align_segment_table(_SEG_BLOCK_REF, _SEG_BLOCK_STUDENT)
     ew_row = next(l for l in table.splitlines() if l.startswith("EW@0x1"))
     # the reading that needed manual alignment before: 23.5 vs 35.4, dispatch vs wait
@@ -5012,7 +5012,7 @@ def test_stall_pricing_segment_join_verdict_reads_the_full_block(tmp_path):
     many-segment kernel's block overruns the head-slice. Slicing before the
     verdict check read every successful join as unsafe — disabling the aligned
     table on exactly the big kernels it exists for."""
-    from peregrine_kernel.loop.driver import _run_stall_pricing
+    from rsi_kernel_tune.loop.driver import _run_stall_pricing
     rows = "".join(
         f"SEG idx={i} kind=EW depth=0x0 pct=0.10 stalls=wait:40,barrier:20\n"
         for i in range(150))  # ~8.5 KB of SEG rows: JOIN-OK sits past the 6000-char slice
@@ -5097,7 +5097,7 @@ def test_distill_prompt_carries_the_ref_orch_dossier(tmp_path):
     [SYNC:]/[GATHER:]/[PHASE:] adjudications cite machine readings instead of
     guessing; absent the file, the prompt is byte-identical to the status quo
     (control-run principle)."""
-    from peregrine_kernel.loop.driver import run_distill_step
+    from rsi_kernel_tune.loop.driver import run_distill_step
 
     def author(prompt):
         (tmp_path / "milestone.md").write_text(_MILESTONE, encoding="utf-8")
@@ -5156,7 +5156,7 @@ def _two_tree_ctx(tmp_path, agent_outputs):
     """A segment whose best KEEP ("shabest") is not the tree under judgment
     (the fake's HEAD is "sha0"): the shape of every M0 rebuild after the first,
     and of a plateau whose last KEEPs were slower than the best."""
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
 
     class _RefPushing(FakeBackend):
         def push_ref(self, ref, branch):
@@ -5249,7 +5249,7 @@ def test_orch_fail_dossier_is_banked_and_flagged(tmp_path):
 def test_meta_prices_once_when_head_is_the_best(tmp_path):
     """HEAD == best: one job, its dossier banked under both names, and a
     single ref-vs-HEAD face (no best face, no move face)."""
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
 
     be = FakeBackend([
         "cause_class: OK\ndeficient_locus: -\npatch_direction: -\nevidence: checked\n"],
@@ -5273,8 +5273,8 @@ def test_truncated_recon_turns_are_retried_without_charging_rounds(tmp_path, mon
     charged as ordinary rounds, one bad hour spent 8 of 12 GPU rounds on nothing
     (observed on bwd-mha). Tiny AND traceless is retried free; a short turn that emits a
     request or writes artifacts is legal and never retried."""
-    from peregrine_kernel.loop import driver
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop import driver
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     monkeypatch.setattr(driver, "TRUNCATION_BACKOFF_S", (0.0, 0.0, 0.0))
 
@@ -5308,8 +5308,8 @@ def test_truncation_storm_stops_the_run_as_agent_failed(tmp_path, monkeypatch):
     """Past the storm budget the channel is systematically sick — the run must stop
     with a diagnosis (AgentError -> stop=agent_failed, the watchdog-restartable
     class), not spend the whole recon budget on re-affirmation theater."""
-    from peregrine_kernel.loop import driver
-    from peregrine_kernel.loop.driver import AgentError, run_recon_step
+    from rsi_kernel_tune.loop import driver
+    from rsi_kernel_tune.loop.driver import AgentError, run_recon_step
 
     monkeypatch.setattr(driver, "TRUNCATION_BACKOFF_S", (0.0, 0.0, 0.0))
     monkeypatch.setattr(driver, "TRUNCATION_STORM_BUDGET", 1)
@@ -5327,8 +5327,8 @@ def test_truncated_distill_turn_does_not_burn_a_patch_round(tmp_path, monkeypatc
     tiny output. Re-prompting it as a schema round would burn one of only
     max_patch_rounds chances (a bwd-mha run lost v1 to exactly this); it is
     retried free instead, and the next attempt's write goes through."""
-    from peregrine_kernel.loop import driver
-    from peregrine_kernel.loop.driver import run_distill_step
+    from rsi_kernel_tune.loop import driver
+    from rsi_kernel_tune.loop.driver import run_distill_step
 
     monkeypatch.setattr(driver, "TRUNCATION_BACKOFF_S", (0.0, 0.0, 0.0))
 
@@ -5350,7 +5350,7 @@ def test_ncu_profiler_merges_census_line(tmp_path):
     digest is unchanged (census is opt-in per operator)."""
     from types import SimpleNamespace
     from pathlib import Path as _P
-    from peregrine_kernel.loop.driver import _ncu_profiler
+    from rsi_kernel_tune.loop.driver import _ncu_profiler
     csv = (_P(__file__).parent / "fixtures" / "ncu_sample.csv").read_text()
     with_census = csv + "\nSASS-OPERANDS kernel=BwdMainKernel mma_total=40 a_reg=8 a_desc=32 a_other=0\n"
     ctx = SimpleNamespace(backend=FakeBackend([], [with_census, csv]), ncu_retries=0)
@@ -5457,7 +5457,7 @@ def test_a_plain_basis_round_with_the_same_timings_is_still_audited(tmp_path, ca
 
 
 def test_the_note_is_delivered_once_then_cleared(tmp_path):
-    from peregrine_kernel.loop.driver import _student_prompt
+    from rsi_kernel_tune.loop.driver import _student_prompt
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     ctx.host_bound_note = "- Timing diagnosis: host-bound\n"
@@ -5472,7 +5472,7 @@ def test_mismatch_line_without_observed_near_miss_does_not_close_the_gate(tmp_pa
     verdict-shaped near-miss for the channel — otherwise the line is a free
     bypass weaker than a waiver, and the human audit would read a missing
     delivery as a checker defect."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     bounced = {}
 
@@ -5510,7 +5510,7 @@ def test_verdict_near_miss_keeps_the_latest_line():
     verdict a later round prints — the gate note quotes the stored line
     verbatim, and preserving the wrong side of the disagreement instructs the
     teacher to enshrine garbage in the DELIVERED-MISMATCH record."""
-    from peregrine_kernel.loop.driver import _collect_verdict_near_misses
+    from rsi_kernel_tune.loop.driver import _collect_verdict_near_misses
 
     near = {}
     _collect_verdict_near_misses("noise\nSASS-OK kern", near)
@@ -5523,7 +5523,7 @@ def test_verdict_near_miss_keeps_the_latest_line():
 def test_validate_milestone_file_has_a_strict_authoring_mode(tmp_path):
     """Resume/patch paths must not read a pre-tag milestone as 'not distilled
     yet'; the freshly-authored path must still enforce the tags."""
-    from peregrine_kernel.loop.driver import _validate_milestone_file
+    from rsi_kernel_tune.loop.driver import _validate_milestone_file
     from test_milestone import VALID
     legacy = VALID.replace(
         "- Handoff protocol: [SYNC: none] (single-role demo, no cross-role supply)\n", "").replace(
@@ -5643,7 +5643,7 @@ def test_role_block_without_role_ok_is_not_banked(tmp_path):
 def test_recon_role_delivery_persists_the_ref_account(tmp_path):
     """A recon job log carrying ROLE-OK banks the block at the fixed path the
     diagnose step reads — same contract as the ref ledger and dossier."""
-    from peregrine_kernel.loop.driver import _save_ref_role_exposure
+    from rsi_kernel_tune.loop.driver import _save_ref_role_exposure
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     recon_dir = tmp_path / "recon"
@@ -5659,7 +5659,7 @@ def test_m0_audit_also_carries_the_role_table(tmp_path):
     """Every teacher entry prices — the audit included — so the role table
     is in the audit prompt too (an M0 rebuild whose consumer exposure grew is
     a reading the audit must see before it re-legislates wording)."""
-    from peregrine_kernel.loop.driver import run_meta_step as rms
+    from rsi_kernel_tune.loop.driver import run_meta_step as rms
     be = FakeBackend(["cause_class: OK\npatch_direction: signatures reconcile\n"],
                      [_STALL_LOG_OK + _role_block(_ROLE_CORE_STU)])
     ctx = _stall_ctx(tmp_path, be)
@@ -5776,7 +5776,7 @@ def _reanchor_ctx(tmp_path, *, target_ms=2.0, band=0.06, samples=None, calls=Non
 
 def _stub_confirmation(monkeypatch, median):
     """Stand in for the same-period student re-measure the stop path requires."""
-    import peregrine_kernel.loop.driver as drv
+    import rsi_kernel_tune.loop.driver as drv
     out = None if median is None else \
         {"median_ms": median, "jobs": [{"job": "c1"}, {"job": "c2"}]}
     monkeypatch.setattr(drv, "run_best_confirmation",
@@ -5784,7 +5784,7 @@ def _stub_confirmation(monkeypatch, median):
 
 
 def test_reanchor_stop_needs_both_sides_same_period(tmp_path, monkeypatch):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     # best 2.07 vs stale target 2.0 = +3.5%. Fresh ref min 2.15 (drift x1.075):
     # transported target 2.15 — met on paper, but the run only stops after the
     # STUDENT is re-measured in the same period and agrees.
@@ -5798,7 +5798,7 @@ def test_reanchor_stop_needs_both_sides_same_period(tmp_path, monkeypatch):
 
 
 def test_reanchor_old_best_reading_can_be_the_lucky_draw(tmp_path, monkeypatch):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     # The transported target is met by the archived best reading, but the
     # same-period student re-measure disagrees: no stop — the note carries the
     # honest (fresh) student number instead.
@@ -5809,7 +5809,7 @@ def test_reanchor_old_best_reading_can_be_the_lucky_draw(tmp_path, monkeypatch):
 
 
 def test_reanchor_never_stops_without_the_student_side(tmp_path, monkeypatch):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     # confirm_jobs=0-style runs included: when the student cannot be re-measured
     # the check must not stop the run on half a claim.
     ctx = _reanchor_ctx(tmp_path, samples=[2.16, 2.15, 2.15])
@@ -5819,7 +5819,7 @@ def test_reanchor_never_stops_without_the_student_side(tmp_path, monkeypatch):
 
 
 def test_reanchor_estimator_is_min_vs_min(tmp_path):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     # Zero drift: fresh fastest == launch anchor (the archive keeps the fastest).
     # A median estimator would read the median-vs-min offset (2.04/2.00 = +2%)
     # as drift and hand a genuinely-2%-slow student a free stop=target.
@@ -5830,7 +5830,7 @@ def test_reanchor_estimator_is_min_vs_min(tmp_path):
 
 
 def test_reanchor_confirmed_gap_stashes_note_and_persists(tmp_path):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     import json as _json
     ctx = _reanchor_ctx(tmp_path, samples=[2.0, 2.0, 2.0])
     assert _phantom_gap_reanchor(ctx, 2.07) is None
@@ -5842,7 +5842,7 @@ def test_reanchor_confirmed_gap_stashes_note_and_persists(tmp_path):
 
 
 def test_reanchor_memo_does_not_rebuy_jobs_for_an_unchanged_best(tmp_path):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     calls: list[int] = []
     ctx = _reanchor_ctx(tmp_path, samples=[2.0, 2.0, 2.0], calls=calls)
     assert _phantom_gap_reanchor(ctx, 2.07) is None
@@ -5853,7 +5853,7 @@ def test_reanchor_memo_does_not_rebuy_jobs_for_an_unchanged_best(tmp_path):
 
 
 def test_reanchor_admission_needs_two_samples_and_bounded_spread(tmp_path):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     # an interrupted pair leaving one slow sample must not rewrite the bar
     ctx = _reanchor_ctx(tmp_path, samples=[2.4])
     assert _phantom_gap_reanchor(ctx, 2.07) is None
@@ -5865,7 +5865,7 @@ def test_reanchor_admission_needs_two_samples_and_bounded_spread(tmp_path):
 
 
 def test_reanchor_refuses_cross_cluster_transport(tmp_path, capsys):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     # the run moved machines: fresh samples come from a machine the
     # launch anchor (and the best) never ran on.
     ctx = _reanchor_ctx(tmp_path, samples=[2.15, 2.15, 2.16],
@@ -5876,7 +5876,7 @@ def test_reanchor_refuses_cross_cluster_transport(tmp_path, capsys):
 
 
 def test_reanchor_refuses_a_rebaselined_target(tmp_path, capsys):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     # meta re-baselined §0: that target already reflects its own measurement
     # period — multiplying it by drift-since-launch would count the drift twice.
     calls: list[int] = []
@@ -5889,7 +5889,7 @@ def test_reanchor_refuses_a_rebaselined_target(tmp_path, capsys):
 
 
 def test_reanchor_refuses_an_unanchored_target(tmp_path, capsys):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     # --target-ms / toml constants were never node-sampled: no launch-period
     # conditions exist to transport drift from.
     calls: list[int] = []
@@ -5901,7 +5901,7 @@ def test_reanchor_refuses_an_unanchored_target(tmp_path, capsys):
 
 
 def test_reanchor_only_fires_inside_the_band(tmp_path):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     calls: list[int] = []
     ctx = _reanchor_ctx(tmp_path, samples=[2.2, 2.2], calls=calls)
     assert _phantom_gap_reanchor(ctx, 2.5) is None   # +25%: drift can't explain it
@@ -5911,7 +5911,7 @@ def test_reanchor_only_fires_inside_the_band(tmp_path):
 
 
 def test_reanchor_disabled_or_unwired_is_inert(tmp_path):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     calls: list[int] = []
     ctx = _reanchor_ctx(tmp_path, band=0.0, samples=[2.2, 2.2], calls=calls)
     assert _phantom_gap_reanchor(ctx, 2.07) is None and calls == []
@@ -5920,7 +5920,7 @@ def test_reanchor_disabled_or_unwired_is_inert(tmp_path):
 
 
 def test_reanchor_measurement_failure_degrades_loudly_to_the_old_behavior(tmp_path, capsys):
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     ctx = _reanchor_ctx(tmp_path)
 
     def boom() -> tuple[list[float], str]:
@@ -6010,7 +6010,7 @@ def test_verdict_probe_readings_persist_and_reach_the_next_diagnosis(tmp_path):
     """The contract lines a verdict probe printed are recorded on the meta
     step's ledger row and surface as "measured" sub-rows in the NEXT step's memory —
     the teacher stops re-spending a probe to re-measure a known quantity."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     probe_log = ("PROBE FAIL max_diff=n/a  # c1 (control): a segment variant returned no reading\n"
                  "PROBE PASS max_diff=ref_exposed=106.3,student_exposed=159.6  # c3 (decisive)\n")
     diagnosis = "cause_class: R1\ndeficient_locus: D1.4\npatch_direction: x\n"
@@ -6038,7 +6038,7 @@ def test_verdict_probe_readings_persist_and_reach_the_next_diagnosis(tmp_path):
 # --- same-stage gate early stop ----------------------------------------------------
 
 def _seed_keep(ctx, did, ms, sha="prev"):
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
     append_record(ctx.status_path, IterationRecord(
         iter=len(load_records(ctx.status_path)), decision_id=did, change="c",
         correctness=True, verdict="KEEP", bwd_median_ms=ms, device_median_ms=ms,
@@ -6046,7 +6046,7 @@ def _seed_keep(ctx, did, ms, sha="prev"):
 
 
 def test_parse_gate_contract_reads_per_gate_bands():
-    from peregrine_kernel.loop.driver import _parse_gate_contract
+    from rsi_kernel_tune.loop.driver import _parse_gate_contract
     out = _parse_gate_contract("patch_class: structural\n"
                                "gate_contract: M0-gate ≤ +15%; M1-gate <= 0%; M2-gate ≤ -3%\n")
     assert out == {"M0-gate": 0.15, "M1-gate": 0.0, "M2-gate": -0.03}
@@ -6095,7 +6095,7 @@ def test_gate_baseline_skips_a_reverted_segment(tmp_path):
     standing tree that is +14%, and the reverted segment's 14.43 must not be
     the reading it is held to — that would re-admit the ixbwd case one
     revert later."""
-    from peregrine_kernel.loop.driver import _gate_regression, _previous_gate_reading
+    from rsi_kernel_tune.loop.driver import _gate_regression, _previous_gate_reading
     be = FakeBackend([REC("M0-gate", 14.0)], [EVAL(14.0), NCU])
     ctx = _ctx(tmp_path, be, target_ms=1.0)
     _seed_keep(ctx, "M0-gate", 12.31, sha="shaA")
@@ -6119,7 +6119,7 @@ def test_gate_baseline_skips_a_reverted_segment(tmp_path):
 
 
 def test_revert_patch_voids_its_segment_for_the_gate_baseline(tmp_path):
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     ctx.meta_status_path = None
@@ -6145,7 +6145,7 @@ def test_two_layer_gate_regression_judges_the_patch_and_records_the_contract(tmp
     """End to end: seg1 plateaus after its M0-gate; the structural patch
     declares no band; the rebuild's M0-gate loses 17% -> gate_regression ->
     REVERT_PATCH at once, and the meta ledger row carries the (empty) contract."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     dag = [Decision(id="A", depends_on=[])]
     agent = [REC("A", 13.0), REC("M0-gate", 12.31), REC("B", 12.30), REC("C", 12.31),
              REC("D", 12.30),                                       # seg1 plateau
@@ -6202,7 +6202,7 @@ def test_reference_pricing_runs_once_and_banks_the_ref_side(tmp_path):
     """[loop] ref_price_op: the driver seeds the toolkit into the ref tree, runs
     the same pricing recipe there ONCE, and the next teacher entry reads a
     two-sided role table. A second entry does not resubmit."""
-    from peregrine_kernel.loop.driver import _STALL_PRICE_CMD
+    from rsi_kernel_tune.loop.driver import _STALL_PRICE_CMD
     be = FakeBackend([_DIAG, _patching(tmp_path, "\n### D6 added\nx\n",
                                        "patch_class: additive\nchanged_entries: []\n"),
                       "cause_class: OK\npatch_direction: signatures reconcile\n"],
@@ -6230,7 +6230,7 @@ def test_reference_pricing_retries_only_when_the_tree_changed(tmp_path):
     the same tree (no LINEINFO, PM sections crashing, the sample floor are
     deterministic), so a retry runs only when the head / launch target / app
     spelling changed — and at most three attempts per run."""
-    from peregrine_kernel.loop.driver import _STALL_PRICE_CMD
+    from rsi_kernel_tune.loop.driver import _STALL_PRICE_CMD
     be = FakeBackend([_DIAG, _patching(tmp_path, "\n### D6 added\nx\n",
                                        "patch_class: additive\nchanged_entries: []\n")]
                      + ["cause_class: OK\npatch_direction: signatures reconcile\n"] * 3,
@@ -6259,7 +6259,7 @@ def test_reference_pricing_retries_only_when_the_tree_changed(tmp_path):
 def test_reference_pricing_is_not_run_behind_a_waiver(tmp_path):
     """The teacher owned the absence (ROLE-WAIVED / PMTL-WAIVED in the report):
     no job is bought behind its back."""
-    from peregrine_kernel.loop.driver import _STALL_PRICE_CMD
+    from rsi_kernel_tune.loop.driver import _STALL_PRICE_CMD
     be = FakeBackend([_DIAG, _patching(tmp_path, "\n### D6 added\nx\n",
                                        "patch_class: additive\nchanged_entries: []\n")],
                      [_STALL_LOG_OK + _role_block(_ROLE_CORE_STU)])
@@ -6279,7 +6279,7 @@ def test_reference_pricing_retries_a_partial_table_and_keeps_the_full_one(tmp_pa
     shares; once the launch target changes it is retried and the retry's
     ROLE-OK replaces it; a later partial reading can never downgrade the
     banked account."""
-    from peregrine_kernel.loop.driver import (_STALL_PRICE_CMD, _ref_overlap_banked,
+    from rsi_kernel_tune.loop.driver import (_STALL_PRICE_CMD, _ref_overlap_banked,
                                          _save_ref_role_exposure)
     be = FakeBackend([_DIAG, _patching(tmp_path, "\n### D6 added\nx\n",
                                        "patch_class: additive\nchanged_entries: []\n"),
@@ -6337,7 +6337,7 @@ def test_recon_finish_prices_the_ref_itself_before_holding_the_teacher(tmp_path)
     with tensor + the phase timeline, and the teacher is NOT bounced for
     ROLE/PMTL. The account then reaches the distill prompt, and the first
     teacher entry does not price the ref again."""
-    from peregrine_kernel.loop.driver import (_STALL_PRICE_CMD,
+    from rsi_kernel_tune.loop.driver import (_STALL_PRICE_CMD,
                                          _ref_overlap_block_for_distill,
                                          run_recon_step)
 
@@ -6392,7 +6392,7 @@ def test_transient_ref_pricing_failures_do_not_spend_the_attempts(tmp_path):
     """A submit/queue failure priced nothing: it must not count as one of the
     two attempts (two queue hiccups would retire the ref's account for the
     run). Bounded per session, and the gate note names the failure."""
-    from peregrine_kernel.loop.driver import (BackendError, _STALL_PRICE_CMD,
+    from rsi_kernel_tune.loop.driver import (BackendError, _STALL_PRICE_CMD,
                                          _evidence_gate_msg)
 
     class Flaky(FakeBackend):
@@ -6429,8 +6429,8 @@ def test_a_job_that_never_ran_after_launch_is_not_a_ref_pricing_attempt(tmp_path
     Read as a job that ran and failed, it would write the attempt marker and (same
     tree, same key) never price the reference again. The verdict is typed NoRunError;
     that is what the accounting reads."""
-    from peregrine_kernel.loop.cli import RunnerLostError as LeaseQueuePatienceExhaustedError
-    from peregrine_kernel.loop.driver import _STALL_PRICE_CMD
+    from rsi_kernel_tune.loop.cli import RunnerLostError as LeaseQueuePatienceExhaustedError
+    from rsi_kernel_tune.loop.driver import _STALL_PRICE_CMD
 
     class Queued(FakeBackend):
         last_job_id = ""
@@ -6472,7 +6472,7 @@ def test_a_job_that_launched_and_produced_nothing_is_still_an_attempt(tmp_path):
     """The other side of the boundary the type draws: a plain BackendError
     after the job id moved (poll timeout on a hung reference kernel, log lost
     after success) IS an attempt — the same tree would hang again."""
-    from peregrine_kernel.loop.driver import BackendError, _STALL_PRICE_CMD
+    from rsi_kernel_tune.loop.driver import BackendError, _STALL_PRICE_CMD
 
     class Hung(FakeBackend):
         last_job_id = ""
@@ -6503,7 +6503,7 @@ def test_a_job_that_launched_and_produced_nothing_is_still_an_attempt(tmp_path):
 def test_role_block_is_banked_by_its_own_verdict_not_a_later_one(tmp_path):
     """A recon probe may print a rig's partial table and then the real one;
     the LAST block is banked and judged by the verdict line after it."""
-    from peregrine_kernel.loop.driver import _ref_overlap_banked, _save_ref_role_exposure
+    from rsi_kernel_tune.loop.driver import _ref_overlap_banked, _save_ref_role_exposure
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     recon_dir = tmp_path / "recon"
@@ -6525,7 +6525,7 @@ def test_recon_gate_credits_the_ledger_the_drivers_pricing_job_banked(tmp_path):
     """The driver's own pricing job prints STALL-OK too; the recon loop's
     per-log flag never sees that job, so the gate must read the banked file
     rather than force a STALL-WAIVED the teacher knows is false."""
-    from peregrine_kernel.loop.driver import _STALL_PRICE_CMD, run_recon_step
+    from rsi_kernel_tune.loop.driver import _STALL_PRICE_CMD, run_recon_step
 
     def writeup(prompt):
         assert "STALL evidence missing" not in prompt
@@ -6558,7 +6558,7 @@ def test_recon_gate_credits_the_ledger_the_drivers_pricing_job_banked(tmp_path):
 def test_recon_gate_option_one_reprices_after_the_teacher_adds_the_launch_target(tmp_path):
     """No launch target at the first finish -> the gate names that reason;
     the teacher adds eval/ncu_run.py and ends the turn again -> priced."""
-    from peregrine_kernel.loop.driver import _STALL_PRICE_CMD, run_recon_step
+    from rsi_kernel_tune.loop.driver import _STALL_PRICE_CMD, run_recon_step
 
     def writeup(prompt):
         (tmp_path / "recon-report.md").write_text(
@@ -6595,7 +6595,7 @@ def test_overlap_gate_status_is_derived_from_the_markers(tmp_path):
     """The gate's Status/Deliver text comes from disk (attempt markers + banked
     files), so it is right after a resume, after a job that banked the role
     table but not the timeline, and after the attempts are spent."""
-    from peregrine_kernel.loop.driver import (_STALL_PRICE_CMD, _ref_price_status,
+    from rsi_kernel_tune.loop.driver import (_STALL_PRICE_CMD, _ref_price_status,
                                          _ref_pricing_key, _save_ref_role_exposure)
     be = FakeBackend([], [])
     ctx = _stall_ctx(tmp_path, be)
@@ -6621,7 +6621,7 @@ def test_overlap_gate_status_is_derived_from_the_markers(tmp_path):
 def test_kept_probe_survives_a_meta_step_between_iterations(tmp_path):
     """A meta step's verdict-probe commit (git add -A) + reset would sweep the
     untracked kept probe away; the next student iteration restores it."""
-    from peregrine_kernel.loop.driver import _restore_kept_probes
+    from rsi_kernel_tune.loop.driver import _restore_kept_probes
     (tmp_path / "notes").mkdir()
     (tmp_path / "notes" / "p.py").write_text("print('rig v3')\n")
     be = FakeBackend(["PROBE_REQUEST: notes/p.py", "PROBE_REQUEST: notes/p.py", "garbage"],
@@ -6641,7 +6641,7 @@ def test_distill_prompt_names_a_missing_ref_overlap_account(tmp_path):
     """No banked account (or a partial one) -> the distill prompt says so in
     words the milestone rules bind to: overlap adjudications stay [ESTIMATE]
     candidates, never M0 hard lines."""
-    from peregrine_kernel.loop.driver import (_ref_overlap_block_for_distill,
+    from rsi_kernel_tune.loop.driver import (_ref_overlap_block_for_distill,
                                          _save_ref_role_exposure)
     be = FakeBackend([], [])
     ctx = _stall_ctx(tmp_path, be)
@@ -6673,7 +6673,7 @@ def test_reference_pricing_reads_a_head_clipped_batch_log(tmp_path):
     """The ref tree's log is read back capped: only the last ~300 lines, and
     the ledger at the head is the first thing to go. The bundle at the tail
     restores it (stall_price_run.expand_bundle)."""
-    from peregrine_kernel.skills.stall_price_run import emit_bundle
+    from rsi_kernel_tune.skills.stall_price_run import emit_bundle
     full = _STALL_LOG_OK + _role_block(_ROLE_CORE_REF)
     lines = []
     emit_bundle(full, out=lines.append)
@@ -6695,7 +6695,7 @@ def test_ref_segment_account_banks_on_its_own_join_verdict(tmp_path):
     """A library kernel without LINEINFO fails the row ledger's coverage floor
     (deep_gemm ref) while its PC-keyed segment account is clean; the
     segment table must not be lost with the ledger."""
-    from peregrine_kernel.loop.driver import _save_ref_stall_ledger
+    from rsi_kernel_tune.loop.driver import _save_ref_stall_ledger
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     ctx.evidence_dir = tmp_path / "evidence"
@@ -6742,7 +6742,7 @@ def test_source_run_recon_brief_says_the_source_is_in_hand(tmp_path):
     reconnaissance is FOR when the source is readable: measuring what the
     source states only as a template. The blackbox rendering stays
     byte-identical."""
-    from peregrine_kernel.loop.driver import (_apply_prior_input, _bindings, _recon_prompt,
+    from rsi_kernel_tune.loop.driver import (_apply_prior_input, _bindings, _recon_prompt,
                                          render_prompt)
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.oracle_mode = "blackbox"
@@ -6799,7 +6799,7 @@ def test_source_run_runs_recon_before_distilling(tmp_path):
 def test_source_run_without_a_recon_tree_is_the_unchanged_control(tmp_path):
     """recon_op = "" (or no tree on disk): no recon turn, no GPU job, and the
     distill brief is exactly the source brief with nothing appended."""
-    from peregrine_kernel.loop.driver import (_apply_prior_input, _bindings, render_prompt)
+    from rsi_kernel_tune.loop.driver import (_apply_prior_input, _bindings, render_prompt)
     teacher = FakeBackend([_authoring(tmp_path), "EXHAUSTED: nothing to do"], [])
     ctx = _ctx(tmp_path, teacher)
     ctx.oracle_mode = "source"
@@ -6817,7 +6817,7 @@ def test_source_recon_addendum_needs_a_report_on_disk(tmp_path):
     """A recon path that was wired but never produced a report (recon skipped,
     budget spent without a write-up) adds nothing: the brief must not point the
     teacher at a file that is not there."""
-    from peregrine_kernel.loop.driver import _source_recon_distill_addendum
+    from rsi_kernel_tune.loop.driver import _source_recon_distill_addendum
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.oracle_mode = "source"
     ctx.recon_path = tmp_path / "recon-report.md"
@@ -6833,7 +6833,7 @@ def test_source_recon_addendum_overrides_the_no_report_clauses(tmp_path):
     and must derive residency / the inter-kernel ledger itself; with a report on
     disk the addendum must name both so a multi-kernel run transcribes the
     measured "who zeroes" column rather than the templated source's."""
-    from peregrine_kernel.loop.driver import _source_recon_distill_addendum
+    from rsi_kernel_tune.loop.driver import _source_recon_distill_addendum
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.oracle_mode = "source"
     ctx.recon_path = tmp_path / "recon-report.md"
@@ -6872,7 +6872,7 @@ def test_structural_resume_sets_a_standing_note_naming_the_rollback(tmp_path):
     and reported EXHAUSTED into four 0-row segments. The note is the reset's
     visible half, and unlike host_bound_note it stands for every turn of the
     segment."""
-    from peregrine_kernel.loop.driver import _set_resume_note, _student_prompt
+    from rsi_kernel_tune.loop.driver import _set_resume_note, _student_prompt
     ctx = _ctx(tmp_path, FakeBackend([], []))
     _set_resume_note(ctx, _meta("structural"), resume_ref="abc123", baseline_ref="base0")
     assert "D0.13" in ctx.resume_note
@@ -6886,7 +6886,7 @@ def test_structural_resume_sets_a_standing_note_naming_the_rollback(tmp_path):
 
 
 def test_resume_to_baseline_says_so_and_asks_for_every_decision(tmp_path):
-    from peregrine_kernel.loop.driver import _set_resume_note
+    from rsi_kernel_tune.loop.driver import _set_resume_note
     ctx = _ctx(tmp_path, FakeBackend([], []))
     _set_resume_note(ctx, _meta("structural", resume_after=None),
                      resume_ref="base0", baseline_ref="base0")
@@ -6901,7 +6901,7 @@ def test_a_patch_that_resets_nothing_leaves_the_standing_note_alone(tmp_path, pa
     still in force, so its note still describes the tree. Clearing it here is the
     original bug in miniature — a structural rollback the student exhausted out of,
     then an additive step, and the survived old records read as deliveries again."""
-    from peregrine_kernel.loop.driver import _set_resume_note
+    from rsi_kernel_tune.loop.driver import _set_resume_note
     ctx = _ctx(tmp_path, FakeBackend([], []))
     _set_resume_note(ctx, _meta("structural"), resume_ref="abc123", baseline_ref="base0")
     standing = ctx.resume_note
@@ -6915,7 +6915,7 @@ def test_an_unmatched_patch_does_not_manufacture_a_rollback(tmp_path):
     decision — nothing invalidated, the reset is a no-op. Claiming "everything
     after the resume point" there would spend the segment re-delivering rows that
     are already delivered."""
-    from peregrine_kernel.loop.driver import _set_resume_note
+    from rsi_kernel_tune.loop.driver import _set_resume_note
     ctx = _ctx(tmp_path, FakeBackend([], []))
     _set_resume_note(ctx, _meta("structural", resume_after="D0.19", invalidated=()),
                      resume_ref="tipsha", baseline_ref="base0")
@@ -6926,7 +6926,7 @@ def test_a_resume_point_with_no_recorded_sha_reads_as_the_stub_it_is(tmp_path):
     """_resolve_resume falls back to baseline when the checkpoint sha is not on
     record. Naming D0.13 there, with a list that omits D0.1..D0.13, would tell the
     student those are still delivered and send it to write D0.14 onto a stub."""
-    from peregrine_kernel.loop.driver import _set_resume_note
+    from rsi_kernel_tune.loop.driver import _set_resume_note
     ctx = _ctx(tmp_path, FakeBackend([], []))
     _set_resume_note(ctx, _meta("structural", resume_after="D0.13"),
                      resume_ref="base0", baseline_ref="base0")
@@ -6940,7 +6940,7 @@ def test_a_foundation_patch_with_an_unparsed_dag_still_reads_as_the_stub(tmp_pat
     """_compute_resume_plan returns (None, []) when the milestone DAG does not
     parse; that is a real full restart, so the empty list must not be read as
     "nothing invalidated"."""
-    from peregrine_kernel.loop.driver import _set_resume_note
+    from rsi_kernel_tune.loop.driver import _set_resume_note
     ctx = _ctx(tmp_path, FakeBackend([], []))
     _set_resume_note(ctx, _meta("structural", resume_after=None, invalidated=()),
                      resume_ref="base0", baseline_ref="base0")
@@ -6952,8 +6952,8 @@ def test_revert_patch_clears_the_note_with_the_workspace(tmp_path):
     """A REVERT_PATCH puts the workspace back on the pre-patch good tree, where the
     'invalidated' decisions are delivered again — a surviving note would send the
     student off to rebuild them."""
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
-    from peregrine_kernel.loop.driver import _judge_patch, _PendingPatch
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.loop.driver import _judge_patch, _PendingPatch
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be, target_ms=0.1)
     ctx.meta_status_path = None
@@ -6976,8 +6976,8 @@ def test_revert_patch_clears_the_note_with_the_workspace(tmp_path):
 # and judges parity by it — repeated before it ends the run.
 
 def test_ref_in_job_keeps_the_in_job_reference_reading(tmp_path):
-    from peregrine_kernel.loop.driver import _enforce_single_ref
-    from peregrine_kernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.driver import _enforce_single_ref
+    from rsi_kernel_tune.loop.parse import parse_eval
     ctx = _confirm_ctx(tmp_path, _ConfirmBackend([], []))
     ctx.ref_rides_job = False
     ctx.ref_in_job = True
@@ -7026,8 +7026,8 @@ def test_paired_parity_unconfirmed_is_memoised_and_the_run_continues(tmp_path):
 
 
 def test_paired_parity_is_inert_without_the_flag_or_below_equivalence(tmp_path):
-    from peregrine_kernel.loop.driver import _paired_parity_stop
-    from peregrine_kernel.inner.trajectory import IterationRecord
+    from rsi_kernel_tune.loop.driver import _paired_parity_stop
+    from rsi_kernel_tune.inner.trajectory import IterationRecord
     be = _ConfirmBackend([], [_EVAL_CONFIRM(2.0, 2.1)])
     ctx = _ctx(tmp_path, be)
     ctx.gate_window = "device"
@@ -7047,12 +7047,12 @@ def test_paired_reanchor_replaces_the_cross_channel_drift_transport(tmp_path, mo
     ref jobs. Parity -> stop as target; below parity -> the note carries the
     PAIRED residual."""
     import json as _json
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
     calls: list[int] = []
     ctx = _reanchor_ctx(tmp_path, samples=[2.0, 2.0, 2.0], calls=calls)
     ctx.ref_in_job = True
     ctx.backend = _ConfirmBackend([], [_EVAL_CONFIRM(2.07, 2.09), _EVAL_CONFIRM(2.07, 2.07)])
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
     append_record(ctx.status_path, IterationRecord(
         iter=0, decision_id="D1", change="c", correctness=True, verdict="KEEP",
         device_median_ms=2.07, sha="shabest"))
@@ -7094,7 +7094,7 @@ def test_paired_re_measure_needs_two_agreeing_samples(tmp_path):
     """One usable sample, or two that disagree beyond the same-job floor, is no
     verdict: no stop, no memo (a later plateau may try again)."""
     import json as _json
-    from peregrine_kernel.loop.driver import _admit_paired
+    from rsi_kernel_tune.loop.driver import _admit_paired
     # a lone sample (second job failed correctness) -> inadmissible
     be = _ConfirmBackend([REC("D1", 2.0), "EXHAUSTED: done"],
                          [_EVAL_CONFIRM(2.0, 2.05), NCU,
@@ -7140,8 +7140,8 @@ def test_paired_reanchor_reuses_an_unconfirmed_re_measure_of_the_same_sha(tmp_pa
     later plateau whose best is that sha reuses the memo instead of buying the
     same two jobs, and the diagnosis gets the paired residual from it."""
     import json as _json
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
-    from peregrine_kernel.inner.trajectory import IterationRecord, append_record
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
     ctx = _reanchor_ctx(tmp_path, samples=[2.0, 2.0, 2.0])
     ctx.ref_in_job = True
     ctx.backend = _ConfirmBackend([], [])                       # nothing to buy with
@@ -7174,7 +7174,7 @@ def test_paired_reanchor_reuses_an_unconfirmed_re_measure_of_the_same_sha(tmp_pa
 def test_parse_lever_prices_keeps_the_last_copy_of_the_table():
     """The run prints the table twice (timing-only, then with roles); a job
     killed in the role pass leaves only the first. The parser keeps the last."""
-    from peregrine_kernel.loop.driver import parse_lever_prices
+    from rsi_kernel_tune.loop.driver import parse_lever_prices
     log = ("LEVER ring add=+8.56% remove=-8.10% add_ms=3.135 remove_ms=3.21 class=independent "
            "spin_add=None spin_all_minus=None cubin_same_as_base=unknown\n"
            "STACK all=+8.56% sum_singles=+8.56% coupling=+0.00%\n"
@@ -7196,8 +7196,8 @@ def test_levers_priced_at_an_earlier_step_still_verify(tmp_path):
     """The reflection lists earlier steps' levers as priced and the design turn
     is told not to re-list them, so a citation of one must verify against the
     same readings — the current step's table wins on a name clash."""
-    from peregrine_kernel.loop.driver import _merge_lever_tables, _verify_reopen_price
-    from peregrine_kernel.meta_trajectory import MetaRecord
+    from rsi_kernel_tune.loop.driver import _merge_lever_tables, _verify_reopen_price
+    from rsi_kernel_tune.meta_trajectory import MetaRecord
     earlier = MetaRecord(meta_step=0, cause_class="R1", deficient_locus="D1", patch_class="unpriced-reopen",
                          changed_entries=[], patch_direction="flip", outcome="UNPRICED_REOPEN",
                          lever_prices=[{"kind": "lever", "name": "ring", "add_pct": 8.56, "remove_pct": -8.1,
@@ -7218,7 +7218,7 @@ def test_lever_pricing_reuses_the_table_priced_on_the_same_best_tree(tmp_path):
     """A retried meta step (or an audit followed by a plateau on the same first
     green) prices the same best tree: the banked table is reused — no design
     turn, no job — and the diagnosis still reads it."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     be = FakeBackend([_lever_design(tmp_path), _DIAG,
                       _patching(tmp_path, "\n### D6 added\nx\n",
                                 "patch_class: additive\nchanged_entries: []\n")],
@@ -7239,7 +7239,7 @@ def test_lever_pricing_reuses_the_table_priced_on_the_same_best_tree(tmp_path):
 def test_reopen_gate_needs_a_priced_tree_for_the_pricing_route(tmp_path):
     """With stall pricing off the pricing round never runs (it prices the best
     tree the stall pricing found), so it is not an in-step route."""
-    from peregrine_kernel.loop.driver import _reopen_gate_on
+    from rsi_kernel_tune.loop.driver import _reopen_gate_on
     ctx = _priced_ctx(tmp_path, FakeBackend([], []))
     ctx.max_verdict_probe_rounds = 0
     ctx.lever_pricing_rounds = 3
@@ -7256,7 +7256,7 @@ def test_reopen_gate_needs_a_priced_tree_for_the_pricing_route(tmp_path):
 def test_kb_harvest_lints_the_write_up_and_reprompts_once(tmp_path):
     """What the harvest writes into hw_kb is linted the way the loop start and
     publish lint it; findings come back once, with the offending lines."""
-    from peregrine_kernel.loop.driver import ProbeBattle, run_kb_harvest
+    from rsi_kernel_tune.loop.driver import ProbeBattle, run_kb_harvest
     (tmp_path / "sm90").mkdir(exist_ok=True)
     idx = tmp_path / "sm90" / "index.md"
 
@@ -7289,7 +7289,7 @@ def test_kb_harvest_lints_the_write_up_and_reprompts_once(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_phase_verdict_accepts_spaced_quoted_and_glossed_spellings():
-    from peregrine_kernel.loop.driver import _parse_phase_verdict, _verify_phase_verdict
+    from rsi_kernel_tune.loop.driver import _parse_phase_verdict, _verify_phase_verdict
     ex = {"phase": "M1", "gate": "M1-gate", "priced": ["D1.1"],
           "unpriced": ["D1.2"], "delivered": []}
     for line in ("phase_verdict: continue: D1.2",
@@ -7306,8 +7306,8 @@ def test_phase_verdict_accepts_spaced_quoted_and_glossed_spellings():
 
 
 def test_live_records_void_reopened_keeps_and_reverted_segments():
-    from peregrine_kernel.loop.driver import _live_records
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _live_records
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
 
     def keep(did, i):
         return IR(iter=i, decision_id=did, change="", correctness=True, verdict="KEEP")
@@ -7331,8 +7331,8 @@ def test_live_records_void_reopened_keeps_and_reverted_segments():
 
 
 def test_phase_exhaustion_reads_the_reopened_phase_not_the_next_one():
-    from peregrine_kernel.loop.driver import _phase_exhaustion, _live_records
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _phase_exhaustion, _live_records
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
 
     class _C:
         decisions_dag = [Decision("D1.1", frozenset()), Decision("D1.2", frozenset({"D1.1"})),
@@ -7358,8 +7358,8 @@ def test_a_paying_subset_keeps_the_phase_open():
     above the noise floor: the combination is the way forward, the phase is
     not exhausted — as the reading rule handed to the teacher says (the subset
     wins over the class column)."""
-    from peregrine_kernel.loop.driver import _phase_exhaustion, _table_noise_pct
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _phase_exhaustion, _table_noise_pct
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
 
     class _C:
         decisions_dag = [Decision("D1.1", frozenset()), Decision("D1.2", frozenset({"D1.1"})),
@@ -7385,8 +7385,8 @@ def test_a_paying_subset_keeps_the_phase_open():
 
 
 def test_harmful_lever_counts_as_exhausted_not_as_a_way_forward():
-    from peregrine_kernel.loop.driver import _phase_exhaustion
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _phase_exhaustion
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
 
     class _C:
         decisions_dag = [Decision("D1.1", frozenset()), Decision("D1.2", frozenset({"D1.1"}))]
@@ -7402,8 +7402,8 @@ def test_harmful_lever_counts_as_exhausted_not_as_a_way_forward():
 
 
 def test_gate_regression_reads_the_same_job_ratio_and_same_cluster_only():
-    from peregrine_kernel.loop.driver import _gate_regression
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _gate_regression
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
 
     def keep(ms, ratio=None, cluster="", i=0):
         return IR(iter=i, decision_id="M0-gate", change="", correctness=True, verdict="KEEP",
@@ -7427,7 +7427,7 @@ def test_gate_regression_reads_the_same_job_ratio_and_same_cluster_only():
 
 
 def test_pm_interval_follows_the_target_and_the_knob(tmp_path):
-    from peregrine_kernel.loop.driver import _pm_interval, _stall_price_cmd, _STALL_PRICE_CMD
+    from rsi_kernel_tune.loop.driver import _pm_interval, _stall_price_cmd, _STALL_PRICE_CMD
     ctx = _ctx(tmp_path, FakeBackend([], []), target_ms=1.9)
     assert _pm_interval(ctx) == 8192 and _stall_price_cmd(ctx) == _STALL_PRICE_CMD
     ctx.target_ms = 0.25                       # fp8_gemm / attn-fwd class reference
@@ -7440,7 +7440,7 @@ def test_pm_interval_follows_the_target_and_the_knob(tmp_path):
 def test_reference_pricing_retries_a_pmtl_only_miss_when_the_interval_changed(tmp_path):
     """Only the timeline is missing: no retry on the same interval (the same
     collection would starve again) — one retry once the run's interval moved."""
-    from peregrine_kernel.loop.driver import (_ensure_ref_pricing, _ref_pricing_key,
+    from rsi_kernel_tune.loop.driver import (_ensure_ref_pricing, _ref_pricing_key,
                                          _save_ref_role_exposure, _STALL_PRICE_CMD)
     be = FakeBackend([], [])
     rbe = FakeBackend([], [_STALL_LOG_OK + _role_block(_ROLE_CORE_REF)] * 3)
@@ -7483,7 +7483,7 @@ def test_kb_certify_leaves_the_student_lineage_teacher_free(tmp_path):
 
 
 def test_kept_probes_end_with_the_landed_decision_and_yield_to_the_student(tmp_path):
-    from peregrine_kernel.loop.driver import _restore_kept_probes
+    from rsi_kernel_tune.loop.driver import _restore_kept_probes
     ctx = _ctx(tmp_path, FakeBackend([], []))
     (tmp_path / "notes").mkdir()
     ctx.kept_probes = {"notes/p.py": "print('rig v3')\n", "notes/q.py": "print('q')\n"}
@@ -7501,7 +7501,7 @@ def test_kept_probes_end_with_the_landed_decision_and_yield_to_the_student(tmp_p
 
 
 def test_role_ok_without_tensor_is_not_a_near_miss_and_mismatch_cannot_close_role(tmp_path):
-    from peregrine_kernel.loop.driver import _collect_verdict_near_misses, _missing_recon_evidence
+    from rsi_kernel_tune.loop.driver import _collect_verdict_near_misses, _missing_recon_evidence
     near = {}
     _collect_verdict_near_misses("ROLE-OK roles=3 samples=8000 resolved=97.1\nSASS-OK kern", near)
     assert "SASS" in near and "ROLE" not in near and "PMTL" not in near
@@ -7550,7 +7550,7 @@ def test_design_turn_ablations_ride_the_pricing_job_and_are_citable(tmp_path):
     measured one is a legal `reopen_price ... via ablation:<name>` — while an
     n/a one and an unknown one are not. Ablation rows are not levers: they
     never make a phase read exhausted."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD, _phase_exhaustion, _verify_reopen_price
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD, _phase_exhaustion, _verify_reopen_price
     be = FakeBackend([_lever_design_with_ablations(tmp_path), _DIAG,
                       _patching(tmp_path, "\n### D6 added\nx\n",
                                 "patch_class: additive\nchanged_entries: []\n")],
@@ -7585,7 +7585,7 @@ def test_ablation_only_design_turn_still_buys_the_job(tmp_path):
     """No candidate lever but ablations to run: the teacher writes only
     `ablations` (and may still say LEVERS: none); the job runs, the prompt
     says there is no lever table, the ablation table is there."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
 
     def agent(prompt):
         (tmp_path / "notes").mkdir(exist_ok=True)
@@ -7610,7 +7610,7 @@ def test_json_probe_request_runs_the_frozen_ablation_recipe(tmp_path):
     normalised (levers dropped, kernel_file set), one GPU job, the ablation
     table fed back, its rows on the step's price table and in probe_readings,
     and the R1 that cites `ablation:<name>` passes the price gate."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
 
     def probe(prompt):
         _lever_kernel(tmp_path)
@@ -7687,7 +7687,7 @@ def test_lever_pricing_reruns_once_on_a_dirty_node_without_a_design_turn(tmp_pat
     """The pricing job's GPU held an orphan (PRICE-FAIL node-dirty): the SAME design
     is re-priced once — one more job, no second design turn, and the table comes from
     the rerun."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     dirty = ("PRICE kernel_file=kernel.py variants: base +ring +lane +nb_sym all\n"
              "PRICE ROUND 0 base pass=True device=3.4 vs_ref_device=None pass_tag=main\n"
              "NODE-DIRTY after `python3 eval/bench.py --mode all` timed out (2400s): "
@@ -7708,8 +7708,8 @@ def test_lever_pricing_reruns_once_on_a_dirty_node_without_a_design_turn(tmp_pat
 
 # --- placeholder ledger: a conservative form is a debt the gate row cannot cross ---
 
-from peregrine_kernel.loop.driver import _placeholder_ledger, _student_prompt  # noqa: E402
-from peregrine_kernel.inner.trajectory import IterationRecord  # noqa: E402
+from rsi_kernel_tune.loop.driver import _placeholder_ledger, _student_prompt  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import IterationRecord  # noqa: E402
 
 REC_C = lambda did, change, kf="flash_attn_dsl/flash_bwd.py": (  # noqa: E731
     f"decision_id: {did}\nchange: {change}\nfiles_touched: {kf}\n"
@@ -7823,9 +7823,9 @@ def test_placeholder_ledger_follows_the_lineage_of_the_given_head():
 
 
 # --------------------------------------------------------------------- review fixes
-from peregrine_kernel.loop.driver import (  # noqa: E402
+from rsi_kernel_tune.loop.driver import (  # noqa: E402
     REF_STRUCT_PROMPT_CHARS, _lineage_rows, _sass_serial_status)
-from peregrine_kernel.inner.trajectory import append_record  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import append_record  # noqa: E402
 
 
 def test_serialization_note_reads_the_previous_keep_not_the_row_just_written(tmp_path):
@@ -7909,7 +7909,7 @@ def test_mentioning_the_ledger_or_denying_a_placeholder_is_not_a_declaration(tmp
 # --- teacher-role view ------------------------------------------------------------
 
 def test_teacher_view_passes_the_role_only_to_backends_that_take_it():
-    from peregrine_kernel.loop.driver import _teacher, AGENT_ROLE_TEACHER
+    from rsi_kernel_tune.loop.driver import _teacher, AGENT_ROLE_TEACHER
 
     class Old:                       # predates the split: prompt only
         def run_agent(self, prompt):
@@ -7937,7 +7937,7 @@ def test_meta_step_and_student_turns_use_their_own_roles(monkeypatch):
     """The student iteration asks for the student role; the meta step (diagnose)
     asks for the teacher role — the routing exists so that two models can share
     one run."""
-    from peregrine_kernel.loop import driver as drv
+    from rsi_kernel_tune.loop import driver as drv
     roles = []
 
     class Be:
@@ -7957,7 +7957,7 @@ def test_a_long_demangled_kernel_name_does_not_blind_the_banked_header():
     instrs=/verdict= out of range: both sides parsed as None, and the guard against
     overwriting a bigger kernel's dossier degraded, silently, to overwriting
     unconditionally — the very failure it was added for."""
-    from peregrine_kernel.loop.driver import _banked_dossier_header_text
+    from rsi_kernel_tune.loop.driver import _banked_dossier_header_text
 
     name = ("void cutlass::device_kernel<cutlass::gemm::kernel::GemmUniversal<"
             + "cute::tuple<cute::C<128>, cute::C<256>, cute::C<64> >, " * 6
@@ -7973,7 +7973,7 @@ def test_a_long_demangled_kernel_name_does_not_blind_the_banked_header():
 
 def test_a_banked_header_is_read_from_the_first_line_only():
     """A `# banked:` string quoted deeper in a dossier body is not the header."""
-    from peregrine_kernel.loop.driver import _banked_dossier_header_text
+    from rsi_kernel_tune.loop.driver import _banked_dossier_header_text
 
     body = ("[parse] 40 instructions\n"
             "# banked: block 9/9 kernel=impostor instrs=99999 verdict=OK\n")
@@ -8057,7 +8057,7 @@ def test_probe_pass_from_a_cut_archive_is_no_verdict_not_a_rejection(tmp_path):
 
 def test_the_last_recon_round_banks_its_ledgers(tmp_path):
     """The last round has no next round to carry its evidence into a commit."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def write_up(prompt):
         (tmp_path / "recon-report.md").write_text(
@@ -8082,7 +8082,7 @@ def test_the_last_recon_round_banks_its_ledgers(tmp_path):
 
 
 def test_banking_skips_a_clean_tree_and_never_raises(tmp_path):
-    from peregrine_kernel.loop.driver import _bank_evidence
+    from rsi_kernel_tune.loop.driver import _bank_evidence
 
     class _Clean(FakeBackend):
         def dirty(self):
@@ -8107,7 +8107,7 @@ def test_banking_skips_a_clean_tree_and_never_raises(tmp_path):
 
 
 def test_no_reconnaissance_tree_is_not_an_error(tmp_path):
-    from peregrine_kernel.loop.driver import _bank_evidence
+    from rsi_kernel_tune.loop.driver import _bank_evidence
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.recon_backend = None
     assert _bank_evidence(ctx, "ledgers") == "no reconnaissance tree"
@@ -8117,7 +8117,7 @@ def test_stall_pricing_banks_the_student_dossier_it_writes(tmp_path):
     """Observed: student_role_exposure.txt / student_orch_dossier*.txt were the
     files that held the restart at the dirty-tree preflight — written by the
     student pricing job into the reconnaissance tree, committed by nobody."""
-    from peregrine_kernel.loop.driver import _run_stall_pricing
+    from rsi_kernel_tune.loop.driver import _run_stall_pricing
     be = FakeBackend([], [_STALL_LOG_OK + _role_block(_ROLE_CORE_STU)])
     ctx = _stall_ctx(tmp_path, be)
     recon = FakeBackend([], [])
@@ -8144,7 +8144,7 @@ def test_sched_notapplicable_in_a_job_log_opens_the_gate_like_a_waiver(tmp_path)
     entire 12-round recon budget re-probing a channel no tool on the node could
     satisfy. Driven through run_recon_step's own log scan: the report carries NO
     SCHED waiver and the finish must still stand."""
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
 
     def done(prompt):
         (tmp_path / "recon-report.md").write_text("observations [MEASURED, job 1]")
@@ -8172,7 +8172,7 @@ def test_sched_notapplicable_narrated_by_the_teacher_does_not_open_it(tmp_path):
     line, off a job log, opens the gate — never prose about it, and never a
     truncated echo of it. Here the job printed only prose, so the finish bounces
     to the deliver-or-waive choice exactly as if nothing had been said."""
-    from peregrine_kernel.loop.driver import _SCHED_NOT_APPLICABLE, run_recon_step
+    from rsi_kernel_tune.loop.driver import _SCHED_NOT_APPLICABLE, run_recon_step
     assert _SCHED_NOT_APPLICABLE.search(
         "the tool says SCHED-NOTAPPLICABLE because the ISA is tcgen05") is None
     assert _SCHED_NOT_APPLICABLE.search(
@@ -8209,8 +8209,8 @@ def test_blackbox_recon_seeds_the_guard_beside_the_tools(tmp_path):
     tripwire has to ride in it the way sass_tools does — otherwise every run is
     back to hand-copying the guard's body into gpu_entry.sh. Blackbox runs
     only: a source-mode run's reference tree has nothing to guard."""
-    from peregrine_kernel.loop.driver import BLACKBOX_GUARD_NAME, run_recon_step
-    from peregrine_kernel.loop.driver import _blackbox_guard_source
+    from rsi_kernel_tune.loop.driver import BLACKBOX_GUARD_NAME, run_recon_step
+    from rsi_kernel_tune.loop.driver import _blackbox_guard_source
 
     def done(prompt):
         (tmp_path / "recon-report.md").write_text("observations [MEASURED, job 1]\n"
@@ -8265,7 +8265,7 @@ def test_price_log_verdict_keeps_the_timing_copy_of_a_job_killed_in_the_role_pas
     evidence is the other way a log says how the job ended: the table stands.
     A log that merely stops after PRICE-TIMED (no closing line, no kill) is
     still the archiver mid-read."""
-    from peregrine_kernel.loop.driver import (_price_log_verdict, _price_role_pass_killed,
+    from rsi_kernel_tune.loop.driver import (_price_log_verdict, _price_role_pass_killed,
                                          parse_lever_prices)
     assert _price_log_verdict(_PRICE_LOG_TIMED_KILLED) == "PRICE-TIMED"
     assert _price_role_pass_killed(_PRICE_LOG_TIMED_KILLED) == "the job was killed (exit 137)"
@@ -8293,7 +8293,7 @@ def test_lever_pricing_job_killed_after_the_timing_copy_is_priced_not_rebought(t
     one job (no resubmit of a design that would be killed the same way), the
     table reaches the diagnosis prompt and the evidence file, and loop.log
     says the role pass was cut by the job timeout."""
-    from peregrine_kernel.loop.driver import _LEVER_PRICING_CMD
+    from rsi_kernel_tune.loop.driver import _LEVER_PRICING_CMD
     be = FakeBackend([_lever_design(tmp_path), _DIAG,
                       _patching(tmp_path, "\n### D6 added\nx\n",
                                 "patch_class: additive\nchanged_entries: []\n")],
@@ -8327,7 +8327,7 @@ _TCGEN05_LOG = ("SASS-OK kernel=gdn_core instructions=5872 opcodes=140\n"
 
 
 def _recon_run(tmp_path, teacher_outputs, logs):
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
     teacher = FakeBackend(teacher_outputs, [])
     recon = FakeBackend([], logs)
     ctx = _ctx(tmp_path, teacher)
@@ -8412,7 +8412,7 @@ def test_write_up_denying_a_cluster_the_ncu_metric_read_is_bounced(tmp_path):
 
 
 def test_launch_ok_line_is_the_preferred_cluster_source(tmp_path):
-    from peregrine_kernel.loop.driver import _launch_cluster_from_log
+    from rsi_kernel_tune.loop.driver import _launch_cluster_from_log
     assert _launch_cluster_from_log(
         "LAUNCH-OK kernel=k grid=(128,1,1) block=(256,1,1) ctas=128 cluster=(16,1,1) "
         "cluster_max_active=7 regs=244 smem_dyn=227572\n"
@@ -8432,8 +8432,8 @@ def test_a_multi_kernel_log_is_read_from_the_last_kernel(tmp_path):
     Reading the FIRST metric in the text labelled a helper's launch shape (grid 64,
     cluster 0) as the reference's — the "no cluster" write-up then carried a
     tool-certified LAUNCH-OK line and the contradiction gate never fired."""
-    from peregrine_kernel.loop.driver import _launch_cluster_from_log
-    from peregrine_kernel.skills import launch_tools as LT
+    from rsi_kernel_tune.loop.driver import _launch_cluster_from_log
+    from rsi_kernel_tune.skills import launch_tools as LT
     log = ("kernel: helper_kernel\n"
            "  launch__grid_dim_x    64\n"
            "  launch__block_dim_x   128\n"
@@ -8453,7 +8453,7 @@ def test_a_multi_kernel_log_is_read_from_the_last_kernel(tmp_path):
 
 
 def test_a_cluster_of_one_or_a_disputed_reading_does_not_bounce(tmp_path):
-    from peregrine_kernel.loop.driver import (_launch_contradictions,
+    from rsi_kernel_tune.loop.driver import (_launch_contradictions,
                                          _launch_contradictions_open)
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.recon_dir = tmp_path
@@ -8483,7 +8483,7 @@ def test_the_contradiction_gate_reads_declarations_not_words(tmp_path):
     turn each — including the correction the bounce message itself asks for, the
     brief's own ≥2-candidate alternative, and the tool's LAUNCH-PARTIAL warning
     printed into §1 as the brief instructs."""
-    from peregrine_kernel.loop.driver import _launch_contradictions
+    from rsi_kernel_tune.loop.driver import _launch_contradictions
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.recon_dir = tmp_path
     ctx.recon_path = tmp_path / "recon-report.md"
@@ -8515,7 +8515,7 @@ def test_contradiction_holds_the_exhausted_write_up_and_is_not_persisted(tmp_pat
     """On the budget-exhausted path the write-up turns must carry the
     contradiction, and the completion marker must not be saved while the
     report still denies the measured cluster."""
-    from peregrine_kernel.loop.driver import _RECON_STATE_NAME
+    from rsi_kernel_tune.loop.driver import _RECON_STATE_NAME
     prompts = []
 
     def stubborn(prompt):
@@ -8533,7 +8533,7 @@ def test_contradiction_holds_the_exhausted_write_up_and_is_not_persisted(tmp_pat
     (tmp_path / "notes").mkdir()
     (tmp_path / "notes" / "probe.py").write_text("import sched_live_tools")
     ctx.recon_path = tmp_path / "recon-report.md"
-    from peregrine_kernel.loop.driver import run_recon_step
+    from rsi_kernel_tune.loop.driver import run_recon_step
     result = run_recon_step(ctx)
     assert result.finished is False
     assert sum("RECON-CONTRADICTION cluster" in p for p in prompts) == 3
@@ -8574,7 +8574,7 @@ def test_a_declared_construction_row_is_scaffolded_while_the_lineage_is_unknown(
 
 
 def test_a_declaration_deeper_in_the_change_or_on_a_gate_row_does_not_scaffold(tmp_path):
-    from peregrine_kernel.loop.driver import _declared_construction
+    from rsi_kernel_tune.loop.driver import _declared_construction
     assert _declared_construction("part 1 of 2 of build step (6) — D0.12: x") == "part 1 of 2"
     assert _declared_construction("part 2 of 2 — done") is None            # finished package
     assert _declared_construction("mirrors the ref. part 1 of 2 split") is None  # not the opening
@@ -8598,8 +8598,8 @@ def test_a_declaration_deeper_in_the_change_or_on_a_gate_row_does_not_scaffold(t
 
 
 def test_green_on_resume_reads_the_trajectory_when_no_record_owns_head():
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
-    from peregrine_kernel.loop.driver import _green_on_resume, _resume_anchor
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _green_on_resume, _resume_anchor
     revert0 = IR(iter=0, decision_id="D0.1", change="c", correctness=False, verdict="REVERT",
                  error="non-finite", sha="")            # an evaluated REVERT owns no sha
     scaffold = [IR(iter=i, decision_id=f"D0.{i}", change="c", correctness=None,
@@ -8633,8 +8633,8 @@ def test_a_budget_resume_over_an_evaluated_delivery_anchors_on_the_last_keep(tmp
     run_inner_loop's anchor is that KEEP: a delivery that then fails correctness
     resets to the verified tree, not to the unchecked HEAD it built on (resetting
     there restores the break and resets there again on every later one)."""
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
-    from peregrine_kernel.loop.driver import _green_on_resume, _resume_anchor, run_inner_loop
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.loop.driver import _green_on_resume, _resume_anchor, run_inner_loop
     be = FakeBackend([REC("D0.9", 2.4)], [EVAL(2.4, ok=False), NCU])
     ctx = _ctx(tmp_path, be, target_ms=1.8)
     append_record(ctx.status_path, IR(
@@ -8652,7 +8652,7 @@ def test_a_budget_resume_over_a_scaffold_ladder_reenters_scaffold_mode(tmp_path,
     """The process restarted (budget / certificate) over an iteration-0 REVERT + scaffold
     rows: the first post-resume construction row is committed NEUTRAL, not
     evaluated; the gate row evaluates and reaches target."""
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
     be = FakeBackend([REC("D0.5", None), REC("M0-gate", 1.8)], [EVAL(1.8), NCU])
     ctx = _ctx(tmp_path, be, target_ms=1.9)     # (_ctx starts an empty status file)
     ctx.m0_audit = False
@@ -8678,7 +8678,7 @@ def test_a_green_resume_over_an_unowned_head_resets_to_the_last_keep(tmp_path, c
     """The same resume through the production entry point: run_two_layer names the
     divergence in the log and hands the KEEP to the segment, so the first failing
     delivery after the restart rolls back to the verified tree."""
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
     be = FakeBackend([REC("D0.9", 2.4), REC("D0.9", 2.4)],
                      [EVAL(2.4, ok=False), NCU, EVAL(2.4, ok=False), NCU])
     ctx = _ctx(tmp_path, be, target_ms=1.8)
@@ -8702,8 +8702,8 @@ def test_paired_reanchor_residual_is_measured_to_the_stop_line_not_parity(tmp_pa
     it stops on, not +1.5%: the note says so and drops the "inside the floor,
     prefer parity" advice that parity-bar runs get."""
     import json as _json
-    from peregrine_kernel.loop.driver import _phantom_gap_reanchor
-    from peregrine_kernel.inner.trajectory import IterationRecord as IR
+    from rsi_kernel_tune.loop.driver import _phantom_gap_reanchor
+    from rsi_kernel_tune.inner.trajectory import IterationRecord as IR
     ctx = _reanchor_ctx(tmp_path, samples=[2.0, 2.0, 2.0])
     ctx.ref_in_job = True
     ctx.equivalence_ratio = 1.05
@@ -8724,7 +8724,7 @@ def test_paired_reanchor_residual_is_measured_to_the_stop_line_not_parity(tmp_pa
 
 
 def test_parse_cause_class_takes_infeasible_on_the_plateau_path_only():
-    from peregrine_kernel.loop.driver import _parse_cause_class
+    from rsi_kernel_tune.loop.driver import _parse_cause_class
     assert _parse_cause_class("cause_class: INFEASIBLE\n") == "INFEASIBLE"
     # the M0 audit has no stop request: distance to target is expected there
     assert _parse_cause_class("cause_class: INFEASIBLE\n", allow_ok=True) == ""
@@ -8740,7 +8740,7 @@ _INFEASIBLE_OPEN = _INFEASIBLE.replace("floor_opt=2.40 ms vs target=1.9 ms -> BL
 
 
 def test_infeasible_diagnosis_stops_without_a_patch_and_writes_the_notice(tmp_path):
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     # the stop request cites no measured bandwidth reading: the WP18 recipe
     # bounce fires once, the resent diagnosis lands as the stop
     be = FakeBackend([_INFEASIBLE, _INFEASIBLE], [])
@@ -8779,8 +8779,8 @@ def _replay_cases():
 def test_infeasible_gate_replays_real_stop_requests(case):
     """Nine real stop requests: the five BLOCKED ones (floor above target x 1.20)
     pass, the four on an OPEN line are refused."""
-    from peregrine_kernel.loop.driver import _infeasible_refusal, _plateau_diagnoses
-    from peregrine_kernel.meta_trajectory import MetaRecord
+    from rsi_kernel_tune.loop.driver import _infeasible_refusal, _plateau_diagnoses
+    from rsi_kernel_tune.meta_trajectory import MetaRecord
     prior = [MetaRecord(meta_step=i, cause_class="x", deficient_locus="", patch_class="",
                         changed_entries=[], patch_direction="", outcome=o)
              for i, o in enumerate(case["prior"])]
@@ -8796,8 +8796,8 @@ def test_infeasible_gate_replays_real_stop_requests(case):
 def test_infeasible_gate_min_diagnoses_counts_plateau_diagnoses_only():
     """The distillation and a clean M0 audit are not diagnoses that could have
     asked to stop; a step-count floor of 2 holds a first plateau request back."""
-    from peregrine_kernel.loop.driver import _infeasible_refusal, _plateau_diagnoses
-    from peregrine_kernel.meta_trajectory import MetaRecord
+    from rsi_kernel_tune.loop.driver import _infeasible_refusal, _plateau_diagnoses
+    from rsi_kernel_tune.meta_trajectory import MetaRecord
     mk = lambda o: MetaRecord(meta_step=0, cause_class="x", deficient_locus="", patch_class="",
                               changed_entries=[], patch_direction="", outcome=o)
     assert _plateau_diagnoses([mk("AUTHORED"), mk("AUDIT_CLEAN")]) == 0
@@ -8809,7 +8809,7 @@ def test_infeasible_gate_min_diagnoses_counts_plateau_diagnoses_only():
 
 
 def test_infeasible_gate_checks_the_numbers_not_just_the_word():
-    from peregrine_kernel.loop.driver import _infeasible_refusal
+    from rsi_kernel_tune.loop.driver import _infeasible_refusal
     chk = lambda line, t=1.9: _infeasible_refusal(f"reachability: {line}\n", diagnoses=1,
                                                   min_diagnoses=1, target_ms=t)
     # BLOCKED claimed, but the floor does not clear the 20% margin
@@ -8830,7 +8830,7 @@ def test_infeasible_gate_checks_the_numbers_not_just_the_word():
 def test_infeasible_on_open_is_bounced_and_the_class_that_answers_it_patches(tmp_path):
     """An OPEN stop request is put back once with the conditions; the teacher's
     re-diagnosis patches as usual and the record keeps the refusal."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     r2 = ("reachability: floor_opt=1.20 ms vs target=1.9 ms -> OPEN\n"
           "cause_class: R2\ndeficient_locus: D6\nevidence: ledger\npatch_direction: add decision\n")
     be = FakeBackend([_INFEASIBLE_OPEN, r2,
@@ -8847,7 +8847,7 @@ def test_infeasible_on_open_is_bounced_and_the_class_that_answers_it_patches(tmp
 
 
 def test_infeasible_on_open_twice_is_refused_without_a_stop(tmp_path):
-    from peregrine_kernel.meta_trajectory import load_meta_records, reflect_summary
+    from rsi_kernel_tune.meta_trajectory import load_meta_records, reflect_summary
     be = FakeBackend([_INFEASIBLE_OPEN, _INFEASIBLE_OPEN], [])
     ctx = _ctx(tmp_path, be)
     before = ctx.milestone.read_text(encoding="utf-8")
@@ -8884,7 +8884,7 @@ def test_infeasible_texts_never_hand_the_decision_to_a_human():
     """Every surface that tells the teacher (or the milestone author) what an
     INFEASIBLE stop does must describe it as the run's end — not as a request
     for a human to rule on and send the run on with a new direction."""
-    from peregrine_kernel.loop.driver import _INFEASIBLE_MENTION_BLOCK
+    from rsi_kernel_tune.loop.driver import _INFEASIBLE_MENTION_BLOCK
     root = Path(__file__).resolve().parent.parent
     surfaces = {
         "mention bounce": _INFEASIBLE_MENTION_BLOCK,
@@ -8952,7 +8952,7 @@ def test_two_layer_run_ends_on_infeasible_with_the_budget_unspent(tmp_path):
 
 
 def test_lever_price_block_says_a_group_card_was_priced_on_its_representative_only():
-    from peregrine_kernel.loop.driver import _lever_price_block
+    from rsi_kernel_tune.loop.driver import _lever_price_block
     lever = {"kind": "lever", "name": "idx", "add_pct": 1.0, "remove_pct": -1.0, "cls": "independent",
              "spin_add_ns": None, "spin_all_minus_ns": None}
     stack = {"kind": "stack", "all_pct": 1.0, "sum_singles_pct": 1.0, "coupling_pp": 0.0,
@@ -8971,7 +8971,7 @@ def test_ncu_profiler_folds_resusage_for_the_dominant_kernel():
     nothing. The full per-kernel list rides the eval JSON's `resusage` key (parse
     side), the job log carries it for humans — the digest holds the dominant one."""
     from types import SimpleNamespace
-    from peregrine_kernel.loop.driver import _ncu_profiler
+    from rsi_kernel_tune.loop.driver import _ncu_profiler
     # cuobjdump names the symbol (_Z11spillKernelPKfPfi), NCU's CSV the demangled
     # dominant kernel — the fold bridges the two spellings the way match_resusage
     # does: the _Z<len> head names the function the demangled form contains.
@@ -8995,7 +8995,7 @@ def test_ncu_profiler_folds_resusage_for_the_dominant_kernel():
 def test_ncu_profiler_without_resusage_lines_is_unchanged():
     from types import SimpleNamespace
     from pathlib import Path as _P
-    from peregrine_kernel.loop.driver import _ncu_profiler
+    from rsi_kernel_tune.loop.driver import _ncu_profiler
     csv = (_P(__file__).parent / "fixtures" / "ncu_sample.csv").read_text()
     ctx = SimpleNamespace(backend=FakeBackend([], [csv]), ncu_retries=0)
     prof = _ncu_profiler(ctx, "b1", correctness=True)

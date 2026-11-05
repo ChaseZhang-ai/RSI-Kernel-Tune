@@ -21,14 +21,14 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
-from peregrine_kernel.cardkit import (GPU_ENTRY_TEMPLATE, _WP11_ALLNCU_CASE,
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record, load_records
+from rsi_kernel_tune.cardkit import (GPU_ENTRY_TEMPLATE, _WP11_ALLNCU_CASE,
                                  _WP11_CACHE_BLOCK)
-from peregrine_kernel.loop import driver
-from peregrine_kernel.loop.parse import (EVAL_TAIL_CHARS, EVAL_TAIL_LINES, job_log_tail,
+from rsi_kernel_tune.loop import driver
+from rsi_kernel_tune.loop.parse import (EVAL_TAIL_CHARS, EVAL_TAIL_LINES, job_log_tail,
                                     parse_eval)
-from peregrine_kernel.submit import direct
-from peregrine_kernel.submit.config import SubmitConfig
+from rsi_kernel_tune.submit import direct
+from rsi_kernel_tune.submit.config import SubmitConfig
 
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx
 from test_template_timing import FakeGpu, load_timing
@@ -164,7 +164,7 @@ def test_wallclock_fields_helper_reads_and_resets_the_teacher_bucket():
 
 
 def test_queue_wait_is_read_from_the_job_log():
-    log = "[direct] GPU 2 is in use by another peregrine_kernel run -- waiting\n" \
+    log = "[direct] GPU 2 is in use by another rsi_kernel_tune run -- waiting\n" \
           "[direct] GPU 2 acquired after 90s wait\n== BEGIN ==\n"
     assert driver._queue_wait_from_log(log) == 90.0
     assert driver._queue_wait_from_log(EVAL(2.6)) is None
@@ -336,7 +336,7 @@ def test_merged_revert_with_ncu_on_revert_false_keeps_the_record_ncu_free(tmp_pa
 
 
 def test_wp11_apply_cfg_reads_loop_toml(tmp_path, monkeypatch):
-    monkeypatch.delenv("PK_SPRT_EARLY_STOP", raising=False)
+    monkeypatch.delenv("RKT_SPRT_EARLY_STOP", raising=False)
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.merge_eval_ncu = True
     ctx.sprt_early_stop = False
@@ -344,8 +344,8 @@ def test_wp11_apply_cfg_reads_loop_toml(tmp_path, monkeypatch):
         "[loop]\nmerge_eval_ncu = false\nsprt_early_stop = true\n", encoding="utf-8")
     driver._wp11_apply_cfg(ctx)
     assert ctx.merge_eval_ncu is False and ctx.sprt_early_stop is True
-    assert os.environ["PK_SPRT_EARLY_STOP"] == "1"
-    os.environ.pop("PK_SPRT_EARLY_STOP", None)   # NOT monkeypatch.delenv: its
+    assert os.environ["RKT_SPRT_EARLY_STOP"] == "1"
+    os.environ.pop("RKT_SPRT_EARLY_STOP", None)   # NOT monkeypatch.delenv: its
     # teardown-undo would RESTORE the production-set value and leak it onward
     # bad values leave the defaults. WP15 (B3): the sprt_early_stop default is
     # delivery-dependent — ON for a local delivery (the backtest-gated flip,
@@ -357,51 +357,51 @@ def test_wp11_apply_cfg_reads_loop_toml(tmp_path, monkeypatch):
     ctx2 = _ctx(tmp_path, FakeBackend([], []))
     driver._wp11_apply_cfg(ctx2)
     assert ctx2.merge_eval_ncu is True and ctx2.sprt_early_stop is True
-    os.environ.pop("PK_SPRT_EARLY_STOP", None)
+    os.environ.pop("RKT_SPRT_EARLY_STOP", None)
 
 
 def test_wp15_sprt_default_is_delivery_dependent(tmp_path, monkeypatch):
     # ssh delivery, nothing configured -> the conservative default (no early
     # stop; the env does not cross the wire). An ssh config that arms the flag
-    # without declaring PK_SPRT_EARLY_STOP in submit.toml [env] draws the WARN.
+    # without declaring RKT_SPRT_EARLY_STOP in submit.toml [env] draws the WARN.
     import types
 
     def _with_delivery(monkeypatch, delivery, env=None):
-        from peregrine_kernel.submit import config as submit_config
+        from rsi_kernel_tune.submit import config as submit_config
 
         cfg = types.SimpleNamespace(delivery=delivery, env=env or {})
         monkeypatch.setattr(submit_config, "load_config", lambda op: cfg)
         be = FakeBackend([], [])
         be.op = "demo"          # _wp15_delivery reads the backend's op
         ctx = _ctx(tmp_path, be)
-        os.environ.pop("PK_SPRT_EARLY_STOP", None)
+        os.environ.pop("RKT_SPRT_EARLY_STOP", None)
         (tmp_path / "loop.toml").unlink(missing_ok=True)
         driver._wp11_apply_cfg(ctx)
         return ctx   # the caller asserts the env the flip left, then pops it
 
     ctx_ssh = _with_delivery(monkeypatch, "ssh")
     assert ctx_ssh.sprt_early_stop is False
-    assert "PK_SPRT_EARLY_STOP" not in os.environ
+    assert "RKT_SPRT_EARLY_STOP" not in os.environ
 
     ctx_local = _with_delivery(monkeypatch, "local")
     assert ctx_local.sprt_early_stop is True
-    assert os.environ["PK_SPRT_EARLY_STOP"] == "1"
-    os.environ.pop("PK_SPRT_EARLY_STOP", None)
+    assert os.environ["RKT_SPRT_EARLY_STOP"] == "1"
+    os.environ.pop("RKT_SPRT_EARLY_STOP", None)
 
     ctx_warn = _with_delivery(monkeypatch, "ssh", env={"OTHER": "1"})
     # the config explicitly arms it (sprt_early_stop is left at its False
     # default here, so no flip); the WARN path needs the explicit true:
     (tmp_path / "loop.toml").write_text("[loop]\nsprt_early_stop = true\n",
                                         encoding="utf-8")
-    os.environ.pop("PK_SPRT_EARLY_STOP", None)
+    os.environ.pop("RKT_SPRT_EARLY_STOP", None)
     driver._wp11_apply_cfg(ctx_warn)
     assert ctx_warn.sprt_early_stop is True   # explicit config wins on ssh too
-    os.environ.pop("PK_SPRT_EARLY_STOP", None)   # no env leak (pop, not delenv:
+    os.environ.pop("RKT_SPRT_EARLY_STOP", None)   # no env leak (pop, not delenv:
     # the delenv teardown-undo would restore the production-set value)
 
 
 def test_merged_deadline_is_the_sum_of_the_segment_budgets(tmp_path):
-    from peregrine_kernel.submit.jobs import RUN_HEADROOM_S
+    from rsi_kernel_tune.submit.jobs import RUN_HEADROOM_S
     cfg = SubmitConfig(branch="main", op_dir="/tmp/x", base_dir="/tmp", timeout=3600)
     runner = direct.DirectRunner(cfg)
     assert runner._deadline_for("all") == 3600 + RUN_HEADROOM_S
@@ -421,8 +421,8 @@ def test_merged_deadline_is_the_sum_of_the_segment_budgets(tmp_path):
 def test_job_env_carries_the_tree_sha_for_the_build_cache():
     cfg = SubmitConfig(branch="main", op_dir="/tmp/x", base_dir="/tmp", env={"A": "1"})
     env = direct._job_env(cfg, "abc123")
-    assert env["PK_TREE_SHA256"] == "abc123" and env["A"] == "1"
-    assert direct._job_env(cfg).get("PK_TREE_SHA256") is None
+    assert env["RKT_TREE_SHA256"] == "abc123" and env["A"] == "1"
+    assert direct._job_env(cfg).get("RKT_TREE_SHA256") is None
 
 
 # --- task 2: the content-addressed build cache (shell contract) ----------------
@@ -430,7 +430,7 @@ def test_job_env_carries_the_tree_sha_for_the_build_cache():
 
 def _rendered_gpu_entry() -> str:
     return GPU_ENTRY_TEMPLATE.format(
-        name="t", suite="peregrine_kernel", arch="sm_100a", clock="", mem_clock="",
+        name="t", suite="rsi_kernel_tune", arch="sm_100a", clock="", mem_clock="",
         require_lock="0", clock_note="n",
         wp11_cache_block=_WP11_CACHE_BLOCK, wp11_allncu_case=_WP11_ALLNCU_CASE)
 
@@ -450,18 +450,18 @@ _BASH_CACHE_HARNESS = r"""
 set -euo pipefail
 harness_script="$1"; home="$2"; root="$3"
 source "$harness_script"
-export PK_BUILD_CACHE="${PK_BUILD_CACHE:-1}" PK_TREE_SHA256="${PK_TREE_SHA256:-shaX}"
+export RKT_BUILD_CACHE="${RKT_BUILD_CACHE:-1}" RKT_TREE_SHA256="${RKT_TREE_SHA256:-shaX}"
 export HOME="$home"
 mkdir -p "$HOME"
-key="$(pk_build_cache_key)"
-if PK_CACHE_ENTRY="$(pk_build_cache_brain verify "$root" "$key" 2>/dev/null)" && [ -n "$PK_CACHE_ENTRY" ]; then
+key="$(rkt_build_cache_key)"
+if RKT_CACHE_ENTRY="$(rkt_build_cache_brain verify "$root" "$key" 2>/dev/null)" && [ -n "$RKT_CACHE_ENTRY" ]; then
   echo "HIT"
 else
   staging="$root/staging.t"
-  rm -rf "$staging"; mkdir -p "$staging/pk_kernel_abc"
-  echo fakeso > "$staging/pk_kernel_abc/pk_kernel_abc.so"
-  pk_build_cache_brain promote "$root" "$key" "$staging"
-  entry="$(pk_build_cache_brain verify "$root" "$key")"
+  rm -rf "$staging"; mkdir -p "$staging/rkt_kernel_abc"
+  echo fakeso > "$staging/rkt_kernel_abc/rkt_kernel_abc.so"
+  rkt_build_cache_brain promote "$root" "$key" "$staging"
+  entry="$(rkt_build_cache_brain verify "$root" "$key")"
   [ -n "$entry" ] && echo "BUILT-AND-HIT"
 fi
 """
@@ -495,7 +495,7 @@ def test_build_cache_shell_miss_promote_hit_and_key_stability(tmp_path):
     r3 = subprocess.run(
         ["bash", str(harness), str(script), str(home), str(store)],
         capture_output=True, text=True, timeout=60,
-        env={**env, "PK_TREE_SHA256": "shaY"})
+        env={**env, "RKT_TREE_SHA256": "shaY"})
     assert "BUILT-AND-HIT" in r3.stdout       # the moved key is a fresh miss
 
 
@@ -506,8 +506,8 @@ def test_build_cache_tampered_entry_is_a_miss(tmp_path):
     home.mkdir()
     store = tmp_path / "store2"
     body = _BASH_CACHE_HARNESS + """
-echo tampered > "$root/$key/pk_kernel_abc/pk_kernel_abc.so"
-if PK_CACHE_ENTRY="$(pk_build_cache_brain verify "$root" "$key" 2>/dev/null)" && [ -n "$PK_CACHE_ENTRY" ]; then
+echo tampered > "$root/$key/rkt_kernel_abc/rkt_kernel_abc.so"
+if RKT_CACHE_ENTRY="$(rkt_build_cache_brain verify "$root" "$key" 2>/dev/null)" && [ -n "$RKT_CACHE_ENTRY" ]; then
   echo "UNEXPECTED-HIT"; exit 9
 fi
 echo TAMPER-REFUSED
@@ -522,20 +522,20 @@ def test_build_cache_off_by_default_and_silent(tmp_path):
     script = _cache_functions_script(tmp_path)
     home = tmp_path / "home3"
     home.mkdir()
-    # PK_BUILD_CACHE unset: setup must echo nothing and export nothing
+    # RKT_BUILD_CACHE unset: setup must echo nothing and export nothing
     body = r"""
 set -euo pipefail
 harness_script="$1"
 source "$harness_script"
-unset PK_BUILD_CACHE 2>/dev/null || true
-out="$(pk_build_cache_setup)"
+unset RKT_BUILD_CACHE 2>/dev/null || true
+out="$(rkt_build_cache_setup)"
 [ -z "$out" ] || { echo "UNEXPECTED OUTPUT: $out"; exit 9; }
-[ -z "${PK_KERNEL_BUILD_DIR:-}" ] || { echo "UNEXPECTED PK_KERNEL_BUILD_DIR"; exit 9; }
+[ -z "${RKT_KERNEL_BUILD_DIR:-}" ] || { echo "UNEXPECTED RKT_KERNEL_BUILD_DIR"; exit 9; }
 echo "OFF-SILENT"
 """
     harness = tmp_path / "harness3.sh"
     harness.write_text(body, encoding="utf-8")
-    env = {k: v for k, v in os.environ.items() if k != "PK_BUILD_CACHE"}
+    env = {k: v for k, v in os.environ.items() if k != "RKT_BUILD_CACHE"}
     env["PATH"] = "/usr/bin:/bin:/usr/local/bin"
     r = subprocess.run(["bash", str(harness), str(script), str(home)],
                        capture_output=True, text=True, env=env, timeout=60)
@@ -548,7 +548,7 @@ def test_rendered_template_is_valid_bash_and_carries_both_blocks(tmp_path):
     p.write_text(text, encoding="utf-8")
     subprocess.run(["bash", "-n", str(p)], check=True)
     assert "    allncu)" in text            # the merged task (the driver's marker)
-    assert "pk_build_cache_setup" in text   # the build cache (dormant without env)
+    assert "rkt_build_cache_setup" in text   # the build cache (dormant without env)
     # segment budgets mirror the two-job path: the census segment under
     # TASK_TIMEOUT (run_with_timeout), the NCU segment under NCU_TIMEOUT
     assert 'run_with_timeout bash -c "$*"' in text
@@ -651,7 +651,7 @@ def test_store_gap_falls_back_to_the_full_archive(tmp_path, monkeypatch):
     # to the full archive — the tree the job sees is byte-identical either way.
     monkeypatch.setenv(direct.INPUTS_STORE_ENV, str(tmp_path / "store"))
     monkeypatch.setenv(direct.LOCK_DIR_ENV, str(tmp_path / "locks"))
-    from peregrine_kernel.submit import jobs as ds
+    from rsi_kernel_tune.submit import jobs as ds
     entry = ("#!/bin/bash\nls eval/problem/inputs/s1/g.safetensors > /dev/null\n"
              'echo "task=$1 finished"\n')
     d, cfg = _git_op(tmp_path)
@@ -720,7 +720,7 @@ def _role_timing(gpu: RoleGpu):
     sys.modules["torch"] = _fake_torch(gpu)
     try:
         spec = importlib.util.spec_from_file_location(
-            "_wp11_timing", REPO / "src" / "peregrine_kernel" / "card_template" / "eval" / "timing.py")
+            "_wp11_timing", REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "timing.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
@@ -776,14 +776,14 @@ def test_sprt_on_a_win_or_null_measurement_reads_full():
 
 def test_sprt_default_flag_follows_the_env(monkeypatch):
     import importlib
-    from peregrine_kernel.card_template.eval import timing as module
-    monkeypatch.setenv("PK_SPRT_EARLY_STOP", "")
+    from rsi_kernel_tune.card_template.eval import timing as module
+    monkeypatch.setenv("RKT_SPRT_EARLY_STOP", "")
     fresh = importlib.reload(module)
     assert fresh.SPRT_EARLY_STOP is False
-    monkeypatch.setenv("PK_SPRT_EARLY_STOP", "1")
+    monkeypatch.setenv("RKT_SPRT_EARLY_STOP", "1")
     fresh = importlib.reload(fresh)
     assert fresh.SPRT_EARLY_STOP is True
-    monkeypatch.delenv("PK_SPRT_EARLY_STOP")
+    monkeypatch.delenv("RKT_SPRT_EARLY_STOP")
     importlib.reload(fresh)   # leave the module in the default state for others
 
 
@@ -801,7 +801,7 @@ def test_backtest_judgment_is_production():
     # object). The import IS the identity; this test forbids its regression.
     import importlib.util
 
-    from peregrine_kernel.card_template.eval import timing
+    from rsi_kernel_tune.card_template.eval import timing
     spec = importlib.util.spec_from_file_location(
         "backtest_early_stop", REPO / "scripts" / "backtest_early_stop.py")
     mod = importlib.util.module_from_spec(spec)

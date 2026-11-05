@@ -15,7 +15,7 @@ measurement-integrity section via the attack -> defense -> status table in
 - **Status**: CLOSED (implemented 2026-11-04, WP29, by explicit user
   adjudication — "fill the gap directly, add a switch"; the WP20R proposal
   below was the adjudicated shape). Defense: the **replay probe**
-  (`src/peregrine_kernel/card_template/eval/benchkit.py`, the WP29 section;
+  (`src/rsi_kernel_tune/card_template/eval/benchkit.py`, the WP29 section;
   package record `CHANGES-WP29.md`). Fixture:
   `tests/redteam/test_redteam_recon.py` — the value-blindness assertions
   stay (they document why the values cannot see this form), and the WP29
@@ -46,11 +46,11 @@ measurement-integrity section via the attack -> defense -> status table in
   median over the windows). Every timed probe call draws fresh content, so a
   content-keyed store recognizes nothing and every probe call sits on the
   honest path. The parent compares per shape:
-  `probe_median > PK_REPLAY_PROBE_RATIO x judged_median` (default 3.0,
+  `probe_median > RKT_REPLAY_PROBE_RATIO x judged_median` (default 3.0,
   conservative — better to miss a cheat than to convict an honest kernel;
-  `PK_REPLAY_PROBE_RATIO` overrides) -> `replay_probe: suspected` on the eval
+  `RKT_REPLAY_PROBE_RATIO` overrides) -> `replay_probe: suspected` on the eval
   JSON, and the driver turns it into a fresh_recheck-same suspicious REVERT
-  carrying the block with both latency numbers. Switch: `PK_REPLAY_PROBE`
+  carrying the block with both latency numbers. Switch: `RKT_REPLAY_PROBE`
   (default ON per the adjudication; `=0` fully off — the bench is
   byte-identical to pre-WP29). Unavailable path (the fresh_recheck posture):
   file-based inputs (no content re-draw), a non-finite probe draw, or any
@@ -84,5 +84,5 @@ measurement-integrity section via the attack -> defense -> status table in
   flips a verdict (convicting needs a per-job-image baseline the loop keys do
   not carry); recorded posture.
 
-<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+<!-- SPDX-FileCopyrightText: Copyright 2026 The RSI-Kernel-Tune Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->

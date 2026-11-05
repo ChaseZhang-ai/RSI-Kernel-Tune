@@ -12,7 +12,7 @@ Two overwrites used to happen silently:
 
 from __future__ import annotations
 
-from peregrine_kernel.loop import driver
+from rsi_kernel_tune.loop import driver
 
 from test_loop_driver import (  # noqa: F401 -- shared fixtures/helpers
     _ROLE_CORE_REF, _STALL_LOG_OK, FakeBackend, _ctx, _role_block, _stall_ctx,

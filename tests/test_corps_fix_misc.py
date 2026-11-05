@@ -12,11 +12,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from peregrine_kernel.baseline import BASIS_CUPTI  # noqa: E402
-from peregrine_kernel.timing_audit import host_path_note  # noqa: E402
+from rsi_kernel_tune.baseline import BASIS_CUPTI  # noqa: E402
+from rsi_kernel_tune.timing_audit import host_path_note  # noqa: E402
 
 from test_milestone import VALID as MILESTONE_VALID  # noqa: E402
-from peregrine_kernel.milestone import validate_milestone  # noqa: E402
+from rsi_kernel_tune.milestone import validate_milestone  # noqa: E402
 
 
 # --- BUG-SEED-23: the host-path note's thinner/thicker wording follows the direction --
@@ -112,9 +112,9 @@ def test_seed27_chain_from_a_suffixed_task_continues_forward_numbering(chain):
 
 # --- BUG-SEED-36: creation sites validate the task/operator name ----------------------
 
-from peregrine_kernel import launch  # noqa: E402
-from peregrine_kernel import scaffold as scaffold_mod  # noqa: E402
-from peregrine_kernel.task import check_new_task_name  # noqa: E402
+from rsi_kernel_tune import launch  # noqa: E402
+from rsi_kernel_tune import scaffold as scaffold_mod  # noqa: E402
+from rsi_kernel_tune.task import check_new_task_name  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -177,7 +177,7 @@ def test_seed36_scaffold_cli_reports_a_bad_name_readably(capsys):
 import subprocess  # noqa: E402
 from types import SimpleNamespace as _NS  # noqa: E402
 
-from peregrine_kernel import taskcard  # noqa: E402
+from rsi_kernel_tune import taskcard  # noqa: E402
 
 
 def _git_repo(path: Path) -> None:
@@ -289,11 +289,11 @@ def test_seed39_nested_entered_does_not_close_the_outer_tee(tmp_path):
 
 # --- BUG-SEED-40: a broken submit config is reported, not silently unstamped ----------
 
-from peregrine_kernel import baseline_cli  # noqa: E402
+from rsi_kernel_tune import baseline_cli  # noqa: E402
 
 
 def _patch_load_config(monkeypatch, effect):
-    import peregrine_kernel.submit.config as submit_config
+    import rsi_kernel_tune.submit.config as submit_config
     monkeypatch.setattr(submit_config, "load_config", effect)
 
 
@@ -357,12 +357,12 @@ def test_seed44_a_hung_deliverable_check_keeps_the_session_resumable(
     td.mkdir()
     (td / "spec.json").write_text(json.dumps({
         "kind": "caller", "role": "student", "reply": str(td / "reply.md"),
-        "check": "true", "condition": "PEREGRINE TURN. unit fixture."}), encoding="utf-8")
+        "check": "true", "condition": "RSI-KERNEL-TUNE TURN. unit fixture."}), encoding="utf-8")
     leg = mod.GoalLeg("claude-test-1", "test-model", [], "do the thing", env={
-        "PK_GOAL_TURN_DIR": str(td),
+        "RKT_GOAL_TURN_DIR": str(td),
         "CLAUDE_CONFIG_DIR": str(tmp_path / "cfg"),
-        "PK_CLAUDE_BIN": "/usr/bin/true",
-        "PK_GOAL_TMUX_SOCKET": f"fkgoal-misc-{os.getpid()}",
+        "RKT_CLAUDE_BIN": "/usr/bin/true",
+        "RKT_GOAL_TMUX_SOCKET": f"fkgoal-misc-{os.getpid()}",
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
     })
 

@@ -1,6 +1,6 @@
 """Regression tests for the W1 audit fix W1-LIF-01 (monitor CLI kernel-file default):
 
-* the standalone ``peregrine <op> monitor`` CLI resolves --kernel-file from the
+* the standalone ``rsi-kernel-tune <op> monitor`` CLI resolves --kernel-file from the
   card's own problem.json (cuda -> kernel.cu) instead of hardcoding kernel.py --
   monitor/cli.py.
 
@@ -9,7 +9,7 @@
  The _chain hardening cases are appended by their own commit below.)
 
 Ported from the R2 audit's untracked test batch, rewritten for the
-peregrine_kernel tree. CPU only.
+rsi_kernel_tune tree. CPU only.
 """
 
 from __future__ import annotations
@@ -20,12 +20,12 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel import monitor
+from rsi_kernel_tune import monitor
 
 
 # --- W1-LIF-01: the CLI defaults to the card's own kernel file ---------------------
 def test_monitor_cli_defaults_to_the_cards_kernel_file(tmp_path, capsys):
-    from peregrine_kernel.monitor import cli
+    from rsi_kernel_tune.monitor import cli
 
     op = "cudaop"
     op_dir = tmp_path / "operators" / op
@@ -45,7 +45,7 @@ def test_monitor_cli_defaults_to_the_cards_kernel_file(tmp_path, capsys):
 
 
 def test_monitor_cli_an_explicit_kernel_file_still_wins(tmp_path, capsys):
-    from peregrine_kernel.monitor import cli
+    from rsi_kernel_tune.monitor import cli
 
     op = "cudaop"
     op_dir = tmp_path / "operators" / op
@@ -65,7 +65,7 @@ def test_monitor_cli_an_explicit_kernel_file_still_wins(tmp_path, capsys):
 
 
 def test_monitor_cli_a_card_without_kernel_file_falls_back_to_kernel_py(tmp_path, capsys):
-    from peregrine_kernel.monitor import cli
+    from rsi_kernel_tune.monitor import cli
 
     op = "pyop"
     op_dir = tmp_path / "operators" / op
@@ -86,7 +86,7 @@ def test_monitor_cli_a_card_without_kernel_file_falls_back_to_kernel_py(tmp_path
 def startup_env(monkeypatch):
     """A clean start-up: no monitor profile, a saved sys.path and sitecustomize
     slot — the module under test mutates all three while it runs."""
-    monkeypatch.delenv("PK_MON_PROFILE", raising=False)
+    monkeypatch.delenv("RKT_MON_PROFILE", raising=False)
     had = sys.modules.pop("sitecustomize", None)
     saved_path = list(sys.path)
     yield
@@ -112,17 +112,17 @@ def test_chain_skips_a_planted_workspace_sitecustomize(tmp_path, monkeypatch, st
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "sitecustomize.py").write_text(
-        "import sys as _s\n_s.modules['__pk_planted_ran__'] = True\n", encoding="utf-8")
+        "import sys as _s\n_s.modules['__rkt_planted_ran__'] = True\n", encoding="utf-8")
     image = tmp_path / "site-packages"     # the harness's own copy, outside the tree
     image.mkdir()
     (image / "sitecustomize.py").write_text("CHAIN_MARKER = 'image'\n", encoding="utf-8")
-    monkeypatch.setenv("PK_MON_ROOT", str(ws))
+    monkeypatch.setenv("RKT_MON_ROOT", str(ws))
     monkeypatch.chdir(ws)
     sys.path[:] = [str(ws), str(image)]    # planted first: the old _chain imported it
     _load_runtime_sitecustomize()
     chained = sys.modules["sitecustomize"]
     assert getattr(chained, "CHAIN_MARKER", None) == "image"
-    assert "__pk_planted_ran__" not in sys.modules
+    assert "__rkt_planted_ran__" not in sys.modules
     assert sys.path == [str(ws), str(image)]   # the path is put back untouched
 
 
@@ -130,23 +130,23 @@ def test_chain_skips_a_planted_sitecustomize_by_cwd_alone(tmp_path, monkeypatch,
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "sitecustomize.py").write_text(
-        "import sys as _s\n_s.modules['__pk_planted_ran__'] = True\n", encoding="utf-8")
+        "import sys as _s\n_s.modules['__rkt_planted_ran__'] = True\n", encoding="utf-8")
     image = tmp_path / "site-packages"
     image.mkdir()
     (image / "sitecustomize.py").write_text("CHAIN_MARKER = 'image'\n", encoding="utf-8")
-    monkeypatch.delenv("PK_MON_ROOT", raising=False)   # no root given: cwd is the guard
+    monkeypatch.delenv("RKT_MON_ROOT", raising=False)   # no root given: cwd is the guard
     monkeypatch.chdir(ws)
     sys.path[:] = [str(ws), str(image)]
     _load_runtime_sitecustomize()
     assert getattr(sys.modules["sitecustomize"], "CHAIN_MARKER", None) == "image"
-    assert "__pk_planted_ran__" not in sys.modules
+    assert "__rkt_planted_ran__" not in sys.modules
 
 
 def test_chain_still_reaches_the_harness_sitecustomize(tmp_path, monkeypatch, startup_env):
     image = tmp_path / "site-packages"
     image.mkdir()
     (image / "sitecustomize.py").write_text("CHAIN_MARKER = 'image'\n", encoding="utf-8")
-    monkeypatch.setenv("PK_MON_ROOT", str(tmp_path / "ws"))   # ws itself has none
+    monkeypatch.setenv("RKT_MON_ROOT", str(tmp_path / "ws"))   # ws itself has none
     sys.path[:] = [str(image)]
     ours = _load_runtime_sitecustomize()
     assert getattr(sys.modules["sitecustomize"], "CHAIN_MARKER", None) == "image"
@@ -154,7 +154,7 @@ def test_chain_still_reaches_the_harness_sitecustomize(tmp_path, monkeypatch, st
 
 
 def test_chain_with_nothing_to_import_restores_ours(tmp_path, monkeypatch, startup_env):
-    monkeypatch.delenv("PK_MON_ROOT", raising=False)
+    monkeypatch.delenv("RKT_MON_ROOT", raising=False)
     sys.path[:] = [str(tmp_path / "empty")]    # no sitecustomize anywhere on it
     ours = _load_runtime_sitecustomize()
     assert sys.modules["sitecustomize"] is ours

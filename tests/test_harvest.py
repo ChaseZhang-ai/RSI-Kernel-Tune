@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from peregrine_kernel.loop.harvest import (
+from rsi_kernel_tune.loop.harvest import (
     Change,
     format_report,
     git_status,

@@ -21,17 +21,17 @@ OP="$BASE/operators/smoke"
 mkdir -p "$OP"
 echo "[smoke] tree: $OP"
 
-PYTHON="${PK_SMOKE_PY:-$HOME/venvs/forgekernel/bin/python}"
+PYTHON="${RKT_SMOKE_PY:-$HOME/venvs/forgekernel/bin/python}"
 PYTHONPATH="$REPO/src" "$PYTHON" - "$OP" <<'PYEOF'
 import json, sys
 from pathlib import Path
-from peregrine_kernel.cardkit import (GPU_ENTRY_TEMPLATE, _WP11_CACHE_BLOCK,
+from rsi_kernel_tune.cardkit import (GPU_ENTRY_TEMPLATE, _WP11_CACHE_BLOCK,
                                  _WP11_ALLNCU_CASE, render_gpu_entry)
 op = Path(sys.argv[1])
 (op / "eval" / "problem").mkdir(parents=True)
 (op / "notes").mkdir()
 # the rendered job entry: the WP19 key enumerator + cache + preflight ride it
-text = render_gpu_entry(name="smoke", suite="peregrine_kernel", arch="sm_86",
+text = render_gpu_entry(name="smoke", suite="rsi_kernel_tune", arch="sm_86",
                         clock="", mem_clock="", require_lock="0", clock_note="")
 (op / "gpu_entry.sh").write_text(text, encoding="utf-8")
 (op / "eval" / "problem" / "problem.json").write_text(
@@ -64,29 +64,29 @@ git -C "$OP" add -A
 git -C "$OP" -c user.email=s@t -c user.name=s commit -qm "smoke tree"
 cd "$OP"
 
-RUN="$PYTHON -m peregrine_kernel.submit smoke --base-dir $BASE"
-FKENV="PK_BUILD_CACHE=1 PK_BUILD_CACHE_KEY_NARROW=1 PK_PROBE_BATCH_SETTLE_S=1"
+RUN="$PYTHON -m rsi_kernel_tune.submit smoke --base-dir $BASE"
+FKENV="RKT_BUILD_CACHE=1 RKT_BUILD_CACHE_KEY_NARROW=1 RKT_PROBE_BATCH_SETTLE_S=1"
 
 echo "[smoke] job A: the probe batch (manifest-composed command)"
-eval "$RUN submit --mode 'cmd:echo \"=== pk-probe-batch begin: notes/probe_a.py ===\" ; python3 notes/probe_a.py ; echo \"=== pk-probe-batch end: notes/probe_a.py rc=\$? ===\" ; sleep 1 ; echo \"=== pk-probe-batch begin: notes/probe_b.py ===\" ; python3 notes/probe_b.py ; echo \"=== pk-probe-batch end: notes/probe_b.py rc=\$? ===\"'"
+eval "$RUN submit --mode 'cmd:echo \"=== rkt-probe-batch begin: notes/probe_a.py ===\" ; python3 notes/probe_a.py ; echo \"=== rkt-probe-batch end: notes/probe_a.py rc=\$? ===\" ; sleep 1 ; echo \"=== rkt-probe-batch begin: notes/probe_b.py ===\" ; python3 notes/probe_b.py ; echo \"=== rkt-probe-batch end: notes/probe_b.py rc=\$? ===\"'"
 sleep 8
-LOGA=$(ls -t .pk-jobs/*.log 2>/dev/null | head -1)
+LOGA=$(ls -t .rkt-jobs/*.log 2>/dev/null | head -1)
 [ -z "$LOGA" ] && LOGA=$(find . -name "*.log" -newer submit.toml 2>/dev/null | head -1)
 echo "--- job A log (batch region) ---"
-grep -E "pk-probe-batch|PROBE PASS|build cache:|task=cmd" "${LOGA:-/dev/null}" | head -12
+grep -E "rkt-probe-batch|PROBE PASS|build cache:|task=cmd" "${LOGA:-/dev/null}" | head -12
 
 echo "[smoke] job B: same kernel content, different tree sha (narrow ON)"
 git -C "$OP" -c user.email=s@t -c user.name=s commit -q --allow-empty -m "empty move"
 eval "env $FKENV $RUN submit --mode 'cmd:echo key-check'"
 sleep 8
-LOGB=$(ls -t .pk-jobs/*.log 2>/dev/null | head -1)
+LOGB=$(ls -t .rkt-jobs/*.log 2>/dev/null | head -1)
 echo "--- job B build-cache line ---"
 grep -E "build cache:" "${LOGB:-/dev/null}" | head -2
 
 echo "[smoke] job C: narrow OFF (the baseline whole-tree key)"
-eval "env PK_BUILD_CACHE=1 $RUN submit --mode 'cmd:echo key-check-off'"
+eval "env RKT_BUILD_CACHE=1 $RUN submit --mode 'cmd:echo key-check-off'"
 sleep 8
-LOGC=$(ls -t .pk-jobs/*.log 2>/dev/null | head -1)
+LOGC=$(ls -t .rkt-jobs/*.log 2>/dev/null | head -1)
 echo "--- job C build-cache line ---"
 grep -E "build cache:" "${LOGC:-/dev/null}" | head -2
 

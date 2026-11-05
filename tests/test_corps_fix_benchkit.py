@@ -31,7 +31,7 @@ torch = pytest.importorskip("torch")
 from test_fresh_recheck import PROBLEM, _VERDICT, _card, _run_card
 
 REPO = Path(__file__).resolve().parents[1]
-EVAL_SRC = REPO / "src" / "peregrine_kernel" / "card_template" / "eval"
+EVAL_SRC = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval"
 
 
 def _load(name, path):
@@ -41,8 +41,8 @@ def _load(name, path):
     return mod
 
 
-lb = _load("pk_benchkit_corps_fix", EVAL_SRC / "benchkit.py")
-P = _load("pk_precision_corps_fix", EVAL_SRC / "precision.py")
+lb = _load("rkt_benchkit_corps_fix", EVAL_SRC / "benchkit.py")
+P = _load("rkt_precision_corps_fix", EVAL_SRC / "precision.py")
 
 
 def _json_payload(stdout: str) -> dict:

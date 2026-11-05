@@ -11,9 +11,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record
-from peregrine_kernel.loop.driver import _save_ref_struct_table
-from peregrine_kernel.loop.parse import (
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record
+from rsi_kernel_tune.loop.driver import _save_ref_struct_table
+from rsi_kernel_tune.loop.parse import (
     RESOLVABLE_DIFF_CAP,
     RESOLVABLE_DIFF_FLOOR,
     resolvable_diff,
@@ -33,7 +33,7 @@ def test_struct_table_write_failure_log_names_the_destination(tmp_path, capsys):
     {e}` — the exception text sat in the destination slot and the path it tried
     to write was absent, so a write failure said what went wrong but never where.
     The sibling bank logs all read `could not persist <name> to <dst>: <e>`."""
-    from peregrine_kernel.loop.driver import _REF_STRUCT_TABLE_NAME
+    from rsi_kernel_tune.loop.driver import _REF_STRUCT_TABLE_NAME
 
     recon = tmp_path / "recon"
     recon.mkdir()
@@ -67,7 +67,7 @@ def test_struct_table_bank_still_writes_on_a_normal_path(tmp_path):
 
 def _kb_ctx(tmp_path):
     """A ctx whose kb repo root is tmp_path/repo (the quarantine's parent)."""
-    from peregrine_kernel.loop import lang_mode
+    from rsi_kernel_tune.loop import lang_mode
 
     ctx = _ctx(tmp_path, FakeBackend([], []))
     repo = tmp_path / "repo"
@@ -84,7 +84,7 @@ def test_quarantine_keeps_same_basename_entries_from_different_archs(tmp_path):
     subtrees' same-named leaky entries renamed onto one file — rename(2)
     replaces silently, the earlier entry vanished from both its tree and the
     quarantine, and the reviewing human saw one leak, not two."""
-    from peregrine_kernel.loop.driver import _quarantine_leaky_kb
+    from rsi_kernel_tune.loop.driver import _quarantine_leaky_kb
 
     ctx, kb = _kb_ctx(tmp_path)
     (kb / "sm100" / "leak.md").write_text("sm100 leak body\n", encoding="utf-8")
@@ -106,7 +106,7 @@ def test_quarantine_does_not_replace_a_previous_run_s_entry(tmp_path):
     """A second quarantine (a later run) with the same entry name must not
     replace the file the first run left for the human — it flattens its own
     relative path beside it."""
-    from peregrine_kernel.loop.driver import _quarantine_leaky_kb
+    from rsi_kernel_tune.loop.driver import _quarantine_leaky_kb
 
     ctx, kb = _kb_ctx(tmp_path)
     qdir = tmp_path / "repo" / "kb_quarantine"
@@ -124,7 +124,7 @@ def test_quarantine_unique_names_stay_flat(tmp_path):
     subtrees can never rename onto one destination (the incident's silent
     replace). Adapted at the merge: the merged implementation flattens
     unconditionally (``<rel with / -> __>``), not only on collision."""
-    from peregrine_kernel.loop.driver import _quarantine_leaky_kb
+    from rsi_kernel_tune.loop.driver import _quarantine_leaky_kb
 
     ctx, kb = _kb_ctx(tmp_path)
     (kb / "sm100" / "oddity.md").write_text("body\n", encoding="utf-8")
@@ -139,7 +139,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 sys.path.insert(0, {src!r})
-from peregrine_kernel.loop.driver import _seed_pricing_toolkits, _seed_sass_tools
+from rsi_kernel_tune.loop.driver import _seed_pricing_toolkits, _seed_sass_tools
 
 
 class _Be:
@@ -200,7 +200,7 @@ def test_malformed_package_declaration_is_rejected_on_both_paths(decl):
     evaluated — while _open_package_tail rejected the SAME delivery as
     malformed and priced over it: the row was construction-protected AND
     REVERT-eligible at once. Both paths now share _pkg_step_ok's bar."""
-    from peregrine_kernel.loop.driver import (
+    from rsi_kernel_tune.loop.driver import (
         _declared_construction,
         _open_package_tail,
     )
@@ -212,7 +212,7 @@ def test_malformed_package_declaration_is_rejected_on_both_paths(decl):
 def test_wellformed_package_declaration_still_works_on_both_paths():
     """The unification must not tighten away the real contract: a valid
     ``part 1 of 3`` opening still scaffolds and still opens the tail."""
-    from peregrine_kernel.loop.driver import (
+    from rsi_kernel_tune.loop.driver import (
         _declared_construction,
         _open_package_tail,
         _PKG_MAX_STEPS,
@@ -230,7 +230,7 @@ def test_wellformed_package_declaration_still_works_on_both_paths():
 def test_malformed_declaration_does_not_spend_the_package_budget():
     """An ordinary (malformed) KEEP is not a package row: it must not count
     toward the n-rows-of-grace budget any more than it extends the plea."""
-    from peregrine_kernel.loop.driver import _open_package_tail
+    from rsi_kernel_tune.loop.driver import _open_package_tail
 
     segment = [_pkg_tail_row("part 0 of 3 — malformed opener"),
                _pkg_tail_row("part 1 of 2 — real package step")]
@@ -240,7 +240,7 @@ def test_malformed_declaration_does_not_spend_the_package_budget():
 # --- BUG-SEED-35: a verdict probe whose transport failed ended the whole run --
 
 
-from peregrine_kernel.loop.driver import BackendError
+from rsi_kernel_tune.loop.driver import BackendError
 
 
 class _DyingTransportBackend(FakeBackend):
@@ -276,7 +276,7 @@ def test_verdict_probe_transport_failure_is_a_no_verdict_not_a_crash(
     sequence into a "job failed (...)" reason, _run_stall_pricing diagnoses
     without a ledger). The probe is now this round's NO VERDICT and the run
     survives."""
-    from peregrine_kernel.loop.driver import (
+    from rsi_kernel_tune.loop.driver import (
         _probe_label,
         _run_meta_verdict_probe,
     )
@@ -295,7 +295,7 @@ def test_verdict_probe_transport_feedback_does_not_preach_protocol(tmp_path):
     """The failed-transport round must not reach the teacher as the probe's
     protocol problem: the no-verdict-line sermon (pre-register a criterion)
     would send it editing a script that never executed."""
-    from peregrine_kernel.loop.driver import (
+    from rsi_kernel_tune.loop.driver import (
         _verdict_probe_feedback,
         _run_meta_verdict_probe,
     )
@@ -315,8 +315,8 @@ def test_verdict_probe_no_verdict_line_feedback_keeps_the_sermon(tmp_path):
     """A probe that RAN but printed no verdict line keeps the original
     protocol feedback — the transport wording is only for jobs that never
     started."""
-    from peregrine_kernel.loop.driver import _verdict_probe_feedback
-    from peregrine_kernel.loop.parse import parse_probe_verdict
+    from rsi_kernel_tune.loop.driver import _verdict_probe_feedback
+    from rsi_kernel_tune.loop.parse import parse_probe_verdict
 
     pv = parse_probe_verdict("some output with no verdict line", audit=False)
     feedback = _verdict_probe_feedback("notes/probe_x.py", pv, "some output", 1, 3)
@@ -351,7 +351,7 @@ def test_ref_role_table_keeps_the_bigger_banked_full_account(tmp_path):
     dossier) applied to the role table verbatim. A later FULL table built from
     strictly fewer stall samples is now refused; an equal-or-larger account
     still supersedes."""
-    from peregrine_kernel.loop.driver import _save_ref_role_exposure
+    from rsi_kernel_tune.loop.driver import _save_ref_role_exposure
 
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.evidence_dir = tmp_path / "evidence"
@@ -374,7 +374,7 @@ def test_student_role_tables_split_head_and_best(tmp_path):
     the best tree's table from the same step: evidence file and prompt table
     contradicted each other, and a PARTIAL HEAD table replaced a FULL best one.
     The names now follow the dossiers' head/best split."""
-    from peregrine_kernel.loop.driver import (
+    from rsi_kernel_tune.loop.driver import (
         _STUDENT_BEST_ORCH_DOSSIER_NAME,
         _STUDENT_ORCH_DOSSIER_NAME,
         _STUDENT_ROLE_EXPOSURE_BEST_NAME,
@@ -407,7 +407,7 @@ def test_student_role_tables_split_head_and_best(tmp_path):
 def test_student_role_tables_coincident_head_and_best_bank_both_names(tmp_path):
     """One job prices both trees when they coincide: both bank names carry the
     same table (student_role_exposure.txt keeps its historical content)."""
-    from peregrine_kernel.loop.driver import (
+    from rsi_kernel_tune.loop.driver import (
         _STUDENT_BEST_ORCH_DOSSIER_NAME,
         _STUDENT_ORCH_DOSSIER_NAME,
         _STUDENT_ROLE_EXPOSURE_BEST_NAME,

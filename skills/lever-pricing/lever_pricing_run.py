@@ -189,7 +189,7 @@ MAX_SUBSETS = 6
 # (loop/meta_shapes.py) -- priced on the representative alone, a lever's reading agreed
 # in direction with the rest of the group only 61% of the time a change was real.
 # Every bench, the role pass and the ablations' NCU clock read that one workload.
-WORKLOAD_SCOPE_ENV = "PK_LB_WORKLOAD_SCOPE"
+WORKLOAD_SCOPE_ENV = "RKT_LB_WORKLOAD_SCOPE"
 WORKLOAD_SCOPE = "representative"
 _SCOPE_SEEN: dict = {}
 _SCOPE_WANT = {"name": WORKLOAD_SCOPE}
@@ -368,7 +368,7 @@ PREBUILD_MIN_S = 120
 # read n/a instead; the ablations answer what each component of the kernel costs.
 ABLATION_RESERVE_CAP_S = 600
 _PREBUILD_SNIPPET = ("import sys; sys.path.insert(0, 'eval'); import benchkit as L\n"
-                     "try:\n    L.load_cuda_entry(sys.argv[1], '__pk_prebuild__')\n"
+                     "try:\n    L.load_cuda_entry(sys.argv[1], '__rkt_prebuild__')\n"
                      "except AttributeError:\n    pass\n")
 
 
@@ -456,7 +456,7 @@ def cuda_sass_sha(src: str, kernel: str):
     try:
         from orch_census_run import find_cuda_build  # type: ignore  # vendored flat in notes/
     except ImportError:
-        from peregrine_kernel.skills.orch_census_run import find_cuda_build
+        from rsi_kernel_tune.skills.orch_census_run import find_cuda_build
     so = find_cuda_build(src, os.path.basename(kernel))
     if so is None or shutil.which("cuobjdump") is None:
         return None
@@ -639,7 +639,7 @@ def _scope_env():
 def scoped_workload_refused(name, root=None):
     """Why ``--workload <name>`` cannot be priced on this card, or None: the card must be
     a group card that lists its meta workloads (problem.json ``meta_workloads``, written
-    by the peregrine revision whose card runtime understands a named scope -- an older card
+    by the rsi-kernel-tune revision whose card runtime understands a named scope -- an older card
     would ignore the name and time its whole group) and ``name`` one of its entries."""
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", name or ""):
         return f"bad workload name {name!r}"
@@ -685,7 +685,7 @@ def _bench_post(j):
     gpu_state telemetry — a reading whose node sits outside the pass's first
     reading's band is marked NODE-DIRTY and produces no verdict (the pass stops;
     the driver re-runs once on a fresh node). Off unless
-    PK_SCREENING_CLOCK_GUARD=1: the historical behavior never read gpu_state
+    RKT_SCREENING_CLOCK_GUARD=1: the historical behavior never read gpu_state
     here, and this module keeps to it byte for byte by default."""
     if isinstance(j, dict) and isinstance(j.get("workload_scope"), dict) and not _SCOPE_SEEN:
         _SCOPE_SEEN.update(j["workload_scope"])
@@ -703,7 +703,7 @@ def _bench_post(j):
     return j
 
 
-CLOCK_GUARD_ENV = "PK_SCREENING_CLOCK_GUARD"
+CLOCK_GUARD_ENV = "RKT_SCREENING_CLOCK_GUARD"
 _CLOCK_GUARD_ANCHOR: dict = {}
 
 
@@ -754,10 +754,10 @@ def paired_order(variants) -> list:
 # always made. Isolation is unchanged: the call timeout is the CLIENT's, and a
 # hung or crashed call kills the worker process group and takes the same
 # NODE-DIRTY path the subprocess timeout always took. Kill switch
-# PK_SCREENING_INPROC=0 (and any worker startup / protocol failure) falls back
+# RKT_SCREENING_INPROC=0 (and any worker startup / protocol failure) falls back
 # to the per-call subprocess for the rest of the run — the historical behavior,
 # byte for byte.
-BENCH_INPROC_ENV = "PK_SCREENING_INPROC"
+BENCH_INPROC_ENV = "RKT_SCREENING_INPROC"
 _BENCH_DONE = "BENCH-DONE"
 _BENCH_ERR_BEGIN = "BENCH-STDERR-BEGIN"
 _BENCH_ERR_END = "BENCH-STDERR-END"
@@ -1013,7 +1013,7 @@ def ablation_reserve_s(n_ablations: int, rounds: int, bench_s) -> float:
 def run_price(variant, timeout=ROLE_PM_TIMEOUT):
     # roles only: no -lineinfo build of every variant (one more ~40 s nvcc run each)
     rc, out, err = sh("python3 notes/stall_price_run.py --pm", timeout=timeout,
-                      env={**_scope_env(), "PK_CUDA_LINEINFO": "0"})
+                      env={**_scope_env(), "RKT_CUDA_LINEINFO": "0"})
     roles = None
     for ln in (out + "\n" + err).splitlines():
         if ln.startswith("ROLE-JSON: "):

@@ -16,7 +16,7 @@ sys.path.insert(0, str(REPO / "src"))
 
 from test_loop_driver import FakeBackend, _ctx
 
-from peregrine_kernel.loop.driver import _run_sweep_request_per_shape
+from rsi_kernel_tune.loop.driver import _run_sweep_request_per_shape
 
 _RECIPE = {"variants": [{"name": "wide", "edits": [{"old": "a", "new": "b"}]}]}
 

@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """FIX-R3G regression pins for BUG-CH-J-04 (``skills/timeline/timeline_probe.py``).
@@ -23,7 +23,7 @@ import sys
 
 import pytest
 
-from peregrine_kernel.skills.timeline_probe import (
+from rsi_kernel_tune.skills.timeline_probe import (
     NROW, NSITE, NSLOT, NWARP, parse_timeline,
 )
 
@@ -114,7 +114,7 @@ def _mock_benches(tp, monkeypatch, *, base_ms, stamped_ms, slab):
 
 @pytest.fixture
 def tp():
-    from peregrine_kernel.skills import timeline_probe as tp
+    from rsi_kernel_tune.skills import timeline_probe as tp
     return tp
 
 

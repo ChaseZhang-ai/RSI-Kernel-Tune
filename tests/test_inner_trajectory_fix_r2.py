@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from peregrine_kernel.inner.trajectory import (
+from rsi_kernel_tune.inner.trajectory import (
     IterationRecord,
     _DIFF_SIG,
     append_record,

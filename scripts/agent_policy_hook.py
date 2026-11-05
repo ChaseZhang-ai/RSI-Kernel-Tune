@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """PreToolUse hook: refuse a tool call that reaches the network from an offline role, or
 that names the reference implementation's repository (see
-src/peregrine_kernel/loop/agent_policy.py).
+src/rsi_kernel_tune/loop/agent_policy.py).
 
 Installed by the harness into an agent's project settings; invoked by Claude Code as
 
-    python3 agent_policy_hook.py <workspace>/.claude/peregrine_kernel-agent-policy.json
+    python3 agent_policy_hook.py <workspace>/.claude/rsi_kernel_tune-agent-policy.json
 
 with the tool call as JSON on stdin. Exit 2 blocks the call and hands stderr to the
 agent; exit 0 lets it through. Standard library only: it runs under whatever
@@ -62,7 +62,7 @@ _NET_URL = re.compile(r"\b(?:https?|ftps?|git|ssh|rsync)://", re.I)
 # The ways to the GPU machine, for a student that keeps the network (no_cluster without
 # offline): also by path (`/usr/bin/ssh`), which the deny rules do not match.
 _CLUSTER_CMD = re.compile(
-    r"""(?:^|[\s;&|(`$'"/])(?:ssh|scp|rsync|python3?\s+-m\s+peregrine_kernel\.submit)(?:\s|$)""",
+    r"""(?:^|[\s;&|(`$'"/])(?:ssh|scp|rsync|python3?\s+-m\s+rsi_kernel_tune\.submit)(?:\s|$)""",
     re.I)
 
 
@@ -123,19 +123,19 @@ def decide(policy: dict, event: dict) -> str | None:
 
     if policy.get("offline"):
         if tool in ("WebFetch", "WebSearch"):
-            return (f"BLOCKED by the Peregrine-Kernel agent policy: the {role} works offline "
+            return (f"BLOCKED by the RSI-Kernel-Tune agent policy: the {role} works offline "
                     f"in this run, so {tool} is not available. Interface facts come from "
                     f"the KB, the DSL sources on this machine and your own probes.")
         for text in texts:
             if _NET_CMD.search(text) or _NET_URL.search(text):
-                return (f"BLOCKED by the Peregrine-Kernel agent policy: the {role} works "
+                return (f"BLOCKED by the RSI-Kernel-Tune agent policy: the {role} works "
                         f"offline in this run and this command reaches the network. "
                         f"Nothing outside this machine is available this turn — the "
                         f"sandbox refuses the connection as well.")
     if (policy.get("offline") or policy.get("no_cluster")) and tool == "Bash":
         for text in texts:
             if _CLUSTER_CMD.search(text):
-                return (f"BLOCKED by the Peregrine-Kernel agent policy: the {role} does not drive "
+                return (f"BLOCKED by the RSI-Kernel-Tune agent policy: the {role} does not drive "
                         f"the GPU machine (ssh / its own jobs). GPU work goes through the "
                         f"evaluation command your task names; the loop submits and records it.")
 
@@ -144,7 +144,7 @@ def decide(policy: dict, event: dict) -> str | None:
         for text in texts:
             hit = _reference_hit(patterns, tool, text)
             if hit:
-                return (f"BLOCKED by the Peregrine-Kernel agent policy: this {tool} call names "
+                return (f"BLOCKED by the RSI-Kernel-Tune agent policy: this {tool} call names "
                         f"`{hit}`, the reference implementation's repository. The reference "
                         f"source is off limits in this run (role {role}, "
                         f"{policy.get('oracle_mode')} mode) — on this machine and on the web.")
@@ -156,13 +156,13 @@ def main(argv: list[str]) -> int:
         policy = json.loads(open(argv[1], encoding="utf-8").read())
     except (IndexError, OSError, ValueError) as e:
         # A policy that cannot be read must not silently allow everything.
-        sys.stderr.write(f"BLOCKED: Peregrine-Kernel agent policy unreadable ({e})\n")
+        sys.stderr.write(f"BLOCKED: RSI-Kernel-Tune agent policy unreadable ({e})\n")
         return 2
     if not isinstance(policy, dict):
         # Legal JSON of the wrong shape would AttributeError inside decide() and exit
         # 1 — which Claude Code reads as a NON-blocking error, i.e. the call goes
         # through. Anything unreadable as a policy fails closed, like the above.
-        sys.stderr.write("BLOCKED: Peregrine-Kernel agent policy is not a JSON object\n")
+        sys.stderr.write("BLOCKED: RSI-Kernel-Tune agent policy is not a JSON object\n")
         return 2
     try:
         event = json.loads(sys.stdin.read() or "{}")
@@ -170,13 +170,13 @@ def main(argv: list[str]) -> int:
         # Same contract as the policy side: an event that cannot be read must not
         # silently allow everything (exit 0). Claude Code blocks on exit 2 and hands
         # stderr to the agent; exit 1 would be a NON-blocking pass.
-        sys.stderr.write(f"BLOCKED: Peregrine-Kernel agent policy could not read the "
+        sys.stderr.write(f"BLOCKED: RSI-Kernel-Tune agent policy could not read the "
                          f"tool-call event ({e})\n")
         return 2
     if not isinstance(event, dict):
         # An event that parses but is not an object (an array, a string, null) would
         # AttributeError inside decide() and exit 1 — the same non-blocking pass.
-        sys.stderr.write("BLOCKED: Peregrine-Kernel agent policy could not read the "
+        sys.stderr.write("BLOCKED: RSI-Kernel-Tune agent policy could not read the "
                          "tool-call event (not a JSON object)\n")
         return 2
     msg = decide(policy, event)

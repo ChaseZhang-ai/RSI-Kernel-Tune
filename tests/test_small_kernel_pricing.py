@@ -4,11 +4,11 @@ launches, and a starved PM timeline is re-collected once at a finer interval."""
 import sys
 import types
 
-from peregrine_kernel.loop.driver import _PM_TIMELINE_RE, _PMTL_OK, _STALL_OK
-from peregrine_kernel.skills import pm_timeline_tools as pmt
-from peregrine_kernel.skills import role_exposure_tools as RE
-from peregrine_kernel.skills import stall_price_run as spr
-from peregrine_kernel.skills import stall_tools as st
+from rsi_kernel_tune.loop.driver import _PM_TIMELINE_RE, _PMTL_OK, _STALL_OK
+from rsi_kernel_tune.skills import pm_timeline_tools as pmt
+from rsi_kernel_tune.skills import role_exposure_tools as RE
+from rsi_kernel_tune.skills import stall_price_run as spr
+from rsi_kernel_tune.skills import stall_tools as st
 
 LS = "smsp__pcsamp_warps_issue_stalled_long_scoreboard"
 
@@ -310,7 +310,7 @@ def test_a_failed_finer_pm_collection_is_not_read_off_the_previous_jobs_report(m
 
 
 def test_pm_timeline_run_does_not_read_the_previous_jobs_report(monkeypatch, tmp_path, capsys):
-    from peregrine_kernel.skills import pm_timeline_run as ptr
+    from rsi_kernel_tune.skills import pm_timeline_run as ptr
     monkeypatch.setattr(ptr, "REPORT", str(tmp_path / "pm_timeline"))
     (tmp_path / "pm_timeline.ncu-rep").write_text("the previous job's report")
     monkeypatch.setattr(ptr.subprocess, "run", lambda *a, **k: types.SimpleNamespace(

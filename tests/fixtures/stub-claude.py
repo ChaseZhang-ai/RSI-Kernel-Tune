@@ -34,7 +34,7 @@ cfg = os.environ["CLAUDE_CONFIG_DIR"]
 slug = re.sub(r"[^A-Za-z0-9]", "-", os.getcwd())
 os.makedirs(os.path.join(cfg, "projects", slug), exist_ok=True)
 path = os.path.join(cfg, "projects", slug, sid + ".jsonl")
-turn_dir = os.environ.get("PK_GOAL_TURN_DIR")
+turn_dir = os.environ.get("RKT_GOAL_TURN_DIR")
 if turn_dir:
     reply = json.load(open(os.path.join(turn_dir, "spec.json")))["reply"]
 else:
@@ -137,7 +137,7 @@ elif mode == "resume_ok":
 elif mode == "cleared":
     api_error("Please run /login · API Error: 401 OAuth access token is invalid.", "authentication_failed")
     turn_end()
-    say('Goal cleared after an unrecoverable error (authentication failed): "PEREGRINE". '
+    say('Goal cleared after an unrecoverable error (authentication failed): "RSI-KERNEL-TUNE". '
         'Run /goal again to continue.')
     idle()
 elif mode == "pause_then_ok":

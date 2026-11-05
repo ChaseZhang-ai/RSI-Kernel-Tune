@@ -34,7 +34,7 @@ mod = types.ModuleType("fake_pricing_vendor")
 mod.__file__ = str(src)
 importlib.import_module = lambda name: mod
 sys.path.insert(0, str(repo_src))
-from peregrine_kernel.loop.driver import _seed_pricing_toolkits
+from rsi_kernel_tune.loop.driver import _seed_pricing_toolkits
 
 
 class _BE:
@@ -57,7 +57,7 @@ import sys
 from pathlib import Path
 workspace, repo_src = Path(sys.argv[1]), Path(sys.argv[2])
 sys.path.insert(0, str(repo_src))
-from peregrine_kernel.loop.driver import _detach_kb_probes
+from rsi_kernel_tune.loop.driver import _detach_kb_probes
 
 
 class _BE:
@@ -87,7 +87,7 @@ mod = types.ModuleType("fake_mc_vendor")
 mod.__file__ = str(root / "vendor_src.py")
 importlib.import_module = lambda name: mod
 sys.path.insert(0, str(repo_src))
-from peregrine_kernel.loop.driver import _mc_seed_toolkit
+from rsi_kernel_tune.loop.driver import _mc_seed_toolkit
 
 
 class _BE:
@@ -114,7 +114,7 @@ import re, sys
 from pathlib import Path
 repo_src, report = Path(sys.argv[1]), Path(sys.argv[2])
 sys.path.insert(0, str(repo_src))
-from peregrine_kernel.loop.driver import _report_waives
+from rsi_kernel_tune.loop.driver import _report_waives
 
 
 class _Ctx:

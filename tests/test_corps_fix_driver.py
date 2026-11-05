@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from test_loop_driver import REC, EVAL, NCU, FakeBackend, _ctx
 
-from peregrine_kernel.inner.trajectory import load_records
-from peregrine_kernel.loop.driver import (_green_on_resume, run_inner_iteration,
+from rsi_kernel_tune.inner.trajectory import load_records
+from rsi_kernel_tune.loop.driver import (_green_on_resume, run_inner_iteration,
                                           run_inner_loop)
 
 # a record block with a placeholder declaration, for the gate-refused path
@@ -124,7 +124,7 @@ def test_resume_over_a_never_evaluated_revert_stays_unknown_not_not_green(tmp_pa
 
 
 def test_unattended_safety_net_logs_the_full_traceback(tmp_path, monkeypatch, capsys):
-    import peregrine_kernel.loop.driver as drv
+    import rsi_kernel_tune.loop.driver as drv
 
     def boom(*args, **kwargs):
         raise ValueError("synthetic inner failure")

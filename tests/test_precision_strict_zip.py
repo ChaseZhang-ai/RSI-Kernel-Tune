@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """BUG-SEED-24 — PrecisionRecorder.measure silently truncated mismatched inputs.
@@ -24,7 +24,7 @@ torch = pytest.importorskip("torch")
 
 REPO = Path(__file__).resolve().parents[1]
 _precision_spec = importlib.util.spec_from_file_location(
-    "pk_template_precision", REPO / "src" / "peregrine_kernel" / "card_template" / "eval" / "precision.py")
+    "rkt_template_precision", REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "precision.py")
 P = importlib.util.module_from_spec(_precision_spec)
 _precision_spec.loader.exec_module(P)
 

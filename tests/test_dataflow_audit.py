@@ -74,10 +74,10 @@ TESTS_DIR = Path(__file__).resolve().parent
 ROOT = TESTS_DIR.parent
 SRC = ROOT / "src"
 
-TRAJECTORY = SRC / "peregrine_kernel" / "inner" / "trajectory.py"
-PARSE = SRC / "peregrine_kernel" / "loop" / "parse.py"
-TIMING = SRC / "peregrine_kernel" / "card_template" / "eval" / "timing.py"
-DRIVER = SRC / "peregrine_kernel" / "loop" / "driver.py"
+TRAJECTORY = SRC / "rsi_kernel_tune" / "inner" / "trajectory.py"
+PARSE = SRC / "rsi_kernel_tune" / "loop" / "parse.py"
+TIMING = SRC / "rsi_kernel_tune" / "card_template" / "eval" / "timing.py"
+DRIVER = SRC / "rsi_kernel_tune" / "loop" / "driver.py"
 
 # IterationRecord's write-side plumbing and same-named-but-different-source files:
 # hits there do not count as readers. launch.py / loop/cli.py / monitor/cli.py
@@ -86,14 +86,14 @@ DRIVER = SRC / "peregrine_kernel" / "loop" / "driver.py"
 # same source (loop/cli.py:634 job state, :1797/:1814 confirmation and monitor JSON,
 # :3184 paired confirmation; monitor/cli.py:33 confirmation JSON, :72 args). They
 # are not readers of IterationRecord rows.
-IR_PLUMBING = ("src/peregrine_kernel/loop/driver.py", "src/peregrine_kernel/loop/parse.py",
-               "src/peregrine_kernel/launch.py", "src/peregrine_kernel/loop/cli.py",
-               "src/peregrine_kernel/monitor/cli.py")
-IR_BENCH = "src/peregrine_kernel/card_template/"
+IR_PLUMBING = ("src/rsi_kernel_tune/loop/driver.py", "src/rsi_kernel_tune/loop/parse.py",
+               "src/rsi_kernel_tune/launch.py", "src/rsi_kernel_tune/loop/cli.py",
+               "src/rsi_kernel_tune/monitor/cli.py")
+IR_BENCH = "src/rsi_kernel_tune/card_template/"
 # EvalResult: the constructor and the bench write side don't count as readers
 # (the driver is its designed audience).
-EV_PLUMBING = ("src/peregrine_kernel/loop/parse.py",)
-EV_BENCH = "src/peregrine_kernel/card_template/"
+EV_PLUMBING = ("src/rsi_kernel_tune/loop/parse.py",)
+EV_BENCH = "src/rsi_kernel_tune/card_template/"
 
 BASELINE_PATH = TESTS_DIR / "dataflow_audit_baseline.json"
 WHITELIST_PATH = TESTS_DIR / "dataflow_audit_whitelist.json"
@@ -104,8 +104,8 @@ WHITELIST_PATH = TESTS_DIR / "dataflow_audit_whitelist.json"
 # _WP11_TELEMETRY_FIELDS keys are already IterationRecord fields (registered
 # field-wise in the whitelist) and are not added again here.
 TUPLES = (
-    (TRAJECTORY, "_SOL_HEADER_KEYS", "SOL", "src/peregrine_kernel/inner/ncu.py"),
-    (TIMING, "GPU_STATE_FIELDS", "GPU_STATE", "src/peregrine_kernel/card_template/"),
+    (TRAJECTORY, "_SOL_HEADER_KEYS", "SOL", "src/rsi_kernel_tune/inner/ncu.py"),
+    (TIMING, "GPU_STATE_FIELDS", "GPU_STATE", "src/rsi_kernel_tune/card_template/"),
 )
 
 DIGEST_FN = "build_digest"
@@ -268,7 +268,7 @@ def audit() -> dict[str, dict]:
             }
 
     callers = [c for c in _production_callers(DIGEST_FN)
-               if not c.startswith("peregrine_kernel/inner/trajectory.py")]
+               if not c.startswith("rsi_kernel_tune/inner/trajectory.py")]
     table[DIGEST_FN] = {
         "status": "read" if callers else "readerless",
         "tier": "consumption" if callers else "no-read",

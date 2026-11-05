@@ -17,7 +17,7 @@ no code commits the main repository's copy.
 So a freshly certified recipe is just an uncommitted file: one `git checkout` and it is gone, after the
 GPU probe has already been paid for.
 
-**Which checkout it lands in also matters**: the knowledge base's location follows where Peregrine-Kernel is
+**Which checkout it lands in also matters**: the knowledge base's location follows where RSI-Kernel-Tune is
 installed (the source tree an editable install points at), not the current directory. Start a run from
 another worktree and the recipe may land in another tree's `hw_kb/`.
 
@@ -26,8 +26,8 @@ another worktree and the recipe may land in another tree's `hw_kb/`.
 **Before the start**: when the knowledge-base directory (and `docs/kb-provenance/`, except `gaps/`; the
 CUDA and CuTe DSL modes each guard their own directories) has uncommitted changes, a new run refuses
 to start (exit 3), so that the previous run's unharvested recipes do not get buried under the next
-run. Commit or discard them, then `peregrine run` again. Resuming a run that has already started is not
-held by this gate. When the loop is run directly on a hand-made tree (`peregrine <op> loop`),
+run. Commit or discard them, then `rsi-kernel-tune run` again. Resuming a run that has already started is not
+held by this gate. When the loop is run directly on a hand-made tree (`rsi-kernel-tune <op> loop`),
 `--allow-dirty-kb` starts it on a dirty knowledge base.
 
 **At the end**: the terminal prints a `[harvest]` list (the uncommitted files left in the knowledge-base
@@ -36,7 +36,7 @@ under "New knowledge-base entries". The recipes stay in the working tree for a p
 then commit or discard -- until then, the next new run is still held by the gate above.
 
 **When a run did not reach its finish**: a run stopped before its finish (a killed session, an
-interruption) never does the end-of-run knowledge-base write-up. `peregrine harvest .artifacts/<op>_<id>`
+interruption) never does the end-of-run knowledge-base write-up. `rsi-kernel-tune harvest .artifacts/<op>_<id>`
 does it afterwards: one teacher turn, no GPU job, no confirmation; what it writes is likewise left for
 a person to review.
 
@@ -55,7 +55,7 @@ operator-agnostic. Check the other two axes:
 2. **A source may be pointed to, never paraphrased**: file names, function names, line numbers,
    paraphrased content and measured footprints of a reference implementation (readable source or
    blackbox alike) all go to `docs/kb-provenance/<entry>.md` (in no agent's read set); the reasons are
-   in that directory's README. The mechanical lint (`src/peregrine_kernel/loop/kb_lint.py`, run at loop
+   in that directory's README. The mechanical lint (`src/rsi_kernel_tune/loop/kb_lint.py`, run at loop
    start and when a recipe is certified; an entry that fails at certification is moved out of the
    student-readable tree into `kb_quarantine/` at the repository root) catches leaks of proper names;
    **a narrated paraphrase without proper names gets past the lint, and only a human reader catches
@@ -69,5 +69,5 @@ overwrites it.
 
 | Switch | Effect |
 |---|---|
-| `--allow-dirty-kb` (`peregrine <op> loop`) | start even though the knowledge base has uncommitted changes |
-| `peregrine harvest .artifacts/<op>_<id>` | do the knowledge-base write-up of a run that did not reach its finish |
+| `--allow-dirty-kb` (`rsi-kernel-tune <op> loop`) | start even though the knowledge base has uncommitted changes |
+| `rsi-kernel-tune harvest .artifacts/<op>_<id>` | do the knowledge-base write-up of a run that did not reach its finish |

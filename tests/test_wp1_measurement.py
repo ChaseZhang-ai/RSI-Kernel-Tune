@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record, build_digest, load_records
-from peregrine_kernel.loop.parse import parse_eval
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record, build_digest, load_records
+from rsi_kernel_tune.loop.parse import parse_eval
 
 
 # --- task 1: the raw readings survive the parse and the record -----------------
@@ -122,7 +122,7 @@ def test_digest_shows_spread_but_never_the_raw_arrays():
 
 # --- task 2: resolvable_diff — the resolution the run's own ratios resolve ------
 
-from peregrine_kernel.loop.parse import (RESOLVABLE_DIFF_CAP, RESOLVABLE_DIFF_FLOOR,
+from rsi_kernel_tune.loop.parse import (RESOLVABLE_DIFF_CAP, RESOLVABLE_DIFF_FLOOR,
                                     detect_plateau, resolvable_diff)
 
 
@@ -231,7 +231,7 @@ def test_detect_plateau_old_behavior_without_ratios_is_bit_for_bit():
 
 # --- task 2: driver consumers --------------------------------------------------
 
-import peregrine_kernel.loop.driver as drv
+import rsi_kernel_tune.loop.driver as drv
 
 
 def test_gate_regression_noise_uses_the_run_ratios(tmp_path):
@@ -275,7 +275,7 @@ def test_resolvable_keys_are_context_config_with_historical_defaults():
     # the data cannot speak.
     import dataclasses
     import inspect
-    import peregrine_kernel.loop.cli as cli
+    import rsi_kernel_tune.loop.cli as cli
     src = inspect.getsource(cli)
     for key, default in (("resolvable_floor", "0.005"), ("resolvable_cap", "0.015"),
                          ("confirm_budget_per_iter", "1")):
@@ -287,8 +287,8 @@ def test_resolvable_keys_are_context_config_with_historical_defaults():
 
 # --- task 3: the suspicious-watermark confirmation band ------------------------
 
-from peregrine_kernel.loop.driver import _confirm_suspicious_watermark
-from peregrine_kernel.loop.parse import parse_eval
+from rsi_kernel_tune.loop.driver import _confirm_suspicious_watermark
+from rsi_kernel_tune.loop.parse import parse_eval
 
 
 class _GpuLogBackend:
@@ -304,7 +304,7 @@ class _GpuLogBackend:
 
 
 def _wm_ctx(tmp_path, be, *, margin=0.03):
-    from peregrine_kernel.loop.driver import LoopContext
+    from rsi_kernel_tune.loop.driver import LoopContext
     ctx = LoopContext(
         op="demo", workspace=tmp_path, milestone=tmp_path / "m.md", kb_dir=tmp_path,
         status_path=tmp_path / "status.jsonl", meta_dir=tmp_path / "meta",
@@ -419,7 +419,7 @@ import sys
 import types
 
 TIMING_PY = (Path(__file__).resolve().parents[1]
-             / "src" / "peregrine_kernel" / "card_template" / "eval" / "timing.py")
+             / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "timing.py")
 
 
 def _load_timing():

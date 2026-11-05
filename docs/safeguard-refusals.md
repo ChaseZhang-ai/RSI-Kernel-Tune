@@ -13,7 +13,7 @@ The two call for opposite responses:
 | channel mix-up | the gateway rotates through a channel pool | yes, the pool rotates | the gateway / channel |
 | **safeguard refusal** | **some part of the request context was judged violative** | **no, the same context is refused again** | **the text that was judged violative** |
 
-Peregrine-Kernel does not currently detect refusals: a downgraded turn runs to the end on the fallback
+RSI-Kernel-Tune does not currently detect refusals: a downgraded turn runs to the end on the fallback
 model and is recorded like any other. So when a run's agent turns keep producing nothing, or a model
 you never configured shows up in a transcript, check for the record below **by hand**; retrying will
 not make it go away.

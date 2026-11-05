@@ -16,8 +16,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from test_launch import _confirmed, _loop_ends, _start, _task, _Teacher  # noqa: E402
 
-from peregrine_kernel import launch, monitor  # noqa: E402
-from peregrine_kernel.runs import list_runs  # noqa: E402
+from rsi_kernel_tune import launch, monitor  # noqa: E402
+from rsi_kernel_tune.runs import list_runs  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -25,11 +25,11 @@ REPO = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
     """A scratch place for runs and locks; the harness itself stays the real repository."""
-    monkeypatch.setenv("PEREGRINE_RUNS_DIR", str(tmp_path / "runs"))
-    monkeypatch.setenv("PEREGRINE_LOCK_DIR", str(tmp_path / "locks"))
-    monkeypatch.delenv("PEREGRINE_OPERATORS_DIR", raising=False)
-    monkeypatch.setenv("PK_DELIVERY", "local")
-    monkeypatch.setenv("PK_GPU", "0")
+    monkeypatch.setenv("RSI-KERNEL-TUNE_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("RSI-KERNEL-TUNE_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("RSI-KERNEL-TUNE_OPERATORS_DIR", raising=False)
+    monkeypatch.setenv("RKT_DELIVERY", "local")
+    monkeypatch.setenv("RKT_GPU", "0")
     monkeypatch.setattr(launch, "probe_ncu", lambda task, op_dir: True)
     return tmp_path
 
@@ -39,9 +39,9 @@ def repo(tmp_path, monkeypatch):
 
 
 def _drive_to_the_end(repo, monkeypatch, *, stop, confirm):
-    """`peregrine new` + `peregrine run` with the loop stood in: it ends with ``stop``
+    """`rsi-kernel-tune new` + `rsi-kernel-tune run` with the loop stood in: it ends with ``stop``
     and ``confirm`` as the final confirmation exactly as given (no stand-in defaults)."""
-    from peregrine_kernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     task_dir = _task(repo)
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
@@ -52,7 +52,7 @@ def _drive_to_the_end(repo, monkeypatch, *, stop, confirm):
 
 def test_a_target_stop_with_a_correctness_alarm_is_not_done(repo, monkeypatch):
     """The loop stopped at the target, but the confirmed kernel's correctness monitor
-    raised an alarm: `peregrine run` exits 2 and the run is stopped — DONE requires a
+    raised an alarm: `rsi-kernel-tune run` exits 2 and the run is stopped — DONE requires a
     confirmation with no alarm, whatever the stop word says."""
     rc, run = _drive_to_the_end(repo, monkeypatch, stop="target",
                                 confirm=_confirmed(8.0, monitor="alarm"))
@@ -75,11 +75,11 @@ def test_a_target_stop_on_a_confirmed_best_is_done(repo, monkeypatch):
 def test_a_target_stop_without_any_confirmation_is_not_done(repo, monkeypatch):
     """A target stop with no best_confirmation.json at all: `met` is false, so the run
     ends stopped instead of reading DONE out of the stop word."""
-    from peregrine_kernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
 
     def main(argv):
-        from peregrine_kernel.loop.cli import SUMMARY_FILE
-        d = Path(os.environ["PEREGRINE_OPERATORS_DIR"]) / argv[0]
+        from rsi_kernel_tune.loop.cli import SUMMARY_FILE
+        d = Path(os.environ["RSI-KERNEL-TUNE_OPERATORS_DIR"]) / argv[0]
         (d / SUMMARY_FILE).write_text(json.dumps({"stop": "target"}))
         return 0
 
@@ -195,7 +195,7 @@ def test_a_one_sided_companion_declaration_reopens_both_sides():
     """D2 declares ⊗ D3 and D3 declares nothing back: reopening D2 pulls D3 in too —
     companions land in one commit, so half a pair kept would validate a tree the
     other half rewrites."""
-    from peregrine_kernel.resume import Decision, compute_reopen
+    from rsi_kernel_tune.resume import Decision, compute_reopen
     traj = [Decision("D1"), Decision("D2", companions={"D3"}), Decision("D3")]
     plan = compute_reopen(traj, {"D2"})
     assert plan.reopen == ["D2", "D3"] and plan.kept == ["D1"]
@@ -204,7 +204,7 @@ def test_a_one_sided_companion_declaration_reopens_both_sides():
 def test_a_one_sided_companion_declaration_reopens_the_declarer_too():
     """The direction that always worked stays working: the companion (D3) declaring ⊗
     D2 is pulled in when D2 is reopened — and now so is anything D2 named."""
-    from peregrine_kernel.resume import Decision, compute_reopen
+    from rsi_kernel_tune.resume import Decision, compute_reopen
     traj = [Decision("D1"), Decision("D2"), Decision("D3", companions={"D2"})]
     plan = compute_reopen(traj, {"D2"})
     assert plan.reopen == ["D2", "D3"] and plan.kept == ["D1"]
@@ -212,7 +212,7 @@ def test_a_one_sided_companion_declaration_reopens_the_declarer_too():
 
 def test_a_two_sided_companion_declaration_behaves_as_before():
     """Both sides declaring ⊗ each other: the symmetric closure changes nothing."""
-    from peregrine_kernel.resume import Decision, compute_reopen
+    from rsi_kernel_tune.resume import Decision, compute_reopen
     traj = [Decision("D1"), Decision("D2", companions={"D3"}),
             Decision("D3", companions={"D2"})]
     plan = compute_reopen(traj, {"D2"})
@@ -224,7 +224,7 @@ def test_a_two_sided_companion_declaration_behaves_as_before():
 def test_companion_closure_does_not_reach_past_the_changed_set():
     """A decision that declares no companion and is not changed stays kept even when a
     companion pair elsewhere reopens: the closure is the pair, not the trajectory."""
-    from peregrine_kernel.resume import Decision, compute_reopen
+    from rsi_kernel_tune.resume import Decision, compute_reopen
     traj = [Decision("D1"), Decision("D2", companions={"D3"}), Decision("D3"),
             Decision("D4")]
     plan = compute_reopen(traj, {"D2"})
@@ -287,7 +287,7 @@ x
 def test_dependency_warnings_flag_a_one_sided_companion_declaration():
     """⊗ declared on one side only is warned, in the style of the ⇒ echo check: the
     reopen plan can only keep the pair together when both sides declare it."""
-    from peregrine_kernel.milestone import dependency_warnings
+    from rsi_kernel_tune.milestone import dependency_warnings
     w = dependency_warnings(_companion_milestone())
     assert w == ["§3 D0.2 declares ⊗ D0.3 but D0.3 does not list ⊗ D0.2"
                  " — companions land in one commit, and the reopen plan can only"
@@ -295,7 +295,7 @@ def test_dependency_warnings_flag_a_one_sided_companion_declaration():
 
 
 def test_dependency_warnings_stay_silent_on_a_two_sided_companion_declaration():
-    from peregrine_kernel.milestone import dependency_warnings
+    from rsi_kernel_tune.milestone import dependency_warnings
     assert dependency_warnings(
         _companion_milestone("- Depends on: ⇐ D0.1 | ⊗ D0.2")) == []
 
@@ -307,7 +307,7 @@ def test_command_findings_see_the_teacher_command_too():
     """All agent commands used to share the "agent command" source, so the dedup key
     collided and the second command's findings were dropped whole: the teacher leg —
     always the second — could carry --settings past the gate unseen."""
-    from peregrine_kernel.loop import agent_policy as ap
+    from rsi_kernel_tune.loop import agent_policy as ap
     student = 'claude -p "optimize the kernel"'
     teacher = 'claude --settings /tmp/evil.json -p "recon the reference"'
     assert ap.command_findings([student, teacher], {}) == [
@@ -319,14 +319,14 @@ def test_command_findings_see_the_teacher_command_too():
 
 
 def test_command_findings_report_an_identical_command_once():
-    from peregrine_kernel.loop import agent_policy as ap
+    from rsi_kernel_tune.loop import agent_policy as ap
     assert len(ap.command_findings(["claude -p --bare", "claude -p --bare"], {})) == 1
 
 
 def test_command_findings_still_read_a_shared_script_once(tmp_path):
     """A script file named by two commands is scanned once: its (path, text) pair is
     what repeats, and the dedup keeps working on it."""
-    from peregrine_kernel.loop import agent_policy as ap
+    from rsi_kernel_tune.loop import agent_policy as ap
     script = tmp_path / "agent.sh"
     script.write_text("claude -p --bare\n")
     findings = ap.command_findings([f"bash {script}", f"bash {script}"], {})
@@ -340,15 +340,15 @@ def test_command_findings_still_read_a_shared_script_once(tmp_path):
 def _load_hook_module():
     """The in-process monitor hook, standalone: it is stdlib-only and installs nothing
     on import (the install happens through sitecustomize)."""
-    path = Path(monitor.__file__).parent / "runtime" / "hook" / "pk_monitor_hook.py"
-    spec = importlib.util.spec_from_file_location("pk_monitor_hook_lifecycle", path)
+    path = Path(monitor.__file__).parent / "runtime" / "hook" / "rkt_monitor_hook.py"
+    spec = importlib.util.spec_from_file_location("rkt_monitor_hook_lifecycle", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
 def test_dump_failure_leaves_a_one_time_stderr_trace(tmp_path, capsys):
-    """PK_MON_OUT is not writable: the dump still swallows (a raising hook would kill
+    """RKT_MON_OUT is not writable: the dump still swallows (a raising hook would kill
     the bench it watches) but stderr names the failure once — the data loss is not
     silent, and the second failing dump does not spam."""
     hook = _load_hook_module()
@@ -368,7 +368,7 @@ def test_dump_failure_leaves_a_one_time_stderr_trace(tmp_path, capsys):
 
 
 def test_dump_failure_is_reported_when_the_path_cannot_exist(tmp_path, capsys):
-    """A PK_MON_OUT under a regular file cannot become a directory on any uid: same
+    """A RKT_MON_OUT under a regular file cannot become a directory on any uid: same
     one-time trace, same swallow."""
     block = tmp_path / "block"
     block.write_text("a file, not a directory\n")
@@ -396,7 +396,7 @@ def test_dump_stays_silent_when_it_succeeds(tmp_path, capsys):
 def _load_runner_module():
     """The job-side runner (stdlib-only), standalone."""
     path = Path(monitor.__file__).parent / "runtime" / "run.py"
-    spec = importlib.util.spec_from_file_location("pk_monitor_runner_lifecycle", path)
+    spec = importlib.util.spec_from_file_location("rkt_monitor_runner_lifecycle", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

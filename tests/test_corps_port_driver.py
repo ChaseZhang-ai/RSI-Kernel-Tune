@@ -2,7 +2,7 @@
 
 Source: the audit-r2-2026-11-05 archive's untracked test directory (legacy-snapshot
 naming), file test_driver_measurement_fixes.py, ported to the latest tree per the
-correction order of 2026-11-05 (legacy package name -> ``peregrine_kernel``,
+correction order of 2026-11-05 (legacy package name -> ``rsi_kernel_tune``,
 coordinates re-anchored).
 
 Subset rationale (full inventory in the porting report of CHANGES-corps-fix.md):
@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import pytest
 
-from peregrine_kernel.inner.trajectory import IterationRecord as IR, append_record
-from peregrine_kernel.loop.driver import _confirm_suspicious_watermark
-from peregrine_kernel.loop.parse import parse_eval
+from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, append_record
+from rsi_kernel_tune.loop.driver import _confirm_suspicious_watermark
+from rsi_kernel_tune.loop.parse import parse_eval
 
 from test_loop_driver import EVAL_DW, FakeBackend, _ctx
 

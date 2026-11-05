@@ -9,8 +9,8 @@ import json
 
 import pytest
 
-from peregrine_kernel.inner.trajectory import IterationRecord
-from peregrine_kernel.loop.parse import (
+from rsi_kernel_tune.inner.trajectory import IterationRecord
+from rsi_kernel_tune.loop.parse import (
     _gate_ratio,
     parse_eval,
     parse_probe_verdict,
@@ -105,7 +105,7 @@ def test_probe_passed_suffix_keeps_max_diff():
     assert parse_probe_verdict("PROBE FAIL max_diff=1.13").passed is False
 # --- P3-5 [P3]: update_last_outcome validates the outcome at the entry -----------
 
-from peregrine_kernel.meta_trajectory import (MetaRecord, append_meta_record,
+from rsi_kernel_tune.meta_trajectory import (MetaRecord, append_meta_record,
                                               load_meta_records, update_last_outcome)
 
 

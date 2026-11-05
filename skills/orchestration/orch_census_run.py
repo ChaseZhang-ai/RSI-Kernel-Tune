@@ -49,12 +49,12 @@ try:  # vendored flat in a job tree (notes/ on sys.path)
     import orch_tools  # type: ignore
     import sass_tools  # type: ignore
 except ImportError:  # harness-side import path (tests)
-    from peregrine_kernel.skills import orch_tools, sass_tools
+    from rsi_kernel_tune.skills import orch_tools, sass_tools
 try:
     import sass_census  # type: ignore
 except ImportError:
     try:
-        from peregrine_kernel.skills import sass_census  # type: ignore
+        from rsi_kernel_tune.skills import sass_census  # type: ignore
     except ImportError:  # a tree seeded before the census module rode along
         sass_census = None  # type: ignore
 
@@ -185,25 +185,25 @@ def census(dump_dir: str, out=print, full: bool = False) -> Optional[dict]:
 
 # ---- CUDA C++ kernels (loop language cuda-sol) ----------------------------------
 # A CUDA-mode student's CUDA C++ kernel file is built by the card (eval/benchkit.py
-# load_cuda_entry) into <PK_KERNEL_BUILD_DIR | $TMP/pk_kernel_build>/pk_kernel_<key>/,
+# load_cuda_entry) into <RKT_KERNEL_BUILD_DIR | $TMP/rkt_kernel_build>/rkt_kernel_<key>/,
 # with a copy of the source staged next to the extension .so. No JIT dump switch
 # exists for it: the build the NCU run just used is found by that staged copy and
 # its embedded cubins are extracted (cuobjdump -xelf), then read like the DSL's.
 # The CUDA suffix is spelled in two halves: this file is seeded into notes/, and
 # a binary-reference recon tree's guard refuses notes that name C/C++ sources.
 CUDA_SUFFIX = "." + "cu"
-CUDA_BUILD_ENV = "PK_KERNEL_BUILD_DIR"
+CUDA_BUILD_ENV = "RKT_KERNEL_BUILD_DIR"
 
 
 def cuda_build_root() -> str:
-    return os.environ.get(CUDA_BUILD_ENV) or os.path.join(tempfile.gettempdir(), "pk_kernel_build")
+    return os.environ.get(CUDA_BUILD_ENV) or os.path.join(tempfile.gettempdir(), "rkt_kernel_build")
 
 
 def find_cuda_build(src: str, kernel_name: str, root: Optional[str] = None) -> Optional[str]:
     """The extension .so the card built from exactly ``src`` (staged as
     ``kernel_name`` in its build directory), newest first; None when none was built."""
     hits = []
-    for d in glob.glob(os.path.join(root or cuda_build_root(), "pk_kernel_*")):
+    for d in glob.glob(os.path.join(root or cuda_build_root(), "rkt_kernel_*")):
         try:
             with open(os.path.join(d, kernel_name), encoding="utf-8") as fh:
                 if fh.read() != src:
@@ -250,7 +250,7 @@ def main(argv=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     full = "--full" in args
     kernel = args[args.index("--kernel") + 1] if "--kernel" in args[:-1] else None
-    dump_dir = tempfile.mkdtemp(prefix="pk_orch_census_")
+    dump_dir = tempfile.mkdtemp(prefix="rkt_orch_census_")
     env = dict(os.environ, **DUMP_ENV)
     env[DUMP_DIR_ENV] = dump_dir
     print(f"[orch-census] running {' '.join(NCU_CMD)} with the JIT cubin kept "

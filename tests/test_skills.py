@@ -1,4 +1,4 @@
-"""skills/: one directory per skill, importable as peregrine_kernel.skills, mirrored into the agent's
+"""skills/: one directory per skill, importable as rsi_kernel_tune.skills, mirrored into the agent's
 working directory before every turn."""
 
 from __future__ import annotations
@@ -7,8 +7,8 @@ import importlib
 import subprocess
 from pathlib import Path
 
-from peregrine_kernel import skills
-from peregrine_kernel.loop import driver
+from rsi_kernel_tune import skills
+from rsi_kernel_tune.loop import driver
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,7 +44,7 @@ def test_mirror_copies_every_skill_into_the_workspace(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     subprocess.run(["git", "init", "-q", str(ws)], check=True)
-    from peregrine_kernel.loop.agent_policy import _git_exclude
+    from rsi_kernel_tune.loop.agent_policy import _git_exclude
     names = skills.mirror(ws)
     _git_exclude(ws, ".claude/")
     assert set(names) == {d.name for d in skills.skill_dirs()}

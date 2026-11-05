@@ -12,12 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel import judge as judge_mod
-from peregrine_kernel import launch
-from peregrine_kernel.localenv import load_machine
-from peregrine_kernel.runs import (STATUS_DONE, STATUS_FAILED, STATUS_STOPPED,
+from rsi_kernel_tune import judge as judge_mod
+from rsi_kernel_tune import launch
+from rsi_kernel_tune.localenv import load_machine
+from rsi_kernel_tune.runs import (STATUS_DONE, STATUS_FAILED, STATUS_STOPPED,
                                    new_run)
-from peregrine_kernel.task import load_task
+from rsi_kernel_tune.task import load_task
 
 
 DESCRIPTION = "y = x / sqrt(mean(x^2) + 1e-6) * w\n"
@@ -29,11 +29,11 @@ REF_PY = "import torch\n\ndef run(x, w):\n    return x * w\n"
 
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
-    monkeypatch.setenv("PEREGRINE_RUNS_DIR", str(tmp_path / "runs"))
-    monkeypatch.setenv("PEREGRINE_LOCK_DIR", str(tmp_path / "locks"))
-    monkeypatch.delenv("PEREGRINE_OPERATORS_DIR", raising=False)
-    monkeypatch.setenv("PK_DELIVERY", "local")
-    monkeypatch.setenv("PK_GPU", "0")
+    monkeypatch.setenv("RSI-KERNEL-TUNE_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("RSI-KERNEL-TUNE_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("RSI-KERNEL-TUNE_OPERATORS_DIR", raising=False)
+    monkeypatch.setenv("RKT_DELIVERY", "local")
+    monkeypatch.setenv("RKT_GPU", "0")
     return tmp_path
 
 
@@ -57,7 +57,7 @@ GPU_JOB_STEPS = ("write_judge", "calibrate", "probe_ncu")
 def _stub_preamble_and_loop(monkeypatch, calls, *, loop_rc=0, stop="target"):
     """Stand-ins for everything _drive does before the loop (judge writing, the trees,
     calibration, the NCU probe -- the GPU-job payers) and for the loop itself."""
-    from peregrine_kernel.loop.cli import SUMMARY_FILE
+    from rsi_kernel_tune.loop.cli import SUMMARY_FILE
 
     monkeypatch.setattr(judge_mod, "load_check", lambda d: calls.append("load_check"))
 
@@ -77,14 +77,14 @@ def _stub_preamble_and_loop(monkeypatch, calls, *, loop_rc=0, stop="target"):
     monkeypatch.setattr(launch, "probe_ncu", probe)
     monkeypatch.setattr(launch.taskcard, "write_card",
                         lambda *a, **k: calls.append("write_card")
-                        or Path(os.environ["PEREGRINE_OPERATORS_DIR"]))
+                        or Path(os.environ["RSI-KERNEL-TUNE_OPERATORS_DIR"]))
     monkeypatch.setattr(launch.taskcard, "seal_reference", lambda *a, **k: None)
     monkeypatch.setattr(launch.taskcard, "set_tolerance", lambda *a, **k: None)
     monkeypatch.setattr(launch.taskcard, "write_loop_toml", lambda *a, **k: None)
     monkeypatch.setattr(launch.taskcard, "clone_workspace", lambda *a, **k: None)
 
     def main(argv):
-        op = Path(os.environ["PEREGRINE_OPERATORS_DIR"]) / argv[0]
+        op = Path(os.environ["RSI-KERNEL-TUNE_OPERATORS_DIR"]) / argv[0]
         op.mkdir(parents=True, exist_ok=True)
         (op / SUMMARY_FILE).write_text(json.dumps({"stop": stop}))
         if stop == "target":
@@ -93,15 +93,15 @@ def _stub_preamble_and_loop(monkeypatch, calls, *, loop_rc=0, stop="target"):
                  "median_ratio": 8.0}))
         return loop_rc
 
-    fake = types.ModuleType("peregrine_kernel.loop.cli")
+    fake = types.ModuleType("rsi_kernel_tune.loop.cli")
     fake.SUMMARY_FILE = SUMMARY_FILE
     fake.main = main
-    import peregrine_kernel.loop as loop_pkg
+    import rsi_kernel_tune.loop as loop_pkg
     monkeypatch.setattr(loop_pkg, "cli", fake, raising=False)
-    monkeypatch.setitem(sys.modules, "peregrine_kernel.loop.cli", fake)
+    monkeypatch.setitem(sys.modules, "rsi_kernel_tune.loop.cli", fake)
 
 
-# -- BUG-CORPS-C-01: `peregrine harvest` promises one teacher turn and zero GPU jobs ----
+# -- BUG-CORPS-C-01: `rsi-kernel-tune harvest` promises one teacher turn and zero GPU jobs ----
 
 
 def test_harvest_of_a_started_run_submits_no_gpu_job(repo, monkeypatch):

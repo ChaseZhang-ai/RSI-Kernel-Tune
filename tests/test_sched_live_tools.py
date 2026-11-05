@@ -9,8 +9,8 @@ verdict, and the liveness peak's composition.
 """
 import io
 
-from peregrine_kernel.skills import sched_live_tools as SL
-from peregrine_kernel.skills.sass_tools import parse_sass
+from rsi_kernel_tune.skills import sched_live_tools as SL
+from rsi_kernel_tune.skills.sass_tools import parse_sass
 
 SASS = """
         /*0100*/  IMAD.MOV.U32 R1, RZ, RZ, c[0x0][0x28] ;
@@ -338,7 +338,7 @@ def test_mma_sync_report_prints_the_isa_verdict_the_driver_reads():
     assert line.startswith("SCHED-OK isa=mma_sync loop=backedge mma_runs=4 barriers=3 "
                            "ldsm=2 depbars=1 cp_async_groups=1 mbar_waits=1 ew_runs=3")
     assert "handoff_before_each_ew=[" in line
-    from peregrine_kernel.loop.driver import _SCHED_OK
+    from rsi_kernel_tune.loop.driver import _SCHED_OK
     assert _SCHED_OK.search(text) is not None
 
 
@@ -382,7 +382,7 @@ def test_tcgen05_report_prints_the_isa_verdict_the_driver_reads():
                            "mbar_waits=2 mbar_arrives=2 tmem_ld=1 tmem_st=1 "
                            "mma_sync_runs=1 barriers=1 ew_runs=2")
     assert "[chains] 3 accumulator chains in body (2 tcgen05/TMEM, 1 mma.sync side path)" in text
-    from peregrine_kernel.loop.driver import _SCHED_OK
+    from rsi_kernel_tune.loop.driver import _SCHED_OK
     assert _SCHED_OK.search(text) is not None
     # liveness still measured; the TMEM load is its own provenance class
     assert "LIVE-" in text
@@ -405,7 +405,7 @@ def test_liveness_decodes_mma_sync_fragments_and_tmem_traffic():
 
 
 def test_driver_sched_regex_accepts_all_three_forms_and_nothing_looser():
-    from peregrine_kernel.loop.driver import _SCHED_OK
+    from rsi_kernel_tune.loop.driver import _SCHED_OK
     assert _SCHED_OK.search("SCHED-OK loop=backedge hgmma_runs=5 depbars=4 ew_runs=3\n")
     assert _SCHED_OK.search("SCHED-OK isa=mma_sync loop=backedge mma_runs=296 barriers=12 "
                             "ldsm=87 depbars=0 cp_async_groups=0 mbar_waits=8 ew_runs=27\n")

@@ -15,7 +15,7 @@ differ. Covered here:
   (BUG-SEED-36);
 * git failures around committing/reporting are loud, not silent skips
   (BUG-SEED-38);
-* the run-log tee's file handles are closed, and `peregrine status` survives a
+* the run-log tee's file handles are closed, and `rsi-kernel-tune status` survives a
   torn status line (BUG-SEED-39, ported hardening);
 * the baseline CLI degrades narrowly and says so (BUG-SEED-40).
 """
@@ -29,10 +29,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from peregrine_kernel import baseline_cli, launch, taskcard
-from peregrine_kernel.milestone import validate_milestone
-from peregrine_kernel.resume import Decision, ReopenPlan, compute_reopen
-from peregrine_kernel.runs import list_runs
+from rsi_kernel_tune import baseline_cli, launch, taskcard
+from rsi_kernel_tune.milestone import validate_milestone
+from rsi_kernel_tune.resume import Decision, ReopenPlan, compute_reopen
+from rsi_kernel_tune.runs import list_runs
 
 from test_milestone import VALID
 
@@ -42,9 +42,9 @@ from test_launch import (  # noqa: F401 -- the repo fixture and the end-to-end s
 
 
 def _confirmed_run(repo, monkeypatch, stop, confirm):
-    """A full `peregrine new` + `peregrine run` whose loop ends with ``stop`` in
+    """A full `rsi-kernel-tune new` + `rsi-kernel-tune run` whose loop ends with ``stop`` in
     its summary and ``confirm`` as its final confirmation (None: none written)."""
-    from peregrine_kernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
         "match": True, "tolerance": {"y": 2e-6}, "problems": []})
@@ -79,10 +79,10 @@ def test_stop_at_target_without_a_confirmation_is_not_done(repo, monkeypatch):
     import os
     from pathlib import Path
 
-    from peregrine_kernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
 
     def _unconfirmed_target_ends(argv):
-        d = Path(os.environ["PEREGRINE_OPERATORS_DIR"]) / argv[0]
+        d = Path(os.environ["RSI-KERNEL-TUNE_OPERATORS_DIR"]) / argv[0]
         (d / loop_cli.SUMMARY_FILE).write_text(json.dumps({"stop": "target"}))
         return 0
 
@@ -171,7 +171,7 @@ def test_init_refuses_an_illegal_name_before_the_scaffold_runs(tmp_path, monkeyp
     # the dash-arg route dispatches to the scaffolder; the name is checked first
     monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)
     (tmp_path / "tasks").mkdir()
-    from peregrine_kernel import scaffold
+    from rsi_kernel_tune import scaffold
     called = []
     monkeypatch.setattr(scaffold, "main", lambda argv: called.append(argv) or 0)
     for bad in ("../../evil", "run"):
@@ -180,7 +180,7 @@ def test_init_refuses_an_illegal_name_before_the_scaffold_runs(tmp_path, monkeyp
 
 
 def test_scaffold_refuses_an_illegal_or_reserved_operator_name(tmp_path):
-    from peregrine_kernel import scaffold
+    from rsi_kernel_tune import scaffold
     for bad in ("../../evil", "../evil", "a/b", "_hidden", "run"):
         assert scaffold.main([bad, "--base-dir", str(tmp_path), "--no-git"]) == 2, bad
     assert list(tmp_path.rglob("*")) == []     # nothing created
@@ -228,7 +228,7 @@ def test_kb_changes_warn_instead_of_staying_silent(tmp_path, monkeypatch, capsys
     monkeypatch.setattr(launch.subprocess, "run", fake_run)
     assert launch.kb_changes() == []
     out = capsys.readouterr().out
-    assert "[peregrine]" in out and "knowledge-base" in out
+    assert "[rsi-kernel-tune]" in out and "knowledge-base" in out
 
 
 # -- BUG-SEED-40: the baseline CLI degrades narrowly and says so -----------------------------
@@ -241,7 +241,7 @@ def test_submit_cluster_degrades_with_a_note_on_config_errors(capsys, tmp_path,
     # silence (an unstamped baseline is unguarded, not wrong), a PRESENT but broken
     # config -> "" loudly on stderr, so a real configuration error stays
     # distinguishable from a missing one (BUG-SEED-40).
-    from peregrine_kernel.submit import config as submit_config
+    from rsi_kernel_tune.submit import config as submit_config
 
     assert baseline_cli._submit_cluster("no_such_operator_here") == ""
     assert capsys.readouterr().out == ""          # absent config says nothing
@@ -257,7 +257,7 @@ def test_submit_cluster_degrades_with_a_note_on_config_errors(capsys, tmp_path,
 
 
 def test_submit_cluster_lets_unexpected_errors_propagate(monkeypatch):
-    from peregrine_kernel.submit import config as submit_config
+    from rsi_kernel_tune.submit import config as submit_config
 
     def boom(op):
         raise AttributeError("load_config changed shape")
@@ -267,7 +267,7 @@ def test_submit_cluster_lets_unexpected_errors_propagate(monkeypatch):
         baseline_cli._submit_cluster("op")
 
 
-# -- BUG-SEED-39: the run-log tee is closed, `peregrine status` survives a torn line ----------
+# -- BUG-SEED-39: the run-log tee is closed, `rsi-kernel-tune status` survives a torn line ----------
 
 
 def test_entered_closes_the_run_log_handles(tmp_path):

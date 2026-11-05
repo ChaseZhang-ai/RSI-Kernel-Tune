@@ -535,7 +535,7 @@ MAX_SEG_ROWS = 18
 def _sched_modules():
     """sass_tools + sched_live_tools — package import or vendored-flat (ws notes/)."""
     try:
-        from peregrine_kernel.skills import sass_tools, sched_live_tools
+        from rsi_kernel_tune.skills import sass_tools, sched_live_tools
         return sass_tools, sched_live_tools
     except ImportError:
         try:

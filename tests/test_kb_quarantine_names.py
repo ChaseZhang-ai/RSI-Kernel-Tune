@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from peregrine_kernel.loop.driver import _quarantine_leaky_kb
+from rsi_kernel_tune.loop.driver import _quarantine_leaky_kb
 from test_loop_driver import FakeBackend, _ctx
 
 

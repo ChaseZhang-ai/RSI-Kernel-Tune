@@ -14,10 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.inner.trajectory import IterationRecord, append_record, load_records
-from peregrine_kernel.loop import driver as drv
-from peregrine_kernel.loop import lever_pool
-from peregrine_kernel.skills import sweep_run
+from rsi_kernel_tune.inner.trajectory import IterationRecord, append_record, load_records
+from rsi_kernel_tune.loop import driver as drv
+from rsi_kernel_tune.loop import lever_pool
+from rsi_kernel_tune.skills import sweep_run
 
 REPO = Path(__file__).resolve().parents[1]
 

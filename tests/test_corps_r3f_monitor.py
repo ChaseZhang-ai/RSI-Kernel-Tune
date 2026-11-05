@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """Regression tests for the audit-corps R3F fix wave over the monitor surface.
@@ -7,7 +7,7 @@ Covered here:
 - BUG-CH-H-01: numeric env knobs are parsed with a readable fallback instead
   of a bare float()/int(): a typo'd TASK_TIMEOUT used to kill the monitor job
   before any output existed (GPU job burned, zero MARKER), and a typo'd
-  PK_MON_MAX_CALLS used to kill the hook install so the whole job watched
+  RKT_MON_MAX_CALLS used to kill the hook install so the whole job watched
   nothing (the failure one stderr line nobody reads).
 - BUG-CH-H-02: the seed profiles' change detection sees the install-time
   default-generator shift: a bench that never seeds still draws something new
@@ -33,7 +33,7 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel import monitor
+from rsi_kernel_tune import monitor
 
 REPO = Path(__file__).resolve().parents[1]
 HOOK_DIR = monitor.RUNTIME_DIR / "hook"
@@ -44,9 +44,9 @@ needs_torch = pytest.mark.skipif(
 
 
 def _python_on_hook(code: str, env_extra: dict, tmp_path: Path) -> subprocess.CompletedProcess:
-    env = dict(os.environ, PYTHONPATH=str(HOOK_DIR), PK_MON_OUT=str(tmp_path / "out"),
+    env = dict(os.environ, PYTHONPATH=str(HOOK_DIR), RKT_MON_OUT=str(tmp_path / "out"),
                **env_extra)
-    env.pop("PK_MON_PROFILE", None)
+    env.pop("RKT_MON_PROFILE", None)
     env.update(env_extra)
     return subprocess.run([sys.executable, "-c", code], env=env, capture_output=True,
                           text=True, timeout=120)
@@ -55,9 +55,9 @@ def _python_on_hook(code: str, env_extra: dict, tmp_path: Path) -> subprocess.Co
 # --- BUG-CH-H-01: the runner's TASK_TIMEOUT -----------------------------------------
 
 def _runtime_run(tmp_path: Path):
-    """The runtime runner, importable from a card-shaped tree (.pk_monitor/run.py)."""
-    (tmp_path / "card" / ".pk_monitor").mkdir(parents=True)
-    src = (tmp_path / "card" / ".pk_monitor" / "run.py")
+    """The runtime runner, importable from a card-shaped tree (.rkt_monitor/run.py)."""
+    (tmp_path / "card" / ".rkt_monitor").mkdir(parents=True)
+    src = (tmp_path / "card" / ".rkt_monitor" / "run.py")
     src.write_text(monitor.runtime_files()[f"{monitor.TREE_DIR}/run.py"], encoding="utf-8")
     import importlib.util
     spec = importlib.util.spec_from_file_location("corps_r3f_monitor_run", src)
@@ -95,34 +95,34 @@ def test_an_unset_task_timeout_uses_the_default_budget(tmp_path, monkeypatch, ca
     assert rc == 0 and "budget 3600" in out
 
 
-# --- BUG-CH-H-01: the hook's PK_MON_MAX_CALLS ---------------------------------------
+# --- BUG-CH-H-01: the hook's RKT_MON_MAX_CALLS ---------------------------------------
 
 def test_a_typoed_max_calls_keeps_the_hook_alive(tmp_path):
-    """PK_MON_MAX_CALLS=64 calls used to kill install() (one stderr line, the
+    """RKT_MON_MAX_CALLS=64 calls used to kill install() (one stderr line, the
     whole job watched nothing). It now keeps the default and records why."""
     p = _python_on_hook(
-        "import pk_monitor_hook as h\n"
+        "import rkt_monitor_hook as h\n"
         "print(h._state.get('installed'), h._state.get('max_calls'))\n"
-        "print([e for e in h._state.get('errors') or [] if 'PK_MON_MAX_CALLS' in e])\n",
-        {"PK_MON_PROFILE": "base", "PK_MON_MAX_CALLS": "64 calls"}, tmp_path)
+        "print([e for e in h._state.get('errors') or [] if 'RKT_MON_MAX_CALLS' in e])\n",
+        {"RKT_MON_PROFILE": "base", "RKT_MON_MAX_CALLS": "64 calls"}, tmp_path)
     assert p.returncode == 0, p.stderr
     assert "hook not installed" not in p.stderr
     assert "True 64" in p.stdout                       # installed, default kept
-    assert "PK_MON_MAX_CALLS" in p.stdout              # the misconfiguration is recorded
+    assert "RKT_MON_MAX_CALLS" in p.stdout              # the misconfiguration is recorded
 
 
 def test_a_numeric_max_calls_still_parses(tmp_path):
     p = _python_on_hook(
-        "import pk_monitor_hook as h\nprint(h._state.get('installed'), h._state.get('max_calls'))\n",
-        {"PK_MON_PROFILE": "base", "PK_MON_MAX_CALLS": "12"}, tmp_path)
+        "import rkt_monitor_hook as h\nprint(h._state.get('installed'), h._state.get('max_calls'))\n",
+        {"RKT_MON_PROFILE": "base", "RKT_MON_MAX_CALLS": "12"}, tmp_path)
     assert p.returncode == 0, p.stderr
     assert "True 12" in p.stdout
 
 
 def test_an_unset_max_calls_keeps_the_default(tmp_path):
     p = _python_on_hook(
-        "import pk_monitor_hook as h\nprint(h._state.get('installed'), h._state.get('max_calls'))\n",
-        {"PK_MON_PROFILE": "base"}, tmp_path)
+        "import rkt_monitor_hook as h\nprint(h._state.get('installed'), h._state.get('max_calls'))\n",
+        {"RKT_MON_PROFILE": "base"}, tmp_path)
     assert p.returncode == 0, p.stderr
     assert "True 64" in p.stdout
 
@@ -204,8 +204,8 @@ def test_hook_reports_the_install_time_default_seed_shift(tmp_path):
     the hook json as ``default_reseeded`` -- the evidence a never-seeding bench
     still carries."""
     p = _python_on_hook(
-        "import pk_monitor_hook as h\nprint(h._state.get('default_reseeded'))\n",
-        {"PK_MON_PROFILE": "seed1"}, tmp_path)
+        "import rkt_monitor_hook as h\nprint(h._state.get('default_reseeded'))\n",
+        {"RKT_MON_PROFILE": "seed1"}, tmp_path)
     assert p.returncode == 0, p.stderr
     assert p.stdout.strip() == "True"
 
@@ -213,8 +213,8 @@ def test_hook_reports_the_install_time_default_seed_shift(tmp_path):
 @needs_torch
 def test_non_seed_profiles_do_not_claim_the_default_shift(tmp_path):
     p = _python_on_hook(
-        "import pk_monitor_hook as h\nprint(h._state.get('default_reseeded'))\n",
-        {"PK_MON_PROFILE": "spikes"}, tmp_path)
+        "import rkt_monitor_hook as h\nprint(h._state.get('default_reseeded'))\n",
+        {"RKT_MON_PROFILE": "spikes"}, tmp_path)
     assert p.returncode == 0, p.stderr
     assert p.stdout.strip() == "False"
 
@@ -222,7 +222,7 @@ def test_non_seed_profiles_do_not_claim_the_default_shift(tmp_path):
 @needs_torch
 def test_base_profile_does_not_claim_the_default_shift(tmp_path):
     p = _python_on_hook(
-        "import pk_monitor_hook as h\nprint(h._state.get('default_reseeded'))\n",
-        {"PK_MON_PROFILE": "base"}, tmp_path)
+        "import rkt_monitor_hook as h\nprint(h._state.get('default_reseeded'))\n",
+        {"RKT_MON_PROFILE": "base"}, tmp_path)
     assert p.returncode == 0, p.stderr
     assert p.stdout.strip() == "False"

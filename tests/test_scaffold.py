@@ -1,7 +1,7 @@
-"""Tests for the operator-repo scaffolder (``peregrine init <op> --kernel-file ...``).
+"""Tests for the operator-repo scaffolder (``rsi-kernel-tune init <op> --kernel-file ...``).
 
 The scaffolder instantiates an isolated operator repo under ``operators/<op>/``
-from the tracked main-repo templates: ``src/peregrine_kernel/card_template/`` (workspace docs +
+from the tracked main-repo templates: ``src/rsi_kernel_tune/card_template/`` (workspace docs +
 harness skeleton) and ``meta/*_prompt.md`` (the operator-agnostic agent prompts).
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.scaffold import new_operator
+from rsi_kernel_tune.scaffold import new_operator
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,7 +34,7 @@ def base(tmp_path: Path) -> Path:
     """An isolated main-repo root holding copies of the real templates."""
     shutil.copytree(REPO_ROOT / "meta", tmp_path / "meta")
     shutil.copytree(
-        REPO_ROOT / "src" / "peregrine_kernel" / "card_template", tmp_path / "src" / "peregrine_kernel" / "card_template"
+        REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template", tmp_path / "src" / "rsi_kernel_tune" / "card_template"
     )
     return tmp_path
 
@@ -70,7 +70,7 @@ def test_op_name_substituted(base: Path) -> None:
 def test_scaffolded_submit_config_loads_without_credentials(base: Path) -> None:
     """A fresh operator must be able to reach the GPU with no submit.local.toml: the
     scaffolded default is local delivery, and only the branch is the author's to fill."""
-    from peregrine_kernel.submit.config import load_config
+    from rsi_kernel_tune.submit.config import load_config
 
     new_operator("demo_op", base_dir=base)
     op_dir = base / "operators" / "demo_op"
@@ -129,7 +129,7 @@ def test_fail_fast_when_operator_exists(base: Path) -> None:
 
 
 def test_dispatcher_routes_init_with_options_to_the_scaffold(base: Path) -> None:
-    from peregrine_kernel.__main__ import main
+    from rsi_kernel_tune.__main__ import main
 
     rc = main(["init", "demo_op", "--kernel-file", "foo/bar.py",
                "--base-dir", str(base), "--no-git"])
@@ -192,7 +192,7 @@ def test_git_init_sets_receive_deny_current_branch(base: Path) -> None:
     """_git_init must configure receive.denyCurrentBranch = updateInstead so that
     the student workspace can push to the card repo's checked-out branch."""
     import subprocess
-    from peregrine_kernel.scaffold import _git_init
+    from rsi_kernel_tune.scaffold import _git_init
 
     new_operator("demo_op", base_dir=base)
     op_dir = base / "operators" / "demo_op"

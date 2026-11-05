@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from peregrine_kernel import monitor
+from rsi_kernel_tune import monitor
 
 
 # --- fixtures ---------------------------------------------------------------------
@@ -96,8 +96,8 @@ def test_parse_log_a_complete_final_json_still_wins():
 # --- BUG-SEED-41: the hook records its own dump failures --------------------------
 def _load_hook_module():
     import importlib.util
-    path = Path(monitor.RUNTIME_DIR) / "hook" / "pk_monitor_hook.py"
-    spec = importlib.util.spec_from_file_location("pk_monitor_hook_under_test", path)
+    path = Path(monitor.RUNTIME_DIR) / "hook" / "rkt_monitor_hook.py"
+    spec = importlib.util.spec_from_file_location("rkt_monitor_hook_under_test", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -117,7 +117,7 @@ def test_dump_failure_is_recorded_and_reported_once(tmp_path, capsys):
     # failure as a one-shot flag and says so once on stderr -- a summary that is
     # going nowhere can never show a recorded list, so the flag is the record.
     assert hook._state["dump_failed"] is True
-    assert capsys.readouterr().err.count("pk-monitor") == 1   # said once, not twice
+    assert capsys.readouterr().err.count("rkt-monitor") == 1   # said once, not twice
 
 
 # --- BUG-SEED-42: per-process calls do not overwrite each other -------------------

@@ -25,14 +25,14 @@ from test_loop_driver import (  # noqa: E402
     EVAL, NCU, REC, _MILESTONE, _E2EFake, FakeBackend, _ctx,
 )
 
-from peregrine_kernel.loop import screening  # noqa: E402
-from peregrine_kernel.loop import driver as drv  # noqa: E402
-from peregrine_kernel.loop.driver import (  # noqa: E402
+from rsi_kernel_tune.loop import screening  # noqa: E402
+from rsi_kernel_tune.loop import driver as drv  # noqa: E402
+from rsi_kernel_tune.loop.driver import (  # noqa: E402
     BackendError, _arch_probe_ms, _arch_probe_stamp, _canonical_recipe_hash,
     _mc_job, _node_dirty_reason, _run_arch_probes, _sm_clock_drift, _sweep_job,
     _sweep_spec_refused, _wp17_apply_cfg, _wp17_maybe_cert_candidates_head,
 )
-from peregrine_kernel.skills import lever_pricing_run as lpr  # noqa: E402
+from rsi_kernel_tune.skills import lever_pricing_run as lpr  # noqa: E402
 
 _MS_DUAL = _MILESTONE.replace(
     "# demo milestone\n",
@@ -327,7 +327,7 @@ _PROBLEM = {"arch": "sm90", "family": "gemm",
 
 
 def test_recipe_floor_consumes_analytic_floor():
-    from peregrine_kernel.loop.analytic_floor import floor_for
+    from rsi_kernel_tune.loop.analytic_floor import floor_for
     full = screening.recipe_floor({"problem": _PROBLEM})
     assert full is not None and full["floor_ms"] == pytest.approx(
         floor_for(_PROBLEM)["floor_ms"]) and full["floor_ms"] > 0
@@ -381,8 +381,8 @@ def test_pre_rank_picks_the_floor_top_but_the_time_decides(tmp_path):
     ctx.m0_probe_candidates = 2
     ctx.m0_probe_rounds = 3
     _recipes(tmp_path, texts)
-    run = pytest.importorskip("peregrine_kernel.loop.driver")
-    from peregrine_kernel.loop.driver import run_two_layer
+    run = pytest.importorskip("rsi_kernel_tune.loop.driver")
+    from rsi_kernel_tune.loop.driver import run_two_layer
     run_two_layer(ctx, max_meta=1)
     # the bracket probed the floor-ranked top two, NOT the file order's first two
     modes = [c[1] for c in be.calls if c[0] == "gpu" and str(c[1]).startswith("cmd:")]
@@ -425,7 +425,7 @@ def test_pre_rank_off_switch_and_default_inertness(tmp_path):
     ctx.m0_probe_candidates = 1          # a bracket of one still probes 2 (the floor)
     ctx.m0_probe_rounds = 3
     _recipes(tmp_path, texts)
-    from peregrine_kernel.loop.driver import run_two_layer
+    from rsi_kernel_tune.loop.driver import run_two_layer
     run_two_layer(ctx, max_meta=1)
     modes = [c[1] for c in be.calls if c[0] == "gpu" and str(c[1]).startswith("cmd:")]
     assert modes[0].endswith("notes/arch_0.json")     # file order, not floor order
@@ -622,7 +622,7 @@ def test_inproc_worker_one_spawn_for_many_calls(monkeypatch, tmp_path):
 
 
 def test_inproc_kill_switch_restores_subprocess(monkeypatch, tmp_path):
-    """PK_SCREENING_INPROC=0: every call is the per-call subprocess, byte for
+    """RKT_SCREENING_INPROC=0: every call is the per-call subprocess, byte for
     byte the historical behavior — and no worker is ever spawned."""
     root = tmp_path / "task"
     (root / "eval").mkdir(parents=True, exist_ok=True)
@@ -694,7 +694,7 @@ def test_inproc_completed_no_json_falls_back_to_subprocess(monkeypatch, tmp_path
 
 
 def test_clock_guard_opt_in_marks_the_reading(monkeypatch):
-    """PK_SCREENING_CLOCK_GUARD=1: a bench whose gpu_state drifts off the pass's
+    """RKT_SCREENING_CLOCK_GUARD=1: a bench whose gpu_state drifts off the pass's
     first reading is NODE-DIRTY and reads no verdict; the default never looks."""
     monkeypatch.delenv(lpr.CLOCK_GUARD_ENV, raising=False)
     monkeypatch.setattr(lpr, "_CLOCK_GUARD_ANCHOR", {})

@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-import peregrine_kernel.skills.lever_pricing_run as lpr
-from peregrine_kernel.loop.driver import parse_lever_prices
+import rsi_kernel_tune.skills.lever_pricing_run as lpr
+from rsi_kernel_tune.loop.driver import parse_lever_prices
 
 BASE = "import x\n\nA = 1\nB = 2\nC = 3\n"
 
@@ -655,7 +655,7 @@ def test_ablation_pass_prints_the_kernel_as_one_token(tmp_path, monkeypatch, cap
     out = capsys.readouterr().out
     line = next(l for l in out.splitlines() if l.startswith("ABLATE no_b "))
     assert " kernel=void_at::native::elementwise_kernel<128,_4>(int,_float_*) status=ok h=h" in line
-    from peregrine_kernel.loop.driver import parse_lever_prices as parse
+    from rsi_kernel_tune.loop.driver import parse_lever_prices as parse
     row = parse(out)[0][0]
     assert row["name"] == "no_b" and row["delta_pct"] == 11.11 and row["status"] == "ok"
     assert lpr.kernel_token(None) == "none" and lpr.kernel_token("  a  b ") == "a_b"
@@ -862,7 +862,7 @@ def test_main_prints_price_ok_when_the_job_clock_cannot_cover_the_role_pass(tmp_
     PRICE-OK. Under a clock that cannot cover even one --pm the pass is skipped
     (one line says so, naming the unpriced variants), the PRICE-OK copy is
     printed with the role columns None, and the driver reads it as a table."""
-    from peregrine_kernel.loop.driver import _price_log_verdict
+    from rsi_kernel_tune.loop.driver import _price_log_verdict
     root = tmp_path
     (root / "notes").mkdir()
     (root / "kernel.py").write_text(BASE)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from peregrine_kernel.loop.parse import (
+from rsi_kernel_tune.loop.parse import (
     Exhausted,
     ProbeRequest,
     Record,
@@ -15,7 +15,7 @@ from peregrine_kernel.loop.parse import (
     parse_student_turn,
     JOB_END_CUT, JOB_END_KILLED, JOB_END_WHOLE, JobEnd, job_abend,
 )
-from peregrine_kernel.inner.trajectory import IterationRecord
+from rsi_kernel_tune.inner.trajectory import IterationRecord
 
 RECORD_TEXT = """\
 some reasoning prose the agent emitted first...
@@ -613,7 +613,7 @@ def test_a_nan_reading_cannot_hijack_the_running_best():
     out of _best_ms's sample as a no-reading row, so the running best no longer
     flips with the rows' order (it used to read nan for [nan, 2.5] and 2.5 for
     [2.5, nan])."""
-    from peregrine_kernel.loop.driver import _best_ms
+    from rsi_kernel_tune.loop.driver import _best_ms
 
     nan_ev = parse_eval('=== JSON ===\n{"correctness": {"pass": true}, '
                         '"performance": {"bwd_median_ms": NaN, "device_median_ms": NaN}}')

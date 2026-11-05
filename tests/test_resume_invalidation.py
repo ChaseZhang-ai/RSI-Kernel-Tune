@@ -14,7 +14,7 @@ its own id OR intersect its depends_on. The earliest affected decision and
 everything after it are invalidated; resume happens just before it.
 """
 
-from peregrine_kernel.resume import Decision, ResumePlan, compute_resume
+from rsi_kernel_tune.resume import Decision, ResumePlan, compute_resume
 
 
 def _fa_like_trajectory():

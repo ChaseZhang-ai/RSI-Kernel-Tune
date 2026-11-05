@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from peregrine_kernel import binref, cardkit, sealref
+from rsi_kernel_tune import binref, cardkit, sealref
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,7 +53,7 @@ def test_binref_recon_tree_ncu_carries_the_flags() -> None:
 
 
 def test_gpu_entry_template_ncu_carries_the_flags() -> None:
-    text = cardkit.render_gpu_entry(name="op", suite="peregrine_kernel", arch="sm_100a",
+    text = cardkit.render_gpu_entry(name="op", suite="rsi_kernel_tune", arch="sm_100a",
                                     clock="1500", mem_clock="3996", require_lock="1",
                                     clock_note="n")
     cmds = _ncu_commands(text)
@@ -66,7 +66,7 @@ def test_gpu_entry_template_ncu_carries_the_flags() -> None:
 
 def test_generated_card_entry_carries_the_flags() -> None:
     """End to end through the same .replace() taskcard.write_card applies."""
-    text = cardkit.render_gpu_entry(name="op", suite="peregrine_kernel", arch="sm_100a",
+    text = cardkit.render_gpu_entry(name="op", suite="rsi_kernel_tune", arch="sm_100a",
                                     clock="1500", mem_clock="3996", require_lock="1",
                                     clock_note="n")
     text = text.replace("--launch-count 24", "--launch-count 48")

@@ -1,4 +1,4 @@
-"""peregrine_kernel.submit.direct: local and ssh delivery of one gpu_entry task."""
+"""rsi_kernel_tune.submit.direct: local and ssh delivery of one gpu_entry task."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.submit import cli as submit_cli
-from peregrine_kernel.submit import jobs as ds
-from peregrine_kernel.submit import direct
-from peregrine_kernel.submit.config import load_config
+from rsi_kernel_tune.submit import cli as submit_cli
+from rsi_kernel_tune.submit import jobs as ds
+from rsi_kernel_tune.submit import direct
+from rsi_kernel_tune.submit.config import load_config
 
 ENTRY_OK = """#!/bin/bash
-echo "entry task=$1 gpu=$CUDA_VISIBLE_DEVICES timeout=$TASK_TIMEOUT key=${PK_REF_KEY:-none}"
+echo "entry task=$1 gpu=$CUDA_VISIBLE_DEVICES timeout=$TASK_TIMEOUT key=${RKT_REF_KEY:-none}"
 ls
 echo "task=$1 finished"
 """
@@ -158,7 +158,7 @@ def test_the_gpu_lock_makes_a_second_run_wait(tmp_path, monkeypatch):
         assert not got.is_set()
     t.join(timeout=5)
     assert got.is_set()
-    assert any("in use by another peregrine_kernel run" in c for c in calls)
+    assert any("in use by another rsi_kernel_tune run" in c for c in calls)
 
 
 # -- ssh ------------------------------------------------------------------------------------
@@ -221,7 +221,7 @@ def _ssh_run(cfg, fake):
 
 
 def test_ssh_run_syncs_the_tree_then_runs_under_the_host_gpu_lock(tmp_path):
-    cfg = _ssh_cfg(tmp_path, env='PK_REF_KEY = "s3cret"\n')
+    cfg = _ssh_cfg(tmp_path, env='RKT_REF_KEY = "s3cret"\n')
     fake = _FakeSsh([(0, True)])
     status, log = _ssh_run(cfg, fake)
     assert status == ds.STATUS_SUCCEEDED

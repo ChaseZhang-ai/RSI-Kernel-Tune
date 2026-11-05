@@ -16,12 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.loop import agent_policy as ap
-from peregrine_kernel.loop import cli as loop_cli
-from peregrine_kernel.loop import driver
-from peregrine_kernel.loop import lang_mode
-from peregrine_kernel.skills import job_env_check, lever_pricing_run, orch_census_run
-from peregrine_kernel.skills import timeline_probe as tp
+from rsi_kernel_tune.loop import agent_policy as ap
+from rsi_kernel_tune.loop import cli as loop_cli
+from rsi_kernel_tune.loop import driver
+from rsi_kernel_tune.loop import lang_mode
+from rsi_kernel_tune.skills import job_env_check, lever_pricing_run, orch_census_run
+from rsi_kernel_tune.skills import timeline_probe as tp
 from test_loop_driver import FakeBackend, _ctx
 from test_binref import base, repo  # noqa: F401  (the fixtures card_lb builds on)
 
@@ -68,15 +68,15 @@ def card_lb(base, monkeypatch):
 
 MARKED = STUDENT.replace(
     "#include <torch/extension.h>\n",
-    "#include <torch/extension.h>\n#define PK_SEG(...) ((void)0)\n").replace(
+    "#include <torch/extension.h>\n#define RKT_SEG(...) ((void)0)\n").replace(
     "    int i = blockIdx.x * blockDim.x + threadIdx.x;\n",
-    '    PK_SEG("aux.entry");\n'
+    '    RKT_SEG("aux.entry");\n'
     "    int i = blockIdx.x * blockDim.x + threadIdx.x;\n"
     "    for (int ci = 0; ci < 4; ++ci) {\n"
-    '        PK_SEG("state.C.wait_kk.begin", ci);\n'
-    '        PK_SEG("state.C.wait_kk.end", ci);\n'
-    "        PK_SEG(NAMES[ci], ci);\n"
-    '        PK_SEG("state.E.end", ci + 1);\n'
+    '        RKT_SEG("state.C.wait_kk.begin", ci);\n'
+    '        RKT_SEG("state.C.wait_kk.end", ci);\n'
+    "        RKT_SEG(NAMES[ci], ci);\n"
+    '        RKT_SEG("state.E.end", ci + 1);\n'
     "    }\n")
 
 
@@ -168,7 +168,7 @@ def test_the_cuda_prompts_teach_cuda_not_the_dsl():
 
 
 def test_the_cuda_kb_is_its_own_launchable_lint_clean_tree():
-    from peregrine_kernel.loop.kb_lint import lint_kb_dir
+    from rsi_kernel_tune.loop.kb_lint import lint_kb_dir
     kb = REPO / "hw_kb/cuda"
     assert (kb / "TEMPLATE.md").is_file() and (kb / "README.md").is_file()
     assert loop_cli._kb_arch_problem(kb, "sm100") is None
@@ -212,12 +212,12 @@ def test_the_cuda_student_timeline_note_teaches_the_cpp_marker(tmp_path):
     ctx.evidence_dir = tmp_path / "evidence"
     (tmp_path / "kernel.cu").write_text(MARKED)
     note = driver._timeline_student_note(ctx)
-    assert "#define PK_SEG(...) ((void)0)" in note and "def _seg" not in note
+    assert "#define RKT_SEG(...) ((void)0)" in note and "def _seg" not in note
     assert "cutlass.const_expr" not in note
     assert "`aux.entry`" in note and "`state.E.end`" in note
-    assert "PK_SEG(NAMES[ci], ci)" in note       # the computed name is named
-    (tmp_path / "kernel.cu").write_text(MARKED.replace("#define PK_SEG(...) ((void)0)\n", ""))
-    assert "lacks the `#define PK_SEG` line" in driver._timeline_student_note(ctx)
+    assert "RKT_SEG(NAMES[ci], ci)" in note       # the computed name is named
+    (tmp_path / "kernel.cu").write_text(MARKED.replace("#define RKT_SEG(...) ((void)0)\n", ""))
+    assert "lacks the `#define RKT_SEG` line" in driver._timeline_student_note(ctx)
 
 
 # ---------------------------------------------------------------- timeline probe (C++)
@@ -225,24 +225,24 @@ def test_cpp_markers_are_read_rewritten_and_the_readout_is_bound_into_the_module
     assert tp.markers(MARKED, cuda=True) == ["aux.entry", "state.C.wait_kk.begin",
                                               "state.C.wait_kk.end", "state.E.end"]
     assert tp.has_marker_def(MARKED, cuda=True) and not tp.has_marker_def(MARKED)
-    assert tp.unparsed_markers(MARKED, cuda=True) == ["PK_SEG(NAMES[ci], ci)"]
+    assert tp.unparsed_markers(MARKED, cuda=True) == ["RKT_SEG(NAMES[ci], ci)"]
     stamped, sites = tp.stamp_cuda_source(MARKED, "all", stride=2)
     assert sites == tp.markers(MARKED, cuda=True)
-    assert "#define PK_SEG" not in stamped and "PK_SEG(" not in stamped
-    assert "_pk_tl_seg(0, (long long)(0))" in stamped and "_pk_tl_seg(3, (long long)(ci + 1))" in stamped
+    assert "#define RKT_SEG" not in stamped and "RKT_SEG(" not in stamped
+    assert "_rkt_tl_seg(0, (long long)(0))" in stamped and "_rkt_tl_seg(3, (long long)(ci + 1))" in stamped
     assert stamped.count("((void)0);") == 1           # the computed name is a no-op
-    assert "#define PK_TL_STRIDE 2" in stamped and "%%clock64" in stamped and "%%gridid" in stamped
-    assert f"#define PK_TL_NSITE {tp.NSITE}" in stamped and "@NSLOT@" not in stamped
+    assert "#define RKT_TL_STRIDE 2" in stamped and "%%clock64" in stamped and "%%gridid" in stamped
+    assert f"#define RKT_TL_NSITE {tp.NSITE}" in stamped and "@NSLOT@" not in stamped
     # the readout sits before the module and is bound inside it, after the student's own defs
-    assert stamped.index("static void _pk_tl_read") < stamped.index("PYBIND11_MODULE")
-    assert re.search(r'PYBIND11_MODULE\(TORCH_EXTENSION_NAME, m\) \{\n    m\.def\("_pk_tl_read", '
-                     r'&_pk_tl_read\); m\.def\("run", &run\); \}', stamped)
+    assert stamped.index("static void _rkt_tl_read") < stamped.index("PYBIND11_MODULE")
+    assert re.search(r'PYBIND11_MODULE\(TORCH_EXTENSION_NAME, m\) \{\n    m\.def\("_rkt_tl_read", '
+                     r'&_rkt_tl_read\); m\.def\("run", &run\); \}', stamped)
     # same stamping twice: no nonce (the slab is the module's own symbol)
     assert tp.stamp_cuda_source(MARKED, "all", stride=2)[0] == stamped
     lean, kept = tp.stamp_cuda_source(MARKED, "waits")
     assert kept == ["state.C.wait_kk.begin", "state.C.wait_kk.end"] and lean.count("((void)0);") == 3
-    with pytest.raises(ValueError, match="#define PK_SEG"):
-        tp.stamp_cuda_source(MARKED.replace("#define PK_SEG(...) ((void)0)\n", ""))
+    with pytest.raises(ValueError, match="#define RKT_SEG"):
+        tp.stamp_cuda_source(MARKED.replace("#define RKT_SEG(...) ((void)0)\n", ""))
     with pytest.raises(ValueError, match="PYBIND11_MODULE"):
         tp.stamp_cuda_source(MARKED.replace("PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)", "void x()"))
 
@@ -273,7 +273,7 @@ def test_a_cuda_timeline_runs_the_stamped_bench_and_launcher_under_cuda_run(tmp_
     monkeypatch.setattr(tp, "run_bench_sampling_clock", stamped_bench)
     assert tp.main(["--mode", "waits", "--kernel", "kernel.cu"]) == 0
     assert seen["bench"].endswith("timeline_probe.py --cuda-run eval/bench.py --mode all")
-    assert "_pk_tl_seg(0, (long long)(ci))" in seen["kernel"]
+    assert "_rkt_tl_seg(0, (long long)(ci))" in seen["kernel"]
     assert (tmp_path / "kernel.cu").read_text() == MARKED       # restored
     assert "reason=stamped-bench-failed" in capsys.readouterr().out
     # --dry stamps without a compiler
@@ -282,7 +282,7 @@ def test_a_cuda_timeline_runs_the_stamped_bench_and_launcher_under_cuda_run(tmp_
 
 
 def test_cuda_run_captures_the_cards_build_and_runs_the_script_as_main(tmp_path, monkeypatch):
-    built = types.SimpleNamespace(_pk_tl_read=lambda dst: None)
+    built = types.SimpleNamespace(_rkt_tl_read=lambda dst: None)
     ext = types.ModuleType("torch.utils.cpp_extension")
     ext.load = lambda *a, **k: built
     utils = types.ModuleType("torch.utils")
@@ -312,7 +312,7 @@ def test_the_dsl_timeline_path_is_untouched():
            '    _seg("a.b.begin", 1)\n    _seg("a.b.end", 1)\n')
     assert tp.markers(src) == ["a.b.begin", "a.b.end"] and tp.has_marker_def(src)
     stamped, _ = tp.stamp_source(src)
-    assert "import cutlass as _tl_cutlass" in stamped and "_pk_tl_seg" not in stamped
+    assert "import cutlass as _tl_cutlass" in stamped and "_rkt_tl_seg" not in stamped
     assert not tp.is_cuda_kernel("kernel.py") and tp.is_cuda_kernel("kernel" + ".cu")
 
 
@@ -352,33 +352,33 @@ def test_a_comment_only_variant_reads_the_same_sass():
                 f"\t\tFunction : _ZN41_GLOBAL__N__{ns}_9_kernel_cu_d698c71f5k_bigE14CUtensorMap_st\n"
                 f"        /*0000*/                   LDC R1, c[0x0][0x37c] ;  /* 0x0000df00ff017b82 */\n"
                 f"        /*0010*/                   {op} R2, R2, 0x1, RZ ;  /* 0x0000000102027810 */\n")
-    from peregrine_kernel.skills.lever_pricing_run import sass_code_text
-    a = sass_code_text(dump("c5a99a67", "/tmp/pk_kernel_build/pk_kernel_aaa/kernel.cu"))
-    b = sass_code_text(dump("0f3e9b21", "/tmp/pk_kernel_build/pk_kernel_bbb/kernel.cu"))
+    from rsi_kernel_tune.skills.lever_pricing_run import sass_code_text
+    a = sass_code_text(dump("c5a99a67", "/tmp/rkt_kernel_build/rkt_kernel_aaa/kernel.cu"))
+    b = sass_code_text(dump("0f3e9b21", "/tmp/rkt_kernel_build/rkt_kernel_bbb/kernel.cu"))
     assert a == b and "identifier" not in a and "LDC R1" in a
     assert sass_code_text(dump("0f3e9b21", "x", op="IMAD")) != a
 
 
 def test_the_sass_sha_of_a_cuda_variant_is_none_without_its_build(tmp_path, monkeypatch):
-    monkeypatch.setenv("PK_KERNEL_BUILD_DIR", str(tmp_path))
+    monkeypatch.setenv("RKT_KERNEL_BUILD_DIR", str(tmp_path))
     assert lever_pricing_run.cuda_sass_sha("A", "kernel.cu") is None
 
 
 # ---------------------------------------------------------------- census (C++)
 def test_the_census_finds_the_build_of_exactly_this_source(tmp_path, monkeypatch):
-    monkeypatch.setenv("PK_KERNEL_BUILD_DIR", str(tmp_path))
+    monkeypatch.setenv("RKT_KERNEL_BUILD_DIR", str(tmp_path))
     for key, src in (("aaa", "A"), ("bbb", "B")):
-        d = tmp_path / f"pk_kernel_{key}"
+        d = tmp_path / f"rkt_kernel_{key}"
         d.mkdir()
         (d / "kernel.cu").write_text(src)
-        (d / f"pk_kernel_{key}.so").write_bytes(b"\x7fELF")
-    assert orch_census_run.find_cuda_build("B", "kernel.cu") == str(tmp_path / "pk_kernel_bbb" / "pk_kernel_bbb.so")
+        (d / f"rkt_kernel_{key}.so").write_bytes(b"\x7fELF")
+    assert orch_census_run.find_cuda_build("B", "kernel.cu") == str(tmp_path / "rkt_kernel_bbb" / "rkt_kernel_bbb.so")
     assert orch_census_run.find_cuda_build("C", "kernel.cu") is None
 
 
 def test_a_cuda_census_without_a_build_skips_on_one_line(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("PK_KERNEL_BUILD_DIR", str(tmp_path / "none"))
+    monkeypatch.setenv("RKT_KERNEL_BUILD_DIR", str(tmp_path / "none"))
     (tmp_path / "kernel.cu").write_text("x")
     monkeypatch.setattr(orch_census_run, "_run_ncu", lambda env: (0, "csv\n"))
     assert orch_census_run.main(["--kernel", "kernel.cu"]) == 0
@@ -386,9 +386,9 @@ def test_a_cuda_census_without_a_build_skips_on_one_line(tmp_path, monkeypatch, 
 
 
 def test_the_seeded_tools_never_name_a_cpp_source_the_recon_guard_refuses():
-    from peregrine_kernel import binref
+    from rsi_kernel_tune import binref
     rx = re.compile("|".join(binref.REF_TREE_FORBID))
-    from peregrine_kernel.skills import stall_price_run
+    from rsi_kernel_tune.skills import stall_price_run
     for mod in (tp, lever_pricing_run, orch_census_run, job_env_check, stall_price_run):
         hits = [ln for ln in Path(mod.__file__).read_text().splitlines() if rx.search(ln)]
         assert not hits, (mod.__name__, hits[:3])
@@ -432,7 +432,7 @@ def test_an_unchanged_cuda_source_is_not_restaged(card_lb, monkeypatch):
     monkeypatch.setitem(sys.modules, "torch.utils", utils)
     monkeypatch.setitem(sys.modules, "torch.utils.cpp_extension", ext)
     monkeypatch.setattr(sys.modules["torch"], "utils", utils, raising=False)
-    monkeypatch.setenv("PK_KERNEL_BUILD_DIR", str(card.parent / "build"))
+    monkeypatch.setenv("RKT_KERNEL_BUILD_DIR", str(card.parent / "build"))
     lbm.load_cuda_entry(card / "kernel.cu", "run")
     staged = Path(seen[0])
     old = time.time() - 3600
@@ -442,8 +442,8 @@ def test_an_unchanged_cuda_source_is_not_restaged(card_lb, monkeypatch):
 
 
 def test_a_lineinfo_build_is_its_own_and_the_timed_build_never_carries_it(card_lb, monkeypatch):
-    """The stall ledger's run (PK_CUDA_LINEINFO=1) builds with -lineinfo under pk_lineinfo_*;
-    the timed build keeps the board's flags under pk_kernel_* (the census reads only those)."""
+    """The stall ledger's run (RKT_CUDA_LINEINFO=1) builds with -lineinfo under rkt_lineinfo_*;
+    the timed build keeps the board's flags under rkt_kernel_* (the census reads only those)."""
     lbm, problem, card, _ = card_lb
     ext = types.ModuleType("torch.utils.cpp_extension")
     seen = []
@@ -453,28 +453,28 @@ def test_a_lineinfo_build_is_its_own_and_the_timed_build_never_carries_it(card_l
     monkeypatch.setitem(sys.modules, "torch.utils", utils)
     monkeypatch.setitem(sys.modules, "torch.utils.cpp_extension", ext)
     monkeypatch.setattr(sys.modules["torch"], "utils", utils, raising=False)
-    monkeypatch.setenv("PK_KERNEL_BUILD_DIR", str(card.parent / "build"))
-    monkeypatch.delenv("PK_CUDA_LINEINFO", raising=False)
+    monkeypatch.setenv("RKT_KERNEL_BUILD_DIR", str(card.parent / "build"))
+    monkeypatch.delenv("RKT_CUDA_LINEINFO", raising=False)
     lbm.load_cuda_entry(card / "kernel.cu", "run")
-    monkeypatch.setenv("PK_CUDA_LINEINFO", "1")
+    monkeypatch.setenv("RKT_CUDA_LINEINFO", "1")
     lbm.load_cuda_entry(card / "kernel.cu", "run")
-    monkeypatch.setenv("PK_CUDA_LINEINFO", "0")
+    monkeypatch.setenv("RKT_CUDA_LINEINFO", "0")
     lbm.load_cuda_entry(card / "kernel.cu", "run")
     timed, li, again = seen
-    assert "-lineinfo" not in timed["extra_cuda_cflags"] and timed["name"].startswith("pk_kernel_")
-    assert "-lineinfo" in li["extra_cuda_cflags"] and li["name"].startswith("pk_lineinfo_")
+    assert "-lineinfo" not in timed["extra_cuda_cflags"] and timed["name"].startswith("rkt_kernel_")
+    assert "-lineinfo" in li["extra_cuda_cflags"] and li["name"].startswith("rkt_lineinfo_")
     assert again["name"] == timed["name"]
 
 
 def test_the_stall_run_asks_for_lineinfo_and_the_role_pass_does_not(monkeypatch):
-    from peregrine_kernel.skills import stall_price_run
+    from rsi_kernel_tune.skills import stall_price_run
     src = Path(stall_price_run.__file__).read_text()
-    assert 'os.environ.setdefault("PK_CUDA_LINEINFO", "1")' in src
+    assert 'os.environ.setdefault("RKT_CUDA_LINEINFO", "1")' in src
     calls = []
     monkeypatch.setattr(lever_pricing_run, "sh",
                         lambda cmd, timeout=0, env=None: (calls.append(env), (0, "", ""))[1])
     lever_pricing_run.run_price("base", timeout=5)
-    assert calls[0]["PK_CUDA_LINEINFO"] == "0"
+    assert calls[0]["RKT_CUDA_LINEINFO"] == "0"
 
 
 def test_a_build_error_larger_than_a_pipe_does_not_stall_the_prebuild(tmp_path, monkeypatch, capsys):

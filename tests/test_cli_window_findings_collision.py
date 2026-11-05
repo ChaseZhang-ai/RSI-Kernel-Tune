@@ -6,8 +6,8 @@ on ``AgentCmdFacts`` and every ``loop start`` died with
 ``AttributeError: 'AgentCmdFacts' object has no attribute 'reference_inputs'``
 (seen at a gdn_prefill_bwd run's preflight). The CLI must bind each under its own name."""
 
-from peregrine_kernel.loop import agentctx, cli
-from peregrine_kernel import window_contract
+from rsi_kernel_tune.loop import agentctx, cli
+from rsi_kernel_tune import window_contract
 
 
 def test_cli_binds_both_window_findings_under_distinct_names():

@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """Regression tests for the audit-corps R3F fix wave over loop/analytic_floor.py.
@@ -28,7 +28,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from peregrine_kernel.loop import analytic_floor as af
+from rsi_kernel_tune.loop import analytic_floor as af
 
 _GEMM = {"arch": "sm80", "family": "gemm", "op_type": "gemm", "name": "test_gemm",
          "inputs": [{"name": "a", "shape": ["m", "k"], "dtype": "fp16"}],

@@ -1,4 +1,4 @@
-# Peregrine-Kernel: distilling operator milestones (design rationale)
+# RSI-Kernel-Tune: distilling operator milestones (design rationale)
 
 > **This is the original design rationale**: why the system has the structure it has, and where its
 > invariants come from. The implementation differs in details, marked "In the implementation" below;
@@ -149,7 +149,7 @@ lost; an LLM pre-summary adds a filter with judgement of its own, which is dange
 > technique and change applied, correctness, readings, NCU) and **not** the student's subjective
 > analysis, so the meta agent diagnoses from measured hardware facts rather than from the student's
 > narrative; the Layer-1 digest is built mechanically by `build_digest()` in
-> `src/peregrine_kernel/inner/trajectory.py`.
+> `src/rsi_kernel_tune/inner/trajectory.py`.
 
 > The meta agent's two other inputs are separate from the trajectory: **the milestone** (needed for both
 > diagnosis and patching) and **the reference's source** (needed only for R2, adding an optimization
@@ -211,7 +211,7 @@ workable.
 > In the implementation: a patch's outcome is judged on the inner trajectory segment after it and
 > recorded in `meta_status.jsonl`; a patch that brought no attributable improvement is recorded as
 > `REVERT_PATCH` and rolled back, and the next diagnosis reads this memory so that a direction that
-> already regressed is not proposed again (`src/peregrine_kernel/meta_trajectory.py`).
+> already regressed is not proposed again (`src/rsi_kernel_tune/meta_trajectory.py`).
 
 ### 4.5 No big refactors
 
@@ -265,7 +265,7 @@ patch, instead of restarting from 0. It needs:
 4. **A resume entry point**: the inner loop can "continue from a given checkpoint (code commit + record
    prefix)", not only start from the baseline.
 
-> In the implementation: `src/peregrine_kernel/resume/` (`compute_resume` computes the resume point and the
+> In the implementation: `src/rsi_kernel_tune/resume/` (`compute_resume` computes the resume point and the
 > invalidated checkpoints from the entries a patch hit).
 
 ---
@@ -335,7 +335,7 @@ hand -- a ready-made single-operator development / evaluation bench. The order w
   > `task.toml`, 1.2x by default), checked against a same-job confirmation.
 - **Outer-loop cost**: every outer iteration = one segment of the inner loop (GPU hours). Prefix reuse
   (§6) is the lifeline for cost.
-  > In the implementation: prefix reuse is `src/peregrine_kernel/resume/` (§6).
+  > In the implementation: prefix reuse is `src/rsi_kernel_tune/resume/` (§6).
 - **Credit assignment**: the student model and budget must be fixed for a performance gap to be
   attributable to the milestone rather than to the student's ability.
   > In the implementation: both are written in the task (`[agent.student]`, `[budget]`), and a run
@@ -346,4 +346,4 @@ hand -- a ready-made single-operator development / evaluation bench. The order w
 - **KB cold start**: phase 0 is likely to expose many missing hardware-interface examples, which need
   to be filled in bulk first.
   > In the implementation: the repository ships a knowledge base for Hopper and Blackwell (`hw_kb/cutedsl/`,
-  > `hw_kb/cuda/`), and each run's certified findings are added to it (`peregrine harvest`).
+  > `hw_kb/cuda/`), and each run's certified findings are added to it (`rsi-kernel-tune harvest`).

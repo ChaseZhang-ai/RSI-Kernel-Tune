@@ -32,7 +32,7 @@ import time
 
 import pytest
 
-from peregrine_kernel.loop import cli
+from rsi_kernel_tune.loop import cli
 
 
 # -- BUG-SEED-10: an interrupted agent turn ends the whole process group ----------------------
@@ -56,7 +56,7 @@ def test_end_process_group_kills_the_grandchild_not_just_the_wrapper():
     """The helper the interrupted-turn path must use reaches the whole group: a
     background grandchild under the shell wrapper dies with it (proc.kill() would
     orphan the sleep)."""
-    proc = subprocess.Popen(["bash", "-c", "sleep 3001 & wait # pk-group-probe"],
+    proc = subprocess.Popen(["bash", "-c", "sleep 3001 & wait # rkt-group-probe"],
                             start_new_session=True)
     try:
         deadline = time.monotonic() + 5
@@ -75,8 +75,8 @@ def test_an_interrupted_agent_turn_ends_the_whole_session(monkeypatch, tmp_path)
     ends that whole group: nothing outlives the loop.
 
     Ported from the R1 archive (test_an_interrupted_agent_turn_ends_the_whole_session);
-    the archived import path becomes ``peregrine_kernel``."""
-    marker = "pk-agent-turn-probe-2917"
+    the archived import path becomes ``rsi_kernel_tune``."""
+    marker = "rkt-agent-turn-probe-2917"
     ended: list = []
     real_end = cli._end_process_group
 
@@ -134,7 +134,7 @@ def test_clock_lock_budget_is_a_total_of_clock_lock_retries_submits(monkeypatch,
     (test_clock_lock_retry_counts_total_submits_and_says_so), adapted: this tree's
     fix is doc-only (the counting was already the total), so the test pins the
     implemented counting and phrasing rather than the archive's reworded line."""
-    from peregrine_kernel.submit.jobs import CLOCK_LOCK_REFUSED_MARKER
+    from rsi_kernel_tune.submit.jobs import CLOCK_LOCK_REFUSED_MARKER
 
     refused = f"{CLOCK_LOCK_REFUSED_MARKER} lock not held\n"
     be = cli.RealBackend("op", None, None, "n", "e")
@@ -173,7 +173,7 @@ def test_an_overlay_build_failure_is_recorded_as_a_structured_trace(monkeypatch,
     Ported from the R1 archive
     (test_an_overlay_build_failure_is_recorded_as_a_structured_trace), adapted per
     the R2 ledger: the failure is injected through harness_guard.blob_sha (OSError)."""
-    from peregrine_kernel.loop import harness_guard
+    from rsi_kernel_tune.loop import harness_guard
 
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -276,7 +276,7 @@ def test_retry_call_announces_retries_and_sleeps_only_between_them(monkeypatch, 
 
     Ported from the R1 archive
     (test_retry_call_announces_retries_and_sleeps_only_between_them)."""
-    from peregrine_kernel.loop.driver import BackendError
+    from rsi_kernel_tune.loop.driver import BackendError
 
     be = cli.RealBackend("op", None, None, "n", "e", git_retries=3, git_retry_sleep=10.0)
     sleeps: list = []
@@ -306,7 +306,7 @@ def test_label_only_ref_declaration_is_not_a_reference():
     fresh start over a window contract nothing needs, and the driver was told a ref
     rides the student job. Only the action keys (ref_cmd / ref_mode / submit_op)
     count — the same keys the rest of the file already reads."""
-    from peregrine_kernel.loop.cli import (_arm_has_reference, _ref_rides_job,
+    from rsi_kernel_tune.loop.cli import (_arm_has_reference, _ref_rides_job,
                                            _resolve_ref_spec)
 
     label_only = {"loop": {"ref_name": "cuDNN", "ref_shape": "B=8 N=4096",
@@ -336,7 +336,7 @@ def test_command_findings_check_the_teacher_command_too():
     each distinct text; a single command behaves exactly as before.
 
     Reproduces the triage experiment for BUG-SEED-17."""
-    from peregrine_kernel.loop import agent_policy
+    from rsi_kernel_tune.loop import agent_policy
 
     clean = "claude -p --model x"
     bad_teacher = "claude -p --bare --settings /x/off.json --model y"
@@ -352,7 +352,7 @@ def test_command_findings_check_the_teacher_command_too():
 def test_command_findings_read_a_shared_script_once(tmp_path):
     """Dedup still exists — on (source, text): the same script named by two different
     commands is analyzed once, so its findings are not doubled."""
-    from peregrine_kernel.loop import agent_policy
+    from rsi_kernel_tune.loop import agent_policy
 
     wrapper = tmp_path / "agent.sh"
     wrapper.write_text("cd /somewhere\nexec claude -p\n")

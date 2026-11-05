@@ -34,21 +34,21 @@ import pytest
 torch = pytest.importorskip("torch")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EVAL_DIR = REPO_ROOT / "src" / "peregrine_kernel" / "card_template" / "eval"
+EVAL_DIR = REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template" / "eval"
 
 
 def _load_eval(name: str):
     """The card-template eval module under its own name (benchkit.py is copied into
     cards and loaded by path there too, so tests do the same)."""
-    spec = importlib.util.spec_from_file_location(f"pk_guard_fixes_{name}",
+    spec = importlib.util.spec_from_file_location(f"rkt_guard_fixes_{name}",
                                                   EVAL_DIR / f"{name}.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-from peregrine_kernel.loop import cli, harness_guard  # noqa: E402
-from peregrine_kernel.loop.goal_ref import library_findings  # noqa: E402
+from rsi_kernel_tune.loop import cli, harness_guard  # noqa: E402
+from rsi_kernel_tune.loop.goal_ref import library_findings  # noqa: E402
 
 lb = _load_eval("benchkit")
 precision = _load_eval("precision")

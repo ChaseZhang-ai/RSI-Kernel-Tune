@@ -150,12 +150,12 @@ no price is ever reused across lanes):
 
 ## 6. Wiring specification for M3 (per file, with acceptance assertions)
 
-Env var `PK_MEMO_LANE` (`1` when MEMO; absent = STRICT — the house pattern: absent
+Env var `RKT_MEMO_LANE` (`1` when MEMO; absent = STRICT — the house pattern: absent
 means off). Task key `[protocol] memo_lane`. Card stamp: problem.json top-level
 `"memo_lane": true`. Eval-JSON additions exist **only** on MEMO cards (the STRICT
 eval JSON stays byte-identical).
 
-### 6.1 `src/peregrine_kernel/task.py`
+### 6.1 `src/rsi_kernel_tune/task.py`
 
 - `_KEYS["protocol"]`: add `"memo_lane"`. `Protocol`: add `memo_lane: bool = False`
   (absent → False → STRICT). `_read_protocol`: parse as bool; non-bool is a problem
@@ -163,16 +163,16 @@ eval JSON stays byte-identical).
   already serializes the `protocol` table, so run snapshots and `self_evolve` child
   generation round-trip the key for free.
 
-### 6.2 `src/peregrine_kernel/taskcard.py`
+### 6.2 `src/rsi_kernel_tune/taskcard.py`
 
 - `card_problem`: stamp `problem["memo_lane"] = task.protocol.memo_lane`
   (problem.json is generated, not a frozen surface). `write_submit`: when MEMO, one
-  added `[env]` line `PK_MEMO_LANE = "1"`; when STRICT, submit.toml byte-identical
+  added `[env]` line `RKT_MEMO_LANE = "1"`; when STRICT, submit.toml byte-identical
   to today.
 
-### 6.3 `src/peregrine_kernel/card_template/eval/benchkit.py`
+### 6.3 `src/rsi_kernel_tune/card_template/eval/benchkit.py`
 
-- Add `MEMO_LANE_ENV = "PK_MEMO_LANE"` next to `FRESH_RECHECK_ENV`, read before the
+- Add `MEMO_LANE_ENV = "RKT_MEMO_LANE"` next to `FRESH_RECHECK_ENV`, read before the
   kernel imports (the fence refuses a kernel that reads the environment — the flag
   is harness-side only).
 - `_fresh_recheck_block` / `_maybe_fresh_recheck`: branch on the lane. STRICT:
@@ -198,13 +198,13 @@ eval JSON stays byte-identical).
   signature). Conditional touchpoint; M3 states the gate check at the probe's
   spawn site.
 
-### 6.4 `src/peregrine_kernel/loop/parse.py`
+### 6.4 `src/rsi_kernel_tune/loop/parse.py`
 
 - `EvalResult`: add `lane: dict | None = None` and `memo_fallback: dict | None =
   None`; `parse_eval` reads them off the eval JSON top level (the `fresh_recheck` /
   `gpu_state` pattern: absent on STRICT → None).
 
-### 6.5 `src/peregrine_kernel/loop/driver.py`
+### 6.5 `src/rsi_kernel_tune/loop/driver.py`
 
 - `LoopContext`: add `memo_lane: bool = False`, set where the context is built from
   the loaded task snapshot (`<run>/task/`, re-read by launch like every other task
@@ -223,7 +223,7 @@ eval JSON stays byte-identical).
   is service latency over the repeating stream. All other discipline text stays
   untouched.
 
-### 6.6 `src/peregrine_kernel/inner/trajectory.py` and the report lane column
+### 6.6 `src/rsi_kernel_tune/inner/trajectory.py` and the report lane column
 
 - `IterationRecord`: add `memo_lane: bool = False` (the append-only rule already
   handles older files: `load_records` drops unknown keys; a row without the field
@@ -232,7 +232,7 @@ eval JSON stays byte-identical).
   section 3).
 - Report / paper surfaces: any renderer laying rows into a comparison table groups
   or column-labels by lane. For M3: the digest header line, the run-end summary
-  and the `peregrine export` provenance note (`launch.py cmd_export`) carry the
+  and the `rsi-kernel-tune export` provenance note (`launch.py cmd_export`) carry the
   lane string; cross-run table tools (paper layer, WP26) read the digest's `lane`
   key; M3 adds a render-time assertion that no table row set mixes lanes.
 
@@ -263,7 +263,7 @@ eval JSON stays byte-identical).
 |---|---|
 | `task.py` | `memo_lane = true` loads to `Task.protocol.memo_lane is True`; `memo_lane = "yes"` raises TaskError; existing fixtures load with False; `dump_task_toml` round-trips; existing task tests pass unmodified |
 | `taskcard.py` | a STRICT card's submit.toml is byte-identical to pre-M1 (fixture pin); a MEMO card carries the env line; both cards' problem.json carry the stamp |
-| `benchkit.py` | STRICT rehearsal (`PK_FRESH_RECHECK_DEVICE=cpu`) eval JSON field-identical to pre-M1; MEMO rehearsal JSON carries `lane` and `memo_fallback`, never `fresh_recheck`; the fallback child answers correctly for an honest kernel on both recheck modes |
+| `benchkit.py` | STRICT rehearsal (`RKT_FRESH_RECHECK_DEVICE=cpu`) eval JSON field-identical to pre-M1; MEMO rehearsal JSON carries `lane` and `memo_fallback`, never `fresh_recheck`; the fallback child answers correctly for an honest kernel on both recheck modes |
 | `parse.py` | a STRICT JSON parses with `lane`/`memo_fallback` None; a MEMO JSON populates them; no existing parsed field moves |
 | `driver.py` | STRICT dry-run records `memo_lane=False` with zero pins modified; MEMO dry-run (fixture card, CPU rehearsal device) records `memo_lane=True`; `memo_fallback.pass=False` produces the REVERT with the specified error text; `pass=None` produces no conviction plus the unverified-fallback flag |
 | `trajectory.py` | a pre-M1 trajectory file loads and digests as strict; a MEMO run's digest carries `"lane": "memo"` |
@@ -294,5 +294,5 @@ eval JSON stays byte-identical).
 - **This document is a design, not an implementation license.** M1 adds no code;
   M3 implements exactly this spec and routes any deviation through adjudication.
 
-<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+<!-- SPDX-FileCopyrightText: Copyright 2026 The RSI-Kernel-Tune Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->

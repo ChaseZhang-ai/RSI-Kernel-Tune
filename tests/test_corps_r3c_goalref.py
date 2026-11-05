@@ -7,7 +7,7 @@ evaluation, or forge the verdict text its eval command prints. The harness itsel
 (outside the agent's sandbox) keeps writing the answers.
 
 C-10: the session's eval/exec/check command runs ``python -m`` from the agent's
-working directory; without interpreter isolation a ``peregrine_kernel`` package
+working directory; without interpreter isolation a ``rsi_kernel_tune`` package
 planted in that directory shadows this module and forges the CLI the verdicts ride on.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from peregrine_kernel.loop import goal_ref as gr
+from rsi_kernel_tune.loop import goal_ref as gr
 
 
 def _card(root: Path, op: str = "demo") -> Path:
@@ -37,18 +37,18 @@ def _card(root: Path, op: str = "demo") -> Path:
 
 def test_the_session_cli_command_isolates_the_interpreter():
     cmd = gr.command("eval", "/some/ws")
-    assert " -P " in cmd and " -s " in cmd and "-m peregrine_kernel.loop.goal_ref" in cmd
+    assert " -P " in cmd and " -s " in cmd and "-m rsi_kernel_tune.loop.goal_ref" in cmd
     assert "PYTHONPATH=" in cmd          # this checkout, not the working directory
 
 
 def test_a_shadow_package_in_the_working_directory_cannot_hijack_the_cli(tmp_path):
-    """End to end: cwd is the agent-writable workspace, and a planted peregrine_kernel
+    """End to end: cwd is the agent-writable workspace, and a planted rsi_kernel_tune
     package would answer first without -P (cwd precedes PYTHONPATH for ``python -m``).
     With it, the real module answers."""
     ws = tmp_path / "ws"
-    shadow = ws / "peregrine_kernel" / "loop"
+    shadow = ws / "rsi_kernel_tune" / "loop"
     shadow.mkdir(parents=True)
-    (ws / "peregrine_kernel" / "__init__.py").write_text("", encoding="utf-8")
+    (ws / "rsi_kernel_tune" / "__init__.py").write_text("", encoding="utf-8")
     (shadow / "__init__.py").write_text("", encoding="utf-8")
     (shadow / "goal_ref.py").write_text(
         "import sys\n"

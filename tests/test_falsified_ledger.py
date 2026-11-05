@@ -10,7 +10,7 @@ arch filter, not any gate behavior, because no gate reads this file).
 """
 import json
 
-from peregrine_kernel.loop.driver import (
+from rsi_kernel_tune.loop.driver import (
     _append_falsified_ledger,
     _falsified_ledger_block,
     _falsified_ledger_path,
@@ -197,7 +197,7 @@ def _patch(tmp_path):
 
 
 def test_diagnose_prompt_carries_the_ledger_as_prior_only(tmp_path):
-    from peregrine_kernel.loop.driver import run_meta_step
+    from rsi_kernel_tune.loop.driver import run_meta_step
     be = FakeBackend([_DIAG, _patch(tmp_path)], [])
     ctx = _wp3_ctx(tmp_path, be)
     ctx.milestone.write_text(
@@ -213,7 +213,7 @@ def test_diagnose_prompt_carries_the_ledger_as_prior_only(tmp_path):
 
 
 def test_diagnose_prompt_omits_the_section_without_a_ledger(tmp_path):
-    from peregrine_kernel.loop.driver import run_meta_step
+    from rsi_kernel_tune.loop.driver import run_meta_step
     be = FakeBackend([_DIAG, _patch(tmp_path)], [])
     ctx = _wp3_ctx(tmp_path, be)
     ctx.milestone.write_text(

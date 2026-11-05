@@ -7,7 +7,7 @@ the whole run through the probe channel).
 
 from __future__ import annotations
 
-from peregrine_kernel.loop.driver import (
+from rsi_kernel_tune.loop.driver import (
     BackendError,
     _run_meta_verdict_probe,
     run_meta_step,
@@ -30,7 +30,7 @@ def test_verdict_probe_backend_error_degrades_to_no_verdict(tmp_path):
     job used to end the whole run and waste the remaining budget. The round
     degrades to a no-verdict reading, the teacher hears the reason, the run
     carries on to its diagnosis."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     diagnosis = "cause_class: R1\ndeficient_locus: D1.1"
     patch = _patching(tmp_path, "\n### D0.9 loosened\nx\n",
                       "patch_class: structural\nchanged_entries: [D0.9]\npatch: ...\n")
@@ -63,7 +63,7 @@ def test_probe_manifest_backend_error_falls_back_and_degrades(tmp_path):
     the same wholesale-failure fallback as a marker-less log, and the
     per-script path it falls back to carries the same net per script: the run
     carries on instead of dying on the batch job's flake."""
-    from peregrine_kernel.meta_trajectory import load_meta_records
+    from rsi_kernel_tune.meta_trajectory import load_meta_records
     manifest = tmp_path / "batch.txt"
     scripts = ["s0.py", "s1.py"]
     manifest.write_text("\n".join(scripts) + "\n", encoding="utf-8")

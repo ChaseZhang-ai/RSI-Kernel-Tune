@@ -6,11 +6,11 @@ the perf JSON scan must respect string literals, and a torn trajectory line must
 not sink the run's whole history."""
 import json
 
-from peregrine_kernel.inner.results import (_first_json_with_key,
+from rsi_kernel_tune.inner.results import (_first_json_with_key,
                                             parse_correctness)
-from peregrine_kernel.inner.trajectory import (IterationRecord, _DIFF_SIG,
+from rsi_kernel_tune.inner.trajectory import (IterationRecord, _DIFF_SIG,
                                                constant_output_flag)
-from peregrine_kernel.loop.parse import (Exhausted, ProbeRequest, Record,
+from rsi_kernel_tune.loop.parse import (Exhausted, ProbeRequest, Record,
                                          _float_list, detect_plateau, parse_eval)
 
 
@@ -192,7 +192,7 @@ def _keep_rec(it):
 
 
 def test_load_records_tolerates_a_torn_final_line(tmp_path, capsys):
-    from peregrine_kernel.inner.trajectory import append_record, load_records
+    from rsi_kernel_tune.inner.trajectory import append_record, load_records
     p = tmp_path / "status.jsonl"
     append_record(p, _keep_rec(1))
     with open(p, "a") as fh:
@@ -209,7 +209,7 @@ def test_load_records_still_raises_on_a_broken_middle_line(tmp_path):
     # cannot be torn, so a broken line there is real corruption and must be loud.
     import pytest
 
-    from peregrine_kernel.inner.trajectory import append_record, load_records
+    from rsi_kernel_tune.inner.trajectory import append_record, load_records
     p = tmp_path / "status.jsonl"
     append_record(p, _keep_rec(1))
     with open(p, "a") as fh:
@@ -220,7 +220,7 @@ def test_load_records_still_raises_on_a_broken_middle_line(tmp_path):
 
 
 def test_load_records_clean_file_warns_nothing(tmp_path, capsys):
-    from peregrine_kernel.inner.trajectory import append_record, load_records
+    from rsi_kernel_tune.inner.trajectory import append_record, load_records
     p = tmp_path / "status.jsonl"
     append_record(p, _keep_rec(1))
     append_record(p, _keep_rec(2))
@@ -233,7 +233,7 @@ def test_load_records_clean_file_warns_nothing(tmp_path, capsys):
 # GPU probe and an echoed "EXHAUSTED: ..." stopped the run.
 
 def _import_parse_student_turn():
-    from peregrine_kernel.loop.parse import parse_student_turn
+    from rsi_kernel_tune.loop.parse import parse_student_turn
     return parse_student_turn
 
 

@@ -24,8 +24,8 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.submit import direct, jobs as ds
-from peregrine_kernel.submit.config import SubmitConfig, load_config
+from rsi_kernel_tune.submit import direct, jobs as ds
+from rsi_kernel_tune.submit.config import SubmitConfig, load_config
 
 ENTRY_OK = """#!/bin/bash
 echo "entry task=$1"

@@ -13,7 +13,7 @@ sys.path.insert(0, str(REPO / "src"))
 
 from test_loop_driver import FakeBackend, _ctx  # noqa: E402
 
-from peregrine_kernel.loop import driver
+from rsi_kernel_tune.loop import driver
 
 _LOG_CLUSTERED = ("LAUNCH-OK kernel=main_kernel grid=(16,1,1) block=(128,1,1) ctas=16 "
                   "cluster=(2,8,1) cluster_max_active=16\n")

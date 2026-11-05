@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.localenv import load_machine, read_env_file
-from peregrine_kernel.task import TaskError, load_task
+from rsi_kernel_tune.localenv import load_machine, read_env_file
+from rsi_kernel_tune.task import TaskError, load_task
 
 
 MINIMAL = '[task]\nlanguage = "cutedsl"\narch = "sm100"\n'
@@ -36,7 +36,7 @@ def test_an_inline_comment_is_stripped_from_an_unquoted_value(tmp_path):
     (tmp_path / "local.env").write_text(
         "REMOTE_HOST=host # alias\n"
         "REMOTE_WORKDIR=/data/fk   # dedicated directory\n"
-        "PK_DELIVERY=ssh\n")
+        "RKT_DELIVERY=ssh\n")
     m = load_machine(tmp_path, environ={})
     assert (m.delivery, m.remote_host, m.remote_workdir) == ("ssh", "host", "/data/fk")
 

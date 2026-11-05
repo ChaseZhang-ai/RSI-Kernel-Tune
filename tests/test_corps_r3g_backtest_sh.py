@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """FIX-R3G regression pins for BUG-CH-J-01 (``scripts/backtest_sh.py``).
@@ -37,7 +37,7 @@ SCRIPT = REPO / "scripts" / "backtest_sh.py"
 
 @pytest.fixture(scope="module")
 def bt():
-    spec = importlib.util.spec_from_file_location("pk_corps_r3g_backtest_sh", SCRIPT)
+    spec = importlib.util.spec_from_file_location("rkt_corps_r3g_backtest_sh", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

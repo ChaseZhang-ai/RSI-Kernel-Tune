@@ -30,15 +30,15 @@ from test_loop_driver import (  # noqa: E402
     _MILESTONE, REC, _ctx,
 )
 
-from peregrine_kernel.inner.trajectory import (  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import (  # noqa: E402
     IterationRecord, append_record, build_digest, load_records, per_shape_ledger,
     per_shape_best_readings,
 )
-from peregrine_kernel.milestone import (  # noqa: E402
+from rsi_kernel_tune.milestone import (  # noqa: E402
     parse_per_shape_declarations, parse_regime_expr, parse_regime_predicates,
     regime_coverage, regime_expr_matches, validate_milestone,
 )
-from peregrine_kernel.loop.driver import (  # noqa: E402
+from rsi_kernel_tune.loop.driver import (  # noqa: E402
     LoopContext, _arch_probe_stamp, _parse_arch_candidates, _run_stall_pricing,
     _sweep_per_shape_feedback, _wp14_declaration_violations,
     _wp14_regime_evidence_block, _wp14_regime_label_line,
@@ -242,7 +242,7 @@ def test_regime_map_and_evidence_selection(tmp_path, monkeypatch):
     ctx.milestone.write_text(text, encoding="utf-8")
     rmap = {"prefill": "D1.1: m >= 1024", "decode": "D1.2: m < 1024",
             "mid": "D1.1: m >= 1024"}
-    import peregrine_kernel.loop.driver as drv
+    import rsi_kernel_tune.loop.driver as drv
     monkeypatch.setattr(drv, "_wp14_regime_map", lambda c, t=None: dict(rmap))
     label = _wp14_regime_label_line(ctx)
     assert "Regime labels" in label and "`prefill` → regime `D1.1: m >= 1024`" in label
@@ -287,7 +287,7 @@ def test_sweep_per_shape_selection(tmp_path):
         "group": [{"name": "prefill", "workload": {"axes": {"m": 8192}}},
                   {"name": "decode", "workload": {"axes": {"m": 64}}}],
         "meta_workloads": ["prefill", "decode"]}), encoding="utf-8")
-    import peregrine_kernel.loop.driver as drv
+    import rsi_kernel_tune.loop.driver as drv
     decl = _MILESTONE.replace(
         "**D1.1 base**",
         "**D1.1 base**\nper_shape: raster[prefill]={row,col}, raster[decode]=row", 1)
@@ -329,7 +329,7 @@ def test_sweep_per_shape_feedback_table():
 
 
 def test_sweep_scope_cmd_scopes_the_bench():
-    import peregrine_kernel.loop.driver as drv
+    import rsi_kernel_tune.loop.driver as drv
     cmd = drv._sweep_scope_cmd("__sweep_D2.1.json", "prefill")
     assert cmd.startswith("cmd:python3 -c")
     assert "l._SCOPE_WANT['name']='prefill'" in cmd       # the tool's own assignment
@@ -397,7 +397,7 @@ def test_mc_dispatch_per_shape_readings_and_no_mechanical_merge(tmp_path, monkey
     ordinary no-winner REVERT with the per-workload readings banked — the
     dispatch composition is the teacher's per_shape declaration, never a
     driver-written merge."""
-    import peregrine_kernel.loop.driver as drv
+    import rsi_kernel_tune.loop.driver as drv
 
     class Rec:
         decision_id = "D2.4"

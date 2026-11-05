@@ -363,7 +363,7 @@ milliseconds it is worth.
     written here so the next recipe does not repeat it.
 
     The driver's feedback channel is **asymmetric** (see the probe feedback path of
-    `src/peregrine_kernel/loop/driver.py` and `parse.py`):
+    `src/rsi_kernel_tune/loop/driver.py` and `parse.py`):
     - `PROBE FAIL` → only `max_diff=...` is passed back; **the log tail is discarded**, the traceback is invisible;
     - `NO VERDICT` (not a single `PROBE` line in the log) → the last 25 lines / 2000 characters of the log are
       passed back;

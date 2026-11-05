@@ -16,7 +16,7 @@ sys.path.insert(0, str(REPO / "src"))
 
 from test_loop_driver import FakeBackend, _ctx
 
-from peregrine_kernel.loop import driver
+from rsi_kernel_tune.loop import driver
 
 _SUSPENDED = ("[RE-PRICED @abc1234567 job 9: 1.10 -> 0.80 ms — FADED; SUSPENDED by "
               "driver — the rung citing this price may not be landed until the "

@@ -16,11 +16,11 @@ from test_loop_driver import (  # noqa: E402
     _DIAG, _MILESTONE, _STALL_LOG_OK, FakeBackend, _ctx, _patching, _seed_keep,
 )
 
-from peregrine_kernel.loop.driver import (  # noqa: E402
+from rsi_kernel_tune.loop.driver import (  # noqa: E402
     BackendError, PricedTrees, _orch_diff_views, _pick_ref_dossier,
     _price_student_trees, _save_ref_orch_dossier, _student_prompt, run_meta_step,
 )
-from peregrine_kernel.inner.trajectory import load_records  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import load_records  # noqa: E402
 
 
 def _block(instrs, summary):
@@ -40,7 +40,7 @@ _ORCH_OK_LINE = ("ORCH-OK regions=4 loops=2 nbar_ids=1 mbar_objs=3 resolved=3 "
 # A chain-replay pricing log: a bystander kernel's (FAIL) dossier first, then the
 # kernel under judgment, named by the dominant-launch line the runner prints.
 _CHAIN_LOG = (
-    "[stall_price] dominant launch index=0 name=topk_kernel\n"
+    "[stall_price] dominant launch index=0 name=torkt_kernel\n"
     + _block(310, _FAIL_SUMM) + "ORCH-FAIL no-sync-sites\n"
     "[stall_price] dominant launch index=2 name=sparse_attn_fwd_kernel\n"
     + _block(3520, _OK_SUMM) + _ORCH_OK_LINE
@@ -55,7 +55,7 @@ def test_ref_dossier_picks_the_ok_largest_block_and_stamps_the_kernel():
                            "instrs=3520 verdict=OK\n")
     assert "LDGSTS.E.BYPASS.LTC256B.128" in text and "no-sync-sites" not in text
     assert "ORCH DOSSIER BEGIN" not in text and "\nORCH-OK" not in text
-    assert "not banked: block 1: topk_kernel instrs=310 ORCH-FAIL" in note
+    assert "not banked: block 1: torkt_kernel instrs=310 ORCH-FAIL" in note
 
 
 def test_ref_dossier_single_block_keeps_the_old_contract():
@@ -76,7 +76,7 @@ def test_save_ref_orch_dossier_banks_the_picked_block(tmp_path):
     _save_ref_orch_dossier(ctx, _CHAIN_LOG)
     banked = (tmp_path / "evidence" / "ref_orch_dossier.txt").read_text()
     assert banked.startswith("# banked: block 2/2 kernel=sparse_attn_fwd_kernel")
-    from peregrine_kernel.loop.driver import _orch_summary
+    from rsi_kernel_tune.loop.driver import _orch_summary
     assert _orch_summary(banked)["cache_ops"] == ["LDGSTS.E.BYPASS.LTC256B.128"]
 
 

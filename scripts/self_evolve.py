@@ -3,7 +3,7 @@
 
     python scripts/self_evolve.py tasks/<op> [--step 1.05] [--max-gen N]
 
-A generation is an ordinary run (`peregrine new`, then `peregrine run`). When it ends with a confirmed
+A generation is an ordinary run (`rsi-kernel-tune new`, then `rsi-kernel-tune run`). When it ends with a confirmed
 best kernel faster than its reference by more than the noise floor, the next generation is
 written as a new task, ``tasks/<op>-g<k>/``: the same task.toml, description and shapes, the
 best kernel copied into its reference/ (so the new task carries everything it needs and can be
@@ -33,20 +33,20 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from peregrine_kernel import launch  # noqa: E402
-from peregrine_kernel.runs import list_runs  # noqa: E402
-from peregrine_kernel.task import (TaskError, dump_task_toml, load_task,  # noqa: E402
+from rsi_kernel_tune import launch  # noqa: E402
+from rsi_kernel_tune.runs import list_runs  # noqa: E402
+from rsi_kernel_tune.task import (TaskError, dump_task_toml, load_task,  # noqa: E402
                               read_task_toml)
 
 REF_DIR = "reference"
-# == peregrine_kernel.loop.parse's noise constants (WP1): below the CAP, two readings of one
+# == rsi_kernel_tune.loop.parse's noise constants (WP1): below the CAP, two readings of one
 # kernel are not told apart, however tight a handful of confirmation jobs happened to
 # be. Single source of truth: import the cap (and floor) from parse; this standalone
 # script keeps local copies only for the case the import cannot resolve.
 try:
-    from peregrine_kernel.loop.parse import RESOLVABLE_DIFF_CAP as _RESOLVABLE_CAP  # noqa: E402
-except ImportError:  # pragma: no cover - peregrine_kernel not importable (script run standalone)
-    _RESOLVABLE_CAP = 0.015   # == peregrine_kernel.loop.parse.RESOLVABLE_DIFF_CAP
+    from rsi_kernel_tune.loop.parse import RESOLVABLE_DIFF_CAP as _RESOLVABLE_CAP  # noqa: E402
+except ImportError:  # pragma: no cover - rsi_kernel_tune not importable (script run standalone)
+    _RESOLVABLE_CAP = 0.015   # == rsi_kernel_tune.loop.parse.RESOLVABLE_DIFF_CAP
 NOISE_FLOOR_MIN = _RESOLVABLE_CAP
 
 
@@ -82,7 +82,7 @@ def _floor_progress_text(task, best: dict) -> str | None:
     single source; a card without a problem.json yields None and no line is
     printed). Report-only: nothing downstream reads it."""
     try:
-        from peregrine_kernel.loop.analytic_floor import floor_from_op_dir
+        from rsi_kernel_tune.loop.analytic_floor import floor_from_op_dir
         info = floor_from_op_dir(Path(task.dir), arch="")
     except Exception:  # noqa: BLE001 — an advisory must never break the chain
         return None
@@ -284,7 +284,7 @@ def _write_carry(task, run, dest: Path, best: dict | None = None) -> None:
     census_sections = _best_tree_census_sections(run, best) if best else {}
     census = ""
     if best and best.get("kernel"):
-        header = (f"<!-- pk-ref-census\n"
+        header = (f"<!-- rkt-ref-census\n"
                   f"reference_kernel_sha256: {_reference_kernel_sha(best['kernel'])}\n"
                   f"parent_best_sha: {best.get('sha', '')}\n"
                   f"window: {best.get('window') or ''}\n"
@@ -378,12 +378,12 @@ def main(argv=None) -> int:
         if run is not None:
             rc = launch.cmd_run([str(run.dir)])
         if rc != 0:
-            # `peregrine new` / `peregrine run` itself failed — an infrastructure
+            # `rsi-kernel-tune new` / `rsi-kernel-tune run` itself failed — an infrastructure
             # failure (bad machine config, a dead backend, an env problem), not the
             # loop's verdict. It must not read as the natural chain break below (which
             # is a RESULT and exits 0): say so, and hand the operator a distinct code.
             print(f"[self-evolve] generation {gen}: the harness failed "
-                  f"(peregrine new/run exit {rc}) — this is not a chain stop; fix the "
+                  f"(rsi-kernel-tune new/run exit {rc}) — this is not a chain stop; fix the "
                   f"environment and rerun", flush=True)
             return 3
         best = launch.best_of(run, task) if run is not None else None

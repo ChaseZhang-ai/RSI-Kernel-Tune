@@ -28,7 +28,7 @@ directly today). The four tests below add coverage nothing else pins:
   skipped today, only a non-positive one degrades the aggregate.
 
 Note the archive's wrong-source import bug (it imported BASIS_CUPTI from the
-timing_audit module): BASIS_CUPTI lives in ``peregrine_kernel.baseline`` -- not
+timing_audit module): BASIS_CUPTI lives in ``rsi_kernel_tune.baseline`` -- not
 needed here because the host-path-note tests it served are covered by
 test_corps_fix_misc.
 """
@@ -41,8 +41,8 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.loop import goal_ref as gr
-from peregrine_kernel.loop import harness_guard
+from rsi_kernel_tune.loop import goal_ref as gr
+from rsi_kernel_tune.loop import harness_guard
 
 from test_template_timing import FakeGpu, load_timing
 

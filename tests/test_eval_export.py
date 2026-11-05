@@ -1,4 +1,4 @@
-# Copyright 2026 The Peregrine-Kernel Authors
+# Copyright 2026 The RSI-Kernel-Tune Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """WP27: the external evaluation export packager (``scripts/eval-export/pack.py``).
@@ -38,7 +38,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 PACK = REPO / "scripts" / "eval-export" / "pack.py"
-BENCHKIT = REPO / "src" / "peregrine_kernel" / "card_template" / "eval" / "benchkit.py"
+BENCHKIT = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "benchkit.py"
 DOC = REPO / "docs" / "external-eval.md"
 
 _GIT_ENV = {
@@ -50,7 +50,7 @@ _GIT_ENV = {
 
 @pytest.fixture(scope="module")
 def pack():
-    spec = importlib.util.spec_from_file_location("pk_eval_export_pack", PACK)
+    spec = importlib.util.spec_from_file_location("rkt_eval_export_pack", PACK)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -244,8 +244,8 @@ def test_naming_conventions_and_overrides(tmp_path: Path) -> None:
     assert r2.returncode == 0, r2.stderr
     sol2 = json.loads(((tmp_path / "pkg2") / "solution.json").read_text())
     # default: the definition's last path segment + the self-brand
-    assert sol2["name"] == "001_rms_peregrine"
-    assert sol2["author"] == "peregrine-kernel"
+    assert sol2["name"] == "001_rms_rsi-kernel-tune"
+    assert sol2["author"] == "rsi-kernel-tune"
 
 
 # --- signature / DPS / contract -------------------------------------------------
@@ -508,7 +508,7 @@ def test_packager_is_stdlib_only_and_network_free() -> None:
     banned = {"urllib", "http", "socket", "ssl", "requests", "ftplib", "smtplib",
               "telnetlib", "xmlrpc", "asyncio", "websocket", "curl"}
     assert not mods & banned, f"network modules in the packager: {mods & banned}"
-    framework = {"peregrine_kernel"}
+    framework = {"rsi_kernel_tune"}
     assert not mods & framework, f"the packager imports the framework: {mods & framework}"
     # (the framework's former module name is absent from the whole tree already —
     # the WP25 branding gate pins that — so there is no second name to ban here)
@@ -547,11 +547,11 @@ def test_cuda_build_constants_stay_in_sync_with_the_card() -> None:
 def test_readme_and_packager_state_the_boundary() -> None:
     readme = (REPO / "scripts" / "eval-export" / "README.md").read_text(encoding="utf-8")
     assert "Manual, opt-in, human-run, offline" in readme
-    assert "src/peregrine_kernel" in readme
+    assert "src/rsi_kernel_tune" in readme
 
 
 def test_a_bad_import_timeout_env_falls_back_to_the_default(pack, tmp_path, monkeypatch) -> None:
-    """PK_EVAL_EXPORT_IMPORT_TIMEOUT is an operator knob: a mis-typed value falls
+    """RKT_EVAL_EXPORT_IMPORT_TIMEOUT is an operator knob: a mis-typed value falls
     back to the default like every env knob -- a raw ValueError must not escape
     the import probe and break the packager's exit-2 refusal contract with a
     bare traceback."""
@@ -559,7 +559,7 @@ def test_a_bad_import_timeout_env_falls_back_to_the_default(pack, tmp_path, monk
     work.mkdir()
     (work / "kernel.py").write_text("def run(x):\n    return x\n", encoding="utf-8")
     for bad in ("abc", "", "300s"):
-        monkeypatch.setenv("PK_EVAL_EXPORT_IMPORT_TIMEOUT", bad)
+        monkeypatch.setenv("RKT_EVAL_EXPORT_IMPORT_TIMEOUT", bad)
         report = pack.Report()
         pack.preflight_compile(b"def run(x):\n    return x\n", "kernel.py", work, report)
         assert not report.failed, report.stages

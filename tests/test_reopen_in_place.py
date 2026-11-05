@@ -12,12 +12,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import FakeBackend, _ctx  # noqa: E402
 
-from peregrine_kernel.inner.trajectory import IterationRecord as IR, load_records  # noqa: E402
-from peregrine_kernel.loop.driver import (  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import IterationRecord as IR, load_records  # noqa: E402
+from rsi_kernel_tune.loop.driver import (  # noqa: E402
     MetaResult, _judge_patch, _note_reopen, _PendingPatch, _resolve_resume_in_place,
     _student_prompt,
 )
-from peregrine_kernel.resume import Decision, ReopenPlan, compute_reopen, compute_resume  # noqa: E402
+from rsi_kernel_tune.resume import Decision, ReopenPlan, compute_reopen, compute_resume  # noqa: E402
 
 
 def _traj():
@@ -102,7 +102,7 @@ def test_reopen_falls_back_to_reset_when_nothing_is_green_or_nothing_reopens(tmp
 def test_reopen_row_and_student_note(tmp_path):
     ctx = _ctx(tmp_path, FakeBackend([], []))
     for r in _keeps():
-        from peregrine_kernel.inner.trajectory import append_record
+        from rsi_kernel_tune.inner.trajectory import append_record
         append_record(ctx.status_path, r)
     meta = MetaResult("d", "structural", ["D0.4"], resume_after="D0.3",
                       invalidated=[], reopened=["D0.4", "D0.5", "D1.1"],
@@ -122,7 +122,7 @@ def test_reopen_row_and_student_note(tmp_path):
 
 
 def test_reverted_reopen_patch_voids_the_reopen_row(tmp_path):
-    from peregrine_kernel.inner.trajectory import append_record
+    from rsi_kernel_tune.inner.trajectory import append_record
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     ctx.meta_status_path = None          # no meta ledger row to update in this unit test

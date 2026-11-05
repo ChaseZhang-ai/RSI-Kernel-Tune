@@ -1,6 +1,6 @@
 # External evaluation export
 
-This document specifies the manual lane that packages a Peregrine-Kernel optimization
+This document specifies the manual lane that packages a RSI-Kernel-Tune optimization
 product into the submission format of an external evaluation suite: the NVIDIA SOL
 suite (SOL-ExecBench, free B200 evaluation) and FlashInfer-Bench. The tooling is
 [`scripts/eval-export/pack.py`](../scripts/eval-export/pack.py); everything below the
@@ -16,7 +16,7 @@ explicitly.
   automatic loop, the driver never calls it, and it performs **zero network I/O** — the
   upload to a suite's submission channel is a separate human step.
 - **Independent of the framework.** `scripts/eval-export/` imports nothing from
-  `src/peregrine_kernel/` (a test pins this), so it cannot drag framework code onto a
+  `src/rsi_kernel_tune/` (a test pins this), so it cannot drag framework code onto a
   submission path. The WP24 de-boarding adjudication stands: the framework core stays
   zero-network-egress and has zero external-benchmark surface. The export lane is a
   boundary asset, documented here and in the audit note below.
@@ -76,7 +76,7 @@ its imports, overridable with `--language`):
 A `cuda_cpp` solution additionally carries `compile_options.cuda_cflags`: **the flags
 the card built it with** (defaults `-O3 --use_fast_math` + sm_100a codegen, plus any
 `// fk-cuda-cflags:` line's flags, allowlist-checked) — mirroring
-`src/peregrine_kernel/card_template/eval/benchkit.py`, so the bytes and flags judged on
+`src/rsi_kernel_tune/card_template/eval/benchkit.py`, so the bytes and flags judged on
 the target machine are the bytes and flags submitted.
 
 Package contents written by `pack.py OUT_DIR ...`:
@@ -265,7 +265,7 @@ python3 scripts/eval-export/pack.py pkg/ --tree operators/rmsnorm \
 python3 scripts/eval-export/pack.py pkg/ \
     --kernel kernels/sparse_attention/dsv41_fused_attn_rope_cast/b200/kernel.py \
     --definition <suite-dataset-definition-name> \
-    --inputs q,kv,indices,token_positions,cos_sin_cache,attn_sink,topk_length,sm_scale,rms_norm_eps,enable_q_norm \
+    --inputs q,kv,indices,token_positions,cos_sin_cache,attn_sink,torkt_length,sm_scale,rms_norm_eps,enable_q_norm \
     --outputs out,sf,ml,lse
 ```
 
@@ -273,5 +273,5 @@ Exit code 0 = package written; 2 = refused (a lint failure, a compiler rejection
 correctness FAIL — nothing is written on refusal). Full CLI: `python3
 scripts/eval-export/pack.py --help`.
 
-<!-- SPDX-FileCopyrightText: Copyright 2026 The Peregrine-Kernel Authors -->
+<!-- SPDX-FileCopyrightText: Copyright 2026 The RSI-Kernel-Tune Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->

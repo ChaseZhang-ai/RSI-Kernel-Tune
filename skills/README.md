@@ -8,7 +8,7 @@ the diff via `.git/info/exclude`.
 GPU jobs run what is committed in a tree, so the driver also seeds the scripts a job needs
 into the tree's `notes/` and commits them there: a probe imports them bare
 (`import sass_tools`), a frozen recipe runs them as `python3 notes/<tool>.py`. The harness
-imports the same files as `peregrine_kernel.skills.<module>` to read their verdict lines.
+imports the same files as `rsi_kernel_tune.skills.<module>` to read their verdict lines.
 
 | skill | what it reads |
 |---|---|

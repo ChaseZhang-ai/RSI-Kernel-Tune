@@ -57,7 +57,7 @@ from typing import Dict, List, NamedTuple, Tuple
 try:  # seeded copy sits next to sass_tools in notes/
     import sass_tools as _st
 except ImportError:  # in-package import (tests, tooling)
-    from peregrine_kernel.skills import sass_tools as _st
+    from rsi_kernel_tune.skills import sass_tools as _st
 
 _REG = re.compile(r"\bR(\d+)\b")
 _HEX = re.compile(r"0x[0-9a-fA-F]+")

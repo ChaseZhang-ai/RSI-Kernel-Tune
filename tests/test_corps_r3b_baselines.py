@@ -15,12 +15,12 @@ along — the arch path simply lacked it.
 
 from pathlib import Path
 
-from peregrine_kernel.baseline import (
+from rsi_kernel_tune.baseline import (
     ARCH_BASELINE_FILENAME,
     ROLE_ARCHITECTURE,
     load_baseline,
 )
-from peregrine_kernel.loop import cli
+from rsi_kernel_tune.loop import cli
 
 
 def _cfg(ms=2.5, **extra):
@@ -89,7 +89,7 @@ def test_dry_run_reports_a_measured_archive_as_is(tmp_path: Path):
     # hand-mark it measured (samples_ms non-empty) the way measure_and_archive does
     from dataclasses import replace
     measured = replace(path, samples_ms=[1.24, 1.25])
-    from peregrine_kernel.baseline import save_baseline
+    from rsi_kernel_tune.baseline import save_baseline
     save_baseline(tmp_path, measured)
     before = (tmp_path / ARCH_BASELINE_FILENAME).read_bytes()
     got = cli._ensure_arch_baseline("op", tmp_path, _cfg(ms=9.0), measure=False)

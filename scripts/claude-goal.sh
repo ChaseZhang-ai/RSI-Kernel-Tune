@@ -5,10 +5,10 @@
 #   bash claude-goal.sh <expected-model> <model-flag> [extra claude args...]
 #     prompt on stdin, reply on stdout.
 #
-# scripts/agent-claude.sh execs this when PK_AGENT_DRIVER=goal (set by a caller that
+# scripts/agent-claude.sh execs this when RKT_AGENT_DRIVER=goal (set by a caller that
 # wants a goal session, e.g. loop/goal_ref.py).
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The helper is stdlib-only and 3.9-clean, so the system python3 serves when no
 # interpreter is named.
-exec "${PK_AGENT_PY:-python3}" "$HERE/claude-goal.py" "$@"
+exec "${RKT_AGENT_PY:-python3}" "$HERE/claude-goal.py" "$@"

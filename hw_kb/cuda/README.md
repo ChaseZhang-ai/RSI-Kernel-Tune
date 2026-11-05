@@ -1,8 +1,8 @@
 # CUDA hardware knowledge base (hw_kb/cuda)
 
-Peregrine-Kernel's **CUDA mode** (loop language `cuda-sol`: the student writes a single-file CUDA C++ `kernel.cu`,
+RSI-Kernel-Tune's **CUDA mode** (loop language `cuda-sol`: the student writes a single-file CUDA C++ `kernel.cu`,
 the operator tree compiles it with nvcc + the CUTLASS headers) has its own hardware knowledge base. It is **fully separate** from the CuTe DSL mode's `hw_kb/cutedsl/`:
-CUDA runs read and write only this tree, DSL runs read and write only `hw_kb/cutedsl/` (`src/peregrine_kernel/loop/lang_mode.py`).
+CUDA runs read and write only this tree, DSL runs read and write only `hw_kb/cutedsl/` (`src/rsi_kernel_tune/loop/lang_mode.py`).
 The mechanism knowledge on both sides can be the same, the spelling differs — DSL entries teach `cute.*` calls, these teach CUDA C++ / CUTLASS (CuTe C++) /
 inline PTX — so the two do not share a tree.
 
@@ -14,7 +14,7 @@ inline PTX — so the two do not share a tree.
 - **The evidence chain is split in two layers by reader**: the student reads an entry's "Sources", which may cite only official docs / public infra API symbols /
   this repo's probes; the reference implementation's file names, function names, line numbers, paraphrases of its content and measured footprints all go to
   `docs/kb-provenance/cuda/<entry name>.md` (for human review, not in the agent read set). The mechanical gate is the same as for `hw_kb/cutedsl/`:
-  `src/peregrine_kernel/loop/kb_lint.py`.
+  `src/rsi_kernel_tune/loop/kb_lint.py`.
 - **Only GPU-certified material enters**: a probe returns `PROBE PASS`, or (for numerically invisible knobs) a KEEP's own
   NCU dossier census shows the contract axis moved. Entries of the DSL tree are **not copied over as they are** — their readings were taken on the DSL spelling.
   For the same mechanism to enter here, the example must be rewritten in CUDA and the readings re-taken on a CUDA probe (G3 certification in a CUDA run,
@@ -31,7 +31,7 @@ hw_kb/cuda/
 ```
 
 **One tree per architecture.** `kb_arch` comes from `[loop] kb_arch` in `operators/<op>/loop.toml` (or
-`peregrine loop --kb-arch`); CUDA mode resolves it under `hw_kb/cuda/<kb_arch>/`, and the tree must exist and have an `index.md`,
+`rsi-kernel-tune loop --kb-arch`); CUDA mode resolves it under `hw_kb/cuda/<kb_arch>/`, and the tree must exist and have an `index.md`,
 otherwise the run is refused at start (exit 14). Opening a tree for a new architecture = create the directory + write `index.md`.
 
 ## Initial contents

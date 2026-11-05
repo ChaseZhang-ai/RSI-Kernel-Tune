@@ -1,8 +1,8 @@
 """Loop CLI + submit fixes: honest ssh job verdicts.
 
 Ported from the archived fix-wave's test_cli_submit_fixes.py (the sections that
-pin the ssh delivery's verdict semantics), renamed and rebranded: peregrine_kernel
-imports, PK_JOB_BEGIN, pk paths. One fix per section:
+pin the ssh delivery's verdict semantics), renamed and rebranded: rsi_kernel_tune
+imports, RKT_JOB_BEGIN, pk paths. One fix per section:
 
 * the ssh job's begin marker prints only once the host GPU lock is held, so a
   deadline spent QUEUING on that lock is a Lost (resubmitted, not charged), and a
@@ -19,10 +19,10 @@ from pathlib import Path
 
 import pytest
 
-from peregrine_kernel.loop import cli
-from peregrine_kernel.submit import direct
-from peregrine_kernel.submit import jobs as ds
-from peregrine_kernel.submit.config import SubmitConfig
+from rsi_kernel_tune.loop import cli
+from rsi_kernel_tune.submit import direct
+from rsi_kernel_tune.submit import jobs as ds
+from rsi_kernel_tune.submit.config import SubmitConfig
 
 # -- ssh verdict classification ---------------------------------------------------------------
 
@@ -82,7 +82,7 @@ def _git(d: Path, *args: str) -> None:
 
 
 def _ssh_op(tmp_path: Path, clone: str = "clone") -> SubmitConfig:
-    d = tmp_path / clone / "PeregrineKernel" / "operators" / "op"
+    d = tmp_path / clone / "RSI-Kernel-Tune" / "operators" / "op"
     d.mkdir(parents=True)
     (d / "gpu_entry.sh").write_text("#!/bin/bash\n")
     (d / "submit.toml").write_text(

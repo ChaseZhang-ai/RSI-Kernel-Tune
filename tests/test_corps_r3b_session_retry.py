@@ -18,11 +18,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from peregrine_kernel.loop import cli
+from rsi_kernel_tune.loop import cli
 
 DEAD = "dead-id"
 FRESH = re.compile(r"scope-student-[0-9a-f]+")
-SID_FILE = Path(".pk-sessions") / "scope.student"
+SID_FILE = Path(".rkt-sessions") / "scope.student"
 
 
 def _backend(tmp_path: Path, script) -> cli.RealBackend:
@@ -40,7 +40,7 @@ def _script(seen):
     """A turn that fails hard on the dead id (unknown-session error) and
     succeeds otherwise, recording (id, mode, prompt-tail) per attempt."""
     def turn(cmd, prompt, role):
-        m = re.search(r"PK_AGENT_SESSION_ID=(\S+) PK_AGENT_SESSION_MODE=(\S+)", cmd)
+        m = re.search(r"RKT_AGENT_SESSION_ID=(\S+) RKT_AGENT_SESSION_MODE=(\S+)", cmd)
         seen.append((m.group(1), m.group(2),
                      "## Previous attempt failed" in prompt))
         if m.group(1) == DEAD:
@@ -69,7 +69,7 @@ def test_a_created_session_survives_its_first_hard_failure(tmp_path):
     seen = []
 
     def turn(cmd, prompt, role):
-        m = re.search(r"PK_AGENT_SESSION_ID=(\S+) PK_AGENT_SESSION_MODE=(\S+)", cmd)
+        m = re.search(r"RKT_AGENT_SESSION_ID=(\S+) RKT_AGENT_SESSION_MODE=(\S+)", cmd)
         seen.append((m.group(1), m.group(2),
                      "## Previous attempt failed" in prompt))
         if m.group(2) == "create":

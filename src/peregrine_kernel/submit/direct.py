@@ -166,24 +166,36 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _op_tree_identity(op_dir: Path) -> str:
+    """A digest of the op tree's absolute path: two checkouts are two trees."""
+    return hashlib.sha256(str(Path(op_dir).resolve()).encode()).hexdigest()[:12]
+
+
 def _inputs_manifest_entry(op_dir: Path, path: Path, memo: dict) -> dict | None:
     """One sync candidate: ``{path (in-tree), sha256, size}``, or None.
 
-    WP19 (task 1 addendum): the source-side hash is memoized by (size, mtime_ns) —
-    an unchanged file is not re-read. A stat mismatch, a missing memo or ANY
-    trouble falls back to the full hash (and refreshes the memo)."""
+    WP19 (task 1 addendum): the source-side hash is memoized by
+    (op tree, size, mtime_ns) — an unchanged file of the same tree is not
+    re-read. The record is bound to the op tree it was hashed from: the store
+    (and its memo) are shared by every op tree on the machine, and two trees
+    colliding on (path, size, mtime_ns) must not hand each other's sha over --
+    that delivered one tree's bytes into the other's job tree (BUG-CORPS-C-18).
+    A stat mismatch, a missing or foreign memo record or ANY trouble falls
+    back to the full hash (and refreshes the memo)."""
     try:
         rel = path.relative_to(op_dir).as_posix()
         st = path.stat()
         size, mtime = st.st_size, st.st_mtime_ns
+        op = _op_tree_identity(op_dir)
         cached = memo.get(rel)
-        if (isinstance(cached, dict) and cached.get("size") == size
+        if (isinstance(cached, dict) and cached.get("op") == op
+                and cached.get("size") == size
                 and cached.get("mtime_ns") == mtime
                 and isinstance(cached.get("sha256"), str)):
             h = cached["sha256"]
         else:
             h = _file_sha256(path)
-            memo[rel] = {"size": size, "mtime_ns": mtime, "sha256": h}
+            memo[rel] = {"op": op, "size": size, "mtime_ns": mtime, "sha256": h}
     except (OSError, ValueError):
         return None
     return {"path": rel, "sha256": h, "size": size}

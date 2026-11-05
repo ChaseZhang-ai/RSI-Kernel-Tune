@@ -29,14 +29,15 @@ from peregrine_kernel.submit import direct, jobs as ds
 from peregrine_kernel.submit.config import SubmitConfig
 
 
-def _op(base: Path, name: str = "op", *, with_inputs: bool = True) -> tuple[Path, SubmitConfig]:
+def _op(base: Path, name: str = "op", *, with_inputs: bool = True,
+        filler: bytes = b"ABCDEF") -> tuple[Path, SubmitConfig]:
     d = base / "operators" / name
     (d / "eval" / "problem" / "inputs" / "s1").mkdir(parents=True)
     (d / "gpu_entry.sh").write_text("#!/bin/bash\necho ok\n")
     (d / "kernel.py").write_text("x = 1\n")
     if with_inputs:
         (d / "eval" / "problem" / "inputs" / "s1" / "g.safetensors").write_bytes(
-            b"ABCDEF" * (direct.INPUTS_SYNC_MIN_BYTES // 3 + 100))
+            filler * (direct.INPUTS_SYNC_MIN_BYTES // 3 + 100))
     (d / "submit.toml").write_text(
         '[job]\ntimeout = 60\n[repo]\ndelivery = "local"\nbranch = "main"\n'
         '[exec]\ngpu = "0"\n', encoding="utf-8")
@@ -91,3 +92,39 @@ def test_restore_mismatch_leaves_no_partial_file(tmp_path):
     store_file.write_bytes(good)
     direct.restore_inputs_from_store(tree, manifest)
     assert (tree / rel).read_bytes() == good  # the good path still lands the bytes
+
+
+# -- BUG-CORPS-C-18: a memo record is bound to the op tree it was hashed from ---
+
+
+def test_two_trees_sharing_a_store_cannot_inherit_each_others_memo(tmp_path):
+    """Two op trees whose input file agrees on (path, size, mtime_ns) in one
+    shared store: the memo used to hand tree B tree A's sha, and the store
+    then silently delivered A's bytes into B's job tree."""
+    da, cfg_a = _op(tmp_path, "op_a", filler=b"ABCDEF")
+    db, cfg_b = _op(tmp_path, "op_b", filler=b"QRSTUV")   # same size, other bytes
+    rel = "eval/problem/inputs/s1/g.safetensors"
+    pa, pb = da / rel, db / rel
+    # force the double coincidence: same size (same generator) and same mtime_ns
+    os.utime(pa, ns=(pa.stat().st_atime_ns, 1_000_000_000))
+    os.utime(pb, ns=(pb.stat().st_atime_ns, 1_000_000_000))
+    assert pa.stat().st_size == pb.stat().st_size
+    assert pa.stat().st_mtime_ns == pb.stat().st_mtime_ns
+    sha_a, sha_b = _sha(pa), _sha(pb)
+    assert sha_a != sha_b
+
+    ma = direct.sync_inputs_to_store(cfg_a)
+    assert ma[0]["sha256"] == sha_a
+    mb = direct.sync_inputs_to_store(cfg_b)     # the coincidental twin tree
+    assert mb[0]["sha256"] == sha_b
+    tree = tmp_path / "treeb"
+    tree.mkdir()
+    direct.restore_inputs_from_store(tree, mb)
+    assert (tree / rel).read_bytes() == pb.read_bytes()
+
+    memo = direct._inputs_load_manifest(direct.inputs_store_dir())
+    op_while_b = memo[rel]["op"]                # the record names its op tree
+    direct.sync_inputs_to_store(cfg_a)          # tree A comes back
+    memo = direct._inputs_load_manifest(direct.inputs_store_dir())
+    assert memo[rel]["op"] != op_while_b        # the record follows its own tree
+    assert memo[rel]["sha256"] == sha_a

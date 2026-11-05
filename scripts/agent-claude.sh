@@ -38,7 +38,11 @@ if [ -n "$EFFORT" ]; then
 fi
 
 if [ "${PK_AGENT_DRIVER:-}" = "goal" ]; then
-    exec bash "$HERE/claude-goal.sh" "$MODEL" "$MODEL" "${ARGS[@]}"
+    # The wall-clock timeout rides along as env: claude-goal.py knows only
+    # PK_GOAL_DEADLINE / PK_GOAL_TIMEOUT (no third argument), and dropping the
+    # timeout_s here left a goal session with the script's default instead of the
+    # caller's, i.e. a turn that outlived or died short of its budget.
+    PK_GOAL_TIMEOUT="$TIMEOUT" exec bash "$HERE/claude-goal.sh" "$MODEL" "$MODEL" "${ARGS[@]}"
 fi
 # WP19 (task 6): session resume within one scope (a meta entry, an iteration).
 # PK_AGENT_SESSION_MODE=create passes --session-id (first turn of the scope);

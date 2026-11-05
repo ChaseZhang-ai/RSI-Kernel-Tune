@@ -36,7 +36,7 @@
     timeout_s = 7200                # one turn's wall clock
 
     [budget]
-    hours           = 4             # inner-loop wall clock
+    hours           = 4             # the loop's wall clock: reconnaissance, distillation and the student's rounds
     max_meta        = 3             # outer (teacher patch) rounds
     reference_hours = 8             # generating a reference when there is none
 

@@ -1518,7 +1518,16 @@ def _compiled(ws, tq, tk, tv, ta, tb, to, tfs, sc, stream):
 
 
 class _Entry:
-    __slots__ = ("graph", "o", "state", "hold")
+    __slots__ = ("graphs", "o", "state", "slot", "hold")
+
+
+# conv2d_dgrad's `_DX_SLOTS` pattern: replaying the same key used to hand back
+# the SAME o/state objects every call, so a caller that kept result N and
+# called again had result N silently overwritten under it.  A captured CUDA
+# graph writes fixed pointers, so each slot gets its own (o, state) pair and
+# its own capture of the same two kernels; consecutive replays rotate slots,
+# which keeps consecutive results distinct tensors.
+_DX_SLOTS = 2
 
 
 def _build(q, k, v, a, beta, scale):
@@ -1533,25 +1542,31 @@ def _build(q, k, v, a, beta, scale):
     cur = torch.cuda.current_stream()
 
     ent = _Entry()
-    ent.o = torch.zeros((NTOK, HV, DIM), device=q.device, dtype=torch.bfloat16)
-    ent.state = torch.zeros((1, HV, DIM, DIM), device=q.device,
-                            dtype=torch.float32)
-    to = from_dlpack(ent.o, assumed_align=16)
-    tfs = from_dlpack(ent.state, assumed_align=16)
-    c_p1, c_c3 = _compiled(ws, tq, tk, tv, ta, tb, to, tfs, sc, _cu(cur))
+    ent.o, ent.state, ent.graphs = [], [], []
+    ent.slot = 0
+    tos, tfss = [], []
+    for _ in range(_DX_SLOTS):
+        ent.o.append(torch.zeros((NTOK, HV, DIM), device=q.device,
+                                 dtype=torch.bfloat16))
+        ent.state.append(torch.zeros((1, HV, DIM, DIM), device=q.device,
+                                     dtype=torch.float32))
+        tos.append(from_dlpack(ent.o[-1], assumed_align=16))
+        tfss.append(from_dlpack(ent.state[-1], assumed_align=16))
 
-    # Hold the inputs so their allocations cannot be recycled under the graph's
-    # captured pointers.
-    ent.hold = (q, k, v, a, beta, tq, tk, tv, ta, tb, to, tfs)
+    # The kernels are traced once (against slot 0's buffers); the compiled
+    # artifacts take their tensor arguments per call and every slot's buffers
+    # share shapes/strides, so both captures reuse the same two artifacts.
+    c_p1, c_c3 = _compiled(ws, tq, tk, tv, ta, tb, tos[0], tfss[0], sc, _cu(cur))
+
+    # Hold the inputs -- and both slots' outputs -- so their allocations
+    # cannot be recycled under the graphs' captured pointers.
+    ent.hold = ((q, k, v, a, beta, tq, tk, tv, ta, tb)
+                + tuple(tos) + tuple(tfss))
 
     side = torch.cuda.Stream()
 
     def _issue_p1(cu):
         c_p1(tq, tk, ta, tb, ws["tT"], ws["tP"], ws["tG"], ws["fbase"], sc,
-             cu)
-
-    def _issue_c3(cu):
-        c_c3(tq, tk, tv, ws["tT"], ws["tP"], ws["tG"], to, tfs, ws["fbase"],
              cu)
 
     # The warm-up pass puts both kernels on one stream, so it has to keep the
@@ -1560,7 +1575,8 @@ def _build(q, k, v, a, beta, scale):
     warm.wait_stream(cur)
     with torch.cuda.stream(warm):
         _issue_p1(_cu(warm))
-        _issue_c3(_cu(warm))
+        c_c3(tq, tk, tv, ws["tT"], ws["tP"], ws["tG"], tos[0], tfss[0],
+             ws["fbase"], _cu(warm))
     cur.wait_stream(warm)
     torch.cuda.synchronize()
 
@@ -1570,18 +1586,27 @@ def _build(q, k, v, a, beta, scale):
     # flood takes the SMs. The two nodes stay concurrent — both fork off the
     # same event and rejoin at the end, neither waits on the other — and p1
     # reads nothing chain3 produces, so the order cannot deadlock.
-    g = torch.cuda.CUDAGraph()
-    with torch.cuda.graph(g):
-        cap = torch.cuda.current_stream()
-        ev = torch.cuda.Event()
-        ev.record(cap)
-        side.wait_event(ev)
-        _issue_c3(_cu(cap))
-        _issue_p1(_cu(side))
-        ev2 = torch.cuda.Event()
-        ev2.record(side)
-        cap.wait_event(ev2)
-    ent.graph = g
+    # One capture per slot: identical node structure, different o/state
+    # pointers.
+    for i in range(_DX_SLOTS):
+        to, tfs = tos[i], tfss[i]
+
+        def _issue_c3(cu, to=to, tfs=tfs):
+            c_c3(tq, tk, tv, ws["tT"], ws["tP"], ws["tG"], to, tfs, ws["fbase"],
+                 cu)
+
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g):
+            cap = torch.cuda.current_stream()
+            ev = torch.cuda.Event()
+            ev.record(cap)
+            side.wait_event(ev)
+            _issue_c3(_cu(cap))
+            _issue_p1(_cu(side))
+            ev2 = torch.cuda.Event()
+            ev2.record(side)
+            cap.wait_event(ev2)
+        ent.graphs.append(g)
     return ent
 
 
@@ -1596,5 +1621,7 @@ def gdn_prefill_fwd(q, k, v, a, beta, scale):
             _ORDER.append(key)
             while len(_ORDER) > _CACHE_MAX:
                 _CACHE.pop(_ORDER.pop(0), None)
-    ent.graph.replay()
-    return ent.o, ent.state
+    i = ent.slot ^ 1
+    ent.slot = i
+    ent.graphs[i].replay()
+    return ent.o[i], ent.state[i]

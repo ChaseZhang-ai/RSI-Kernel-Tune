@@ -476,7 +476,11 @@ def drive(run, machine, *, resuming: bool = False, harvest_only: bool = False) -
         run.update(status=runs_mod.STATUS_RUNNING)
         try:
             rc = _drive(run, task, machine, resuming=resuming, harvest_only=harvest_only)
-        except Exception as e:  # noqa: BLE001 -- the record must say why the run stopped
+        except (Exception, SystemExit) as e:
+            # noqa: BLE001 -- the record must say why the run stopped. SystemExit is
+            # caught on purpose (W1-LIF-02): the loop's config phase refuses bad
+            # [loop] keys with `raise SystemExit(...)`, and an uncaught one left the
+            # run record at "running" forever, with no error and nothing to resume.
             run.update(status=runs_mod.STATUS_FAILED, error=f"{type(e).__name__}: {e}")
             raise
         # The finalization used to run outside every handler (BUG-CORPS-C-02): an

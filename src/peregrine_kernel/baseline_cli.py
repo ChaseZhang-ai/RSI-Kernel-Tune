@@ -474,7 +474,12 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     if args.from_json:
-        data = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
+        try:
+            data = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            sys.stderr.write(f"[baseline] error: --from-json {args.from_json} is not a "
+                             f"readable JSON archive ({e})\n")
+            return 4
         if "ms" not in data:
             sys.stderr.write("[baseline] error: --from-json needs an 'ms' key\n")
             return 4

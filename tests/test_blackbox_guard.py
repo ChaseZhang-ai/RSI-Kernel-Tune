@@ -94,8 +94,10 @@ def test_stdlib_tempfile_does_not_trip_it(tmp_path):
 
 
 def test_sass_stays_open(tmp_path):
-    """SASS is what black-box reconnaissance IS; only line-resolved source is out."""
-    res = run_guard(tmp_path, "ncu --print-source sass --set full python3 ref.py")
+    """SASS is what black-box reconnaissance IS; only line-resolved source is out.
+    (--set full is NOT open any more: it is NCU's own path to line-resolved source,
+    see test_the_other_line_resolved_source_doors_are_refused.)"""
+    res = run_guard(tmp_path, "ncu --print-source sass --set cache python3 ref.py")
     assert res.returncode == 0, res.stdout
 
 
@@ -103,6 +105,76 @@ def test_line_resolved_source_is_refused(tmp_path):
     res = run_guard(tmp_path, "ncu --print-source cuda python3 ref.py")
     assert res.returncode == 3
     assert "BLACKBOX-GUARD REFUSED" in res.stdout
+
+
+def test_the_other_line_resolved_source_doors_are_refused(tmp_path):
+    """`--set full` is NCU's own path to line-resolved source (source sections ride in
+    the full set), `--section SourceCounters` and `--page source(s)` are the same door
+    spelled other ways. A probe command naming any of them is refused."""
+    for cmd in ("ncu --set full python3 ref.py",
+                "ncu --set=full --target-processes all python3 ref.py",
+                "ncu --section SourceCounters python3 ref.py",
+                "ncu --page source --import ref.ncu-rep",
+                "ncu --import ref.ncu-rep --page sources"):
+        res = run_guard(tmp_path, cmd)
+        assert res.returncode == 3, (cmd, res.returncode, res.stdout)
+        assert "BLACKBOX-GUARD REFUSED" in res.stdout
+        assert "GUARD-PASSED" not in res.stdout
+
+
+def test_the_source_door_flags_stay_open_in_a_notes_file_text(tmp_path):
+    """The cmd-only door list must not creep into the notes/ scan: the seeded pricing
+    recipes legitimately carry `--set full` in their frozen text (their own collection
+    command), and banning it there refuses every job a run starts."""
+    res = run_guard(tmp_path, "python3 notes/pricing.py",
+                    notes={"pricing.py": "# the frozen recipe: ncu --set full --launch-count 8\n"
+                                         "# reads the report back with --page source\n"})
+    assert res.returncode == 0, (res.returncode, res.stdout, res.stderr)
+    assert "GUARD-PASSED" in res.stdout
+
+
+def test_the_strings_tool_is_banned_but_the_word_f_strings_is_not(tmp_path):
+    """`\\bstrings\\b` counted a hyphen as a word boundary, so a probe that merely said
+    "f-strings" was refused. The binutils tool stays banned; the adjective does not."""
+    res = run_guard(tmp_path, "python3 notes/fmt.py",
+                    notes={"fmt.py": "# builds its row labels from f-strings\n"
+                                     "print(f'{1:_^{w}}')\n"})
+    assert res.returncode == 0, (res.returncode, res.stdout, res.stderr)
+    assert "GUARD-PASSED" in res.stdout
+    res = run_guard(tmp_path, "strings closed/ref.enc | head")
+    assert res.returncode == 3
+    assert "BLACKBOX-GUARD REFUSED" in res.stdout
+
+
+def test_attribute_chain_bypasses_are_refused(tmp_path):
+    """The source-introspection net used to stop at getsource/linecache: every one of
+    these reached the reference's source in a real run and passed. A function object's
+    __code__/co_filename, a module's __globals__ or __file__, dis.get_instructions and
+    getattr(sys, \"modules\") are all the same reach, spelled around the list."""
+    bypasses = (
+        "python3 -c 'import ref; print(ref.run.__code__)'",
+        "python3 -c 'import ref; print(ref.run.__code__.co_filename)'",
+        "python3 -c 'import ref; print(ref.run.__globals__[\"k\"])'",
+        "python3 -c 'import ref; print(ref.__file__)'",
+        "python3 -c 'import dis; print(dis.get_instructions(ref.run))'",
+        "python3 -c 'import sys; print(getattr(sys, \"modules\")[\"ref\"])'",
+        "python3 -c 'import sys; print(sys.modules.get(\"ref\"))'",
+    )
+    for cmd in bypasses:
+        res = run_guard(tmp_path, cmd)
+        assert res.returncode == 3, (cmd, res.returncode, res.stdout, res.stderr)
+        assert "BLACKBOX-GUARD REFUSED" in res.stdout
+
+
+def test_a_probe_files_own_path_does_not_trip_the_cmd_only_file_token(tmp_path):
+    """`__file__` is refused on the command line but not in notes/ text: the seeded
+    timeline_probe.py resolves its own path with __file__, and banning it there would
+    refuse every job of a tree the probe legitimately rides in."""
+    res = run_guard(tmp_path, "python3 notes/timeline_probe.py",
+                    notes={"timeline_probe.py":
+                           "ROOT = os.path.dirname(os.path.abspath(__file__))\n"})
+    assert res.returncode == 0, (res.returncode, res.stdout, res.stderr)
+    assert "GUARD-PASSED" in res.stdout
 
 
 def test_run_specific_names_via_extra(tmp_path):
@@ -199,6 +271,30 @@ def test_a_probe_cannot_hide_under_the_guards_file_name(tmp_path):
     assert "notes/blackbox-guard.sh" in res.stdout
 
 
+def test_a_relative_source_path_survives_a_later_cd(tmp_path):
+    """The regression: sourcing the guard by a relative path and cd'ing before the first
+    probe left BLACKBOX_GUARD_SELF pointing at a file that no longer existed from the
+    new cwd, the self-skip never matched, and the guard scanned its own comments and
+    forbid list — refusing EVERY cmd in the job. Resolved to an absolute path at
+    source time, the self-skip works from any later cwd."""
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    (notes_dir / "blackbox-guard.sh").write_bytes(SCRIPT.read_bytes())
+    (notes_dir / "r01.py").write_text("import sass_tools\nprint('clean')\n")
+    script = (
+        "set -euo pipefail\n"
+        f'cd {tmp_path}\n'
+        'source notes/blackbox-guard.sh\n'      # relative, as a caller may do
+        'cd /\n'                                # the caller moves on before probing
+        'blackbox_guard "python3 notes/r01.py"\n'
+        'echo GUARD-PASSED\n'
+    )
+    res = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert res.returncode == 0, (res.returncode, res.stdout, res.stderr)
+    assert "GUARD-PASSED" in res.stdout
+    assert "BLACKBOX-GUARD REFUSED" not in res.stdout
+
+
 def test_extra_naming_the_trees_own_wrapper_warns_at_source_time(tmp_path):
     """Regression: EXTRA listed `gdn_ls_ref`, the tree's own wrapper that the README
     told probes to import. Say so the moment the guard is sourced — before any probe."""
@@ -245,3 +341,56 @@ def test_every_driver_seeded_tool_passes_the_guard(tmp_path):
                      notes={**notes, "r01_census.py": "import sass_tools\n"})
     assert res.returncode == 0, (res.stdout, res.stderr)
     assert "GUARD-PASSED" in res.stdout
+
+
+# --- the scan itself must not fail open -------------------------------------------------
+#
+# grep that cannot run exits 2, which reads exactly like "no match": a BLACKBOX_EXTRA
+# token with a regex syntax error used to silence the guard for the whole job — every
+# probe passed, the base tokens never fired once.
+
+def test_a_broken_extra_refuses_to_arm(tmp_path):
+    """An EXTRA that is not a valid extended regex must stop the guard from arming at
+    source time — the sourcing job dies before a single probe runs (fail-closed),
+    instead of passing everything silently (fail-open)."""
+    res = run_guard(tmp_path, "nvidia-smi", extra="kda_gdn(")
+    assert res.returncode == 3, (res.returncode, res.stdout, res.stderr)
+    assert "does not compile" in res.stderr
+    assert "GUARD-PASSED" not in res.stdout
+
+
+def test_a_broken_extra_fails_closed_even_when_the_source_status_is_ignored(tmp_path):
+    """A caller that swallows the source failure (`source ... || true`) still gets a
+    guard function that refuses every probe — never one that scans nothing."""
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    script = (
+        "set -euo pipefail\n"
+        f'W={tmp_path}\n'
+        "BLACKBOX_EXTRA='kda_gdn('\n"
+        f'source {SCRIPT} || true\n'
+        'blackbox_guard "cat closed/ref.enc"\n'
+        'echo GUARD-PASSED\n'
+    )
+    res = subprocess.run(["bash", "-c", script, "bash", "cat closed/ref.enc"],
+                         capture_output=True, text=True)
+    assert res.returncode == 3, (res.returncode, res.stdout, res.stderr)
+    assert "BLACKBOX-GUARD REFUSED" in res.stdout
+    assert "GUARD-PASSED" not in res.stdout
+
+
+def test_an_unreadable_notes_file_refuses_instead_of_passing(tmp_path):
+    """A notes scan that cannot run (grep exits 2 on a file it cannot read) used to be
+    swallowed by `|| true` into "no notes hit". It must refuse: a scan that did not
+    run is not a clean scan."""
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    probe = notes_dir / "probe.py"
+    probe.write_text("import sass_tools\n")
+    probe.chmod(0o000)
+    try:
+        res = run_guard(tmp_path, "nvidia-smi")
+    finally:
+        probe.chmod(0o644)          # let tmp_path cleanup work under a non-root user
+    assert res.returncode == 3, (res.returncode, res.stdout, res.stderr)
+    assert "notes scan" in res.stdout and "GUARD-PASSED" not in res.stdout

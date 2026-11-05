@@ -377,6 +377,15 @@ def main(argv=None) -> int:
         run = latest_run(task.name) if rc == 0 else None
         if run is not None:
             rc = launch.cmd_run([str(run.dir)])
+        if rc != 0:
+            # `peregrine new` / `peregrine run` itself failed — an infrastructure
+            # failure (bad machine config, a dead backend, an env problem), not the
+            # loop's verdict. It must not read as the natural chain break below (which
+            # is a RESULT and exits 0): say so, and hand the operator a distinct code.
+            print(f"[self-evolve] generation {gen}: the harness failed "
+                  f"(peregrine new/run exit {rc}) — this is not a chain stop; fix the "
+                  f"environment and rerun", flush=True)
+            return 3
         best = launch.best_of(run, task) if run is not None else None
         if best is None or not best.get("kernel"):
             print(f"[self-evolve] generation {gen} ended without a confirmed best kernel "

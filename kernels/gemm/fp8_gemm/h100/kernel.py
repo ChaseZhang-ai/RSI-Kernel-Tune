@@ -1076,21 +1076,54 @@ def _cuda_stream():
     return _drv.CUstream(raw)
 
 
+# A data pointer alone is not an identity (the rule the sister fp4 kernel
+# documents at fp4_grouped_gemm/b200 `_tensor_identity`): torch's caching
+# allocator hands a freed tensor's address to the next tensor of the same
+# size, and an in-place regen of the scales leaves every pointer untouched.
+# So the cache key carries shape, stride, dtype, device and `_version`
+# (torch's in-place write counter) of EVERY operand, and the entry holds a
+# reference to the source tensors, which is what keeps the allocator from
+# reissuing any of their addresses while the entry is alive.  `a_sf_t` below
+# is a private snapshot of `a_sf`; it is a pure function of a_sf's identity
+# and is pinned in the entry for the same reason.
+#
+# `_version` only sees torch's own in-place writes; a raw-pointer write behind
+# torch's back is outside the contract and the bench does not do one.
+
+def _tensor_identity(t: torch.Tensor):
+    return (int(t.data_ptr()), tuple(t.shape), tuple(t.stride()),
+            str(t.dtype), str(t.device), int(getattr(t, "_version", 0)))
+
+
+_DX_SLOTS = 2           # rotating c buffers: consecutive results never alias
+
+
 def _build(a, a_sf, b, b_sf):
     # D0.3: one-time cached repack of the row scales into MN-major [K/128, M].
     a_sf_t = a_sf.t().contiguous()
-    c = torch.empty(a.shape[0], b.shape[0], device=a.device,
-                    dtype=torch.bfloat16)
-
     mA = from_dlpack(a, assumed_align=16)
     mB = from_dlpack(b, assumed_align=16)
     mSFA = from_dlpack(a_sf_t, assumed_align=16)
     mSFB = from_dlpack(b_sf, assumed_align=16)
-    mC = from_dlpack(c, assumed_align=16)
+
+    # conv2d_dgrad's `_DX_SLOTS` pattern: replaying the same key used to hand
+    # back the SAME c object every call, so a caller that kept result N and
+    # called again had result N silently overwritten under it.  Two owned c
+    # buffers rotate, which keeps consecutive results distinct tensors; the
+    # kernel writes every c element exactly once, so a reused buffer needs no
+    # clear.
+    cs, argss = [], []
+    for _ in range(_DX_SLOTS):
+        c = torch.empty(a.shape[0], b.shape[0], device=a.device,
+                        dtype=torch.bfloat16)
+        cs.append(c)
+        argss.append((mA, mSFA, mB, mSFB, from_dlpack(c, assumed_align=16)))
 
     stream = _cuda_stream()
-    compiled = cute.compile(fp8_gemm_jit, mA, mSFA, mB, mSFB, mC, stream)
-    return compiled, (mA, mSFA, mB, mSFB, mC), a_sf_t, c
+    compiled = cute.compile(fp8_gemm_jit, *argss[0], stream)
+    # `sources` is held by the cached entry (correctness, not lifetime
+    # convenience): see the identity note above.
+    return [0, compiled, tuple(argss), tuple(cs), (a, a_sf, b, b_sf)]
 
 
 def fp8_gemm(
@@ -1100,13 +1133,14 @@ def fp8_gemm(
     b_sf: torch.Tensor,   # [N/128, K/128] fp32, per-128x128-block scales
 ) -> torch.Tensor:
     """Returns c [M, N] bf16 = dequant(a) @ dequant(b)^T."""
-    key = (a.data_ptr(), a_sf.data_ptr(), b.data_ptr(), b_sf.data_ptr(),
-           tuple(a.shape), tuple(b.shape))
+    key = (_tensor_identity(a), _tensor_identity(a_sf),
+           _tensor_identity(b), _tensor_identity(b_sf))
     ent = _STATE.get(key)
     if ent is None:
         ent = _build(a, a_sf, b, b_sf)
         _STATE.clear()
         _STATE[key] = ent
-    compiled, args, _a_sf_t, c = ent
-    compiled(*args, _cuda_stream())
-    return c
+    i = ent[0] ^ 1
+    ent[0] = i
+    ent[1](*ent[2][i], _cuda_stream())
+    return ent[3][i]

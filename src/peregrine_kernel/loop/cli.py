@@ -2548,7 +2548,10 @@ def _main(argv: list[str] | None = None) -> int:
     p.add_argument("--kb-arch", default=None,
                    help="which hw_kb/<language>/<arch>/ tree the run reads and files recipes into "
                         "(default: loop.toml [loop].kb_arch, else sm90)")
-    p.add_argument("--hours", type=float, default=4.0, help="inner-loop wall-clock budget")
+    p.add_argument("--hours", type=float, default=4.0,
+                   help="the loop's wall-clock budget: reconnaissance, distillation "
+                        "and the student's rounds (W1-KNB-04: not inner-loop only -- "
+                        "loop.toml [budget] hours covers the teacher phases too)")
     p.add_argument("--target-ms", type=float, default=None,
                    help="stop threshold; default: derived from the archived ref "
                         "baseline via --equivalence-ratio")

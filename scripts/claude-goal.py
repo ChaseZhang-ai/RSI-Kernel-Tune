@@ -719,7 +719,6 @@ class GoalLeg:
         acted_at_size = -1
         acted_at = 0.0
         last_pane_at = 0.0
-        met_seen_at = 0.0
         checked_at_size = -1
         while True:
             now = time.time()
@@ -743,7 +742,6 @@ class GoalLeg:
             if tr.refusal:
                 return "refusal", json.dumps(tr.refusal)
             if tr.met is not None:
-                met_seen_at = met_seen_at or now
                 # the turn that the judge closed finishes its bookkeeping first
                 if tr.last_kind == "turn_end" or quiet > self.settle_s or dead:
                     ok, out = self.deliverable()
@@ -754,7 +752,6 @@ class GoalLeg:
                         return "fail", ("the goal was judged met but the deliverable check "
                                         f"still fails: {out}")
                     tr.met = None
-                    met_seen_at = 0.0
                     self.resend_goal(f"judged met but the check fails: {out[:160]}")
                     acted_at_size, acted_at = tr.size, now
                     continue
@@ -923,6 +920,11 @@ class GoalLeg:
         if outcome == "refusal":
             rc, why = self.model_verdict(tr)
             self.write_result(tr, outcome, detail, rc)
+            # 75/76/77 all hand the reply back on stdout (the contract this script's
+            # docstring states and the met branch above keeps): the refusal explains on
+            # stderr, but the turn's work is still the caller's to read.
+            reply = self.reply.read_text(encoding="utf-8", errors="replace")
+            sys.stdout.write(reply)
             sys.stderr.write(why + "\n")
             say(why, self.turn_dir)
             return rc or 77

@@ -2302,7 +2302,17 @@ def gdn_prefill_fwd(
     o = torch.empty(N, H_V, Dh, device=q.device, dtype=torch.bfloat16)
     state = torch.empty(H_V, Dh, Dh, device=q.device, dtype=torch.float32)
 
-    key = (N, H_QK, H_V, Dh)
+    # The compiled artifact bakes the dlpack layouts of everything it was
+    # traced with, so the key must carry each caller input's full layout,
+    # not just the shapes: a same-shape call on another GPU or with a
+    # transposed / padded operand would otherwise replay an artifact whose
+    # baked strides describe a different memory map.  scale is a live
+    # runtime argument, and o/state are fresh contiguous allocations laid
+    # out by the keyed shapes, so none of the three belongs in the key.
+    key = (N, H_QK, H_V, Dh,
+           q.device.index,
+           q.dtype, k.dtype, v.dtype, alpha.dtype, beta.dtype,
+           q.stride(), k.stride(), v.stride(), alpha.stride(), beta.stride())
     fn = _exec_cache.get(key)
     if fn is None:
         args = _cute_args(q, k, v, alpha, beta, o, state)

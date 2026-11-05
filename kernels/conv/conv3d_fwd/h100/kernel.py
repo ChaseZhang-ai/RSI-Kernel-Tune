@@ -66,17 +66,20 @@ Declared architecture values the gate's compliance lines read back:
 """
 
 import os
-import subprocess
-import sys
 
 
 def _ensure_dsl46():
     """The im2col-mode TMA descriptor (D0.2) needs nvidia-cutlass-dsl >= 4.6; the
-    image default 4.4.2 cannot express it.  The job env normally pins it
-    (gpu_entry.sh sources dsl_pin_install.sh), so this is a silent no-op there --
-    it is a defensive self-pin for jobs whose env did not carry DSL_PIN.  The
-    version is read from package metadata, never by importing the package, so the
-    re-exec below happens before any of it is loaded."""
+    image default 4.4.2 cannot express it.  Pinning the DSL is the JOB
+    environment's responsibility, done BEFORE this module is imported:
+    gpu_entry.sh sources scripts/dsl_pin_install.sh according to the card's
+    [env] DSL_PIN (submit.toml).  On a correctly pinned env this is a silent
+    no-op; anywhere else it refuses loudly instead of installing anything
+    itself -- a kernel module must not pip-install behind the harness's back
+    (unpinned index, --no-deps) and must not os.execve-restart the bench
+    process it was imported into.  The version is read from package metadata,
+    never by importing the package, so nothing of the DSL is loaded either
+    way."""
     try:
         import importlib.metadata as md
         ver = md.version("nvidia-cutlass-dsl")
@@ -84,20 +87,11 @@ def _ensure_dsl46():
         ver = "none"
     if ver.startswith("4.6"):
         return
-    if os.environ.get("_KERNEL_DSL_PINNED") == "1":
-        raise RuntimeError("nvidia-cutlass-dsl >= 4.6 unavailable (im2col TMA needs it)")
-    env = dict(os.environ)
-    env["PIP_CONFIG_FILE"] = "/dev/null"
-    env["_KERNEL_DSL_PINNED"] = "1"
-    rc = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-q", "--no-cache-dir", "--no-deps",
-         "--timeout", "60", "--index-url", "https://mirrors.aliyun.com/pypi/simple/",
-         "nvidia-cutlass-dsl==4.6.0.dev0", "nvidia-cutlass-dsl-libs-base==4.6.0.dev0"],
-        env=env).returncode
-    if rc != 0:
-        raise RuntimeError("nvidia-cutlass-dsl 4.6 install failed (rc=%d)" % rc)
-    env.setdefault("CUTE_DSL_CACHE_DIR", "/tmp/dsl46_jit_cache")
-    os.execve(sys.executable, [sys.executable] + sys.argv, env)
+    raise RuntimeError(
+        "conv3d_fwd needs nvidia-cutlass-dsl >= 4.6 (im2col TMA, D0.2), found "
+        f"{ver}.  Pin the DSL before the job runs: gpu_entry.sh sources "
+        "scripts/dsl_pin_install.sh from the card's [env] DSL_PIN "
+        "(submit.toml); this kernel does not install packages on its own.")
 
 
 _ensure_dsl46()

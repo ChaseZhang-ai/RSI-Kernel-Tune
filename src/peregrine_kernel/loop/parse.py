@@ -572,6 +572,11 @@ def _correctness_error(corr_obj: dict) -> str:
         # the bench's own verdict already names the first failing (group, output);
         # the ranked rows add the RUNNERS-UP the first-fail stop never reached.
         return f"{err}; worst checks: {detail}" if detail and detail not in err else err
+    # The per-tensor detail dicts are read BY NAME FROM THE BENCH'S OWN JSON, not
+    # from a hardcoded ("dq", "dk", "dv") (SEED-47): the triple is attention's
+    # vocabulary, and a numeric FAIL of any other operator silently degraded to
+    # "no failure detail" — the exact historical accident the WP11 error band was
+    # built to end. JSON object order (insertion) keeps the bench's own order.
     parts = []
     for name in _correctness_detail_names(corr_obj):
         det = corr_obj[name]
@@ -736,7 +741,11 @@ error norm at all — probes have reported values like 8e10 and 8.1e15, smugglin
 sub-check bitmasks through the one field the driver echoes back.
 """
 
-_PROBE_VERDICT_RE = re.compile(r"PROBE\s+(PASS|FAIL)(?:\s+max_diff=(\S+))?([^\n]*)")
+# The verdict word's PASSED/FAILED spellings are consumed by the optional (?:ED)?
+# — otherwise the "ED" landed in the note group and, worse, broke the optional
+# max_diff match ("PASS" then "ED ..." is not \s+max_diff=), so "PROBE PASSED
+# max_diff=0.5" reported the reading as unreported (P3-10).
+_PROBE_VERDICT_RE = re.compile(r"PROBE\s+(PASS|FAIL)(?:ED)?\b(?:\s+max_diff=(\S+))?([^\n]*)")
 _PROBE_NON_NUMERIC = {"n/a", "na", "none", "-"}
 _PROBE_NOTE_LEAD = " \t#-/:;|"
 _PROBE_READING_MAX = 96
@@ -1101,12 +1110,17 @@ def _gate_ratio(rec, gate_window: str) -> float | None:
     """The record's in-job paired ratio in the gate window, or None. vs_ref_device
     is a same-job reading (ref and student timed back-to-back), so node speed
     cancels and what remains is measurement spread — the quantity the resolution
-    estimate needs."""
+    estimate needs. A non-finite ratio (the JSON dialect can carry a NaN/Infinity
+    literal) is a missing reading, never a sample: it would pin ``max(ratios)`` /
+    the median and poison every residual (entry hygiene; SEED-22's rule at this
+    estimator's door — the estimate's own semantics are untouched)."""
     if gate_window == GATE_WINDOW_DEVICE:
         v = getattr(rec, "vs_ref_device", None)
     else:
         v = getattr(rec, "vs_ref", None)
-    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        return None
+    return float(v)
 
 
 def _mad_sigma(values) -> float | None:

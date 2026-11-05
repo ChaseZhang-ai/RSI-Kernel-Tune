@@ -541,7 +541,10 @@ def _attn_kernel(tma_atom, tQ, mK, mLse, mIdx, mTl, mOut, tiled_g2s, tiled_mma,
             key = j * WG + tc
             iv = mIdx[(bidx, key)]
             sv = cutlass.Float32(0.0)
-            if (key < tl) & (iv >= 0):
+            # same triple predicate as the gather (_gather_tile): an iv beyond
+            # the KV extent is unreachable per contract, but if it ever
+            # appeared it must read as an invalid slot, not as sSums[key].
+            if (key < tl) & (iv >= 0) & (iv < s_kv):
                 sv = sSums[key]
             vals.append(sv)
             part = part + sv
@@ -735,7 +738,10 @@ def _idx_kernel(tma_atom, tQi, mKi, mW, mIdx, mTl, mOut, tiled_g2s, tiled_mma,
         for j in cutlass.range_constexpr(nk):
             key = j * WG + tc
             iv = mIdx[(bidx, key)]
-            ok = (key < tl) & (iv >= 0)
+            # same triple predicate as the gather (_gather_tile): an iv beyond
+            # the KV extent is unreachable per contract, but if it ever
+            # appeared it must park, not read sScores[key].
+            ok = (key < tl) & (iv >= 0) & (iv < s_kv)
             sv = cutlass.Float32(PARK)
             if ok:
                 sv = sScores[key]

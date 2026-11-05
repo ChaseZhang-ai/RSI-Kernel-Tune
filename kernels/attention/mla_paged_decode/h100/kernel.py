@@ -870,14 +870,21 @@ def _combine_kernel(
         for j in cutlass.range_constexpr(4):
             acc[j] = acc[j] + wk * rp[j]
 
-    inv = cutlass.Float32(1.0) / l
+    # A zero-chunk sequence (li == 0; the contract says >= 1, defensive)
+    # leaves l at 0.0 and mx at -3.0e38: the tiny floor keeps inv finite,
+    # acc is still all-zero so the output row is an exact zero, and lse
+    # stays at mx exactly (in f32, -3.0e38 + log2(eps) == -3.0e38) -- this
+    # kernel's own finite park value rather than NaN/-inf.  For any
+    # non-empty row l > 0, so the floor never engages on the contract path.
+    l_safe = _fmaxf(l, cutlass.Float32(1.0e-30))
+    inv = cutlass.Float32(1.0) / l_safe
     ro = cute.make_rmem_tensor(cute.make_layout(4), cutlass.BFloat16)
     for j in cutlass.range_constexpr(4):
         ro[j] = cutlass.BFloat16(acc[j] * inv)
     cute.autovec_copy(ro, cute.local_tile(mOut[(b, h, None)], (4,), (tidx,)))
 
     if tidx == 0:
-        mLse[(b, h)] = mx + _lg2f(l)
+        mLse[(b, h)] = mx + _lg2f(l_safe)
 
     _seg("combine.exit")
 

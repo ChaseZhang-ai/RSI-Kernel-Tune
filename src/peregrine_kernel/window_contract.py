@@ -576,8 +576,22 @@ def _check_prep_block(entries, report: dict, names: str) -> list[str]:
             out.append(f"prep did not produce {a.name!r} (declared symmetrize; got "
                        f"{', '.join(sorted(outputs)) or 'nothing'})")
             continue
-        shape = [int(s) for s in (got.get("shape") or [])]
-        if a.shape and shape != list(a.shape):
+        # A hand-written bench can report the shape in any form at all ("[4,32]"
+        # as a string, a list with a dict in it). int() on that used to raise
+        # straight out of the check — the whole prep block unreported — instead
+        # of landing here as one problem naming the tensor. Coerce, and fall
+        # into `problems` on anything that does not.
+        raw = got.get("shape") or []
+        shape = None
+        if isinstance(raw, (list, tuple)):
+            try:
+                shape = [int(s) for s in raw]
+            except (TypeError, ValueError):
+                shape = None
+        if shape is None:
+            out.append(f"prep reported {a.name!r} with a malformed shape {raw!r} "
+                       f"(expected a list of integers)")
+        elif a.shape and shape != list(a.shape):
             out.append(f"prep produced {a.name!r} with shape {shape}, declared {list(a.shape)}")
         if a.dtype and normalize_dtype(got.get("dtype")) != normalize_dtype(a.dtype):
             out.append(f"prep produced {a.name!r} with dtype {got.get('dtype')!r}, "

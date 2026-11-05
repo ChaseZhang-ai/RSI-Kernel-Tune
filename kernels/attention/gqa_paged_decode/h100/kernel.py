@@ -328,14 +328,22 @@ def gqa_kernel(mQ: cute.Tensor, mK: cute.Tensor, mV: cute.Tensor,
 
     # --- epilogue and output ABI (D0.14) -------------------------------------
     _seg("epilogue.begin")
-    inv = cutlass.Float32(1.0) / l_run
+    # A zero-length sequence (the contract says >= 1; defensive) leaves l_run
+    # at 0.0 and m_run at PARK: the tiny floor keeps inv finite, rO is still
+    # all-zero so the output row is an exact zero, and lse lands on PARK
+    # exactly (in f32, PARK + log2(eps) == PARK) -- the file's finite-park
+    # sentinel rather than NaN/-inf.  For any non-empty row l_run >= 1 (the
+    # row max contributes exp2(0)), so the floor never engages on the
+    # contract path.
+    l_safe = cute.arch.fmax(l_run, cutlass.Float32(1.0e-30))
+    inv = cutlass.Float32(1.0) / l_safe
     ovw = cute.flat_divide(mOut[(bz, h0 + w, None)], (4,))
     of = cute.make_fragment_like(ovw[(None, 0)], cutlass.BFloat16)
     for e in cutlass.range_constexpr(4):
         of[e] = (rO[e] * inv).to(cutlass.BFloat16)
     cute.autovec_copy(of, ovw[(None, lane)])   # one 8 B store per lane
     if lane == 0:
-        mLse[(bz, h0 + w)] = m_run + log2_f32(l_run)   # base-2 domain (D0.3)
+        mLse[(bz, h0 + w)] = m_run + log2_f32(l_safe)   # base-2 domain (D0.3)
     _seg("epilogue.end")
 
 

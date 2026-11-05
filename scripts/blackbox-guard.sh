@@ -52,20 +52,45 @@
 # What a task's own reference is called is task-specific; set BLACKBOX_EXTRA to add
 # its module/blob names. Everything below is common to every sealed reference.
 #
+# `strings` is listed as `(^|[^-])strings\b`, not `\bstrings\b`: \b counts a hyphen as
+# a boundary, so the old spelling matched inside "f-strings" and refused ordinary
+# probes that only mention them. The `(^|[^-])` guard keeps the binutils tool banned
+# (`strings closed/ref.enc`, or the word after a space) while an adjective hyphenates
+# away.
+#
 # NOT on this list, deliberately: tempfile / mkdtemp / tarfile. The unsealer uses
 # them, but they are stdlib and a profiling probe legitimately needs a temp file for
 # its .ncu-rep — banning them refuses ordinary NCU probes for the line
 # `import tempfile` while protecting nothing, since what actually guards the
 # unsealed tree is its `fkref` prefix plus the blob, the key, the module object and
 # the source-introspection helpers, all still listed here.
-BLACKBOX_FORBID_BASE='closed/|\.enc\b|_REF_KEY|keystream|unseal|decrypt|fkref|closed_ref|ref_payload|_REF_DIR|_REF_PATH|_SRC_PATH|_module\(\)|linecache|getsource|getsourcefile|inspect\.getfile|inspect\.getmodule|sys\.modules\[|_COMPILE_CACHE|py_compile|\bdis\.|print-source[= ]+(cuda|all|sass,cuda|cuda,sass)|import-source|--source-folders|find / .*-name|find /tmp|ls .*/tmp|mit-han-lab|kernel-design-agents|NVlabs|mlsys2026|contest-solution|benchmark-solution|\bstrings\b|xxd|hexdump|base64 -d'
+BLACKBOX_FORBID_BASE='closed/|\.enc\b|_REF_KEY|keystream|unseal|decrypt|fkref|closed_ref|ref_payload|_REF_DIR|_REF_PATH|_SRC_PATH|_module\(\)|linecache|getsource|getsourcefile|inspect\.getfile|inspect\.getmodule|sys\.modules\s*\.\s*get|sys\.modules\[|__code__|co_filename|__globals__|get_instructions|getattr\s*\(\s*sys\s*,|_COMPILE_CACHE|py_compile|\bdis\.|print-source[= ]+(cuda|all|sass,cuda|cuda,sass)|import-source|--source-folders|find / .*-name|find /tmp|ls .*/tmp|mit-han-lab|kernel-design-agents|NVlabs|mlsys2026|contest-solution|benchmark-solution|(^|[^-])strings\b|xxd|hexdump|base64 -d'
 
-# This file, as it is being sourced. The driver seeds it into notes/, and notes/ is
-# what blackbox_guard scans — while this file's own comments and forbid list carry
-# every forbidden token, so scanning it would refuse EVERY `cmd` before a single probe
-# ran (unit tests that source it from scripts/ cannot show the self-hit). blackbox_guard skips a notes/ file only when it is this
-# guard byte for byte, so a probe cannot hide under the guard's file name.
-BLACKBOX_GUARD_SELF="${BASH_SOURCE[0]}"
+# Refused only in the probe COMMAND string, never in the notes/ file scan. `--set full`
+# and `--page source` are the same door `--print-source cuda` is — NCU's own path to
+# line-resolved source of everything the job profiles, the reference included — and a
+# probe that names them is refused outright. They cannot ride the notes/ scan: the
+# driver-seeded pricing recipes (stall_tools.py's frozen `--set full` collection,
+# struct_tools.py's `--page source` report reader) legitimately carry these strings in
+# their text, so listing them there would refuse every job a run starts. The cost, said
+# plainly: a probe FILE that builds such a flag at runtime is not caught by the file
+# scan — the command that launches it is.
+BLACKBOX_FORBID_CMD='--set[= ]+full|--section[= ]+SourceCounters|--page[= ]+(source|sources)|__file__\b'
+
+# `__file__` rides the command list too, for the same shape of reason in reverse: a
+# probe command that prints `<refmodule>.__file__` is locating the sealed/unsealed
+# reference source (an attribute-chain reach, like co_filename above it). The seeded
+# timeline_probe.py resolves its own path with __file__, so the token cannot go on the
+# notes/ list without refusing every job that tree starts.
+
+# This file, as it is being sourced — resolved to an ABSOLUTE path now, while the
+# sourcing cwd is still the one the relative path was written against. A caller that
+# sources it relatively (`source notes/blackbox-guard.sh`) and cd's before the first
+# probe would otherwise leave BLACKBOX_GUARD_SELF pointing at a file that no longer
+# exists from the new cwd: the self-skip in blackbox_guard never matches, the guard
+# scans its own comments and forbid list (they carry every forbidden token), and every
+# cmd is refused before a single probe runs. (The `cd && pwd` idiom is scripts/claude-goal.sh's.)
+BLACKBOX_GUARD_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
 # An EXTRA token that names the tree's own measurement wrapper (a <tree>/*.py module
 # probes are told to import) refuses every sanctioned probe — see the header. Say so
@@ -100,8 +125,13 @@ blackbox_forbid_pattern() {
 # cannot tell from its own probe crashing. Hence: the file list is built by testing each
 # candidate, and every aggregation pipeline ends in `|| true`.
 blackbox_guard() {
-    local cmd="${1:-}" why="" hit hits f
+    local cmd="${1:-}" why="" hit hits f hits_cmd="" hits_files=""
     local pattern; pattern="$(blackbox_forbid_pattern)"
+    # the command string alone also carries the cmd-only door list (BLACKBOX_FORBID_CMD)
+    local cmd_pattern="$pattern"
+    if [ -n "${BLACKBOX_FORBID_CMD:-}" ]; then
+        cmd_pattern="$pattern|$BLACKBOX_FORBID_CMD"
+    fi
     local dir="${BLACKBOX_NOTES_DIR:-${W:-$PWD}/notes}"
 
     local files=()
@@ -115,15 +145,34 @@ blackbox_guard() {
         files+=("$f")
     done
 
-    if printf '%s' "$cmd" | grep -qE "$pattern"; then why="cmd string"; fi
+    if printf '%s' "$cmd" | grep -qE "$cmd_pattern"; then why="cmd string"; fi
     if [ "${#files[@]}" -gt 0 ]; then
-        hit=$(grep -lE "$pattern" "${files[@]}" 2>/dev/null | head -3 | tr '\n' ' ' || true)
-        [ -n "$hit" ] && why="${why:+$why; }notes: $hit"
+        # grep that cannot run at all (a file it cannot read) exits 2 — which reads
+        # exactly like "no match". The source-time compile check below keeps a broken
+        # pattern from ever reaching this line; an rc>=2 that still happens must refuse,
+        # not ride the `|| true` (which is only for the empty-glob/pipefail story above)
+        # into a clean scan of a dirty tree.
+        local scan_rc=0 raw_hits=""
+        raw_hits=$(grep -lE "$pattern" "${files[@]}" 2>/dev/null) || scan_rc=$?
+        if [ "$scan_rc" -ge 2 ]; then
+            echo "BLACKBOX-GUARD REFUSED (the notes scan itself failed, grep exit $scan_rc): a scan that could not run must not read as a clean one — fix the tree (unreadable notes/ file?) and resend"
+            exit 3
+        fi
+        if [ -n "$raw_hits" ]; then
+            hit=$(printf '%s\n' "$raw_hits" | head -3 | tr '\n' ' ')
+            why="${why:+$why; }notes: $hit"
+        fi
     fi
     [ -n "$why" ] || return 0
 
-    hits=$({ printf '%s\n' "$cmd"; [ "${#files[@]}" -gt 0 ] && cat "${files[@]}"; } 2>/dev/null \
-           | grep -oE "$pattern" | sort | uniq -c | sort -rn | head -6 | tr '\n' ' ' || true)
+    # the command's matched tokens (cmd-only list included) and the notes' matched
+    # tokens are aggregated separately: one pattern cannot cover both contents
+    hits_cmd="$(printf '%s\n' "$cmd" | grep -oE "$cmd_pattern" | sort -u | tr '\n' ' ')" || true
+    if [ "${#files[@]}" -gt 0 ]; then
+        hits_files="$(cat "${files[@]}" 2>/dev/null | grep -oE "$pattern" \
+                      | sort | uniq -c | sort -rn | head -6 | tr '\n' ' ')" || true
+    fi
+    hits="$hits_cmd $hits_files"
     # A reference-specific token that also occurs in the reference's kernel symbol refuses
     # every probe that filters on that kernel (see the header). Say so when the hit
     # came from BLACKBOX_EXTRA, so the task author fixes the list rather than the probe.
@@ -135,6 +184,29 @@ blackbox_guard() {
             extra_hint="${extra_hint} [BLACKBOX_EXTRA also matches this tree's own wrapper module(s): ${collide} — importing it is the sanctioned way to drive the reference, so this refusal is a run configuration error, not a probe error: report it, do not work around it]"
         fi
     fi
-    echo "BLACKBOX-GUARD REFUSED ($why; matched: $hits): this run treats the reference as a closed binary — do not read, locate or unseal the reference kernel source (closed/, the key, the temp tree it is compiled from, the unsealed module object, its module names, getsource / linecache / sys.modules on it), do not fetch its upstream repository, and do not ask NCU for line-resolved source (--print-source sass only; cuobjdump -sass on the JIT cubin is fine). Drive the reference only through the tree's ref runner (make_inputs / ref_runner / bench / ncu). Introspecting the CuTe DSL package itself (cutlass.__file__, importlib.metadata, its .py sources) is fine. Rewrite the probe without the matched tokens and resend.${extra_hint}"
+    echo "BLACKBOX-GUARD REFUSED ($why; matched: $hits): this run treats the reference as a closed binary — do not read, locate or unseal the reference kernel source (closed/, the key, the temp tree it is compiled from, the unsealed module object, its module names, getsource / linecache / sys.modules on it), do not fetch its upstream repository, and do not ask NCU for line-resolved source (--print-source sass only; --set full and --page source are the same door; cuobjdump -sass on the JIT cubin is fine). Drive the reference only through the tree's ref runner (make_inputs / ref_runner / bench / ncu). Introspecting the CuTe DSL package's own installed .py sources on disk is fine. Rewrite the probe without the matched tokens and resend.${extra_hint}"
     exit 3
 }
+
+# An EXTRA token with a regex syntax error (an unbalanced paren, a dangling bracket)
+# makes every scan's grep exit 2 — which reads exactly like "no match", so the guard
+# would pass EVERYTHING for the whole job (fail-open; observed with a run's
+# BLACKBOX_EXTRA). Compile the merged pattern once, HERE, while sourcing: a bad one
+# refuses to load, and the function is replaced by one that refuses every probe, so a
+# caller that ignores this file's exit status still fails closed instead of open.
+_bb_pattern="$(blackbox_forbid_pattern)"
+if printf '' | grep -E "$_bb_pattern" >/dev/null 2>&1; then
+    _bb_rc=0
+else
+    _bb_rc=$?
+fi
+if [ "$_bb_rc" -eq 2 ]; then
+    echo "BLACKBOX-GUARD ERROR: the scan pattern does not compile as an extended regex${BLACKBOX_EXTRA:+ (BLACKBOX_EXTRA=\"$BLACKBOX_EXTRA\")} — refusing to arm. Every BLACKBOX_EXTRA token must be a valid ERE; fix it and restart the job." >&2
+    blackbox_guard() {
+        echo "BLACKBOX-GUARD REFUSED (the scan pattern does not compile — BLACKBOX_EXTRA is a broken extended regex): the guard cannot scan, so nothing runs past it. Fix BLACKBOX_EXTRA and restart the job."
+        exit 3
+    }
+    unset -f blackbox_forbid_pattern blackbox_extra_collisions
+    return 3 2>/dev/null || exit 3
+fi
+unset _bb_pattern _bb_rc

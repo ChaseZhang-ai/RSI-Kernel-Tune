@@ -2805,14 +2805,6 @@ def _main(argv: list[str] | None = None) -> int:
             ".peregrine-loop/crash-backup-<ts>/), or pass "
             "--allow-preexisting-artifacts to declare the reuse.\n")
         return 9  # NOT 8: that already means "KB leak lint found provenance"
-    if not args.dry_run:
-        # Ownership transfer: the tree just passed the gate (or the reuse was
-        # declared), so everything the run writes from here on — baselines, recon
-        # findings, the milestone — belongs to it, and a crash anywhere in the
-        # hours-long pre-iteration pipeline must restart into a resume, not a
-        # refusal (a blackbox run's seeded recon tree cannot be repaired by
-        # archiving: the guard's archive list has never covered it).
-        _admit_launch(op_dir, status_path)
 
     # ref_from_goal: generate (or finish generating) the reference now — after the gate,
     # so its products belong to this run, and before the architecture reference and the
@@ -3411,6 +3403,20 @@ def _main(argv: list[str] | None = None) -> int:
     except ValueError as e:
         sys.stderr.write(f"[loop] error: [loop] correctness_monitor_profiles: {e}\n")
         return 2
+
+    # Ownership transfer, written only now that every synchronous refusal gate has
+    # passed: the tree the loop is about to start on belongs to this run, and a
+    # crash anywhere from here on must restart into a resume, not a refusal (a
+    # blackbox run's seeded recon tree cannot be repaired by archiving: the
+    # guard's archive list has never covered it). Not written beside the fresh
+    # gate above: a sentinel that predates the gates between there and here
+    # (baselines, target derivation, target workloads, harness drift, strict
+    # precision, KB, job env) would turn a refused launch's retry into a resume,
+    # and the fresh-start-only refusals — EXIT_TARGET_WORKLOADS, EXIT_HARNESS_DRIFT,
+    # EXIT_PRECISION_UNREPORTED — would degrade to warnings with the unfixed
+    # config silently carried into the run.
+    if not args.dry_run:
+        _admit_launch(op_dir, status_path)
 
     try:
         summary = run_two_layer(ctx, max_meta=args.max_meta)

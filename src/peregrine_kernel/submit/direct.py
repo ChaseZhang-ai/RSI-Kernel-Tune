@@ -33,6 +33,7 @@ import io
 import json
 import lzma
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -336,6 +337,23 @@ def remote_tree(cfg: SubmitConfig) -> str:
     return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}-{identity}"
 
 
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _checked_env_key(name: str) -> str:
+    """A ``[env]`` key as it is spelled on the remote command line.
+
+    A key is interpolated into a line the host's shell parses, so only shell
+    identifiers travel, and they travel quoted: ``"A;id" = "1"`` is a legal
+    quoted TOML key, but interpolated raw it split ``export A;id=1=...`` into
+    two commands (BUG-CORPS-C-14). shlex.quote of a plain identifier is the
+    identifier itself, so sane keys are byte-for-byte what they always were."""
+    if not _ENV_KEY_RE.match(name):
+        raise ValueError(f"[env] key {name!r} is not a valid shell identifier "
+                         f"(expected [A-Za-z_][A-Za-z0-9_]*)")
+    return shlex.quote(name)
+
+
 def _entry_argv(cfg: SubmitConfig, mode: str) -> list[str]:
     if mode.startswith(CMD_PREFIX):
         return ["bash", cfg.entry_script, "cmd", *shlex.split(mode[len(CMD_PREFIX):])]
@@ -479,10 +497,11 @@ class DirectRunner:
         parts = [f"cd {shlex.quote(remote_tree(self.cfg))}"]
         if self.cfg.exec_env_file:
             parts.append(f". {shlex.quote(self.cfg.exec_env_file)}")
-        parts += [f"export {k}={shlex.quote(str(v))}" for k, v in sorted(env.items())
+        parts += [f"export {_checked_env_key(k)}={shlex.quote(str(v))}" for k, v in sorted(env.items())
                   if k not in secrets]
         # a secret is read off stdin, never spelled on a command line `ps` shows
-        parts += [f"{{ IFS= read -r {k} || true; }} && export {k}" for k in secrets]
+        parts += [f"{{ IFS= read -r {_checked_env_key(k)} || true; }} && "
+                  f"export {_checked_env_key(k)}" for k in secrets]
         lock = shlex.quote(f"{self.cfg.exec_workdir.rstrip('/')}/.gpu{self.cfg.exec_gpu}.lock")
         entry = " ".join(shlex.quote(a) for a in _entry_argv(self.cfg, mode))
         # no begin marker here: the session script prints it, inside the setsid

@@ -46,7 +46,8 @@ from pathlib import Path, PurePosixPath
 from peregrine_kernel.submit.config import SubmitConfig, is_secret_env
 from peregrine_kernel.submit.jobs import (BEGIN_MARKER, RUN_HEADROOM_S, STATUS_FAILED,
                                      STATUS_LOST, STATUS_SUCCEEDED,
-                                     TRANSPORT_ERROR_MARKER, locked)
+                                     TRANSPORT_ERROR_MARKER, locked,
+                                     proc_start_ticks)
 
 LOCAL_TREE = ".exec/tree"
 CMD_PREFIX = "cmd:"
@@ -646,6 +647,10 @@ class DirectRunner:
                                    stderr=subprocess.STDOUT, text=True,
                                    stdin=subprocess.PIPE if secrets else subprocess.DEVNULL,
                                    start_new_session=True)
+                # the ssh client's /proc identity, sampled while it is known alive:
+                # its pid must not be signalled after it was reaped and reused
+                # (BUG-CORPS-C-19)
+                child_start = proc_start_ticks(proc.pid)
                 if secrets:
                     try:
                         proc.stdin.write(secrets)
@@ -667,14 +672,14 @@ class DirectRunner:
                         rc = proc.wait(timeout=deadline)
                     except subprocess.TimeoutExpired:
                         self._stop_remote(log_file)
-                        _kill_group(proc)
+                        _kill_group(proc, child_start)
                         log_file.write(f"[direct] gpu_entry {mode} exceeded {deadline:.0f}s "
                                        f"-- killed\n")
                         log_file.flush()
                         return STATUS_FAILED
                     except BaseException:   # stopped (SIGTERM -> SystemExit) or interrupted
                         self._stop_remote(log_file)
-                        _kill_group(proc)
+                        _kill_group(proc, child_start)
                         raise
                     if rc == 0:
                         return STATUS_SUCCEEDED
@@ -763,11 +768,16 @@ def _descendants(root: int) -> list[int]:
 
 def _kill_session(proc, grace_s: float = STOP_GRACE_S) -> None:
     """End ``proc`` and everything below it. Its process group is not enough: gpu_entry's
-    `timeout` moves the task into a group of its own. The tree is read before the first
-    signal, while every member still hangs below ``proc``."""
+    `timeout` moves itself and the task into a group of their own. The tree is read before
+    the first signal, while every member still hangs below ``proc`` -- and each pid's
+    /proc identity is sampled with it, so a pid that exits and is reused before the
+    signal lands is left alone (BUG-CORPS-C-19)."""
     tree = [proc.pid, *_descendants(proc.pid)]
+    identity = {pid: proc_start_ticks(pid) for pid in tree}
     for sig in (signal.SIGTERM, signal.SIGKILL):
         for pid in tree:
+            if proc_start_ticks(pid) != identity[pid]:
+                continue   # gone, or the pid is somebody else's process now
             try:
                 os.kill(pid, sig)
             except (ProcessLookupError, PermissionError):
@@ -778,17 +788,23 @@ def _kill_session(proc, grace_s: float = STOP_GRACE_S) -> None:
             continue
         if sig == signal.SIGTERM:
             time.sleep(min(grace_s, 1.0))   # the rest of the tree, a moment to go too
-    _kill_group(proc)
+    _kill_group(proc, identity[proc.pid])
 
 
-def _kill_group(proc) -> None:
-    try:
-        os.killpg(proc.pid, 9)
-    except (ProcessLookupError, PermissionError, OSError):
+def _kill_group(proc, identity: str | None = None) -> None:
+    """Kill ``proc``'s process group. ``identity`` is the /proc starttime sampled
+    while ``proc`` was known alive (its callers hold one from spawn or tree-read
+    time): when the pid's occupant no longer matches -- the process was reaped
+    and its pid reused -- the group is not ours to signal. Without an identity
+    (no /proc on this platform) the old best-effort kill stands."""
+    if identity is None or proc_start_ticks(proc.pid) == identity:
         try:
-            proc.kill()
-        except OSError:
-            pass
+            os.killpg(proc.pid, 9)
+        except (ProcessLookupError, PermissionError, OSError):
+            try:
+                proc.kill()
+            except OSError:
+                pass
     try:
         proc.wait(timeout=30)
     except Exception:  # noqa: BLE001 -- best effort; the verdict is written either way

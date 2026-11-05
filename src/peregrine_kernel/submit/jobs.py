@@ -137,6 +137,43 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+def proc_start_ticks(pid: int) -> str | None:
+    """The process's /proc starttime (``stat`` field 22, clock ticks since boot):
+    the identity a pid file carries so a pid reused by an unrelated process is
+    not mistaken for the job's runner. None when it cannot be read (the process
+    is gone, or this machine has no /proc)."""
+    try:
+        data = (Path("/proc") / str(pid) / "stat").read_bytes().decode("ascii",
+                                                                       "replace")
+    except (OSError, ValueError):
+        return None
+    tail = data.rpartition(")")[2].split()   # past comm, which may hold spaces
+    return tail[19] if len(tail) > 19 else None   # field 22, seen from field 3
+
+
+def _runner_record(op_dir: Path, job_id: str) -> tuple[int, str | None]:
+    """The pid file's ``(pid, identity)``; identity is None for an older, pid-only
+    file. A missing or unreadable file reads ``(0, None)``."""
+    try:
+        parts = pid_path(op_dir, job_id).read_text(encoding="utf-8").split()
+        pid = int(parts[0])
+    except (OSError, ValueError):
+        return 0, None
+    return pid, (parts[1] if len(parts) > 1 else None)
+
+
+def _pid_is_job(pid: int, identity: str | None) -> bool:
+    """True when ``pid`` is (still) the process the job's pid file names. With no
+    identity on record (an older job, or a machine without /proc) the old
+    signal-0 semantics stand; with one, the /proc starttime must match -- a pid
+    whose occupant changed is somebody else's process, not this job's runner."""
+    if not _pid_alive(pid):
+        return False
+    if identity is None or not Path("/proc").is_dir():
+        return True
+    return proc_start_ticks(pid) == identity
+
+
 def job_status(op_dir: Path, job_id: str) -> dict:
     """``{"id", "status"}`` for a job: its verdict once written, Running while its runner
     lives, Lost when the runner is gone without one."""
@@ -146,11 +183,8 @@ def job_status(op_dir: Path, job_id: str) -> dict:
             return json.loads(res.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return {"id": int(job_id), "status": STATUS_FAILED}
-    try:
-        pid = int(pid_path(op_dir, job_id).read_text().strip())
-    except (OSError, ValueError):
-        pid = 0
-    if pid and _pid_alive(pid):
+    pid, identity = _runner_record(op_dir, job_id)
+    if pid and _pid_is_job(pid, identity):
         return {"id": int(job_id), "status": STATUS_RUNNING}
     return {"id": int(job_id), "status": STATUS_LOST}
 
@@ -167,8 +201,10 @@ def stop_job(op_dir: Path, job_id: str) -> bool:
     signal was sent."""
     if job_status(op_dir, job_id).get("status") != STATUS_RUNNING:
         return False
+    pid, identity = _runner_record(op_dir, job_id)
+    if not pid or not _pid_is_job(pid, identity):
+        return False    # the pid is gone, or belongs to somebody else now
     try:
-        pid = int(pid_path(op_dir, job_id).read_text().strip())
         # the runner is a session leader, so its pid is the group: the ssh session and
         # gpu_entry go with it
         os.killpg(pid, signal.SIGTERM)
@@ -190,7 +226,9 @@ def spawn_runner(cfg: SubmitConfig, mode: str, branch: str) -> str:
              "--mode", mode, "--branch", branch, "--base-dir", str(op_dir.parents[1])],
             stdout=runner_log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
             start_new_session=True)
-    pid_path(op_dir, jid).write_text(str(proc.pid), encoding="utf-8")
+    start = proc_start_ticks(proc.pid)
+    pid_path(op_dir, jid).write_text(
+        f"{proc.pid} {start}" if start else str(proc.pid), encoding="utf-8")
     return jid
 
 

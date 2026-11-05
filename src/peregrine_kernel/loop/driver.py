@@ -6990,16 +6990,30 @@ def _run_lever_pricing(ctx: LoopContext, priced: "PricedTrees", bindings: dict,
                 return []
             try:
                 spec = json.loads(spec_path.read_text(encoding="utf-8"))
-                levers = spec.get("levers") or []
-                ablations = spec.get("ablations") or []
             except (OSError, json.JSONDecodeError) as e:
                 _log(f"meta/lever-price: levers.json unreadable ({e}) — skipping")
                 return []
+            if not isinstance(spec, dict):
+                # the same face as a junk lever entry below: the teacher's
+                # hand-written file is input, not a verdict — a bare array or a
+                # scalar diagnoses without a price table instead of dying here
+                _log(f"meta/lever-price: levers.json is a bare {type(spec).__name__}, "
+                     f"not an object — diagnosing without a price table")
+                return []
+            levers = spec.get("levers") or []
+            ablations = spec.get("ablations") or []
+            if not isinstance(levers, list):
+                levers = []
             if not levers and not ablations:
                 _log("meta/lever-price: levers.json names no lever and no ablation "
                      "— diagnosing without a price table")
                 return []
-            levers = levers[:ctx.lever_pricing_max_levers]
+            levers = [lv for lv in levers[:ctx.lever_pricing_max_levers]
+                      if isinstance(lv, dict)]   # the variants/ablations guard
+            if not levers and not ablations:
+                _log("meta/lever-price: every lever entry was not an object — "
+                     "diagnosing without a price table")
+                return []
             known_ids = {d.id for d in _milestone_dag(ctx)}
             ablations = _normalise_ablations(ctx, ablations, known_ids)
             for lv in levers:

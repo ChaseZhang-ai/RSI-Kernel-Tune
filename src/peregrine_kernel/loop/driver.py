@@ -2335,8 +2335,10 @@ def _confirm_suspicious_watermark(ctx: LoopContext, be, branch: str, ev, metric_
         why = (f"beats best {metric_before} by more than {margin:.0%}")
     elif ms < metric_before * (1 - rd):
         # WP1 band: past what this run's own paired ratios resolve, inside the
-        # margin. A run without enough ratio history keeps the old free pass
-        # (resolvable_diff falls back to the cap, here >= any sub-margin gain).
+        # margin. Data-poor is not free here: resolvable_diff falls back to the
+        # cap for a run with too little ratio history, the band still buys one
+        # confirmation inside the margin, and the A1 routine confirms every new
+        # best regardless.
         why = (f"beats best {metric_before} by {gain_pct:.1%} — inside the "
                f"{margin:.0%} margin but past what this run's ratios resolve "
                f"({rd:.1%})")
@@ -15355,7 +15357,7 @@ def _price_student_trees(ctx: LoopContext, records) -> PricedTrees:
     else:
         _, _, out.head_dossier, _ = _run_stall_pricing(
             ctx, ref=out.head_sha, bank_as=(_STUDENT_ORCH_DOSSIER_NAME,),
-            label="head")
+            label="head", persist_roles=False)
         if out.head_dossier is None:
             out.missing.append(f"HEAD {short(out.head_sha)}: pricing job failed or its "
                                "self-check did not pass — the tree judged this time has no "
@@ -16249,13 +16251,46 @@ def _pick_ref_dossier(log: str) -> "tuple[str, str] | None":
     return header + m.group(1), note
 
 
+def _role_block_kernel(log: str, block_start: int) -> str:
+    """The kernel whose pricing produced the role block at ``block_start`` —
+    the nearest dominant-launch line before it, else the STALL-OK kernel,
+    else "?" (a log with no identity lines at all). Same preference the
+    dossier's banked header uses, so both banked faces name the same kernel."""
+    name = None
+    for dm in _DOMINANT_LAUNCH_RE.finditer(log, 0, block_start):
+        name = dm.group(2).strip()
+    if name is None:
+        stall = _STALL_OK.search(log)
+        if stall is not None:
+            km = re.match(r"STALL-OK kernel=(.+?) samples=", stall.group(0))
+            name = km.group(1) if km else None
+    return name or "?"
+
+
+_BANKED_ROLES_FOOTER_RE = re.compile(
+    r"^# banked-roles: kernel=(.*) verdict=(\S+)$", re.M)
+
+
+def _banked_roles_identity(text: str) -> "tuple[str, str] | None":
+    """(kernel, verdict) from a banked role ledger's ``# banked-roles:`` footer,
+    or None when the file predates the stamp."""
+    stamps = _BANKED_ROLES_FOOTER_RE.findall(text)
+    return (stamps[-1][0], stamps[-1][1]) if stamps else None
+
+
 def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
     """Bank the ref's role exposure ledger beside its dossier and segment
     account — the ref side of the diagnose step's per-role comparison.
 
     A partial table (no tensor term) is banked only where no full one is: a
     later --set-source probe must not downgrade the account a pricing job
-    delivered."""
+    delivered. A FULL table of a DIFFERENT kernel does not replace a banked
+    FULL one either: a probe can price an aux kernel, and the bystander's
+    role account must not silently become the reference's (the same accident
+    the dossier's banked header guards against). The banked text carries a
+    trailing ``# banked-roles:`` line naming that kernel; every reader of the
+    file either scans for its own line prefixes or parses the ROLE-JSON line,
+    so the stamp stays invisible to them."""
     ev = _evidence_dir(ctx, create=True)
     if ev is None:
         return
@@ -16266,8 +16301,22 @@ def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
     if not full and _ref_overlap_banked(ctx):
         return
     dst = ev / _REF_ROLE_EXPOSURE_NAME
+    blocks = list(_ROLE_BLOCK_RE.finditer(log))
+    kernel = _role_block_kernel(log, blocks[-1].start() if blocks else 0)
     try:
-        dst.write_text(block)
+        kept = _banked_roles_identity(dst.read_text())
+    except OSError:
+        kept = None                      # first save: nothing banked yet
+    if (full and kept is not None and kept[1] == "OK"
+            and kernel != "?" and kept[0] not in ("", "?")
+            and kept[0] != kernel):
+        _log(f"meta/recon: ref role ledger kept banked kernel="
+             f"{kept[0]} over this log's kernel={kernel}")
+        return
+    try:
+        dst.write_text(block.rstrip("\n")
+                       + f"\n# banked-roles: kernel={kernel} "
+                         f"verdict={'OK' if full else 'PARTIAL'}\n")
     except OSError as e:
         _log(f"meta/recon: could not persist {_REF_ROLE_EXPOSURE_NAME} "
              f"to {dst}: {e}")
@@ -17141,13 +17190,18 @@ def _ref_confirm_reading_ms(ctx: LoopContext, be, branch: str) -> "float | None"
 
 def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
                        bank_as: "tuple[str, ...]" = (_STUDENT_ORCH_DOSSIER_NAME,),
-                       label: str = "best", workload: str | None = None) \
+                       label: str = "best", workload: str | None = None,
+                       persist_roles: bool = True) \
         -> "tuple[str | None, str | None, str | None, str | None]":
     """Price one student tree (``ref``; the best-so-far KEEP when None);
     return (row ledger, segment account, orchestration dossier, role exposure).
     ``workload``: one of a group card's other meta workloads (``--workload``;
     loop/meta_shapes.py), read beside the representative's and banked as nothing
     (``bank_as`` = () from its caller) -- the banked dossiers stay the card's own.
+    ``persist_roles``: False leaves the uniquely-named student role ledger alone
+    (the second, HEAD-tree pricing pass reads roles only to discard them — the
+    teacher view consumes the primary pass's roles, and the banked evidence must
+    not describe a different tree than the verdicts it sits beside).
 
     The collection rides the PM-sampling sections (``--pm``): the role
     exposure ledger scales stall shares by the mainloop tensor plateau, which
@@ -17221,7 +17275,7 @@ def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
         _log(f"meta/stall-price[{label}]: role exposure "
              f"{'OK' if full else 'PARTIAL (no tensor term — PM sections missing)'} @ "
              f"{ref[:10] if ref else '?'}")
-        if (ev := _evidence_dir(ctx, create=True)) is not None and (
+        if (ev := _evidence_dir(ctx, create=True)) is not None and persist_roles and (
                 _STUDENT_ORCH_DOSSIER_NAME in bank_as
                 or _STUDENT_BEST_ORCH_DOSSIER_NAME in bank_as):
             try:

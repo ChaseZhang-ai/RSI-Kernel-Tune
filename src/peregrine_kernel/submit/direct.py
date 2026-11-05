@@ -121,6 +121,7 @@ INPUTS_SYNC_ENV = "PK_INPUTS_SYNC"
 # the memo is a cache, never a correctness single point.
 INPUTS_MANIFEST_NAME = "source-manifest.json"
 INPUTS_VERIFY_SAMPLE_STRIDE = 4   # full-hash this store entry in 1 of every N jobs
+RESTORE_CHUNK_BYTES = 1 << 20     # restore streams in chunks of this size
 
 
 def inputs_store_dir() -> Path:
@@ -267,18 +268,33 @@ def restore_inputs_from_store(tree: Path, manifest: list,
                               store: Path | None = None) -> None:
     """Materialize the synced inputs back into a freshly extracted tree.
 
-    Every file is verified against its manifest hash before it lands (the copy
-    is byte-identical or the call raises); a missing or mismatched store entry
-    raises, and the caller falls back to the full archive."""
+    Every file streams from the store in bounded chunks (holding a GB-scale
+    tensor in memory once OOM-killed the runner, and a Lost runner loops the
+    job -- BUG-CORPS-C-17), hashing as it goes: the copy lands only when it is
+    byte-identical to the manifest hash, and a missing or mismatched store
+    entry raises -- leaving no partial file behind -- so the caller falls back
+    to the full archive."""
     store = store if store is not None else inputs_store_dir()
     for entry in manifest:
         src = store / entry["sha256"]
-        data = src.read_bytes()
-        if hashlib.sha256(data).hexdigest() != entry["sha256"]:
-            raise RuntimeError(f"input store hash mismatch: {entry['path']}")
         dest = tree / entry["path"]
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(data)
+        tmp = dest.with_name(f".{dest.name}.restore.{os.getpid()}")
+        h = hashlib.sha256()
+        try:
+            with open(src, "rb") as fin, open(tmp, "wb") as fout:
+                for chunk in iter(lambda: fin.read(RESTORE_CHUNK_BYTES), b""):
+                    h.update(chunk)
+                    fout.write(chunk)
+            if h.hexdigest() != entry["sha256"]:
+                raise RuntimeError(f"input store hash mismatch: {entry['path']}")
+            os.replace(tmp, dest)
+        except BaseException:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            raise
         try:
             os.chmod(dest, 0o644)
         except OSError:

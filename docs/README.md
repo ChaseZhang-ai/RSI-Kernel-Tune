@@ -7,6 +7,7 @@ One line per document. Historical per-package change documents were distilled in
 
 | Path | Content |
 |---|---|
+| [compute-dtype.md](compute-dtype.md) | The declared compute precision (WP22, the task publisher's view): `compute_dtype` in task.toml is YOUR decision — the system optimizes at exactly that dtype and never below it; the gate judges at the declaration, records carry it, numbers never mix across declarations |
 | [run-configuration.md](run-configuration.md) | `rsi-run.toml`, the unified run configuration: API provider/models + key-file pointer, the kernel(s) to optimize, the declared compute precision (the user's decision), the retrieval permission, the concurrency, and a new language's syntax/toolchain files |
 | [blackbox-mode.md](blackbox-mode.md) | Sealed black-box references: what gets sealed, who can read what, and the known failure modes of the guard |
 | [correctness-monitor.md](correctness-monitor.md) | The advisory correctness monitor riding into GPU jobs (`.rkt_monitor/` tree, stressed-input checks, output watch) |

@@ -206,13 +206,15 @@ def test_chain_reads_the_pinned_declaration_over_a_kernel_write():
 def test_chain_reads_the_snapshot_over_a_kernel_write():
     """No pin (a direct reader's posture), but the kernel imported: the
     pre-import capture is what the measure reads."""
-    bk = _benchkit("bf16", "wp22_chain_snap")
     import os
+    bk = _benchkit("bf16", "wp22_chain_snap")
     os.environ["RKT_COMPUTE_DTYPE"] = "bf16"   # the launch world, as at kernel import
-    bk._capture_kernel_import_env()
-    os.environ["RKT_COMPUTE_DTYPE"] = "fp8"          # the kernel's write
-    assert bk._compute_dtype() == "bf16"
-    os.environ.pop("RKT_COMPUTE_DTYPE", None)
+    try:
+        bk._capture_kernel_import_env()
+        os.environ["RKT_COMPUTE_DTYPE"] = "fp8"          # the kernel's write
+        assert bk._compute_dtype() == "bf16"
+    finally:
+        os.environ.pop("RKT_COMPUTE_DTYPE", None)
 
 
 def test_chain_absence_falls_back_to_the_import_frozen_value():
@@ -220,20 +222,25 @@ def test_chain_absence_falls_back_to_the_import_frozen_value():
     import — a state production never reaches, since the pin and the snapshot
     are taken in the same process after this module's import): the
     import-validated declaration stands."""
+    import os
     bk = _benchkit("fp16", "wp22_chain_absent")
     assert bk._ENV_AT_KERNEL_IMPORT is None and bk._GUARD_ENV is None
-    import os
     os.environ.pop("RKT_COMPUTE_DTYPE", None)
     assert bk._compute_dtype() == "fp16"
 
 
 def test_chain_garbage_falls_back_to_the_frozen_value_never_crashes():
     """A value import never validated (a kernel's junk write in a bare process)
-    falls back to the frozen declaration instead of crashing a precision row."""
-    bk = _benchkit("fp16", "wp22_chain_junk")
+    falls back to the frozen declaration instead of crashing a precision row.
+    The junk never outlives the test: a later fresh module load (a card copy)
+    validates its import-time env and must not see it."""
     import os
+    bk = _benchkit("fp16", "wp22_chain_junk")
     os.environ["RKT_COMPUTE_DTYPE"] = "int4"
-    assert bk._compute_dtype() == "fp16"
+    try:
+        assert bk._compute_dtype() == "fp16"
+    finally:
+        os.environ.pop("RKT_COMPUTE_DTYPE", None)
 
 
 def test_chain_fp32_absent_is_fp32():

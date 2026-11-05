@@ -39,8 +39,17 @@ below and in [NOTICE](NOTICE).
   compute for capability benchmarks; the opt-in `MEMO` lane lets a production workload
   with repeating inputs keep a content-keyed cache and measures serving latency — the
   lanes are never mixed in one comparison.
+- 🎚️ **The precision is your declaration, not the optimizer's.** `compute_dtype` in
+  `task.toml` (fp32 by default; `tf32` / `bf16` / `fp16` / `fp8`) names the dtype the
+  kernel computes at: the system optimizes at exactly that precision, never below it,
+  and the fp64-truth error gate still judges every output. See
+  [docs/compute-dtype.md](docs/compute-dtype.md).
 - 🔌 **Zero network egress on the evaluation path.** Tasks come from you (or are scaffolded
   from the released kernel corpus); nothing is uploaded anywhere.
+
+> **The precision of the optimized kernel is YOUR decision.** Declare `compute_dtype`
+> in task.toml — the system optimizes at exactly the declared precision and never goes
+> below it. Default fp32.
 
 ## Quick start
 

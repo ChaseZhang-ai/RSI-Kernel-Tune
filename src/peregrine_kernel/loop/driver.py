@@ -2805,10 +2805,20 @@ def _run_meta_verdict_probe(ctx: LoopContext, be, probe_branch: str, path: str,
     """One single-script verdict probe on its own job (the pre-WP19 path).
 
     WP19 (task 2): extracted verbatim so the manifest's wholesale-failure
-    fallback runs exactly this — the old path is the fallback, not a copy."""
-    be.commit(f"meta-probe: {path}")
-    be.push_branch(probe_branch)
-    probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    fallback runs exactly this — the old path is the fallback, not a copy.
+
+    A backend error degrades to a no-verdict reading instead of escaping: the
+    commit/push/submit chain rides the same net as every sibling probe path
+    (ablation, timeline) — one GPU flake must not end the whole run through
+    the channel whose whole point is one experiment's answer."""
+    probe_log = ""
+    try:
+        be.commit(f"meta-probe: {path}")
+        be.push_branch(probe_branch)
+        probe_log = be.submit_gpu(probe_branch, f"cmd:python3 {path}")
+    except BackendError as e:
+        _log(f"meta: verdict probe {path} degraded ({e}) — no verdict this round")
+        return parse_probe_verdict("", audit=False), f"the probe job never ran: {e}", []
     # audit=False: these lines answer pre-registered hypotheses, and the
     # max_diff field carries the reading as printed. The certification
     # audit (error-norm ceiling, float-only) was downgrading a PASS with a
@@ -12110,9 +12120,17 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 probe_rounds += 1
                 probes_run.extend(mpaths)
                 probe_branch = f"{ctx.branch_prefix}-metaprobe"
-                be.commit(f"meta-probe manifest: {turn.path}")
-                be.push_branch(probe_branch)
-                batch = _run_probe_manifest_batch(ctx, be, probe_branch, mpaths)
+                try:
+                    be.commit(f"meta-probe manifest: {turn.path}")
+                    be.push_branch(probe_branch)
+                    batch = _run_probe_manifest_batch(ctx, be, probe_branch, mpaths)
+                except BackendError as e:
+                    # same net as every sibling probe path: a GPU/git flake
+                    # degrades the round through the per-script fallback (which
+                    # carries the same net per script), it does not end the run
+                    _log(f"meta: probe manifest {turn.path} failed ({e}) — "
+                         f"falling back to the per-script path")
+                    batch = None
                 if batch is None:
                     # the batch never really ran (markers missing): the
                     # per-script path is the fallback, verbatim

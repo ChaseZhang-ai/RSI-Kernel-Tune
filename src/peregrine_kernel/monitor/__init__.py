@@ -265,7 +265,14 @@ def classify(result: dict | None) -> dict:
             if base_sig is not None and hook.get("calls") and base_calls:
                 changed = _in_sig(rec, written) != base_sig
                 if not changed and any(written.values()):
-                    changed = bool(hook.get("perturbed") or hook.get("reseeded"))
+                    # the kernel wrote tensor parameters, so the signatures cannot
+                    # carry the change (every position blanked): the draw evidence
+                    # is the counters -- and the install-time default-generator
+                    # shift, which a bench that never seeds still delivered (the
+                    # hook reports it as default_reseeded; older records lack the
+                    # flag and keep their reading)
+                    changed = bool(hook.get("perturbed") or hook.get("reseeded")
+                                   or hook.get("default_reseeded"))
             else:
                 changed = bool(hook.get("perturbed") or hook.get("reseeded"))
             if not changed:

@@ -493,9 +493,13 @@ def _install_rng() -> None:
     prof = _state["profile"]
     if prof in SEED_OFFSETS:
         off = _state["seed_offset"] = SEED_OFFSETS[prof]
-        # a bench that never seeds still draws something new
+        # a bench that never seeds still draws something new -- report the shift:
+        # when the kernel writes every tensor parameter both runs' input signatures
+        # blank to the same all-None list, so this flag is the only evidence the
+        # seed profile's draws actually changed (the classify-side fallback reads it)
         try:
             t.manual_seed(off)
+            _state["default_reseeded"] = True
         except Exception as e:  # noqa: BLE001
             _err("default seed", e)
 

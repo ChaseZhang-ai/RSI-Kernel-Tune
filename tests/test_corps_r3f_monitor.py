@@ -9,6 +9,16 @@ Covered here:
   before any output existed (GPU job burned, zero MARKER), and a typo'd
   PK_MON_MAX_CALLS used to kill the hook install so the whole job watched
   nothing (the failure one stderr line nobody reads).
+- BUG-CH-H-02: the seed profiles' change detection sees the install-time
+  default-generator shift: a bench that never seeds still draws something new
+  under seed1/seed2, but when the kernel writes every tensor parameter both
+  runs' input signatures blank to the same all-None and the explicit-draw
+  counters stay 0 -- the card's FAIL used to be dropped as "not applicable"
+  with the attribution inverted. The hook now reports the install-time shift
+  and classify counts it (only in the written-positions fallback, where the
+  signature channel is actually blinded; a bench with no RNG draws keeps its
+  not-applicable reading).
+
 The classify tests are pure dicts; the hook/runner tests need torch (skipped
 without it).
 """
@@ -115,3 +125,104 @@ def test_an_unset_max_calls_keeps_the_default(tmp_path):
         {"PK_MON_PROFILE": "base"}, tmp_path)
     assert p.returncode == 0, p.stderr
     assert "True 64" in p.stdout
+
+
+# --- BUG-CH-H-02 --------------------------------------------------------------------
+
+def _call_all_written(i=0):
+    """One kernel call that writes every tensor parameter (a full in-place
+    shape): the hook blanks every position of ``in_sums`` for written args, so
+    both runs' signatures read as the same all-None list."""
+    return {"fn": "call", "i": i, "n_inputs": 2, "in_sums": [1.0, 2.0],
+            "in_nonfinite": [0, 0], "written": [0, 1], "inputs_nonfinite": 0,
+            "outputs": [{"slot": "arg0", "nan": 0, "posinf": 0, "neginf": 0,
+                         "abs_sum": 10.0, "sq_sum": 5.0}]}
+
+
+def _rec(profile, card_pass=True, calls=(), **kw):
+    hook = {"calls": list(calls), "perturbed": kw.pop("perturbed", 1),
+            "reseeded": kw.pop("reseeded", 0),
+            "default_reseeded": kw.pop("default_reseeded", None)}
+    return {"profile": profile, "card_pass": card_pass, "rc": 0, "seconds": 1.0,
+            "cases": kw.pop("cases", []), "hook": hook, **kw}
+
+
+def test_a_seed_fail_survives_full_write_params_via_the_default_shift():
+    """The blind geometry: signatures blanked by full-write params, counters 0
+    (the bench never seeds), yet the install-time default-generator shift made
+    seed1 draw different inputs -- the card FAIL is the monitor's core alarm
+    and must not be dropped as not applicable with the reason inverted."""
+    base = _rec("base", calls=[_call_all_written()], perturbed=0, reseeded=0,
+                default_reseeded=False)
+    seed1 = _rec("seed1", card_pass=False, calls=[_call_all_written()],
+                 perturbed=0, reseeded=0, default_reseeded=True,
+                 cases=[{"case": "mid", "pass": False}])
+    v = monitor.classify({"profiles": [base, seed1]})
+    assert "seed1" in v["ran"] and "seed1" not in v["not_applicable"]
+    assert v["status"] == "alarm"
+    assert "does not generalise" in v["findings"][0]["what"]
+
+
+def test_old_records_without_the_flag_keep_their_reading():
+    """Hook json from before the flag existed: the fallback reads as before."""
+    base = _rec("base", calls=[_call_all_written()], perturbed=0, reseeded=0)
+    seed1 = _rec("seed1", card_pass=True, calls=[_call_all_written()],
+                 perturbed=0, reseeded=0)
+    v = monitor.classify({"profiles": [base, seed1]})
+    assert v["not_applicable"] == ["seed1"] and v["status"] == "ok"
+
+
+def test_a_passing_seed_profile_still_counts_as_run():
+    """A shifted seed that changed the inputs and the card still passes: the
+    profile counts as ran, no finding."""
+    base = _rec("base", calls=[_call_all_written()], perturbed=0, reseeded=0,
+                default_reseeded=False)
+    seed1 = _rec("seed1", card_pass=True, calls=[_call_all_written()],
+                 perturbed=0, reseeded=0, default_reseeded=True)
+    v = monitor.classify({"profiles": [base, seed1]})
+    assert v["ran"] == ["base", "seed1"] and not v["not_applicable"]
+    assert v["status"] == "ok"
+
+
+def test_no_rng_bench_keeps_not_applicable():
+    """A bench with no torch RNG draws: the signature channel works (nothing
+    written) so the profile stays not applicable -- the fix must not widen."""
+    base = _rec("base", calls=[{"fn": "call", "i": 0, "in_sums": [1.0],
+                                "outputs": [{"nan": 0, "abs_sum": 10.0, "sq_sum": 5.0}]}],
+                perturbed=0, reseeded=0, default_reseeded=True)
+    seed1 = _rec("seed1", card_pass=True, calls=[{"fn": "call", "i": 0, "in_sums": [1.0],
+                                                  "outputs": [{"nan": 0, "abs_sum": 10.0,
+                                                               "sq_sum": 5.0}]}],
+                 perturbed=0, reseeded=0, default_reseeded=True)
+    v = monitor.classify({"profiles": [base, seed1]})
+    assert v["not_applicable"] == ["seed1"]
+
+
+@needs_torch
+def test_hook_reports_the_install_time_default_seed_shift(tmp_path):
+    """Under a seed profile the hook's install-time ``manual_seed(off)`` rides
+    the hook json as ``default_reseeded`` -- the evidence a never-seeding bench
+    still carries."""
+    p = _python_on_hook(
+        "import pk_monitor_hook as h\nprint(h._state.get('default_reseeded'))\n",
+        {"PK_MON_PROFILE": "seed1"}, tmp_path)
+    assert p.returncode == 0, p.stderr
+    assert p.stdout.strip() == "True"
+
+
+@needs_torch
+def test_non_seed_profiles_do_not_claim_the_default_shift(tmp_path):
+    p = _python_on_hook(
+        "import pk_monitor_hook as h\nprint(h._state.get('default_reseeded'))\n",
+        {"PK_MON_PROFILE": "spikes"}, tmp_path)
+    assert p.returncode == 0, p.stderr
+    assert p.stdout.strip() == "False"
+
+
+@needs_torch
+def test_base_profile_does_not_claim_the_default_shift(tmp_path):
+    p = _python_on_hook(
+        "import pk_monitor_hook as h\nprint(h._state.get('default_reseeded'))\n",
+        {"PK_MON_PROFILE": "base"}, tmp_path)
+    assert p.returncode == 0, p.stderr
+    assert p.stdout.strip() == "False"

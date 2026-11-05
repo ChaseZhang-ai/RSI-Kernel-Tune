@@ -1663,10 +1663,19 @@ def _lane_temperature_check(ctx: LoopContext) -> "tuple[bool, str]":
         return True, ""
     for r in reversed(records):
         temp = (r.gpu_state or {}).get("temperature_c")
-        if temp is not None:
-            if float(temp) >= _LANE_TEMP_MAX_C:
-                return False, f"last gpu_state temperature {temp}C >= {_LANE_TEMP_MAX_C}C"
-            return True, ""
+        if temp is None:
+            continue
+        try:
+            t = float(temp)
+        except (TypeError, ValueError):
+            # parse_eval never validates the gpu_state block's contents, and a
+            # damaged value sits in status.jsonl across restarts: a guard that
+            # raised here would break the window deterministically (its
+            # load_records twin is guarded for exactly that reason)
+            continue
+        if t >= _LANE_TEMP_MAX_C:
+            return False, f"last gpu_state temperature {temp}C >= {_LANE_TEMP_MAX_C}C"
+        return True, ""
     return True, ""
 
 
@@ -1743,7 +1752,10 @@ def _write_student_digest(ctx: LoopContext) -> None:
 
 # A gate closure row ("M0-gate") vs an ordinary decision ("D0.7"). Gate rows always get
 # the full eval — they are where a scaffold phase's deferred verification is spent.
-_GATE_ROW = re.compile(r"gate", re.IGNORECASE)
+# Anchored like _STAG_GATE_ROW/_GATE_ID below (the decision id is free text: a
+# bare substring match read "D1.4-mitigate-spill" as a gate row — losing the
+# scaffold exemption, gaining the gate-only refusals and reuse privileges).
+_GATE_ROW = re.compile(r"M\d+-gate$", re.IGNORECASE)
 # The ref's per-segment construction table travels WHOLE into the distill prompt:
 # a real table (five regions, seven segments, hand-offs, precision, warp rows) is
 # ~9k characters; a 4k cut fell inside the decisive region's first hand-off line.
@@ -6990,16 +7002,30 @@ def _run_lever_pricing(ctx: LoopContext, priced: "PricedTrees", bindings: dict,
                 return []
             try:
                 spec = json.loads(spec_path.read_text(encoding="utf-8"))
-                levers = spec.get("levers") or []
-                ablations = spec.get("ablations") or []
             except (OSError, json.JSONDecodeError) as e:
                 _log(f"meta/lever-price: levers.json unreadable ({e}) — skipping")
                 return []
+            if not isinstance(spec, dict):
+                # the same face as a junk lever entry below: the teacher's
+                # hand-written file is input, not a verdict — a bare array or a
+                # scalar diagnoses without a price table instead of dying here
+                _log(f"meta/lever-price: levers.json is a bare {type(spec).__name__}, "
+                     f"not an object — diagnosing without a price table")
+                return []
+            levers = spec.get("levers") or []
+            ablations = spec.get("ablations") or []
+            if not isinstance(levers, list):
+                levers = []
             if not levers and not ablations:
                 _log("meta/lever-price: levers.json names no lever and no ablation "
                      "— diagnosing without a price table")
                 return []
-            levers = levers[:ctx.lever_pricing_max_levers]
+            levers = [lv for lv in levers[:ctx.lever_pricing_max_levers]
+                      if isinstance(lv, dict)]   # the variants/ablations guard
+            if not levers and not ablations:
+                _log("meta/lever-price: every lever entry was not an object — "
+                     "diagnosing without a price table")
+                return []
             known_ids = {d.id for d in _milestone_dag(ctx)}
             ablations = _normalise_ablations(ctx, ablations, known_ids)
             for lv in levers:
@@ -7562,9 +7588,18 @@ def _run_sweep_request_per_shape(ctx: LoopContext, be, iter_no: int, path: str,
     same-job ratios from different jobs are not one measurement; the per-column
     winners are the teacher's per_shape composition input, and the landing is
     the student's ordinary delivery (full eval gate)."""
-    from peregrine_kernel.skills.lever_pricing_run import META_ROUNDS  # the merge's clamp
+    from peregrine_kernel.loop.meta_shapes import META_ROUNDS  # the pricing channel's clamp
     spec = dict(spec)
-    spec["rounds"] = max(1, min(int(spec.get("rounds", 3)), META_ROUNDS))
+    try:
+        rounds = int(spec.get("rounds", 3))
+    except (TypeError, ValueError):
+        # the same face as the non-per-shape branch's safe failure: the recipe's
+        # rounds is teacher-authored input, and a mistyped one is refused back
+        # (never a driver crash) — screening.sweep_spec_refused does not check it
+        return _sweep_request_refusal(
+            path, f"The milestone recipe's `rounds` is {spec.get('rounds')!r}, not an "
+                  f"integer — the per-shape sweep refuses the recipe as malformed.")
+    spec["rounds"] = max(1, min(rounds, META_ROUNDS))
     spec_name = f"__sweep_{decision_id}.json"
     spec_path = Path(ctx.workspace) / "notes" / spec_name
     per_wl: dict = {}
@@ -9976,9 +10011,11 @@ def _wp18_null_marker(info: dict) -> str:
 
 def _wp18_stamp_priced_null(ctx: LoopContext, table: list) -> None:
     """Stamp the milestone's decision lines for null/noop levers with their
-    measured-dead reading. Idempotent (an existing PRICED_NULL marker on the
-    citation is replaced, one standing verdict per line); best-effort — a
-    milestone write failure logs and moves on."""
+    measured-dead reading. Idempotent per lever (an existing PRICED_NULL marker
+    on that lever's own citations is replaced, one standing verdict per line)
+    and lever-isolated: stamping one lever never strips another lever's marker,
+    and a standing [RE-PRICED … SUSPENDED] verdict on a citation is preserved.
+    Best-effort — a milestone write failure logs and moves on."""
     nulls = _wp18_null_levers(table)
     if not nulls:
         return
@@ -9988,19 +10025,23 @@ def _wp18_stamp_priced_null(ctx: LoopContext, table: list) -> None:
         _log(f"meta/price-stamp: could not read the milestone ({e})")
         return
     marked = text
+    stamped: list = []
     for name, info in nulls.items():
         if not _cited_levers(marked).count(name) and not info["decision_ids"]:
             continue
-        # one standing verdict per citation: an earlier PRICED_NULL marker is
-        # replaced, not stacked (the RE-PRICED pattern the citation marker
-        # strips natively only knows its own tag)
-        clean = re.sub(r"\s*\[" + _PRICED_NULL_TAG + r"[^\]\n]*\]", "", marked)
-        marked = _mark_lever_citations(clean, name, _wp18_null_marker(info))
+        # the per-lever citation match consumes (replaces) only THIS lever's
+        # earlier PRICED_NULL markers; other levers' stamps and the RE-PRICED
+        # verdicts stay untouched
+        after = _mark_lever_citations(marked, name, _wp18_null_marker(info),
+                                      keep_reprice=True)
+        if after != marked:
+            stamped.append(name)
+        marked = after
     if marked != text:
         try:
             _write_milestone(ctx, marked)
-            _log(f"meta/price-stamp: PRICED_NULL stamped on {len(nulls)} measured-dead "
-                 f"lever citation(s): {', '.join(sorted(nulls))}")
+            _log(f"meta/price-stamp: PRICED_NULL stamped on {len(stamped)} measured-dead "
+                 f"lever citation(s): {', '.join(sorted(stamped))}")
         except (OSError, ValueError) as e:
             _log(f"meta/price-stamp: could not write the milestone ({e})")
 
@@ -10607,13 +10648,24 @@ def _reprice_marker(rv: dict) -> str:
     return tag + "]"
 
 
-def _mark_lever_citations(text: str, name: str, marker: str) -> str:
+def _mark_lever_citations(text: str, name: str, marker: str,
+                          keep_reprice: bool = False) -> str:
     """Put ``marker`` after every `lever:<name>` citation in ``text`` (after its
-    [MEASURED …] tag when one follows), replacing any earlier RE-PRICED marker
-    on that citation — one standing verdict per citation, the latest."""
+    [MEASURED …] tag when one follows), replacing any earlier PRICED_NULL marker
+    on that citation and — unless ``keep_reprice`` — any earlier RE-PRICED
+    marker: one standing verdict per citation, the latest. With
+    ``keep_reprice`` (the PRICED_NULL channel) a standing [RE-PRICED …
+    SUSPENDED] verdict is preserved: the suspension forbids landing the rung,
+    the null stamp only annotates the price, and neither may erase the other."""
+    null_tag = r"(?:\s*\[" + _PRICED_NULL_TAG + r"[^\]\n]*\])*"
+    reprice_tag = r"((?:\s*\[" + _REPRICE_TAG + r"[^\]\n]*\])*)"
     pat = re.compile(r"(\blever\s*[:：]\s*`?" + re.escape(name) + r"`?(?![A-Za-z0-9_\-]))"
-                     r"((?:\s*\[MEASURED[^\]\n]*\])?)((?:\s*\[" + _REPRICE_TAG + r"[^\]\n]*\])*)")
-    return pat.sub(lambda m: f"{m.group(1)}{m.group(2)} {marker}", text)
+                     r"((?:\s*\[MEASURED[^\]\n]*\])?)" + null_tag + reprice_tag + null_tag)
+
+    def _sub(m: "re.Match") -> str:
+        tail = m.group(3) if keep_reprice else ""
+        return f"{m.group(1)}{m.group(2)} {marker}{tail}"
+    return pat.sub(_sub, text)
 
 
 def _revision_line(rv: dict) -> str:
@@ -11886,7 +11938,7 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     if priced is not None:
         # a group card: the same readings on its other meta workloads (one job each)
         diagnose_extra += _meta_workload_readings(ctx, priced, "audit" if audit else "plateau")
-    if cwt := combined_workload_test(_on_cluster(load_records(ctx.status_path), ctx),
+    if cwt := combined_workload_test(_on_cluster(live_records, ctx),
                                      ctx.gate_window, floor=ctx.resolvable_floor,
                                      cap=ctx.resolvable_cap):
         # WP15 Stouffer advisory (contract C8: judgment is NOT here — the main
@@ -14861,7 +14913,11 @@ def run_recon_step(ctx: LoopContext) -> ReconResult:
                 # reading wins, cluster > 1 contradicts the denial, and
                 # LAUNCH-DISPUTED owns the disagreement from the report's side.
                 prev = launch_facts.get("cluster") or (0, 0, 0)
-                if cluster[0] * cluster[1] * cluster[2] >= prev[0] * prev[1] * prev[2]:
+                # strictly greater: on a product tie the recorded (main kernel's)
+                # reading stands — a tie means the later round profiled a same-
+                # size helper, and the comment above rules the write-up's own
+                # clustered reading is not demoted by one
+                if cluster[0] * cluster[1] * cluster[2] > prev[0] * prev[1] * prev[2]:
                     launch_facts.update(cluster=cluster, round=r, source=(
                         "LAUNCH-OK" if _LAUNCH_OK.search(log) else
                         "launch__cluster_dim_* metric in the job log"))
@@ -18706,7 +18762,11 @@ def _wp5_apply_cfg(ctx: LoopContext) -> None:
             v = int(raw) if is_int else float(raw)
         except (TypeError, ValueError):
             return d
-        if isinstance(raw, bool) or (is_int and v < lo) or not math.isfinite(v):
+        # the lower bound applies to BOTH key classes: a negative float
+        # (meta_hours_per_round) used to slip through here and make the
+        # headroom extension's "never into a wall clock that cannot fund a
+        # round" check vacuously true
+        if isinstance(raw, bool) or v < lo or not math.isfinite(v):
             return d
         return v
 
@@ -19106,7 +19166,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
             # was cut short at first green, and judging a rebuild patch at M0 is
             # predetermined (best_after < best_before) — it would revert correct
             # foundations for running out of runway, not for being wrong.
-            if meta_steps >= max_meta:
+            if meta_steps >= meta_cap:
                 _log("meta/m0-audit: meta budget exhausted -> skipping audit")
                 seg_green = True
                 start_iter = len(load_records(ctx.status_path))

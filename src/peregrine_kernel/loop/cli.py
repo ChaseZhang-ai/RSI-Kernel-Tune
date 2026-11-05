@@ -419,6 +419,11 @@ class RealBackend:
             raise box["exc"]
         return proc.returncode, box.get("out", ""), box.get("err", "")
 
+    def _session_file(self, role: str) -> Path:
+        """Where a scope's session id lives (see _session_env)."""
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", self.agent_session_scope or "")
+        return Path(self.workspace) / ".pk-sessions" / f"{safe}.{role}"
+
     def _session_env(self, role: str) -> dict:
         """WP19 (task 6): the resume env for this turn, or {} when resume is
         off / no scope is named. The scope's session id lives in a file under
@@ -427,19 +432,38 @@ class RealBackend:
         driver clears the scope, so a NEW meta entry starts a fresh session."""
         if not self.resume_session or not self.agent_session_scope:
             return {}
-        safe = re.sub(r"[^A-Za-z0-9._-]", "_", self.agent_session_scope)
-        sid_file = Path(self.workspace) / ".pk-sessions" / f"{safe}.{role}"
+        sid_file = self._session_file(role)
         try:
             if sid_file.is_file():
                 sid = sid_file.read_text(encoding="utf-8").strip()
                 if sid:
                     return {"PK_AGENT_SESSION_ID": sid, "PK_AGENT_SESSION_MODE": "resume"}
+            safe = sid_file.name.rsplit(".", 1)[0]
             sid = f"{safe}-{role}-{uuid.uuid4().hex[:12]}"
             sid_file.parent.mkdir(parents=True, exist_ok=True)
             sid_file.write_text(sid, encoding="utf-8")
             return {"PK_AGENT_SESSION_ID": sid, "PK_AGENT_SESSION_MODE": "create"}
         except OSError:
             return {}   # resume is an optimization: any trouble runs the baseline
+
+    def _forget_session(self, role: str) -> None:
+        """Drop a scope's recorded session id so the next turn CREATES a fresh
+        session (see _session_env).
+
+        Called when a turn that RESUMED its session failed on something other
+        than an API outage: a hard failure on ``--resume`` usually means the id
+        is dead or stale (the sid file outlives the process that minted it),
+        and retrying would re-enter the same dead session for every remaining
+        attempt — the whole run then dies as agent_failed on one stale file.
+        The id is an optimization (see _session_env), never a commitment; the
+        next attempt mints a fresh one, failure tail still attached.
+        """
+        if not self.resume_session or not self.agent_session_scope:
+            return
+        try:
+            self._session_file(role).unlink(missing_ok=True)
+        except OSError:
+            pass    # resume is an optimization: any trouble runs the baseline
 
     @staticmethod
     def _prepend_env(cmd: str, env: dict) -> str:
@@ -492,6 +516,13 @@ class RealBackend:
                       f"— waiting {sleep_s:.0f}s before retrying: {last}", flush=True)
                 time.sleep(sleep_s)
                 continue  # deliberately does not consume a hiccup attempt
+            if session_env.get("PK_AGENT_SESSION_MODE") == "resume":
+                # A hard failure on a RESUMED session usually means the recorded
+                # id is dead or stale (the sid file outlives the process that
+                # minted it): forget it, or every remaining attempt re-enters
+                # the same dead session and the run dies as agent_failed on one
+                # stale file.
+                self._forget_session(role)
             attempt += 1
             time.sleep(self.agent_retry_sleep * attempt)  # transient backoff
         raise AgentError(f"agent command failed after {self.agent_retries} attempts: {last}")
@@ -692,7 +723,7 @@ class RealBackend:
         if gd.is_dir():
             return gd / self.inflight_file
         try:
-            text = gd.read_text()
+            text = gd.read_text(encoding="utf-8")
         except OSError:
             return None
         if text.startswith("gitdir:"):  # linked worktree: .git is a pointer file
@@ -720,7 +751,7 @@ class RealBackend:
         if path is None:
             return _INFLIGHT_LOG_ATTEMPTS      # no record to count in: old behaviour
         try:
-            rec = json.loads(path.read_text())
+            rec = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return _INFLIGHT_LOG_ATTEMPTS
         if rec.get("job") != job:
@@ -765,7 +796,7 @@ class RealBackend:
         if path is None or not path.exists():
             return None
         try:
-            rec = json.loads(path.read_text())
+            rec = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             rec = {}
         job = rec.get("job")
@@ -865,29 +896,38 @@ class RealBackend:
 
     def harness_changes(self, base: str, head: str) -> list[str] | None:
         """The harness paths ``head`` changes relative to ``base`` (added, removed or
-        edited; committed trees). None when git cannot say."""
+        edited; committed trees). None when git cannot say.
+
+        ``-z`` like the overlay side reads its listings: without it git quotes a
+        non-ASCII path ("eval/b\\303\\251nch.py"), the quoted spelling matches no
+        harness prefix, and a delivery that edited the judge escapes the REVERT.
+        """
         out = subprocess.run(["git", "-C", str(self.workspace), "diff", "--name-only",
-                              "--no-renames", base, head, "--", *harness_guard.HARNESS_PATHSPECS],
+                              "--no-renames", "-z", base, head, "--",
+                              *harness_guard.HARNESS_PATHSPECS],
                              capture_output=True, text=True)
         if out.returncode != 0:
             return None
-        return harness_guard.harness_only(out.stdout.splitlines(), self.kernel_file)
+        return harness_guard.harness_only(
+            [p for p in out.stdout.split("\0") if p], self.kernel_file)
 
     def harness_drift(self, anchor: str) -> list[str] | None:
         """Harness paths where the WORKING TREE differs from ``anchor``: committed or not,
         and untracked files under the harness directories (a reset keeps those, the next
-        ``git add -A`` would commit them). None when git cannot say."""
+        ``git add -A`` would commit them). None when git cannot say. Both listings run
+        with ``-z`` for the same reason harness_changes does."""
         ws = str(self.workspace)
-        diff = subprocess.run(["git", "-C", ws, "diff", "--name-only", "--no-renames", anchor,
-                               "--", *harness_guard.HARNESS_PATHSPECS],
+        diff = subprocess.run(["git", "-C", ws, "diff", "--name-only", "--no-renames",
+                               "-z", anchor, "--", *harness_guard.HARNESS_PATHSPECS],
                               capture_output=True, text=True)
-        new = subprocess.run(["git", "-C", ws, "ls-files", "--others", "--exclude-standard",
-                              "--", *harness_guard.HARNESS_PATHSPECS],
+        new = subprocess.run(["git", "-C", ws, "ls-files", "-z", "--others",
+                              "--exclude-standard", "--", *harness_guard.HARNESS_PATHSPECS],
                              capture_output=True, text=True)
         if diff.returncode != 0 or new.returncode != 0:
             return None
-        return harness_guard.harness_only(diff.stdout.splitlines() + new.stdout.splitlines(),
-                                          self.kernel_file)
+        return harness_guard.harness_only(
+            [p for p in diff.stdout.split("\0") + new.stdout.split("\0") if p],
+            self.kernel_file)
 
     def restore_harness(self, anchor: str, paths: list[str], message: str) -> str:
         """Put ``paths`` back to their ``anchor`` content (removed when ``anchor`` has no
@@ -1327,6 +1367,33 @@ def _reuse_mode(value) -> str:
     return mode
 
 
+def _cfg_int(section: dict | None, key: str, default: int) -> int:
+    """A [loop] integer knob (``_cfg_int(cfg.get("loop"), "stagnation_k", 3)``).
+
+    A mistyped value ("three", "3%") is a config error, refused at launch with
+    the key named — the bare ``int()`` this replaces died with a traceback that
+    gave the value but never the key, on a face where every neighbouring knob
+    (_reuse_mode, _resolve_gate_window) already refuses readably. A TOML float
+    truncates, as it always did.
+    """
+    raw = (section or {}).get(key, default)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise SystemExit(f"[loop] {key} must be an integer, got {raw!r}") from None
+
+
+def _cfg_float(section: dict | None, key: str, default: float, *, label: str = "") -> float:
+    """A [loop] float knob; same readable refusal as _cfg_int. ``label`` names the
+    knob as it appears in loop.toml when the section and the display differ (the
+    lone [target] knob reads "target.floor_margin")."""
+    raw = (section or {}).get(key, default)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        raise SystemExit(f"[loop] {label or key} must be a number, got {raw!r}") from None
+
+
 def _resolve_ref_in_job(cfg: dict, spec: dict) -> bool:
     """[loop] ref_in_job — the bench's in-job comparator is the reference itself.
 
@@ -1651,25 +1718,40 @@ def _ensure_arch_baseline(op: str, op_dir: Path, cfg: dict, *, measure: bool = T
     refuses to substitute the e2e number). They are second choice on purpose: a
     hand-transcribed constant cannot tell that the shape or the image moved under it,
     and an earlier run of this operator was anchored to one that had.
+
+    ``measure=False`` (--dry-run / --harvest-only) reports what a real run would
+    do without writing anything: the plan a dry run prints may name the declared
+    values, but archiving them here would short-circuit their own measurement.
     """
     existing = _cluster_guarded(op, load_baseline(op_dir, ROLE_ARCHITECTURE))
     declared = _declared_arch_baseline(op, cfg)
+    # A declared-sourced archive (the only writer that leaves samples_ms empty;
+    # measure_and_archive always records its runs) is the saved image of
+    # loop.toml. When the toml moves — arch_ref_device_ms added for the device
+    # default, a corrected reading — the archive must follow it, not shadow it:
+    # returning the stale image here sent operators into a dead end where the
+    # prescribed fix (declare the device reading) changed nothing until they
+    # knew to hand-delete arch_baseline.json. A MEASURED archive is never
+    # overwritten by declared values.
+    refresh = (existing is not None and declared is not None
+               and not existing.samples_ms and asdict(existing) != asdict(declared))
+    if not measure:
+        # --dry-run / --harvest-only report the plan without writing it. Archiving
+        # the declared constants here would be the very phase product the fresh
+        # gate refuses a real start over (a dry run manufacturing the
+        # contamination it warns about), and a real start would then load that
+        # archive before the measurement branch was ever reached — target_ms and
+        # every mechanism gate anchored to a hand-transcribed number forever.
+        # Report what a real run WOULD archive, archive nothing. The same guard
+        # _ensure_ref_baseline has always carried.
+        return declared if refresh else (existing or declared)
+    if refresh:
+        print(f"[loop] the archived architecture baseline is a saved image of "
+              f"loop.toml's declared values and the toml changed — refreshing "
+              f"the archive from loop.toml")
+        save_baseline(op_dir, declared)
+        return declared
     if existing:
-        # A declared-sourced archive (the only writer that leaves samples_ms empty;
-        # measure_and_archive always records its runs) is the saved image of
-        # loop.toml. When the toml moves — arch_ref_device_ms added for the device
-        # default, a corrected reading — the archive must follow it, not shadow it:
-        # returning the stale image here sent operators into a dead end where the
-        # prescribed fix (declare the device reading) changed nothing until they
-        # knew to hand-delete arch_baseline.json. A MEASURED archive is never
-        # overwritten by declared values.
-        if declared is not None and not existing.samples_ms \
-                and asdict(existing) != asdict(declared):
-            print(f"[loop] the archived architecture baseline is a saved image of "
-                  f"loop.toml's declared values and the toml changed — refreshing "
-                  f"the archive from loop.toml")
-            save_baseline(op_dir, declared)
-            return declared
         return existing
 
     spec = _arch_ref_spec(cfg)
@@ -2015,9 +2097,20 @@ def _run_finish_monitor(ctx: LoopContext, backend, op_dir: Path, confirm: dict |
 
 
 def _load_loop_config(op_dir: Path) -> dict:
+    """The card's loop.toml, read as UTF-8 (operator hand-written: the file's own
+    comments and values carry non-ASCII, and a locale-dependent read either
+    crashed on the first high byte or silently mojibake'd strings into prompts).
+    A syntax error is a readable refusal naming the file, not a bare
+    TOMLDecodeError from the middle of the launch."""
     cfg = op_dir / "loop.toml"
     if cfg.exists():
-        return tomllib.loads(cfg.read_text())
+        try:
+            return tomllib.loads(cfg.read_text(encoding="utf-8"))
+        except UnicodeDecodeError as e:
+            raise SystemExit(f"[loop] {cfg} is not valid UTF-8 ({e}) — loop.toml is "
+                             f"read as UTF-8 on every machine; fix the file's encoding") from None
+        except tomllib.TOMLDecodeError as e:
+            raise SystemExit(f"[loop] {cfg} is not valid TOML: {e}") from None
     return {}
 
 
@@ -2750,14 +2843,6 @@ def _main(argv: list[str] | None = None) -> int:
             ".peregrine-loop/crash-backup-<ts>/), or pass "
             "--allow-preexisting-artifacts to declare the reuse.\n")
         return 9  # NOT 8: that already means "KB leak lint found provenance"
-    if not args.dry_run:
-        # Ownership transfer: the tree just passed the gate (or the reuse was
-        # declared), so everything the run writes from here on — baselines, recon
-        # findings, the milestone — belongs to it, and a crash anywhere in the
-        # hours-long pre-iteration pipeline must restart into a resume, not a
-        # refusal (a blackbox run's seeded recon tree cannot be repaired by
-        # archiving: the guard's archive list has never covered it).
-        _admit_launch(op_dir, status_path)
 
     # ref_from_goal: generate (or finish generating) the reference now — after the gate,
     # so its products belong to this run, and before the architecture reference and the
@@ -2994,14 +3079,14 @@ def _main(argv: list[str] | None = None) -> int:
         max_probe_rounds=args.max_probe_rounds,
         kb_tripwire_rounds=args.kb_tripwire_rounds,
         max_verdict_probe_rounds=args.max_verdict_probe_rounds,
-        infeasible_min_diagnoses=max(1, int(
+        infeasible_min_diagnoses=max(1, (
             args.min_meta_before_infeasible if args.min_meta_before_infeasible is not None
-            else cfg.get("loop", {}).get("infeasible_min_diagnoses", 1))),
+            else _cfg_int(cfg.get("loop"), "infeasible_min_diagnoses", 1))),
         lever_pricing_rounds=(args.lever_pricing_rounds if args.lever_pricing_rounds is not None
-                              else int(cfg.get("loop", {}).get("lever_pricing_rounds", 3))),
-        lever_pricing_max_levers=int(cfg.get("loop", {}).get("lever_pricing_max_levers", 5)),
+                              else _cfg_int(cfg.get("loop"), "lever_pricing_rounds", 3)),
+        lever_pricing_max_levers=_cfg_int(cfg.get("loop"), "lever_pricing_max_levers", 5),
         reopen_requires_price=bool(cfg.get("loop", {}).get("reopen_requires_price", True)),
-        reopen_max_fruitless=max(0, int(cfg.get("loop", {}).get("reopen_max_fruitless", 2))),
+        reopen_max_fruitless=max(0, _cfg_int(cfg.get("loop"), "reopen_max_fruitless", 2)),
         reuse_unchanged_reading=_reuse_mode(cfg.get("loop", {}).get("reuse_unchanged_reading", "all")),
         declared_gate_close=bool(cfg.get("loop", {}).get("declared_gate_close", True)),
         harness_guard=guard_mode,
@@ -3012,7 +3097,7 @@ def _main(argv: list[str] | None = None) -> int:
         stall_pricing=bool(cfg.get("loop", {}).get("stall_pricing", True)),
         reopen_in_place=bool(cfg.get("loop", {}).get("reopen_in_place", True)),
         reprice_on_new_best=bool(cfg.get("loop", {}).get("reprice_on_new_best", True)),
-        reprice_min_gain_pct=float(cfg.get("loop", {}).get("reprice_min_gain_pct", 3.0)),
+        reprice_min_gain_pct=_cfg_float(cfg.get("loop"), "reprice_min_gain_pct", 3.0),
         timeline_probe=str(cfg.get("loop", {}).get("timeline_probe", "off")),
         orch_census=bool(cfg.get("loop", {}).get("orch_census", True)),
         # Single-ref contract: a ref measured through a separate submission tree
@@ -3029,7 +3114,7 @@ def _main(argv: list[str] | None = None) -> int:
         # Suspicious-watermark confirmation margin (loop.toml [loop] watermark_margin,
         # 0 disables): a new best beyond this fraction is re-measured before it
         # anchors meta transactions.
-        watermark_margin=float(cfg.get("loop", {}).get("watermark_margin", 0.03)),
+        watermark_margin=_cfg_float(cfg.get("loop"), "watermark_margin", 0.03),
         # Records are stamped with the machine they ran on and judged against
         # same-machine rows; on another machine (a resume elsewhere) the target is
         # restated from a reference measured there (the reanchor_ref channel below).
@@ -3037,36 +3122,37 @@ def _main(argv: list[str] | None = None) -> int:
         # Phantom-gap re-anchor band (loop.toml [loop] reanchor_band, 0 disables):
         # a gap-driven diagnosis whose residual sits inside this fraction first
         # re-anchors the ref same-period — the ref-side mirror of watermark_margin.
-        reanchor_band=float(cfg.get("loop", {}).get("reanchor_band", 0.06)),
+        reanchor_band=_cfg_float(cfg.get("loop"), "reanchor_band", 0.06),
         evidence_dir=evidence_dir, ref_price_dir=ref_price_dir,
         ref_price_backend=ref_price_backend, ref_price_app=ref_price_app,
         # PM-sampling interval for the frozen pricing recipe (both trees); 0 =
         # from the target reading (sub-0.5 ms kernels -> 2048, else 8192)
-        ref_price_pm_interval=int(cfg.get("loop", {}).get("ref_price_pm_interval", 0) or 0),
+        ref_price_pm_interval=_cfg_int(cfg.get("loop"), "ref_price_pm_interval", 0),
         # --- WP1: measurement resolution (loop.toml [loop] resolvable_floor /
         # resolvable_cap) and the per-iteration confirmation budget of the
         # suspicious-watermark band. Defaults keep the historical bounds.
-        resolvable_floor=float(cfg.get("loop", {}).get("resolvable_floor", 0.005)),
-        resolvable_cap=float(cfg.get("loop", {}).get("resolvable_cap", 0.015)),
-        confirm_budget_per_iter=max(1, int(
-            cfg.get("loop", {}).get("confirm_budget_per_iter", 1))),
+        resolvable_floor=_cfg_float(cfg.get("loop"), "resolvable_floor", 0.005),
+        resolvable_cap=_cfg_float(cfg.get("loop"), "resolvable_cap", 0.015),
+        confirm_budget_per_iter=max(1, _cfg_int(
+            cfg.get("loop"), "confirm_budget_per_iter", 1)),
         # [loop] m0_probe_rounds: ARCH_PROBE's GPU-job budget (WP6; default 2 —
         # one job per of the two candidate skeletons, 0 disables, <2 skips).
-        m0_probe_rounds=int(cfg.get("loop", {}).get("m0_probe_rounds", 2)),
+        m0_probe_rounds=_cfg_int(cfg.get("loop"), "m0_probe_rounds", 2),
         # [loop] stagnation_k / multi_candidate_max (WP10; the forwarding lines
         # its CHANGES reserved for the integration step, the m0_probe_rounds
         # precedent): the architecture-escape trigger's K (0 disables) and the
         # MC-DELIVERY cap. Card-layer [loop] is the override surface; these
         # defaults govern launches that don't set the keys.
-        stagnation_k=int(cfg.get("loop", {}).get("stagnation_k", 3)),
-        multi_candidate_max=int(cfg.get("loop", {}).get("multi_candidate_max", 3)),
+        stagnation_k=_cfg_int(cfg.get("loop"), "stagnation_k", 3),
+        multi_candidate_max=_cfg_int(cfg.get("loop"), "multi_candidate_max", 3),
         # --- WP9: measurement anchoring — [target] floor_margin (a weak/absent-ref
         # run's stop derives from the analytic floor) and [loop] floor_stop /
         # floor_stop_margin (stop at floor x (1 + margin) once a verified-BLOCKED
         # diagnosis explored the structural channel). Both default off.
-        target_floor_margin=float((cfg.get("target") or {}).get("floor_margin", 0) or 0),
+        target_floor_margin=_cfg_float(cfg.get("target"), "floor_margin", 0,
+                                       label="target.floor_margin"),
         floor_stop=bool(cfg.get("loop", {}).get("floor_stop", False)),
-        floor_stop_margin=float(cfg.get("loop", {}).get("floor_stop_margin", 0.10)),
+        floor_stop_margin=_cfg_float(cfg.get("loop"), "floor_stop_margin", 0.10),
         # --- WP8: prior supply (teacher-side; all off/empty = pre-WP8 briefs) --
         # [loop] teacher_prior_survey: the teacher researches public SOTA for the
         #   operator family (skills/sota-survey/) and writes notes/prior_art.md
@@ -3085,7 +3171,7 @@ def _main(argv: list[str] | None = None) -> int:
                    or _default_carry_dir(args.op)),
         # [loop] m0_probe_candidates: the ARCH_PROBE bracket width (WP8; default
         #   2 = the WP6 behavior), clamped to m0_probe_rounds at run time.
-        m0_probe_candidates=int(cfg.get("loop", {}).get("m0_probe_candidates", 2)),
+        m0_probe_candidates=_cfg_int(cfg.get("loop"), "m0_probe_candidates", 2),
     )
     # The re-anchor's measurement channel: the same fresh-ref path the finish
     # confirmation uses (measure_ref_fresh — parsed readings, never archived, so
@@ -3357,6 +3443,20 @@ def _main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"[loop] error: [loop] correctness_monitor_profiles: {e}\n")
         return 2
 
+    # Ownership transfer, written only now that every synchronous refusal gate has
+    # passed: the tree the loop is about to start on belongs to this run, and a
+    # crash anywhere from here on must restart into a resume, not a refusal (a
+    # blackbox run's seeded recon tree cannot be repaired by archiving: the
+    # guard's archive list has never covered it). Not written beside the fresh
+    # gate above: a sentinel that predates the gates between there and here
+    # (baselines, target derivation, target workloads, harness drift, strict
+    # precision, KB, job env) would turn a refused launch's retry into a resume,
+    # and the fresh-start-only refusals — EXIT_TARGET_WORKLOADS, EXIT_HARNESS_DRIFT,
+    # EXIT_PRECISION_UNREPORTED — would degrade to warnings with the unfixed
+    # config silently carried into the run.
+    if not args.dry_run:
+        _admit_launch(op_dir, status_path)
+
     try:
         summary = run_two_layer(ctx, max_meta=args.max_meta)
     except (AgentError, BackendError) as e:
@@ -3371,7 +3471,7 @@ def _main(argv: list[str] | None = None) -> int:
     # for budget, and before harvest so the ratio lands in the log next to the run's
     # verdicts. Its own failure must not cost the harvest below.
     confirm_jobs = args.confirm_jobs if args.confirm_jobs is not None else \
-        int(cfg.get("loop", {}).get("confirm_jobs", 3))
+        _cfg_int(cfg.get("loop"), "confirm_jobs", 3)
     confirm = None
     if confirm_jobs > 0:
         # A same-job parity stop named its own sha (not necessarily the absolute
@@ -3486,7 +3586,7 @@ def _main(argv: list[str] | None = None) -> int:
     summary["lane"] = "memo" if ctx.memo_lane else "strict"
     print(f"[loop] done: {json.dumps(summary)}")
     (op_dir / SUMMARY_FILE).write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
-    records = status_path.read_text().count("\n")
+    records = status_path.read_text(encoding="utf-8").count("\n")
     print(f"[loop] status.jsonl now has {records} records at {status_path}")
     return 0
 

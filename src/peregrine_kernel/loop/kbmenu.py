@@ -58,6 +58,17 @@ def _num(readings: dict, key: str):
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+def _num_or(readings: dict, key: str, absent):
+    """The reading, or ``absent`` only when the key carries no number at all. A
+    measured 0.0 is a measurement -- for l2_hit_rate_pct / compute_sol_pct /
+    waves_per_sm it is the strongest form of the very symptoms these rules
+    catch -- so it must compare as itself, never be swapped for the
+    absent-value sentinel (the tensor_pct rule's ``is not None`` is the same
+    reading, spelled out)."""
+    v = _num(readings, key)
+    return absent if v is None else v
+
+
 @dataclass(frozen=True)
 class Rule:
     name: str
@@ -111,14 +122,14 @@ RULES: list[Rule] = [
     ),
     Rule(
         "l2-low",
-        lambda r, ru: (_num(r, "l2_hit_rate_pct") or 100.0) < L2_LOW_PCT,
+        lambda r, ru: _num_or(r, "l2_hit_rate_pct", 100.0) < L2_LOW_PCT,
         lambda r, ru: f"l2_hit_rate_pct={_fmt(_num(r, 'l2_hit_rate_pct'))} < {L2_LOW_PCT:g}",
         ("swizzle", "reference"),
         "tiling-order / swizzle / raster levers (check the working set against L2 first)",
     ),
     Rule(
         "waves-low",
-        lambda r, ru: (_num(r, "waves_per_sm") or 1.0) < WAVES_LOW,
+        lambda r, ru: _num_or(r, "waves_per_sm", 1.0) < WAVES_LOW,
         lambda r, ru: f"waves_per_sm={_fmt(_num(r, 'waves_per_sm'))} < {WAVES_LOW:g}",
         ("persistent",),
         "grid-shape / tail / persistent-scheduling levers (settle the grid before inner-loop tuning)",
@@ -132,8 +143,8 @@ RULES: list[Rule] = [
     ),
     Rule(
         "latency-bound",
-        lambda r, ru: (_num(r, "compute_sol_pct") or 100.0) < SOL_WARM_PCT
-        and (_num(r, "memory_sol_pct") or 100.0) < SOL_WARM_PCT,
+        lambda r, ru: _num_or(r, "compute_sol_pct", 100.0) < SOL_WARM_PCT
+        and _num_or(r, "memory_sol_pct", 100.0) < SOL_WARM_PCT,
         lambda r, ru: (f"both SOL low (compute={_fmt(_num(r, 'compute_sol_pct'))}%, "
                        f"memory={_fmt(_num(r, 'memory_sol_pct'))}%)"),
         None,
@@ -141,8 +152,8 @@ RULES: list[Rule] = [
     ),
     Rule(
         "unbound-attribution",
-        lambda r, ru: (_num(r, "compute_sol_pct") or 100.0) < SOL_WARM_PCT
-        and (_num(r, "memory_sol_pct") or 100.0) < SOL_WARM_PCT
+        lambda r, ru: _num_or(r, "compute_sol_pct", 100.0) < SOL_WARM_PCT
+        and _num_or(r, "memory_sol_pct", 100.0) < SOL_WARM_PCT
         and (_num(r, "tensor_pct") is not None and _num(r, "tensor_pct") < SOL_WARM_PCT),
         lambda r, ru: f"tensor_pct={_fmt(_num(r, 'tensor_pct'))}% with both SOL low",
         None,
@@ -196,7 +207,7 @@ RULES: list[Rule] = [
     ),
     Rule(
         "prefetch-lead",
-        lambda r, ru: (_num(r, "l2_hit_rate_pct") or 100.0) < 20.0,
+        lambda r, ru: _num_or(r, "l2_hit_rate_pct", 100.0) < 20.0,
         lambda r, ru: f"l2_hit_rate_pct={_fmt(_num(r, 'l2_hit_rate_pct'))} < 20 (almost no L2 reuse)",
         ("prefetch",),
         "bulk-prefetch lead levers (start the next tile's L2 fill early; read the L2 hit rate so "

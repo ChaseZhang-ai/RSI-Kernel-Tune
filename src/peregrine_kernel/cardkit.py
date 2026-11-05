@@ -219,7 +219,7 @@ LB_REFUSE=0
 if [ "$LB_REQUIRE_CLOCK_LOCK" = "1" ] && [ "${{LB_CLOCK_STATE%% *}}" != "locked" ]; then
     case "$TASK" in
         help) ;;
-        perf|all|cardref|ref) LB_REFUSE=1 ;;
+        perf|all|cardref|ref|allncu) LB_REFUSE=1 ;;
         *) [ "$LB_CLOCK_STATE" = "unlocked" ] || LB_REFUSE=1 ;;
     esac
 fi

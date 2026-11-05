@@ -186,7 +186,17 @@ def main(argv: list[str] | None = None) -> int:
     kernel = os.path.join(ROOT, args.kernel)
     kernel = kernel if os.path.isfile(kernel) else None
     profiles = [p.strip() for p in args.profiles.split(",") if p.strip()]
-    outer = float(os.environ.get("TASK_TIMEOUT") or 0)
+    # TASK_TIMEOUT is operator-reachable (submit.toml [env] rides through): a typo
+    # used to raise ValueError here, before any output existed -- the job died with
+    # a traceback and zero MARKER, and the parse could only read "printed no
+    # result". An unreadable value keeps the default budget, loudly.
+    raw_timeout = (os.environ.get("TASK_TIMEOUT") or "").strip()
+    try:
+        outer = float(raw_timeout) if raw_timeout else 0.0
+    except ValueError:
+        print(f"[pk-monitor] TASK_TIMEOUT={raw_timeout!r} is not a number -- using the "
+              f"default budget (3600s); fix the job env", flush=True)
+        outer = 0.0
     budget = args.budget_s or (0.85 * outer if outer > 0 else 3600.0)
     cardref = not args.no_cardref and _has_task(entry, "cardref")
     work = tempfile.mkdtemp(prefix="pk_monitor_")

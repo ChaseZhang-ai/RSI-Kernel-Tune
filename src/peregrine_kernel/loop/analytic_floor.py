@@ -175,9 +175,14 @@ def resolve_dim(spec: object, axes: dict, resolver: _ShapeResolver) -> int | Non
         resolver.unresolved = True
         return None
     if isinstance(spec, (int, float)):
-        return int(spec)
+        # json.loads parses Infinity/NaN literals natively: int(inf) is an
+        # OverflowError (not a ValueError -- it escapes the drivers' catch), so a
+        # non-finite entry is simply not resolvable
+        return int(spec) if math.isfinite(spec) else None
     v = resolver.eval(spec)
-    return int(v) if v is not None and v == int(v) and v > 0 else None
+    if v is None or not math.isfinite(v):
+        return None
+    return int(v) if v == int(v) and v > 0 else None
 
 
 # --- tensor bytes ----------------------------------------------------------------
@@ -214,10 +219,17 @@ def tensors_bytes(tensors: list[dict], axes: dict, assumptions: list[str]) -> in
 
 # --- family floors ---------------------------------------------------------------
 
+def _finite_num(v: object) -> bool:
+    """A JSON-legal number the formulas can charge: not a bool, and finite (the
+    ``Infinity``/``NaN`` literals json.loads accepts would OverflowError at the
+    int() conversion -- the TypeError/OverflowError lesson, CORPS-C1's sibling)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 def _axis(axes: dict, kind: str) -> int | None:
     for name in _AXIS_ALIASES[kind]:
         v = axes.get(name)
-        if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+        if _finite_num(v) and v > 0:
             return int(v)
     return None
 
@@ -250,7 +262,11 @@ def family_of(problem: dict) -> str | None:
 
 def _gemm_flops(axes: dict, assumptions: list[str]) -> int | None:
     m, n, k = (axes.get(a) for a in ("m", "n", "k"))
-    if None in (m, n, k) or min(m, n, k) <= 0:
+    # problem.json is the operator's hand-write face: a string axis or an
+    # Infinity/NaN literal is JSON-legal, and min("4096", 8, 8) / int(inf) must
+    # read "not resolvable" (flops not charged, bytes roofline survives), not
+    # raise TypeError/OverflowError through the drivers' (OSError, ValueError)
+    if not (_finite_num(m) and _finite_num(n) and _finite_num(k)) or min(m, n, k) <= 0:
         assumptions.append("gemm: m/n/k axes not resolvable — flops not charged")
         return None
     return 2 * int(m) * int(n) * int(k)          # every MAC once
@@ -289,10 +305,14 @@ def _conv_flops(axes: dict, assumptions: list[str]) -> int | None:
     for key, names in keys:
         for nm in names:
             v = axes.get(nm)
-            if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
+            if _finite_num(v) and v > 0:
                 vals[key] = int(v)
                 break
-    kd = axes.get("k_d") or axes.get("kd") or 1
+    kd = 1
+    for nm in ("k_d", "kd"):
+        if _finite_num(axes.get(nm)):
+            kd = axes[nm]
+            break
     missing = [k for k, _ in keys if k not in vals]
     if missing:
         assumptions.append(f"conv: axes {missing} not resolvable — flops not charged")

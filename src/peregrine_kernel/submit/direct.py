@@ -41,7 +41,7 @@ import subprocess
 import tarfile
 import time
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from peregrine_kernel.submit.config import SubmitConfig, is_secret_env
 from peregrine_kernel.submit.jobs import (BEGIN_MARKER, RUN_HEADROOM_S, STATUS_FAILED,
@@ -109,6 +109,7 @@ INPUTS_SYNC_MIN_BYTES = 1 << 20   # files at/above this ride the store (the tax 
 INPUTS_DIR_SEGMENT = "inputs"     # a path component: <...>/inputs/<...> is input-tensor territory
 INPUTS_STORE_ENV = "PK_INPUTS_STORE"
 INPUTS_SYNC_ENV = "PK_INPUTS_SYNC"
+LOCAL_TREE_ROOT = LOCAL_TREE.split("/", 1)[0]   # ".exec": the extraction tree's root
 # --- WP19 (task 1 addendum, A-G24/B-B7): inputs manifest cost cut ------------------------
 # Every job used to read every input file twice in full (the source-side sha,
 # then the store-side recheck) — GB-scale tensors, per job. The source-side
@@ -226,9 +227,18 @@ def sync_inputs_to_store(cfg: SubmitConfig, store: Path | None = None) -> list |
     memo = _inputs_load_manifest(store)
     manifest: list[dict] = []
     for idx, path in enumerate(sorted(op_dir.rglob("*"))):
+        rel = path.relative_to(op_dir)
+        if LOCAL_TREE_ROOT in rel.parts:
+            # The extraction tree (LOCAL_TREE) is a previous job's workplace,
+            # not input territory: its inputs/ copies are restored data, and
+            # syncing them rebuilt a stale copy -- nested one level deeper --
+            # inside every new job tree (BUG-CH-I-01). Forget any junk entry an
+            # older sync memoized for it.
+            memo.pop(rel.as_posix(), None)
+            continue
         if not path.is_file() or path.stat().st_size < INPUTS_SYNC_MIN_BYTES:
             continue
-        if INPUTS_DIR_SEGMENT not in path.relative_to(op_dir).parts:
+        if INPUTS_DIR_SEGMENT not in rel.parts:
             continue
         entry = _inputs_manifest_entry(op_dir, path, memo)
         if entry is None:
@@ -288,6 +298,12 @@ def restore_inputs_from_store(tree: Path, manifest: list,
     to the full archive."""
     store = store if store is not None else inputs_store_dir()
     for entry in manifest:
+        rel = str(entry["path"])
+        if LOCAL_TREE_ROOT in PurePosixPath(rel).parts:
+            # A manifest (hand-edited, or polluted by the pre-CH-I-01 sync)
+            # must never rebuild the extraction tree inside a fresh job tree.
+            raise RuntimeError(f"manifest entry {rel!r} is inside the extraction "
+                               f"tree ({LOCAL_TREE}) -- refusing to rebuild it")
         src = store / entry["sha256"]
         dest = tree / entry["path"]
         dest.parent.mkdir(parents=True, exist_ok=True)

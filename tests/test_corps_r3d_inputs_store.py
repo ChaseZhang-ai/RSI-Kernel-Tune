@@ -128,3 +128,59 @@ def test_two_trees_sharing_a_store_cannot_inherit_each_others_memo(tmp_path):
     memo = direct._inputs_load_manifest(direct.inputs_store_dir())
     assert memo[rel]["op"] != op_while_b        # the record follows its own tree
     assert memo[rel]["sha256"] == sha_a
+
+
+# -- BUG-CH-I-01: the previous job's extraction tree is not input territory -----
+
+
+def _plant_extraction_junk(d: Path) -> Path:
+    """A previous job's leftover extraction tree, carrying an inputs/ copy over
+    the sync threshold -- exactly what a local run leaves behind."""
+    junk = d / direct.LOCAL_TREE / "eval" / "problem" / "inputs" / "s1" / "g.safetensors"
+    junk.parent.mkdir(parents=True)
+    junk.write_bytes(b"STALE-JUNK!" * (direct.INPUTS_SYNC_MIN_BYTES // 11 + 8))
+    return junk
+
+
+def test_sync_inputs_ignores_the_extraction_tree(tmp_path):
+    d, cfg = _op(tmp_path)
+    _plant_extraction_junk(d)
+    manifest = direct.sync_inputs_to_store(cfg)
+    assert all(".exec" not in Path(e["path"]).parts for e in manifest)
+    memo = direct._inputs_load_manifest(direct.inputs_store_dir())
+    assert all(".exec" not in Path(k).parts for k in memo)
+
+
+def test_sync_purges_junk_entries_from_a_polluted_memo(tmp_path):
+    d, cfg = _op(tmp_path)
+    _plant_extraction_junk(d)
+    junk_rel = ".exec/tree/eval/problem/inputs/s1/g.safetensors"
+    direct._inputs_save_manifest(direct.inputs_store_dir(), {
+        junk_rel: {"op": direct._op_tree_identity(Path(cfg.op_dir)),
+                   "size": 99, "mtime_ns": 1, "sha256": "deadbeef"}})
+    direct.sync_inputs_to_store(cfg)
+    memo = direct._inputs_load_manifest(direct.inputs_store_dir())
+    assert junk_rel not in memo
+
+
+def test_restore_refuses_extraction_tree_entries(tmp_path):
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    entry = {"path": ".exec/tree/eval/problem/inputs/x.bin",
+             "sha256": "0" * 64, "size": 4}
+    with pytest.raises(RuntimeError, match="extraction tree"):
+        direct.restore_inputs_from_store(tree, [entry])
+    assert not (tree / ".exec").exists()
+
+
+def test_a_job_tree_never_nests_the_previous_extraction(tmp_path):
+    """End to end: the junk a local job's tree carried must not be scanned into
+    the manifest and re-built (nested) inside the next job's tree."""
+    d, cfg = _op(tmp_path)
+    _plant_extraction_junk(d)
+    rid = "9"
+    ds.jobs_dir(Path(cfg.op_dir)).joinpath(rid).mkdir(parents=True, exist_ok=True)
+    rc = ds.runner_main(cfg, rid, "perf", cfg.branch)
+    log = ds.log_path(Path(cfg.op_dir), rid).read_text()
+    assert rc == 0, log
+    assert not (d / direct.LOCAL_TREE / ".exec").exists()

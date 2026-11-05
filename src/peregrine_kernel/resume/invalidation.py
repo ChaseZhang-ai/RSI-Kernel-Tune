@@ -119,6 +119,15 @@ def compute_reopen(
     while True:
         hot = changed | reopen
         grew = False
+        # ⊗ is a pair obligation, not a directed edge: a decision named by a
+        # reopened declaration joins even when it declares nothing itself, so a
+        # one-sided declaration cannot split the pair (one half redone, one kept
+        # describing the old tree). The d.companions & reopen condition below is
+        # the other direction (the declarator follows its reopened companion).
+        named: set[str] = set()
+        for o in trajectory:
+            if o.id in reopen:
+                named |= o.companions
         for d in trajectory:
             if d.id in reopen:
                 continue

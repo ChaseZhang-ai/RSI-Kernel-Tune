@@ -45,7 +45,13 @@ def parse_perf(stdout: str) -> dict:
     region = stdout[marker:] if marker != -1 else stdout
     obj = _first_json_with_key(region, "performance") or _first_json_with_key(stdout, "performance")
     if obj is None:
-        return empty
+        # say why: an unparseable block after the marker and a missing marker are
+        # different diagnoses, and an all-None result without a note reads as
+        # "the bench said nothing" when it may have said something unreadable
+        return {**empty,
+                "note": ("the === JSON === block does not parse into an object "
+                         "carrying 'performance'" if marker != -1 else
+                         "no === JSON === block in the output")}
     corr = obj.get("correctness", {})
     perf = obj.get("performance", {})
     return {

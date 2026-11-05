@@ -226,6 +226,20 @@ def classify(result: dict | None) -> dict:
                          f"the rest never ran")
     for s in result.get("skipped") or []:
         add("info", s.get("profile", "?"), f"not run: {s.get('why')}")
+    # The hook reports how many processes it ran in (run.py counts the
+    # hook-<pid>.json files). Zero while a profile DID run means the sitecustomize
+    # injection failed somewhere: the output / input checks never executed at all.
+    # That is a finding of its own — not the "bench does not import the kernel"
+    # story a merely-empty calls list used to be mistaken for. Records written
+    # before run.py counted processes carry no verdict either way.
+    dead = [r.get("profile", "?") for r in result.get("profiles") or []
+            if (r.get("hook") or {}).get("processes") == 0]
+    if dead:
+        add("warn", "-", f"the monitor hook never ran (processes=0 in {len(dead)} of "
+                         f"{len(recs)} profile(s): {', '.join(dead[:6])}) — sitecustomize "
+                         f"did not load the hook into the bench process, so NaN watching "
+                         f"and input-shift detection did not execute; the card's verdicts "
+                         f"under each profile still count")
     if base is None:
         add("warn", "base", "the base run is missing — nothing to compare the other profiles with")
     else:
@@ -252,7 +266,7 @@ def classify(result: dict | None) -> dict:
                 add("warn", "base", f"{key[0]}[{key[1]}] produces {nan} NaN on the card's "
                                     f"own inputs and the card passes it")
 
-    base_calls = _calls(base) if base else {}
+    base_calls = _base_calls(base) if base else {}
     for prof, rec in recs.items():
         if prof == "base":
             if not _not_injected(rec):
@@ -310,11 +324,12 @@ def classify(result: dict | None) -> dict:
             continue
         ran.append(prof)
         # NaN the base run did not have, whatever the card's judge says
-        for key, c in _calls(rec).items():
+        for c in _calls(rec).values():
             nan = _nonfinite(c.get("outputs") or [], "nan")
             nan0 = _nonfinite(_counterpart(base_calls, key).get("outputs") or [], "nan")
             if nan and not nan0:
-                add("alarm", prof, f"{key[0]}[{key[1]}] produces {nan} NaN under {desc} "
+                fn, i = _call_key(c)
+                add("alarm", prof, f"{fn}[{i}] produces {nan} NaN under {desc} "
                                    f"(none on the card's own inputs); card verdict: "
                                    f"{'PASS' if verdict else 'FAIL'}")
         if prof == "repeat":

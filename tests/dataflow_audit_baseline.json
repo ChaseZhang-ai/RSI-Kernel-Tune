@@ -1,9 +1,4 @@
 {
- "IterationRecord.clock_drift": {
-  "kind": "field",
-  "owner": "WP15",
-  "note": "Zero read points in the whole repo: written by the driver (driver.py:3030) with no consumer afterwards; the trigger logic re-derives from gpu_state rather than the flag. To be consumed by WP15's out-of-confirm-band historical-row handling (rejection / interpretation)."
- },
  "IterationRecord.gate_spread_pct": {
   "kind": "field",
   "owner": "WP15",

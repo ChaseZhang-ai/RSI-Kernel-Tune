@@ -490,7 +490,11 @@ def _read_description(d: Path, problems: list[str]) -> str:
         problems.append(f"{DESCRIPTION_FILE} is missing (the teacher writes the correctness "
                         f"judge from it)")
         return ""
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as e:
+        problems.append(f"{DESCRIPTION_FILE} is not valid UTF-8 ({e}); save it as UTF-8")
+        return ""
     if not text.strip():
         problems.append(f"{DESCRIPTION_FILE} is empty")
     return text
@@ -503,6 +507,9 @@ def _read_shapes(d: Path, problems: list[str]) -> list[Shape]:
         return []
     try:
         rows = json.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as e:
+        problems.append(f"{SHAPES_FILE} is not valid UTF-8 ({e}); save it as UTF-8")
+        return []
     except json.JSONDecodeError as e:
         problems.append(f"{SHAPES_FILE} does not parse: {e}")
         return []

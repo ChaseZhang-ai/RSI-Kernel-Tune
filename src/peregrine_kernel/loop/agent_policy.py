@@ -497,11 +497,13 @@ def command_findings(cmds: list[str | None], env: dict[str, str],
         texts.append(("agent command", cmd))
         texts += script_texts(cmd, env, cwd)
 
-    # Every agent command rides the same "agent command" source: keying the dedup on
-    # the source alone dropped the second command's findings whole (the teacher leg
-    # rides second and was invisible to the gate). A script file is still read once —
-    # its (path, text) pair repeats only when the same unchanged file is named again.
-    findings, seen = [], set()
+    # Dedup on (source, text), never on source alone: every command gets the same
+    # source tag, so a source-keyed set kept only the FIRST command (the student's)
+    # and silently dropped the rest — a teacher command carrying --bare / --settings
+    # / a cd then ran without the project settings the policy is delivered in
+    # (BUG-SEED-17). The same script named by several commands still reads once.
+    findings: list = []
+    seen: set = set()
     for source, text in texts:
         if (source, text) in seen:
             continue
@@ -540,7 +542,8 @@ def command_findings(cmds: list[str | None], env: dict[str, str],
                 findings.append(f"{source}: changes directory (chdir) before running "
                                 f"the agent, so the policy in the working directory "
                                 f"would not be loaded")
-    return findings
+    # two commands with the same defect would repeat one finding verbatim: say it once
+    return list(dict.fromkeys(findings))
 
 
 # -- loop.toml ---------------------------------------------------------------------------

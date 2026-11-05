@@ -216,7 +216,9 @@ def test_the_host_path_note_records_the_deployment_cost_without_touching_the_gat
                           ref_host_enqueue_ms=SPAN_REF_HOST_MS)
     assert note.startswith("HOST PATH:")
     assert "NOT affected" in note and "not a gate" in note
-    assert "3.4x thinner" in note                   # 0.06463 / 0.01911
+    # BUG-SEED-23: the direction word follows the actual ratio. The merged note's
+    # subject is the reference (0.01911 ms vs our 0.06463 ms): it is 3.4x thinner.
+    assert "3.4x thinner" in note
     assert "inflated" not in note and "HOST-BOUND" not in note
 
 

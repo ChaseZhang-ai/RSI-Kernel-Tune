@@ -122,6 +122,17 @@ def test_noise_floor():
     assert se.noise_floor({"ratios": [1.0, 1.05, 1.02]}) == pytest.approx(0.05)
 
 
+def test_noise_floor_with_a_zero_ratio_stops_the_chain_instead_of_crashing():
+    # BUG-SEED-27: a zero ratio is nonsense data (a timed kernel never takes 0 ms);
+    # the old (max - min) / min raised ZeroDivisionError on it. Adapted at the merge:
+    # the floor raises a readable ValueError instead of returning an infinite one --
+    # meaningless data stops the chain loudly (stderr + exit 2), never waved through.
+    with pytest.raises(ValueError):
+        se.noise_floor({"ratios": [1.10, 0.0]})
+    with pytest.raises(ValueError):
+        se.noise_floor({"ratios": [0.0, 1.10]})
+
+
 def test_a_generation_without_a_best_ends_the_chain(chain):
     root, ran, ran_runs, gains, _ = chain
     gains += [None]
@@ -141,3 +152,18 @@ def test_an_existing_next_generation_is_not_overwritten(chain, capsys):
     err = capsys.readouterr().err
     assert "rmsnorm-g2" in err and "exists" in err
     assert not (root / "tasks" / "rmsnorm-g2" / "task.toml").exists()
+
+
+def test_a_chain_resumes_from_a_mid_generation_directory(chain):
+    # BUG-SEED-27: starting the chain from tasks/rmsnorm-g2 used to build the
+    # first child as rmsnorm-g2 — the directory the run itself lives in — and die
+    # on FileExistsError. The numbering continues from where you start: the child
+    # of -g2 is -g3.
+    root, ran, ran_runs, gains, _ = chain
+    gains += [1.3, 1.01]
+    start = _task(root, name="rmsnorm-g2")
+    assert se.main([str(start)]) == 0
+    g3 = root / "tasks" / "rmsnorm-g3"
+    assert ran == [start.resolve(), g3]
+    assert (g3 / "reference" / "kernel.py").read_text() == KERNEL
+    assert not (root / "tasks" / "rmsnorm-g4").exists()

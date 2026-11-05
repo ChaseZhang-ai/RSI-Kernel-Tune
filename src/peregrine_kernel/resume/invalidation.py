@@ -80,8 +80,9 @@ class ReopenPlan:
 
     reopen: decisions to redo ON THE CURRENT TREE, in trajectory order — the
             dependency closure of the changed entries (a changed decision, every
-            decision that transitively depends on one, and the ⊗ companions of
-            any of those, since companions land in one commit).
+            decision that transitively depends on one, and every ⊗ companion of
+            any of those — read in both declaration directions, since companions
+            land in one commit whoever named the pair).
     kept:   decisions that stay as built (not in the closure), trajectory order.
     """
 
@@ -116,6 +117,7 @@ def compute_reopen(
     # point at decisions later in the list (companions especially), so one
     # ordered pass is not enough.
     while True:
+        hot = changed | reopen
         grew = False
         for d in trajectory:
             if d.id in reopen:

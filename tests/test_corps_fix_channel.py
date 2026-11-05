@@ -406,14 +406,12 @@ import fcntl as fcntl_mod  # noqa: E402
 
 
 class _QueuedSsh:
-    """The exec step's session queues for the host GPU lock: no begin marker until
-    ``queue_polls`` waits have passed, then the job runs and finishes."""
+    """The exec step's session queues on the host GPU lock and its window expires
+    before any begin marker: the runner sees one wait() whose timeout covers
+    queue + deadline, then maps the markerless expiry to Lost."""
 
-    def __init__(self, queue_polls):
-        self.queue_polls = queue_polls
-        self.polls = 0
+    def __init__(self):
         self.waits = []          # every wait() timeout argument, in order
-        self.began = False
 
     def run(self, argv, input=None, capture_output=False, timeout=None):
         return subprocess.CompletedProcess(argv, 0, b"", b"")
@@ -431,31 +429,28 @@ class _QueuedSsh:
             @staticmethod
             def wait(timeout=None):
                 fake.waits.append(timeout)
-                if fake.polls < fake.queue_polls:
-                    fake.polls += 1
-                    raise subprocess.TimeoutExpired(cmd="ssh", timeout=timeout)
-                if not fake.began:
-                    fake.began = True
-                    stdout.write(f"{jobs.BEGIN_MARKER}\n")
-                    stdout.flush()
-                    raise subprocess.TimeoutExpired(cmd="ssh", timeout=timeout)
-                return 0
+                raise subprocess.TimeoutExpired(cmd="ssh", timeout=timeout)
 
         return _P()
 
 
 def test_the_ssh_deadline_starts_when_the_job_begins_not_while_it_queues(tmp_path,
                                                                          monkeypatch):
-    """The host GPU lock's queue used to sit inside the job's deadline: a queued job
-    was killed and charged Failed for time it never ran. The session prints the begin
-    marker only once it holds the lock, and the deadline starts there."""
+    """The host GPU lock's queue must not sit inside the job's deadline. Adapted at
+    the merge: the r3 line's session script bounds the queue with its own flock -w
+    budget and the runner waits ONCE for queue + deadline, so the pinned shape is
+    that single wait's size, and a markerless expiry reads Lost -- the kernel is
+    never charged for time it spent queued."""
     monkeypatch.setattr(direct, "RUN_HEADROOM_S", 0)
-    cfg = _ssh_cfg(tmp_path)                     # timeout 60 -> deadline 60 s
-    fake = _QueuedSsh(queue_polls=3)
+    cfg = _ssh_cfg(tmp_path)              # timeout 60 -> deadline 60, queue budget 60
+    fake = _QueuedSsh()
     status, log = _ssh_run(cfg, fake)
-    assert status == jobs.STATUS_SUCCEEDED
-    assert fake.waits[:4] == [1.0, 1.0, 1.0, 1.0], "the queue ran on the job's clock"
-    assert fake.waits[4] == pytest.approx(60.0), "the deadline did not start whole at begin"
+    assert fake.waits[0] == pytest.approx(120.0), \
+        "the wait must cover queue budget + deadline, never the queue alone"
+    # fake.waits[1] is the kill path's 30 s settle wait, not a second job window
+    assert status == jobs.STATUS_LOST
+    assert "queued on the GPU lock" in log
+    assert jobs.TRANSPORT_ERROR_MARKER not in log
 
 
 def test_the_session_prints_the_begin_marker_only_under_the_lock(tmp_path):
@@ -465,15 +460,27 @@ def test_the_session_prints_the_begin_marker_only_under_the_lock(tmp_path):
     lock = tmp_path / "gpu.lock"
     lock.write_text("")
     log = tmp_path / "log.txt"
-    with open(lock, "w") as fh, open(log, "w") as lf:
-        fcntl_mod.flock(fh, fcntl_mod.LOCK_EX)
-        proc = subprocess.Popen(
-            ["sh", "-c", direct._SESSION_SCRIPT, str(lock), "bash", "-c", "echo job ran"],
-            cwd=tmp_path, stdout=lf, stderr=subprocess.STDOUT, start_new_session=True)
+    # Adapted at the merge: the session script is _session_script(budget) now -- the
+    # flock wait is bounded, so the same contract is exercised with the lock held
+    # only briefly while the session waits inside its budget.
+    script = direct._session_script(30)
+    hold = open(lock, "w")
+    try:
+        fcntl_mod.flock(hold, fcntl_mod.LOCK_EX)
+        lf = open(log, "w")
+        try:
+            proc = subprocess.Popen(
+                ["sh", "-c", script, str(lock), "bash", "-c", "echo job ran"],
+                cwd=tmp_path, stdout=lf, stderr=subprocess.STDOUT,
+                start_new_session=True)
+        finally:
+            lf.close()
         time.sleep(1.0)
         assert jobs.BEGIN_MARKER not in log.read_text(), \
             "the marker showed while the session was still queued"
-        fcntl_mod.flock(fh, fcntl_mod.LOCK_UN)
+        fcntl_mod.flock(hold, fcntl_mod.LOCK_UN)
+    finally:
+        hold.close()
     assert proc.wait(timeout=30) == 0
     text = log.read_text()
     assert jobs.BEGIN_MARKER in text and "job ran" in text
@@ -495,7 +502,9 @@ def test_an_ssh_drop_after_the_job_began_is_lost_and_ends_the_session(tmp_path):
     fake = _FakeSsh([(255, True)])
     status, log = _ssh_run(cfg, fake)
     assert status == jobs.STATUS_LOST
-    assert "dropped after the job began" in log
+    # Adapted at the merge: the merged runner's Lost line says the outcome on the
+    # host is unknowable (the ssh client died with the job in flight).
+    assert "with the job in flight" in log
     assert jobs.TRANSPORT_ERROR_MARKER not in log
     assert any("pkill" in argv[-1] for argv, _ in fake.runs), \
         "the remote session was not stopped"

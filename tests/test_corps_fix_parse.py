@@ -182,7 +182,9 @@ def test_json_scan_still_finds_the_plain_block():
 
 # --- BUG-SEED-43: one torn line (a run killed mid-append) made load_records -----
 # raise JSONDecodeError, so the whole trajectory — and every resume of it — was
-# unreadable. Unparseable lines are now dropped with one stderr warning.
+# unreadable. A torn FINAL line (the only corruption an append can produce) is now
+# dropped with a stderr note; a broken line anywhere else still raises, since
+# silently truncating the middle would mis-read the run's history.
 
 def _keep_rec(it):
     return IterationRecord(iter=it, decision_id=f"d{it}", change=f"c{it}",
@@ -198,20 +200,23 @@ def test_load_records_tolerates_a_torn_final_line(tmp_path, capsys):
     recs = load_records(p)
     assert [r.iter for r in recs] == [1]          # the history stays readable
     err = capsys.readouterr().err
-    assert "status.jsonl" in err and "unparseable line(s) (2)" in err
+    assert "torn" in err and "status.jsonl" in err
 
 
-def test_load_records_drops_a_bad_middle_line_and_keeps_the_rest(tmp_path, capsys):
+def test_load_records_still_raises_on_a_broken_middle_line(tmp_path):
+    # Adapted at the merge: the lenient any-line drop (the r3 line's variant) was
+    # deduped in favor of the narrow contract -- the middle of an append-only file
+    # cannot be torn, so a broken line there is real corruption and must be loud.
+    import pytest
+
     from peregrine_kernel.inner.trajectory import append_record, load_records
     p = tmp_path / "status.jsonl"
     append_record(p, _keep_rec(1))
     with open(p, "a") as fh:
         fh.write("not json at all\n")
     append_record(p, _keep_rec(2))
-    recs = load_records(p)
-    assert [r.iter for r in recs] == [1, 2]
-    err = capsys.readouterr().err
-    assert "unparseable line(s) (2)" in err
+    with pytest.raises(ValueError):
+        load_records(p)
 
 
 def test_load_records_clean_file_warns_nothing(tmp_path, capsys):

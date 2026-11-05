@@ -25,6 +25,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from peregrine_kernel.task import name_problem
+
 # Template files copied verbatim (with ``<op>`` -> op) from src/peregrine_kernel/card_template/.
 # milestone.md is deliberately absent: the distill step writes it from the oracle,
 # and a scaffolded placeholder would only risk passing the §9 gate and silently
@@ -148,6 +150,15 @@ def main(argv: list[str] | None = None) -> int:
              "delivery that edits them is neither overlaid back to the card nor "
              "refused. Cards for real runs should keep git.")
     args = p.parse_args(argv)
+
+    # BUG-SEED-36: hold the task-name rules at creation, not only at load time --
+    # the operator tree becomes a task the loop loads, and a name the loader will
+    # refuse must not get as far as a git repo on disk.
+    problem = name_problem(args.op)
+    if problem is not None:
+        sys.stderr.write(f"[new] refusing {args.op!r}: {problem}\n")
+        return 2
+
     base = Path(args.base_dir) if args.base_dir else _repo_root()
     op_dir = base / "operators" / args.op
 

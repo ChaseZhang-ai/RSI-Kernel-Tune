@@ -2552,8 +2552,11 @@ def ncu_window(problem_path=None, calls: int = 8, which: str = "kernel") -> None
     pairs = [(v, task_inputs(v, g, "cuda")) for v in _task_shapes(problem)
              for g in task_groups(v)]
     if not pairs:
-        # an empty spread divides by zero below — say why instead
-        raise SystemExit("[ncu] the card has no input groups to profile")
+        # `calls // len(pairs)` divided by zero on the empty groups an empty
+        # input_groups produces (BUG-C5-03): refuse like the bench's fence does
+        print("[bench] ncu: INPUT_ERROR — the workload defines no input groups, "
+              "there is nothing to profile")
+        raise SystemExit(3)
     per = max(1, calls // len(pairs))
     outs = {id(v): allocate_outputs(v, "cuda") if dps else [] for v, _ in pairs}
     for v, inp in pairs:

@@ -80,6 +80,34 @@ def _clean_path(tok: str) -> str:
     return tok.lstrip(_PATH_LWRAP).rstrip(_PATH_RWRAP)
 
 
+_STUDENT_MARK = r"(?m)^[ \t]*{}:[ \t]*"
+"""The turn markers are LINES: anchored to line start like driver.py's
+_ARCH_PROBE_REQUEST_RE, because the vocabulary saturates the prompts and a
+student turn that merely quotes a marker mid-prose must not act on it — a
+prose 'EXHAUSTED: no more ideas' used to terminate the whole run (the driver
+returns None on Exhausted) and a quoted PROBE_REQUEST used to burn a GPU job
+on a path that was never submitted."""
+
+_EXHAUSTED_RE = re.compile(_STUDENT_MARK.format("EXHAUSTED") + r"(.+)")
+
+
+def _exhausted_close(text: str) -> Exhausted | None:
+    """The Exhausted marker, only when it closes the message. The driver's
+    re-prompt states the contract — end the turn with EXACTLY one marker 'and
+    nothing after it' — and Exhausted terminates the whole run, the
+    highest-stakes reading in this parser, so it is held to that contract: the
+    last line-start EXHAUSTED line must be the last non-empty line, or the text
+    falls through to the ordinary shapes (a record after the marker then lands
+    instead of being dropped). The probe markers stay line-start-only: WP19
+    pins PROBE_REQUEST winning over a line that follows it."""
+    last = None
+    for m in _EXHAUSTED_RE.finditer(text):
+        last = m
+    if last is not None and not text[last.end():].strip():
+        return Exhausted(reason=last.group(1).strip())
+    return None
+
+
 def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     """Classify a student agent's final message into the three terminal shapes.
 
@@ -97,7 +125,7 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     saturates the prompts — reach the probe branch and burn a GPU job on a
     path that exists only in the teacher's tree.
     """
-    probe = re.search(r"^\s*PROBE_REQUEST:\s*(\S+)", text, re.MULTILINE)
+    probe = re.search(_STUDENT_MARK.format("PROBE_REQUEST") + r"(\S+)", text)
     if probe:
         return ProbeRequest(path=_clean_path(probe.group(1)))
     # WP19 (task 2): a PROBE-MANIFEST names a ≤4-line list of self-contained
@@ -112,19 +140,15 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     # manifest is not available to it, and re-prompts (loop/driver.py, the
     # `isinstance(turn, ProbeRequest) and turn.manifest` branch) — so an
     # echoed manifest never reaches a GPU job.
-    manifest = re.search(r"PROBE-MANIFEST:\s*(\S+)", text)
+    manifest = re.search(_STUDENT_MARK.format("PROBE-MANIFEST") + r"(\S+)", text)
     if manifest:
         return ProbeRequest(path=_clean_path(manifest.group(1)), manifest=True)
     if allow_recon:
-        recon = re.search(r"RECON_REQUEST:\s*(\S+)", text)
+        recon = re.search(_STUDENT_MARK.format("RECON_REQUEST") + r"(\S+)", text)
         if recon:
             return ReconRequest(path=_clean_path(recon.group(1)))
-    # Line-anchored like PROBE_REQUEST above: the protocol puts the marker on its
-    # own line ("End your turn with EXACTLY one of: ... 'EXHAUSTED: <reason>'"),
-    # and prose that merely mentions the phrase must not stop the run.
-    exhausted = re.search(r"^\s*EXHAUSTED:\s*(.+)", text, re.MULTILINE)
-    if exhausted:
-        return Exhausted(reason=exhausted.group(1).strip())
+    if (exhausted := _exhausted_close(text)) is not None:
+        return exhausted
 
     fields: dict[str, str] = {}
     for line in text.splitlines():
@@ -513,6 +537,26 @@ def _correctness_fail_detail(corr_obj: dict) -> str:
     return "; ".join(parts)
 
 
+_CORRECTNESS_DETAIL_KEYS = ("dq", "dk", "dv")
+"""The attention-gradient spellings the summary listed first, kept verbatim so
+an attn-bwd FAIL's text is byte-identical to before the detail names were
+generalized (a non-attn card's detail dicts — ``rmsnorm_out`` and whatever the
+card's outputs are — used to degrade to "no failure detail in the eval JSON")."""
+
+
+def _correctness_detail_names(corr_obj: dict) -> list[str]:
+    """The correctness object's per-tensor detail keys: every key whose value is
+    a dict carrying a ``max_diff`` / ``error`` key (the shape the bench emits
+    per failing output), the legacy dq/dk/dv spellings first, the rest in the
+    bench's own emission order."""
+    names = [k for k in _CORRECTNESS_DETAIL_KEYS if isinstance(corr_obj.get(k), dict)
+             and ("max_diff" in corr_obj[k] or "error" in corr_obj[k])]
+    names += [k for k, v in corr_obj.items()
+              if k not in _CORRECTNESS_DETAIL_KEYS and isinstance(v, dict)
+              and ("max_diff" in v or "error" in v)]
+    return names
+
+
 def _correctness_error(corr_obj: dict) -> str:
     """The bench's failure verdict, verbatim when it wrote one.
 
@@ -529,10 +573,8 @@ def _correctness_error(corr_obj: dict) -> str:
         # the ranked rows add the RUNNERS-UP the first-fail stop never reached.
         return f"{err}; worst checks: {detail}" if detail and detail not in err else err
     parts = []
-    for name in ("dq", "dk", "dv"):
-        det = corr_obj.get(name)
-        if not isinstance(det, dict):
-            continue
+    for name in _correctness_detail_names(corr_obj):
+        det = corr_obj[name]
         if det_err := det.get("error"):
             parts.append(f"{name}: {det_err}")
         elif "max_diff" in det:
@@ -779,13 +821,16 @@ def job_abend(log: str) -> JobEnd:
         "the archive is cut (the log archiver lags the job) or the job died silently"))
 
 
-def _as_finite_float(raw: str | None) -> float | None:
-    """The token as an error norm / reading, or None when it is not a finite number."""
+def _as_finite_float(raw) -> float | None:
+    """The token / number as a reading, or None when it is not a finite number.
+    The probe verdict path's audit (_audit_pass), reused for the eval JSON's
+    perf scalars: ``float()`` alone turned a bench fault's NaN / inf into a
+    recorded reading that locked every downstream comparison."""
     if raw is None:
         return None
     try:
         v = float(raw)
-    except ValueError:
+    except (ValueError, TypeError):
         return None
     if v != v or v in (float("inf"), float("-inf")):
         return None
@@ -1149,7 +1194,13 @@ def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
     so the old behavior is the data-poor fallback, never a separate mode. A
     record with clock_drift=True is dropped from the sample while enough clean
     rows remain (drifted readings inflate sigma; the fallback keeps a history
-    that is ALL drift measurable, as before).
+    that is ALL drift measurable, as before). A row that reuses an earlier
+    row's reading (``reading_of`` set — the driver's unchanged-tree and
+    declared-gate-close rows) is dropped from both pools entirely: it is a copy
+    of a reading already in the history, not one more draw, and feeding the
+    duplicate to the pools flattened the between-job residuals onto the floor.
+    driver.py's other pools (_runner_up_pool, _climb_streak, the stagnation
+    ledger) exclude reused rows the same way.
 
     ``raw`` (contract C8's injection point): {"pairs": [...], "ratios": [...]} —
     within-job window deviations and between-job job-level ratios the CALLER

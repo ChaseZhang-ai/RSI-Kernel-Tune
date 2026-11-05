@@ -73,6 +73,9 @@ from pathlib import Path
 OK_LINE = "TURN-DELIVERABLE-OK"
 MISSING_LINE = "TURN-DELIVERABLE-MISSING"
 CONDITION_MAX = 4000
+# Budget of one deliverable-check run (BUG-SEED-44: a check that outlives it is a
+# failed check the watch loop handles, never a crash of the leg itself).
+CHECK_TIMEOUT_S = 300
 
 # Variables that mark "running inside a Claude Code session"; a nested session must not
 # inherit them (it would try to talk to the parent's IDE / SSE port).
@@ -689,8 +692,17 @@ class GoalLeg:
     # -- the watch loop ------------------------------------------------------------------
 
     def deliverable(self) -> tuple[bool, str]:
-        r = subprocess.run(self.spec["check"], shell=True, capture_output=True, text=True,
-                           cwd=str(self.cwd), timeout=300)
+        try:
+            r = subprocess.run(self.spec["check"], shell=True, capture_output=True, text=True,
+                               cwd=str(self.cwd), timeout=CHECK_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            # BUG-SEED-44: a check that outlives its budget is a failed check, not a
+            # crash. It used to raise straight through watch() — run() only catches
+            # Interrupted — so the leg died before save_session and session.json kept
+            # its launch-time state ("running", not resumable): a turn whose session
+            # was fine could not be resumed. The watch loop's false-met / deadline
+            # handling does the rest from here.
+            return False, f"the deliverable check timed out after {CHECK_TIMEOUT_S}s"
         out = (r.stdout + r.stderr).strip()
         return (r.returncode == 0 and OK_LINE in out), out
 

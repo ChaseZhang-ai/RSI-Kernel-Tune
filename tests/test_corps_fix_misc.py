@@ -165,9 +165,11 @@ def test_seed36_cmd_init_accepts_a_normal_name(tmp_path, monkeypatch):
 
 
 def test_seed36_scaffold_cli_reports_a_bad_name_readably(capsys):
+    # Adapted at the merge: the refusal rides stderr (the merged name gate's
+    # channel), with the load side's own wording.
     rc = scaffold_mod.main(["../escape"])
     assert rc == 2
-    assert "not a task name" in capsys.readouterr().out
+    assert "not a task name" in capsys.readouterr().err
 
 
 # --- BUG-SEED-38: a failed git status no longer masquerades as "no changes" ------------
@@ -185,18 +187,22 @@ def _git_repo(path: Path) -> None:
 
 def test_seed38_commit_raises_when_git_status_fails(tmp_path, monkeypatch):
     """A failed `git status --porcelain` (empty stdout) used to read as 'nothing to
-    commit' and silently skip the commit; it must be a loud failure instead."""
+    commit' and silently skip the commit; it must be a loud failure instead.
+    Adapted at the merge: the raised type is CalledProcessError (carrying the
+    status output and stderr), the same refusal the r2 line's test pins."""
     _git_repo(tmp_path)
     real_run = subprocess.run
 
     def fake_run(argv, *a, **kw):
         if "status" in argv:
-            return _NS(returncode=128, stdout="", stderr="fatal: bad object HEAD")
+            return _NS(returncode=128, args=argv, stdout="",
+                       stderr="fatal: bad object HEAD")
         return real_run(argv, *a, **kw)
 
     monkeypatch.setattr(taskcard.subprocess, "run", fake_run)
-    with pytest.raises(RuntimeError, match="git status failed"):
+    with pytest.raises(subprocess.CalledProcessError) as ei:
         taskcard._commit(tmp_path, "should never land")
+    assert ei.value.returncode == 128
 
 
 def test_seed38_commit_still_commits_changes_and_skips_a_clean_tree(tmp_path):
@@ -215,11 +221,13 @@ def test_seed38_commit_still_commits_changes_and_skips_a_clean_tree(tmp_path):
 
 
 def test_seed38_kb_changes_reports_a_failed_git_status(tmp_path, monkeypatch, capsys):
-    """rc != 0 used to be read as an empty change set; now it warns on stderr."""
+    """rc != 0 used to be read as an empty change set; now it says so, loudly.
+    Adapted at the merge: the merged kb_changes announces on stdout (_say, the
+    operator's console) with the merged wording."""
     monkeypatch.setattr(launch, "repo_root", lambda: tmp_path)   # not a git repo
     assert launch.kb_changes() == []
-    err = capsys.readouterr().err
-    assert "unknown, not clean" in err and "rc=" in err
+    out = capsys.readouterr().out
+    assert "knowledge-base status unknown" in out and "exit 128" in out
 
 
 def test_seed38_kb_changes_still_lists_real_changes(tmp_path, monkeypatch):

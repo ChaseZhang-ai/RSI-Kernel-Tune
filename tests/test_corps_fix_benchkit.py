@@ -146,16 +146,21 @@ def test_task_correctness_still_judges_a_populated_workload():
     assert {c["group"] for c in verdict["checks"]} == {"g0", "g1"}
 
 
-def test_ncu_window_says_why_when_the_card_has_no_input_groups(tmp_path, monkeypatch):
+def test_ncu_window_says_why_when_the_card_has_no_input_groups(tmp_path, monkeypatch,
+                                                               capsys):
     """Empty pairs used to reach `calls // len(pairs)` — a ZeroDivisionError with
-    no hint. The window now refuses with a message naming the empty card."""
+    no hint. Adapted at the merge: the window refuses with exit 3 (this repo's
+    fence convention) after an INPUT_ERROR line naming the empty card."""
     pdir = tmp_path / "eval" / "problem"
     pdir.mkdir(parents=True)
     pjson = pdir / "problem.json"
     pjson.write_text(json.dumps(_task_problem()), encoding="utf-8")
     monkeypatch.setattr(lb, "_impl", lambda problem, which: (lambda *a: None, False))
-    with pytest.raises(SystemExit, match="no input groups to profile"):
+    with pytest.raises(SystemExit) as ei:
         lb.ncu_window(problem_path=str(pjson))
+    assert ei.value.code == 3
+    out = capsys.readouterr().out
+    assert "INPUT_ERROR" in out and "no input groups" in out
 
 
 # --- BUG-T7C-01: the fresh-recheck child speaks even when the kernel cannot load -----

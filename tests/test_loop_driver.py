@@ -1036,7 +1036,7 @@ def test_kb_certify_quarantines_a_persistent_leak(tmp_path):
     res = run_kb_certify(ctx, diagnosis="G3")
     assert res.certified is False and res.recipe is None
     assert not (kb / "sm90" / "r.md").exists()
-    quarantined = tmp_path / "repo" / "kb_quarantine" / "r.md"
+    quarantined = tmp_path / "repo" / "kb_quarantine" / "sm90__r.md"
     assert quarantined.is_file() and "oracle" in quarantined.read_text()
 
 
@@ -1048,6 +1048,8 @@ def test_inner_iteration_probe_budget_exhausted_is_graceful_revert(tmp_path):
     ctx = _ctx(tmp_path, be)
     ctx.max_probe_rounds = 4
     rec = run_inner_iteration(ctx, 0, metric_before=2.66, last_good_ref="sha-prev")
+    # correctness None, not False (BUG-SEED-02): nothing was evaluated here, and
+    # a False would drop the never-evaluated workspace into scaffold mode on resume
     assert rec is not None and rec.verdict == "REVERT" and rec.correctness is None
     assert "probe" in rec.error.lower()
     assert ("reset", "sha-prev") in be.calls
@@ -5433,6 +5435,8 @@ def test_a_span_basis_round_is_not_audited_as_host_bound(tmp_path, capsys):
     assert "HOST-BOUND STUDENT" not in out
     assert "inflated" not in out
     note = next(l for l in out.splitlines() if "NOTE HOST PATH:" in l)
+    # BUG-SEED-23: the direction word follows the actual ratio. The merged note's
+    # subject is the reference (0.01911 ms vs our 0.06463 ms): it is 3.4x thinner.
     assert "NOT affected" in note and "3.4x thinner" in note
     assert rec.host_bound_ratio is None
     assert rec.device_window_basis == "cupti_kernel_span"

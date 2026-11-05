@@ -274,12 +274,22 @@ class RealBackend:
 
     inflight_file = "pk-inflight.json"
 
+    # Structured trace of overlays that degraded to the tree's own copies
+    # (BUG-SEED-19), one JSON line per affected job: a fail-open overlay failure
+    # must be distinguishable from "identical, no overlay needed" after the fact,
+    # not only in the run log. Lives in the workspace's git dir beside the
+    # in-flight record: it survives every reset and can never ride a job's tree.
+    overlay_fallback_file = "pk-overlay-fallbacks.jsonl"
+
     # A job the card's gpu_entry refused to time because its declared clock lock did
     # not hold on the GPU (jobs.CLOCK_LOCK_REFUSED_MARKER) is never returned to a caller:
-    # submit_gpu spends at most this many ATTEMPTS on it (an initial submit plus
-    # clock_lock_retries - 1 resubmits), then stops with ClockLockRefusedError (nothing
-    # is charged). The state rarely clears by waiting: a GPU that would not lock its
-    # clocks kept refusing — a few retries rule out a one-off; the machine needs a look.
+    # submit_gpu spends at most this many submits IN TOTAL on it (the first plus
+    # this many - 1 resubmits), then stops with ClockLockRefusedError (nothing is
+    # charged). Mind the counting: the lost-runner budget in _submit_gpu_once is
+    # stated the other way — lost_retries EXTRA submits after the first, i.e.
+    # lost_retries + 1 in total. The state rarely clears by waiting: a GPU that
+    # would not lock its clocks kept refusing — a few retries rule out a one-off;
+    # the machine needs a look.
     clock_lock_retries = 3
     clock_lock_retry_sleep_s = 30.0
 
@@ -328,6 +338,9 @@ class RealBackend:
         # sha this backend pushes for a job (see _with_job_env). Empty = off.
         self.job_env_files: dict[str, Path] = {}
         self._job_env_announced: dict[str, str] = {}
+        # Why the last overlay degraded to the tree's own copies ("" = it did not):
+        # a job that did not run the card's judge must be visible, not silent.
+        self._overlay_degraded = ""
         # [loop] harness_guard (loop/harness_guard.py): the card whose tracked harness
         # files (gpu_entry.sh, eval/, ref_bin/, .gitattributes) every job tree carries
         # instead of the lineage's; None = no harness overlay. kernel_file is never
@@ -377,9 +390,10 @@ class RealBackend:
         drains the pipes so this side can print a line every
         ``agent_heartbeat_s`` seconds.
         """
-        # A session of its own: the turn is killed as a GROUP below, and a group is
-        # only the turn's when Popen made one (the shell and every child it spawns --
-        # the model process included -- sit inside it, reachable from here).
+        # The turn's own session: `shell=True` makes Popen's child a wrapper shell,
+        # so killing only that child would orphan the model process under it. A
+        # dedicated process group (the same hygiene goal_ref.py gives a /goal
+        # session) lets the exit path below end everything at once.
         proc = subprocess.Popen(
             cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, text=True, cwd=self.workspace,
@@ -408,10 +422,10 @@ class RealBackend:
             # Ctrl-C / SystemExit lands on THIS thread while the pump owns the
             # pipes. `subprocess.run` killed the child on its way out; a Popen
             # driven from a thread must do that by hand, or the agent (a claude
-            # process) outlives the loop and keeps spending API usage. The shell
-            # is only the turn's first process: its agent (the leg script's
-            # grandchild) survives a bare kill, so the whole GROUP goes, via the
-            # same terminator every other turn-killer here uses.
+            # process) outlives the loop and keeps spending API usage. The
+            # process group is ended, not just the wrapper shell: under
+            # `shell=True` the model process is the wrapper's child, and a
+            # watchdog's SIGKILL path gets no say at all.
             _end_process_group(proc)
             pump.join(timeout=5)
             raise
@@ -536,12 +550,11 @@ class RealBackend:
         Such a job judged and timed nothing: handed back, parse_eval reads "no eval
         JSON" as a correctness FAIL, the driver records a REVERT and spends an
         iteration, and a meta tool spends an attempt — on the machine, not the payload.
-        So it is resubmitted here, within a ``clock_lock_retries``-attempt budget —
-        an initial submit plus ``clock_lock_retries - 1`` resubmits; past that the
-        submit stops with ClockLockRefusedError — a NoRunError, which no caller
-        charges. (``lost_retries`` below reads differently on purpose: there the
-        number is the EXTRA submits after the first loss, so the same value buys one
-        more attempt on that path.)
+        So submit_gpu spends at most ``clock_lock_retries`` submits here IN TOTAL —
+        the first plus ``clock_lock_retries - 1`` resubmits — and past that stops
+        with ClockLockRefusedError — a NoRunError, which no caller charges. (The
+        lost-runner budget in _submit_gpu_once counts the other way: ``lost_retries``
+        EXTRA submits after the first, i.e. ``lost_retries + 1`` in total.)
         """
         refusals = 0
         while True:
@@ -842,7 +855,9 @@ class RealBackend:
 
     def _retry_call(self, fn, what: str):
         """Retry a subprocess.CompletedProcess-returning call on non-zero rc / OS error,
-        with a short backoff: a git or local hiccup clears in seconds.
+        with a short backoff: a git or local hiccup clears in seconds. Every retry
+        is announced, so a caller reading the run log can tell a retrying call from
+        a stalled one.
 
         Two deliberate asymmetries. The backoff follows only the attempts that will
         still happen — a budget that fails every attempt does not sleep past its last
@@ -863,7 +878,9 @@ class RealBackend:
                 if getattr(proc, "returncode", 0) == 0:
                     return proc
                 last = f"rc={proc.returncode} {getattr(proc, 'stderr', '')[-200:].strip()!r}"
-            if attempt < self.git_retries:
+            if attempt < self.git_retries:  # no sleep after the last failure
+                print(f"[loop] {what} failed ({last}); retrying — attempt "
+                      f"{attempt + 1}/{self.git_retries}", flush=True)
                 time.sleep(self.git_retry_sleep * attempt)  # transient backoff
         raise BackendError(f"{what} failed after {self.git_retries} attempts: {last}")
 
@@ -996,8 +1013,8 @@ class RealBackend:
             try:
                 want[path] = src.read_bytes()
             except OSError as e:
-                print(f"[loop] job-env: cannot read the card's {src} ({e}) — {path} rides "
-                      f"the tree's own copy", flush=True)
+                self._overlay_degraded = (f"cannot read the card's {src} ({e}); {path} "
+                                          f"is missing from the overlay")
         drop: list = []
         if self.harness_card is not None:
             card = harness_guard.card_harness_files(self.harness_card, self.kernel_file)
@@ -1010,6 +1027,7 @@ class RealBackend:
                 if not harness_guard.is_git_repo(self.harness_card):
                     self.last_overlay_failure = (f"the card {self.harness_card} is no "
                                                  f"longer a git repository")
+                    self._overlay_degraded = self.last_overlay_failure
                     print(f"[loop] harness overlay: {self.last_overlay_failure} — this "
                           f"job runs the tree's own copies", flush=True)
                 else:
@@ -1017,6 +1035,7 @@ class RealBackend:
                           f"no harness — this job runs the tree's own copies", flush=True)
             elif tree is None:
                 self.last_overlay_failure = f"git cannot list the harness of {ref[:10]}"
+                self._overlay_degraded = self.last_overlay_failure
                 print(f"[loop] harness overlay: {self.last_overlay_failure} — this job "
                       f"runs the tree's own copies", flush=True)
             else:
@@ -1025,6 +1044,8 @@ class RealBackend:
                         want.setdefault(path, src.read_bytes())
                     except OSError as e:
                         self.last_overlay_failure = f"cannot read the card's {src} ({e})"
+                        self._overlay_degraded = (f"cannot read the card's {src} ({e}); "
+                                                  f"{path} is missing from the overlay")
                         print(f"[loop] harness overlay: {self.last_overlay_failure} — "
                               f"this job would run a half card, half lineage judge; the "
                               f"reading is refused", flush=True)
@@ -1053,6 +1074,7 @@ class RealBackend:
         ``last_overlay_failure``: the tree's own copies ride, and the gate refuses
         what such a job read rather than score it under an unverified judge."""
         self.last_overlay_failure = ""   # each push reports only its own failure
+        self._overlay_degraded = ""
         want, drop = self._overlay_wanted(ref)
         ws = self.workspace
         tree = harness_guard.tree_harness_files(ws, ref, "") or {}
@@ -1079,7 +1101,17 @@ class RealBackend:
             print(f"[loop] job-env: could not overlay the card's files ({e}) — this job "
                   f"runs the tree's own copies", flush=True)
             self.last_overlay_failure = f"could not overlay the card's files ({e})"
+            self._overlay_degraded = self.last_overlay_failure
             sha, changes = ref, []
+        if self._overlay_degraded:
+            # BUG-SEED-19: a degraded overlay must never fall through to the dedup'd
+            # announce branch, where an empty change set read as "the tree's copies
+            # match the card — no overlay" and hid the one job that did not run the
+            # card's judge. Say WARNING and leave a structured trace instead.
+            print(f"[loop] WARNING: job-env: {self._overlay_degraded} — the affected "
+                  f"files run the tree's own copies", flush=True)
+            self._note_overlay_fallback(ref, self._overlay_degraded)
+            return sha
         changed = [p for p, _, _ in changes]
         key = ",".join(changed)
         if self._job_env_announced.get("last") != key:
@@ -1092,6 +1124,21 @@ class RealBackend:
                 print("[loop] job-env: the tree's copies match the card — no overlay",
                       flush=True)
         return sha
+
+    def _note_overlay_fallback(self, ref: str, error: str) -> None:
+        """Append one structured line about an overlay that degraded to the tree's own
+        copies (BUG-SEED-19). Best-effort: a workspace that is not a git checkout (or
+        an unwritable git dir) keeps the run-log WARNING as the only trace."""
+        gd = self.workspace / ".git"
+        if not gd.is_dir():
+            return
+        rec = {"ref": ref, "error": error[:300],
+               "note": "the overlay failed; the job ran the tree's own copies"}
+        try:
+            with (gd / self.overlay_fallback_file).open("a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
+        except OSError:
+            pass
 
     def _commit_overlay(self, ref: str, changes: list) -> str:
         """A child commit of ``ref`` carrying ``changes`` [(path, mode, blob) | (path,

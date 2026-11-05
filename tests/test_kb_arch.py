@@ -213,5 +213,7 @@ def test_quarantine_resolves_a_finding_against_the_kb_root(tmp_path):
     ctx.kb_arch = "sm100"
     _quarantine_leaky_kb(ctx, ["sm100/leaky.md:1: banned narrative"])
     assert not leaky.exists()
-    assert (tmp_path / "kb_quarantine" / "leaky.md").is_file()
+    # the tree rides in the quarantine name (BUG-SEED-49: same-named entries
+    # from two trees used to overwrite each other silently)
+    assert (tmp_path / "kb_quarantine" / "sm100__leaky.md").is_file()
     assert (kb / "sm100" / "index.md").is_file()  # the tree itself is untouched

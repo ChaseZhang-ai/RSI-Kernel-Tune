@@ -171,14 +171,17 @@ def test_keep_row_clock_drift_flag_reads_this_cluster_best(tmp_path):
 def test_keep_probe_survives_a_bad_byte_in_the_student_probe(tmp_path, capsys):
     """The probe file is student-authored: one non-UTF-8 byte used to raise
     UnicodeDecodeError straight through the OSError-only handler and stop the
-    whole run. A bad byte degrades instead — the probe is just not kept."""
+    whole run. Adapted at the merge: the kept read is errors="replace" (the
+    content survives with the bad byte replaced) -- the probe is carried over
+    and the run never stops on a decode error."""
     from peregrine_kernel.loop.driver import _keep_probe_across_reset
     be = FakeBackend([], [])
     ctx = _ctx(tmp_path, be)
     probe = tmp_path / "notes" / "p.py"
     probe.parent.mkdir(exist_ok=True)
     probe.write_bytes(b"# rig note: caf\xe9 baseline\nPASS\n")
-    assert _keep_probe_across_reset(ctx, "notes/p.py") is None
+    kept = _keep_probe_across_reset(ctx, "notes/p.py")
+    assert kept is not None and "PASS" in kept and "\ufffd" in kept
     # a decodable probe still round-trips
     probe.write_text("# rig note\nPASS\n", encoding="utf-8")
     assert _keep_probe_across_reset(ctx, "notes/p.py") == "# rig note\nPASS\n"

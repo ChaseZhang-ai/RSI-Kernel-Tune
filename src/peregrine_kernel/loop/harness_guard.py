@@ -88,6 +88,14 @@ def resolve_guard_mode(cfg: dict) -> str:
     return mode
 
 
+def _root_py_hijack(stem: str) -> bool:
+    """Whether a tree-root ``<stem>.py`` is executed by a harness process without the
+    tree naming it: an interpreter startup hook, or a stdlib top-level name the
+    workspace's PYTHONPATH placement shadows (BUG-SEED-07: a root sitecustomize.py or
+    json.py hijacked every job; the monitor's sitecustomize even chain-imports it)."""
+    return stem in ROOT_PY_HOOKS or stem in getattr(sys, "stdlib_module_names", ())
+
+
 def is_harness_path(path: str, kernel_file: str = "") -> bool:
     """Whether ``path`` (tree-relative, posix) is card-owned evaluation harness."""
     p = str(path).strip()

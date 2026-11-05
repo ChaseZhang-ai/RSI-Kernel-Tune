@@ -119,15 +119,17 @@ def test_quarantine_does_not_replace_a_previous_run_s_entry(tmp_path):
 
 
 def test_quarantine_unique_names_stay_flat(tmp_path):
-    """The incident fix must not rename the common case: a unique basename with
-    no collision keeps its plain quarantine name (the existing consumers and
-    the human-facing layout are unchanged)."""
+    """The quarantine name always carries the entry's relative path, so a unique
+    basename still lands readable -- and two same-named entries from different
+    subtrees can never rename onto one destination (the incident's silent
+    replace). Adapted at the merge: the merged implementation flattens
+    unconditionally (``<rel with / -> __>``), not only on collision."""
     from peregrine_kernel.loop.driver import _quarantine_leaky_kb
 
     ctx, kb = _kb_ctx(tmp_path)
     (kb / "sm100" / "oddity.md").write_text("body\n", encoding="utf-8")
     _quarantine_leaky_kb(ctx, ["sm100/oddity.md:1: banned narrative"])
-    assert (tmp_path / "repo" / "kb_quarantine" / "oddity.md").is_file()
+    assert (tmp_path / "repo" / "kb_quarantine" / "sm100__oddity.md").is_file()
 
 
 # --- BUG-SEED-33: the seeders read/write without a fixed encoding -------------

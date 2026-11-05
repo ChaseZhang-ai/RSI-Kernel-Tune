@@ -416,33 +416,29 @@ def per_shape_best_readings(records: list,
 def load_records(path: str | Path) -> list[IterationRecord]:
     """Load records, dropping any unknown keys (tolerates pre-refactor status files).
 
-    Torn-line tolerant: the file is append-only, and a run killed mid-write leaves
-    a half-written final line. One bare ``json.loads`` used to make that half line
-    sink the WHOLE trajectory — every consumer, including the resume entry that
-    counts the rows to continue from, raised JSONDecodeError and the run's history
-    was unreadable. Any line that does not parse is now dropped with one stderr
-    warning naming the file and the line numbers, wherever it sits; the good rows
-    around it stay readable."""
-    out: list[IterationRecord] = []
-    bad: list[int] = []
-    for n, line in enumerate(Path(path).read_text().splitlines(), 1):
+    A torn FINAL line — the process died mid-append — is dropped with a note on
+    stderr instead of making the whole trajectory unreadable and every resume
+    impossible; a broken line anywhere else still raises, since that is corruption
+    an append cannot produce and silently truncating the middle would mis-read
+    the run's history."""
+    out = []
+    lines = Path(path).read_text().splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    for idx, line in enumerate(lines):
         line = line.strip()
         if not line:
             continue
         try:
             d = json.loads(line)
-        except json.JSONDecodeError:
-            bad.append(n)
-            continue
+        except ValueError:
+            if idx == len(lines) - 1:
+                sys.stderr.write(f"[trajectory] torn final line dropped from {path}: "
+                                 f"{line[:60]!r}\n")
+                break
+            raise
         d = {_LEGACY_KEYS.get(k, k): v for k, v in d.items()}
         out.append(IterationRecord(**{k: v for k, v in d.items() if k in _FIELDS}))
-    if bad:
-        shown = ", ".join(str(n) for n in bad[:5])
-        more = f" (+{len(bad) - 5} more)" if len(bad) > 5 else ""
-        print(f"[peregrine_kernel.inner.trajectory] {path}: skipped {len(bad)} "
-              f"unparseable line(s) ({shown}{more}) — a torn or corrupt line must "
-              f"not sink the whole trajectory",
-              file=sys.stderr)
     return out
 
 
@@ -454,12 +450,9 @@ def load_records(path: str | Path) -> list[IterationRecord]:
 # in a row landing on 4.504025/7.560892/7.823140 to the last digit is not a
 # numeric bug, and no one — student, meta, or log reader — was told (observed on
 # an MHA bwd run: four such iterations were only diagnosed by hand afterwards).
-# The numeric branch carries the optional exponent as part of the signature:
-# small-diff kernels print `max_diff=1.5e-05` / `max_diff=1.5e-07`, and a
-# mantissa-only capture truncated every such value to "1.5" — three distinct
-# FAILs read as one bit-identical signature and falsely fired the
-# constant-output diagnosis below.
-_DIFF_SIG = re.compile(r"max_diff=([0-9]+\.[0-9]+(?:[eE][+-]?[0-9]+)?|inf|nan)")
+# The number keeps its full form — optional fraction, optional exponent — so
+# 1.5e-05 and 1.5e-07 are different signatures, not the same "1.5".
+_DIFF_SIG = re.compile(r"max_diff=([0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|inf|nan)")
 CONSTANT_OUTPUT_MIN_REPEATS = 3
 
 

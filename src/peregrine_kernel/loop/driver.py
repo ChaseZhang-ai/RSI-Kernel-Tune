@@ -1732,15 +1732,13 @@ def _write_student_digest(ctx: LoopContext) -> None:
         n = ctx.student_tail_lines or 50
         rows = digest.get("decisions", [])
         digest["decisions"] = rows[-n:] if len(rows) > n else rows
-        curve = digest.get("curve", [])
-        digest["curve"] = curve[-n:] if len(curve) > n else curve
-        regressions = digest.get("regressions", [])
-        digest["regressions"] = regressions[-n:] if len(regressions) > n else regressions
+        # (the curve/regressions tails once got trimmed here, but nothing below
+        # serializes them — the trim was dead and is gone)
         path = _student_digest_path(ctx)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(json.dumps({k: digest[k] for k in
-                                 ("sol", "target", "achieved", "flags")},
+                                 ("sol", "clock", "target", "achieved", "flags")},
                                 ensure_ascii=False) + "\n")
             for row in digest["decisions"]:
                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -2863,6 +2861,22 @@ def _run_probe_manifest_batch(ctx: LoopContext, be, branch: str,
     return _split_probe_batch_log(log, paths)
 
 
+def _run_probe_manifest_commit_batch(ctx: LoopContext, be, probe_branch: str,
+                                     mpath: str,
+                                     mpaths: list[str]) -> "tuple[list | None, str]":
+    """(batch, "") once the manifest's commit + push + batch job ran; (None,
+    "job failed (...)") when a backend side of that chain failed — a node/queue
+    hiccup is the experiment's environment failing, feedback to the teacher and
+    the step goes on (the ablation probe's contract), never an exception that
+    would kill the whole run from inside the meta step."""
+    try:
+        be.commit(f"meta-probe manifest: {mpath}")
+        be.push_branch(probe_branch)
+        return _run_probe_manifest_batch(ctx, be, probe_branch, mpaths), ""
+    except BackendError as e:
+        return None, f"job failed ({e})"
+
+
 def _verdict_probe_feedback(path: str, pv: ProbeVerdict, log: str,
                             round_no: int, budget: int) -> str:
     """One diagnose-step verdict-probe round's feedback.
@@ -3500,8 +3514,9 @@ def _keep_probe_across_reset(ctx: LoopContext, probe_path: str) -> str | None:
     in it must degrade the keep (the probe is simply not carried over), never
     stop the run — the same convention as the _timeline_* reads."""
     try:
-        return (ctx.workspace / probe_path).read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
+        return (ctx.workspace / probe_path).read_text(encoding="utf-8",
+                                                       errors="replace")
+    except OSError:
         return None
 
 
@@ -3529,8 +3544,10 @@ def _restore_kept_probes(ctx: LoopContext) -> None:
         dst = ctx.workspace / path
         if dst.is_file():
             try:
-                same = dst.read_text(encoding="utf-8") == text
-            except (OSError, UnicodeError):
+                # errors="replace": a probe with non-UTF-8 bytes must compare
+                # (and restore, below) instead of raising through the iteration
+                same = dst.read_text(encoding="utf-8", errors="replace") == text
+            except OSError:
                 same = False
             if not same:
                 ctx.kept_probes.pop(path, None)
@@ -3539,7 +3556,7 @@ def _restore_kept_probes(ctx: LoopContext) -> None:
             continue
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(text)
+            dst.write_text(text, encoding="utf-8")
             _log(f"restored kept probe {path} into the workspace")
         except OSError as e:
             _log(f"could not restore kept probe {path}: {e}")
@@ -3871,6 +3888,12 @@ def run_inner_iteration(
         else:
             did, change = "unparseable", "(no parseable decision emitted)"
             err = f"no parseable decision from the student in {ctx.max_probe_rounds} rounds"
+        # correctness None: nothing was evaluated on this path (gate refusal,
+        # undelivered/blocked probe, unparseable output), so the lineage's green
+        # state is not moved — a False here dropped a never-evaluated workspace
+        # into scaffold mode (run_inner_iteration's read side) and kept it there
+        # across restarts (_green_on_resume), the same hole
+        # _harness_edit_revert's None documents for its un-evaluated REVERTs.
         rec = IterationRecord(
             iter=iter_no, decision_id=did, change=change,
             # correctness None: none of these four outcomes evaluated anything, so
@@ -5461,14 +5484,13 @@ def _quarantine_leaky_kb(ctx: LoopContext, findings: list[str]) -> None:
     the repo root, because a quarantine inside hw_kb/ would still sit in the
     tree this is trying to take the entry out of.
 
-    The bare file name is only the quarantine name while it stays unique: a
-    destination that a sibling in this batch (same basename from another
-    subtree) or an earlier quarantine already holds would make rename(2)
-    silently REPLACE the occupant — a sm100/leak.md batch mate used to erase
-    hopper/leak.md (or a previous run's copy) and the human reviewing the
-    quarantine saw one entry, not two. A colliding name is flattened with its
-    relative path (``hopper__leak.md``); a flattened name that still collides
-    gets an ordinal."""
+    The destination always carries the entry's relative path
+    (``sm100/leak.md`` -> ``sm100__leak.md``): a bare-basename destination let a
+    batch mate (same name from another subtree) or an earlier quarantine make
+    rename(2) silently REPLACE the occupant — a sm100/leak.md batch mate used to
+    erase hopper/leak.md (or a previous run's copy) and the human reviewing the
+    quarantine saw one entry, not two. A residual collision (a root-level
+    lookalike name) breaks the tie by number."""
     qdir = lang_mode.kb_repo_root(ctx.kb_dir) / "kb_quarantine"
     rels = sorted({f.split(":", 1)[0] for f in findings})
     batch_names = Counter(Path(rel).name for rel in rels)
@@ -5476,13 +5498,15 @@ def _quarantine_leaky_kb(ctx: LoopContext, findings: list[str]) -> None:
         src = kb_read_dir(ctx).parent / rel
         if src.is_file():
             qdir.mkdir(exist_ok=True)
-            dst = qdir / src.name
-            if batch_names[src.name] > 1 or dst.exists():
-                dst = qdir / rel.replace("/", "__")
-            ordinal = 2
+            # the tree rides in the name: entries of the same file name from two
+            # trees (sm90/leak.md, sm100/leak.md) used to rename onto one
+            # destination, the second silently replacing the first. A residual
+            # collision (a root-level lookalike name) breaks the tie by number.
+            dst = qdir / rel.replace("/", "__")
+            seq = 1
             while dst.exists():
-                dst = qdir / f"{dst.stem}.{ordinal}{dst.suffix}"
-                ordinal += 1
+                dst = qdir / f"{dst.stem}__{seq}{dst.suffix}"
+                seq += 1
             src.rename(dst)
             _log(f"meta/kb: QUARANTINED leaky entry {rel} -> {dst} — review by hand")
 
@@ -5529,7 +5553,7 @@ def _detach_kb_probes(ctx: LoopContext, pre_head: str, probes: dict,
         dst = ctx.workspace / path
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(text)
+            dst.write_text(text, encoding="utf-8")
             kept.append(path)
         except OSError as e:
             _log(f"{what}: could not re-materialise {path}: {e}")
@@ -12211,9 +12235,19 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
                 probe_rounds += 1
                 probes_run.extend(mpaths)
                 probe_branch = f"{ctx.branch_prefix}-metaprobe"
-                be.commit(f"meta-probe manifest: {turn.path}")
-                be.push_branch(probe_branch)
-                batch = _run_probe_manifest_batch(ctx, be, probe_branch, mpaths)
+                batch, batch_err = _run_probe_manifest_commit_batch(
+                    ctx, be, probe_branch, turn.path, mpaths)
+                if batch_err:
+                    _log(f"meta: probe manifest {turn.path} job failed "
+                         f"({batch_err}) — the step continues")
+                    diagnose_extra += (
+                        f"\n## Verdict experiment {probe_rounds}/"
+                        f"{ctx.max_verdict_probe_rounds}: `{turn.path}` (manifest) — "
+                        f"{batch_err}\n"
+                        "The GPU job did not run (a node/queue failure, not an "
+                        "experiment answer); send PROBE_REQUEST again, or give the "
+                        "final diagnosis from the evidence you have.\n")
+                    continue
                 if batch is None:
                     # the batch never really ran (markers missing): the
                     # per-script path is the fallback, verbatim
@@ -15496,7 +15530,7 @@ def _price_student_trees(ctx: LoopContext, records) -> PricedTrees:
     else:
         _, _, out.head_dossier, _ = _run_stall_pricing(
             ctx, ref=out.head_sha, bank_as=(_STUDENT_ORCH_DOSSIER_NAME,),
-            label="head")
+            label="head", persist_roles=False)
         if out.head_dossier is None:
             out.missing.append(f"HEAD {short(out.head_sha)}: pricing job failed or its "
                                "self-check did not pass — the tree judged this time has no "
@@ -16392,14 +16426,48 @@ def _pick_ref_dossier(log: str) -> "tuple[str, str] | None":
     return header + m.group(1), note
 
 
+def _role_block_kernel(log: str, block_start: int) -> str:
+    """The kernel whose pricing produced the role block at ``block_start`` —
+    the nearest dominant-launch line before it, else the STALL-OK kernel,
+    else "?" (a log with no identity lines at all). Same preference the
+    dossier's banked header uses, so both banked faces name the same kernel."""
+    name = None
+    for dm in _DOMINANT_LAUNCH_RE.finditer(log, 0, block_start):
+        name = dm.group(2).strip()
+    if name is None:
+        stall = _STALL_OK.search(log)
+        if stall is not None:
+            km = re.match(r"STALL-OK kernel=(.+?) samples=", stall.group(0))
+            name = km.group(1) if km else None
+    return name or "?"
+
+
+_BANKED_ROLES_FOOTER_RE = re.compile(
+    r"^# banked-roles: kernel=(.*) verdict=(\S+)$", re.M)
+
+
+def _banked_roles_identity(text: str) -> "tuple[str, str] | None":
+    """(kernel, verdict) from a banked role ledger's ``# banked-roles:`` footer,
+    or None when the file predates the stamp."""
+    stamps = _BANKED_ROLES_FOOTER_RE.findall(text)
+    return (stamps[-1][0], stamps[-1][1]) if stamps else None
+
+
 def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
     """Bank the ref's role exposure ledger beside its dossier and segment
     account — the ref side of the diagnose step's per-role comparison.
 
     A partial table (no tensor term) is banked only where no full one is: a
     later --set-source probe must not downgrade the account a pricing job
-    delivered. And a later FULL table must not replace a banked FULL account
-    built from strictly more stall samples — see the guard below."""
+    delivered. A FULL table of a DIFFERENT kernel does not replace a banked
+    FULL one either: a probe can price an aux kernel, and the bystander's
+    role account must not silently become the reference's (the same accident
+    the dossier's banked header guards against). And a later FULL table
+    must not replace a banked FULL account built from strictly more stall
+    samples — see the guard below. The banked text carries a trailing
+    ``# banked-roles:`` line naming that kernel; every reader of the file
+    either scans for its own line prefixes or parses the ROLE-JSON line, so
+    the stamp stays invisible to them."""
     ev = _evidence_dir(ctx, create=True)
     if ev is None:
         return
@@ -16412,6 +16480,8 @@ def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
     if not full and banked_full:
         return
     dst = ev / _REF_ROLE_EXPOSURE_NAME
+    blocks = list(_ROLE_BLOCK_RE.finditer(log))
+    kernel = _role_block_kernel(log, blocks[-1].start() if blocks else 0)
     # Same guard as _save_ref_orch_dossier, which once banked a bystander
     # kernel's dossier over the main kernel's (9112 -> 6232 instrs) off one
     # probe: a later probe log's FULL table must not replace a banked FULL
@@ -16428,7 +16498,19 @@ def _save_ref_role_exposure(ctx: LoopContext, log: str) -> None:
              f"({new_samples})")
         return
     try:
-        dst.write_text(block)
+        kept = _banked_roles_identity(dst.read_text())
+    except OSError:
+        kept = None                      # first save: nothing banked yet
+    if (full and kept is not None and kept[1] == "OK"
+            and kernel != "?" and kept[0] not in ("", "?")
+            and kept[0] != kernel):
+        _log(f"meta/recon: ref role ledger kept banked kernel="
+             f"{kept[0]} over this log's kernel={kernel}")
+        return
+    try:
+        dst.write_text(block.rstrip("\n")
+                       + f"\n# banked-roles: kernel={kernel} "
+                         f"verdict={'OK' if full else 'PARTIAL'}\n")
     except OSError as e:
         _log(f"meta/recon: could not persist {_REF_ROLE_EXPOSURE_NAME} "
              f"to {dst}: {e}")
@@ -17322,13 +17404,18 @@ def _ref_confirm_reading_ms(ctx: LoopContext, be, branch: str) -> "float | None"
 
 def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
                        bank_as: "tuple[str, ...]" = (_STUDENT_ORCH_DOSSIER_NAME,),
-                       label: str = "best", workload: str | None = None) \
+                       label: str = "best", workload: str | None = None,
+                       persist_roles: bool = True) \
         -> "tuple[str | None, str | None, str | None, str | None]":
     """Price one student tree (``ref``; the best-so-far KEEP when None);
     return (row ledger, segment account, orchestration dossier, role exposure).
     ``workload``: one of a group card's other meta workloads (``--workload``;
     loop/meta_shapes.py), read beside the representative's and banked as nothing
     (``bank_as`` = () from its caller) -- the banked dossiers stay the card's own.
+    ``persist_roles``: False leaves the uniquely-named student role ledger alone
+    (the second, HEAD-tree pricing pass reads roles only to discard them — the
+    teacher view consumes the primary pass's roles, and the banked evidence must
+    not describe a different tree than the verdicts it sits beside).
 
     The collection rides the PM-sampling sections (``--pm``): the role
     exposure ledger scales stall shares by the mainloop tensor plateau, which
@@ -17402,7 +17489,7 @@ def _run_stall_pricing(ctx: LoopContext, ref: str | None = None, *,
         _log(f"meta/stall-price[{label}]: role exposure "
              f"{'OK' if full else 'PARTIAL (no tensor term — PM sections missing)'} @ "
              f"{ref[:10] if ref else '?'}")
-        if (ev := _evidence_dir(ctx, create=True)) is not None:
+        if (ev := _evidence_dir(ctx, create=True)) is not None and persist_roles:
             # bank_as names the tree this pricing job priced (the same split
             # the dossiers use): with head != best, the HEAD job's table used
             # to overwrite the best tree's account under the one fixed name —

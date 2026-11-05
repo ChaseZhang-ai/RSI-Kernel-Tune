@@ -80,21 +80,24 @@ def _case_brief(corr: dict) -> list[dict]:
     return out
 
 
-def _hook_files(d: str) -> list[dict]:
-    out = []
+def _hook_files(d: str) -> tuple[list[dict], int]:
+    """(parsed hook dumps, unreadable ones). An unreadable ``hook-<pid>.json`` is a
+    process the hook ran in just the same (a dump torn by the kill), so it is
+    counted rather than silently dropped."""
+    out, bad = [], 0
     if not os.path.isdir(d):
-        return out
+        return out, bad
     for fn in sorted(os.listdir(d)):
         if fn.startswith("hook-") and fn.endswith(".json"):
             try:
                 with open(os.path.join(d, fn), encoding="utf-8") as fh:
                     out.append(json.load(fh))
             except (OSError, ValueError):
-                continue
-    return out
+                bad += 1
+    return out, bad
 
 
-def _merge_hooks(hooks: list[dict]) -> dict:
+def _merge_hooks(hooks: list[dict], unreadable: int = 0) -> dict:
     """One summary per profile run: the process(es) that imported the kernel carry
     its calls; every process contributes what it reshaped and any hook error.
 
@@ -118,7 +121,8 @@ def _merge_hooks(hooks: list[dict]) -> dict:
         unrecorded += int(h.get("unrecorded") or 0)
         if h.get("kernel_module"):
             kmods.append(h["kernel_module"])
-    return {"processes": len(hooks), "kernel_module": kmods[0] if kmods else None,
+    return {"processes": len(hooks) + unreadable,
+            "kernel_module": kmods[0] if kmods else None,
             "calls": calls, "unrecorded_calls": unrecorded, "perturbed": perturbed,
             "reseeded": reseeded, "errors": errors[:10]}
 
@@ -155,7 +159,7 @@ def _run_task(entry: str, task: str, profile: str, out_dir: str, timeout_s: floa
     corr = (ev or {}).get("correctness") or {}
     res = {"task": task, "rc": rc, "seconds": round(time.time() - t0, 1),
            "timed_out": timed_out, "card_pass": corr.get("pass") if ev else None,
-           "cases": _case_brief(corr), "hook": _merge_hooks(_hook_files(out_dir))}
+           "cases": _case_brief(corr), "hook": _merge_hooks(*_hook_files(out_dir))}
     if ev is None or corr.get("pass") is not True:
         res["tail"] = text.splitlines()[-TAIL_LINES:]
     return res

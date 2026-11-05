@@ -107,8 +107,12 @@ def test_classify_reports_a_hook_that_never_injected():
     v = monitor.classify(result)
     assert v["status"] == "warn"
     assert v["ran"] == [] and v["not_applicable"] == []
+    # Adapted at the merge: the base run's never-injected fact is one "-" finding
+    # ("the monitor hook never ran", 0 processes); each further dry profile still
+    # gets its own "did not inject" finding.
     whats = [f["what"] for f in v["findings"]]
-    assert sum("did not inject" in w for w in whats) == 2
+    assert sum("did not inject" in w for w in whats) == 1
+    assert any("the monitor hook never ran" in w for w in whats)
     assert not any("does not import the kernel" in w for w in whats)
     assert not any("did not change" in w for w in whats)
 

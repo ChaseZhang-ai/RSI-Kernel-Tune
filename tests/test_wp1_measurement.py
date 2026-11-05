@@ -268,14 +268,18 @@ def test_resolvable_keys_wire_through_the_card_loop_toml(tmp_path):
 def test_resolvable_keys_are_context_config_with_historical_defaults():
     # the card's loop.toml [loop] is the override surface (the global layer's
     # loop.toml takes [target]/[budget] only); loop/cli.py forwards the keys into
-    # these fields. The defaults must be the historical bounds, so an untouched
-    # run behaves exactly as before wherever the data cannot speak.
+    # these fields — through _cfg_float/_cfg_int since BUG-CH-E-05, so a mistyped
+    # card value refuses at launch naming the key. The defaults must be the
+    # historical bounds, so an untouched run behaves exactly as before wherever
+    # the data cannot speak.
     import dataclasses
     import inspect
     import peregrine_kernel.loop.cli as cli
     src = inspect.getsource(cli)
-    for key in ("resolvable_floor", "resolvable_cap", "confirm_budget_per_iter"):
-        assert f'get("{key}"' in src, key
+    for key, default in (("resolvable_floor", "0.005"), ("resolvable_cap", "0.015"),
+                         ("confirm_budget_per_iter", "1")):
+        # the key is wired from config with its historical default right beside it
+        assert f'"{key}", {default}' in src, key
     names = {f.name for f in dataclasses.fields(drv.LoopContext)}
     assert {"resolvable_floor", "resolvable_cap", "confirm_budget_per_iter"} <= names
 

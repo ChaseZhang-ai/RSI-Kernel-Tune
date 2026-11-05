@@ -723,7 +723,7 @@ class RealBackend:
         if gd.is_dir():
             return gd / self.inflight_file
         try:
-            text = gd.read_text()
+            text = gd.read_text(encoding="utf-8")
         except OSError:
             return None
         if text.startswith("gitdir:"):  # linked worktree: .git is a pointer file
@@ -751,7 +751,7 @@ class RealBackend:
         if path is None:
             return _INFLIGHT_LOG_ATTEMPTS      # no record to count in: old behaviour
         try:
-            rec = json.loads(path.read_text())
+            rec = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return _INFLIGHT_LOG_ATTEMPTS
         if rec.get("job") != job:
@@ -796,7 +796,7 @@ class RealBackend:
         if path is None or not path.exists():
             return None
         try:
-            rec = json.loads(path.read_text())
+            rec = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             rec = {}
         job = rec.get("job")
@@ -1365,6 +1365,33 @@ def _reuse_mode(value) -> str:
         raise SystemExit(f"[loop] reuse_unchanged_reading must be \"all\", \"gate\" or "
                          f"\"off\", got {value!r}")
     return mode
+
+
+def _cfg_int(section: dict | None, key: str, default: int) -> int:
+    """A [loop] integer knob (``_cfg_int(cfg.get("loop"), "stagnation_k", 3)``).
+
+    A mistyped value ("three", "3%") is a config error, refused at launch with
+    the key named — the bare ``int()`` this replaces died with a traceback that
+    gave the value but never the key, on a face where every neighbouring knob
+    (_reuse_mode, _resolve_gate_window) already refuses readably. A TOML float
+    truncates, as it always did.
+    """
+    raw = (section or {}).get(key, default)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise SystemExit(f"[loop] {key} must be an integer, got {raw!r}") from None
+
+
+def _cfg_float(section: dict | None, key: str, default: float, *, label: str = "") -> float:
+    """A [loop] float knob; same readable refusal as _cfg_int. ``label`` names the
+    knob as it appears in loop.toml when the section and the display differ (the
+    lone [target] knob reads "target.floor_margin")."""
+    raw = (section or {}).get(key, default)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        raise SystemExit(f"[loop] {label or key} must be a number, got {raw!r}") from None
 
 
 def _resolve_ref_in_job(cfg: dict, spec: dict) -> bool:
@@ -2070,9 +2097,20 @@ def _run_finish_monitor(ctx: LoopContext, backend, op_dir: Path, confirm: dict |
 
 
 def _load_loop_config(op_dir: Path) -> dict:
+    """The card's loop.toml, read as UTF-8 (operator hand-written: the file's own
+    comments and values carry non-ASCII, and a locale-dependent read either
+    crashed on the first high byte or silently mojibake'd strings into prompts).
+    A syntax error is a readable refusal naming the file, not a bare
+    TOMLDecodeError from the middle of the launch."""
     cfg = op_dir / "loop.toml"
     if cfg.exists():
-        return tomllib.loads(cfg.read_text())
+        try:
+            return tomllib.loads(cfg.read_text(encoding="utf-8"))
+        except UnicodeDecodeError as e:
+            raise SystemExit(f"[loop] {cfg} is not valid UTF-8 ({e}) — loop.toml is "
+                             f"read as UTF-8 on every machine; fix the file's encoding") from None
+        except tomllib.TOMLDecodeError as e:
+            raise SystemExit(f"[loop] {cfg} is not valid TOML: {e}") from None
     return {}
 
 
@@ -3041,14 +3079,14 @@ def _main(argv: list[str] | None = None) -> int:
         max_probe_rounds=args.max_probe_rounds,
         kb_tripwire_rounds=args.kb_tripwire_rounds,
         max_verdict_probe_rounds=args.max_verdict_probe_rounds,
-        infeasible_min_diagnoses=max(1, int(
+        infeasible_min_diagnoses=max(1, (
             args.min_meta_before_infeasible if args.min_meta_before_infeasible is not None
-            else cfg.get("loop", {}).get("infeasible_min_diagnoses", 1))),
+            else _cfg_int(cfg.get("loop"), "infeasible_min_diagnoses", 1))),
         lever_pricing_rounds=(args.lever_pricing_rounds if args.lever_pricing_rounds is not None
-                              else int(cfg.get("loop", {}).get("lever_pricing_rounds", 3))),
-        lever_pricing_max_levers=int(cfg.get("loop", {}).get("lever_pricing_max_levers", 5)),
+                              else _cfg_int(cfg.get("loop"), "lever_pricing_rounds", 3)),
+        lever_pricing_max_levers=_cfg_int(cfg.get("loop"), "lever_pricing_max_levers", 5),
         reopen_requires_price=bool(cfg.get("loop", {}).get("reopen_requires_price", True)),
-        reopen_max_fruitless=max(0, int(cfg.get("loop", {}).get("reopen_max_fruitless", 2))),
+        reopen_max_fruitless=max(0, _cfg_int(cfg.get("loop"), "reopen_max_fruitless", 2)),
         reuse_unchanged_reading=_reuse_mode(cfg.get("loop", {}).get("reuse_unchanged_reading", "all")),
         declared_gate_close=bool(cfg.get("loop", {}).get("declared_gate_close", True)),
         harness_guard=guard_mode,
@@ -3059,7 +3097,7 @@ def _main(argv: list[str] | None = None) -> int:
         stall_pricing=bool(cfg.get("loop", {}).get("stall_pricing", True)),
         reopen_in_place=bool(cfg.get("loop", {}).get("reopen_in_place", True)),
         reprice_on_new_best=bool(cfg.get("loop", {}).get("reprice_on_new_best", True)),
-        reprice_min_gain_pct=float(cfg.get("loop", {}).get("reprice_min_gain_pct", 3.0)),
+        reprice_min_gain_pct=_cfg_float(cfg.get("loop"), "reprice_min_gain_pct", 3.0),
         timeline_probe=str(cfg.get("loop", {}).get("timeline_probe", "off")),
         orch_census=bool(cfg.get("loop", {}).get("orch_census", True)),
         # Single-ref contract: a ref measured through a separate submission tree
@@ -3076,7 +3114,7 @@ def _main(argv: list[str] | None = None) -> int:
         # Suspicious-watermark confirmation margin (loop.toml [loop] watermark_margin,
         # 0 disables): a new best beyond this fraction is re-measured before it
         # anchors meta transactions.
-        watermark_margin=float(cfg.get("loop", {}).get("watermark_margin", 0.03)),
+        watermark_margin=_cfg_float(cfg.get("loop"), "watermark_margin", 0.03),
         # Records are stamped with the machine they ran on and judged against
         # same-machine rows; on another machine (a resume elsewhere) the target is
         # restated from a reference measured there (the reanchor_ref channel below).
@@ -3084,36 +3122,37 @@ def _main(argv: list[str] | None = None) -> int:
         # Phantom-gap re-anchor band (loop.toml [loop] reanchor_band, 0 disables):
         # a gap-driven diagnosis whose residual sits inside this fraction first
         # re-anchors the ref same-period — the ref-side mirror of watermark_margin.
-        reanchor_band=float(cfg.get("loop", {}).get("reanchor_band", 0.06)),
+        reanchor_band=_cfg_float(cfg.get("loop"), "reanchor_band", 0.06),
         evidence_dir=evidence_dir, ref_price_dir=ref_price_dir,
         ref_price_backend=ref_price_backend, ref_price_app=ref_price_app,
         # PM-sampling interval for the frozen pricing recipe (both trees); 0 =
         # from the target reading (sub-0.5 ms kernels -> 2048, else 8192)
-        ref_price_pm_interval=int(cfg.get("loop", {}).get("ref_price_pm_interval", 0) or 0),
+        ref_price_pm_interval=_cfg_int(cfg.get("loop"), "ref_price_pm_interval", 0),
         # --- WP1: measurement resolution (loop.toml [loop] resolvable_floor /
         # resolvable_cap) and the per-iteration confirmation budget of the
         # suspicious-watermark band. Defaults keep the historical bounds.
-        resolvable_floor=float(cfg.get("loop", {}).get("resolvable_floor", 0.005)),
-        resolvable_cap=float(cfg.get("loop", {}).get("resolvable_cap", 0.015)),
-        confirm_budget_per_iter=max(1, int(
-            cfg.get("loop", {}).get("confirm_budget_per_iter", 1))),
+        resolvable_floor=_cfg_float(cfg.get("loop"), "resolvable_floor", 0.005),
+        resolvable_cap=_cfg_float(cfg.get("loop"), "resolvable_cap", 0.015),
+        confirm_budget_per_iter=max(1, _cfg_int(
+            cfg.get("loop"), "confirm_budget_per_iter", 1)),
         # [loop] m0_probe_rounds: ARCH_PROBE's GPU-job budget (WP6; default 2 —
         # one job per of the two candidate skeletons, 0 disables, <2 skips).
-        m0_probe_rounds=int(cfg.get("loop", {}).get("m0_probe_rounds", 2)),
+        m0_probe_rounds=_cfg_int(cfg.get("loop"), "m0_probe_rounds", 2),
         # [loop] stagnation_k / multi_candidate_max (WP10; the forwarding lines
         # its CHANGES reserved for the integration step, the m0_probe_rounds
         # precedent): the architecture-escape trigger's K (0 disables) and the
         # MC-DELIVERY cap. Card-layer [loop] is the override surface; these
         # defaults govern launches that don't set the keys.
-        stagnation_k=int(cfg.get("loop", {}).get("stagnation_k", 3)),
-        multi_candidate_max=int(cfg.get("loop", {}).get("multi_candidate_max", 3)),
+        stagnation_k=_cfg_int(cfg.get("loop"), "stagnation_k", 3),
+        multi_candidate_max=_cfg_int(cfg.get("loop"), "multi_candidate_max", 3),
         # --- WP9: measurement anchoring — [target] floor_margin (a weak/absent-ref
         # run's stop derives from the analytic floor) and [loop] floor_stop /
         # floor_stop_margin (stop at floor x (1 + margin) once a verified-BLOCKED
         # diagnosis explored the structural channel). Both default off.
-        target_floor_margin=float((cfg.get("target") or {}).get("floor_margin", 0) or 0),
+        target_floor_margin=_cfg_float(cfg.get("target"), "floor_margin", 0,
+                                       label="target.floor_margin"),
         floor_stop=bool(cfg.get("loop", {}).get("floor_stop", False)),
-        floor_stop_margin=float(cfg.get("loop", {}).get("floor_stop_margin", 0.10)),
+        floor_stop_margin=_cfg_float(cfg.get("loop"), "floor_stop_margin", 0.10),
         # --- WP8: prior supply (teacher-side; all off/empty = pre-WP8 briefs) --
         # [loop] teacher_prior_survey: the teacher researches public SOTA for the
         #   operator family (skills/sota-survey/) and writes notes/prior_art.md
@@ -3132,7 +3171,7 @@ def _main(argv: list[str] | None = None) -> int:
                    or _default_carry_dir(args.op)),
         # [loop] m0_probe_candidates: the ARCH_PROBE bracket width (WP8; default
         #   2 = the WP6 behavior), clamped to m0_probe_rounds at run time.
-        m0_probe_candidates=int(cfg.get("loop", {}).get("m0_probe_candidates", 2)),
+        m0_probe_candidates=_cfg_int(cfg.get("loop"), "m0_probe_candidates", 2),
     )
     # The re-anchor's measurement channel: the same fresh-ref path the finish
     # confirmation uses (measure_ref_fresh — parsed readings, never archived, so
@@ -3432,7 +3471,7 @@ def _main(argv: list[str] | None = None) -> int:
     # for budget, and before harvest so the ratio lands in the log next to the run's
     # verdicts. Its own failure must not cost the harvest below.
     confirm_jobs = args.confirm_jobs if args.confirm_jobs is not None else \
-        int(cfg.get("loop", {}).get("confirm_jobs", 3))
+        _cfg_int(cfg.get("loop"), "confirm_jobs", 3)
     confirm = None
     if confirm_jobs > 0:
         # A same-job parity stop named its own sha (not necessarily the absolute
@@ -3547,7 +3586,7 @@ def _main(argv: list[str] | None = None) -> int:
     summary["lane"] = "memo" if ctx.memo_lane else "strict"
     print(f"[loop] done: {json.dumps(summary)}")
     (op_dir / SUMMARY_FILE).write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
-    records = status_path.read_text().count("\n")
+    records = status_path.read_text(encoding="utf-8").count("\n")
     print(f"[loop] status.jsonl now has {records} records at {status_path}")
     return 0
 

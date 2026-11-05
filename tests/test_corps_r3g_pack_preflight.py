@@ -188,3 +188,42 @@ def test_kernel_runtimeerror_degrades_to_warn(pack, monkeypatch, tmp_path):
     assert stage["status"] == "WARN"
     assert "could not run the reference or the kernel here" in stage["detail"]
     assert not report.failed
+
+
+def test_short_kernel_output_is_a_fail_not_a_pass(pack, monkeypatch, tmp_path):
+    """A kernel that returns one output where the contract/reference has two
+    must FAIL — the pre-fix zip truncated silently and the never-compared
+    second output was recorded as PASS."""
+    ref = (f"import {FAKE_IO}\n"
+           "def run(x):\n"
+           f"    return {FAKE_IO}.out(1.0, 2.0), {FAKE_IO}.out(3.0, 4.0)\n")
+    kern = (f"import {FAKE_IO}\n"
+            "def run(x):\n"
+            f"    return {FAKE_IO}.out(1.0, 2.0)\n")
+    report = _run_stage(pack, monkeypatch, tmp_path,
+                        kernel_src=kern, reference_src=ref,
+                        problem=_one_input_problem(outputs={"o0": {}, "o1": {}}))
+    stage = report.stages[-1]
+    assert stage["stage"] == "correctness"
+    assert stage["status"] == "FAIL"
+    assert "1 output(s)" in stage["detail"] and "2" in stage["detail"]
+    assert report.failed
+
+
+def test_matching_outputs_still_pass(pack, monkeypatch, tmp_path):
+    """The length guard must not block an honest kernel: equal-length outputs
+    within tolerance still record PASS."""
+    ref = (f"import {FAKE_IO}\n"
+           "def run(x):\n"
+           f"    return {FAKE_IO}.out(1.0, 2.0), {FAKE_IO}.out(3.0, 4.0)\n")
+    kern = (f"import {FAKE_IO}\n"
+            "def run(x):\n"
+            f"    return {FAKE_IO}.out(1.0, 2.0), {FAKE_IO}.out(3.0, 4.0)\n")
+    report = _run_stage(pack, monkeypatch, tmp_path,
+                        kernel_src=kern, reference_src=ref,
+                        problem=_one_input_problem(outputs={"o0": {}, "o1": {}}))
+    stage = report.stages[-1]
+    assert stage["stage"] == "correctness"
+    assert stage["status"] == "PASS"
+    assert "1 contract workload(s)" in stage["detail"]
+    assert not report.failed

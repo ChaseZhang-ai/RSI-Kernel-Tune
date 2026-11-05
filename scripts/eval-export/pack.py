@@ -772,6 +772,12 @@ def preflight_correctness(src: bytes, kfile: str, contract: Contract, dps: bool,
                     outs = (outs,)
             names = list((defn.get("outputs") or {}).keys()) \
                 or [f"output_{i}" for i in range(len(outs))]
+            if len(outs) != len(refs) or len(names) != len(refs):
+                report.add("correctness", "FAIL",
+                           f"the kernel returned {len(outs)} output(s) for the "
+                           f"contract/reference's {len(refs)} ({len(names)} contract "
+                           f"name(s)) -- the missing comparison(s) would silently pass")
+                return
             tol_map = ((contract.tolerance or {}).get("outputs") or {})
             for name, got, want in zip(names, outs, refs):
                 got_c, want_c = got.float(), want.float()

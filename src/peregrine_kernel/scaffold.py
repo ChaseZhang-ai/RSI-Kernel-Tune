@@ -21,6 +21,7 @@ tasks by peregrine_kernel.taskcard.)
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -61,6 +62,30 @@ _KERNEL_TOKEN = "{KERNEL_FILE}"
 def _repo_root() -> Path:
     # src/peregrine_kernel/scaffold.py -> parents[2] == repo root
     return Path(__file__).resolve().parents[2]
+
+
+# A task/operator name becomes a directory under tasks/ or operators/ (and a TOML
+# key, a branch namespace, a job label). It must be ONE ordinary path component:
+# no separators (nothing escapes the container), nothing hidden and not the
+# template namespace (no leading dot or underscore), and no collision with the
+# CLI's own commands (BUG-SEED-36: `peregrine init ../../evil` used to write
+# outside tasks/).
+_TASK_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_RESERVED_TASK_NAMES = frozenset(
+    {"init", "new", "run", "status", "harvest", "export", "help"})
+
+
+def task_name_problems(name: str) -> list[str]:
+    """Why ``name`` cannot be a task/operator name, or [] when it can."""
+    problems = []
+    if not name or not _TASK_NAME_RE.fullmatch(name):
+        problems.append(
+            f"{name!r}: a task name must be one plain path component -- letters, "
+            f"digits, '.', '_', '-' only, starting with a letter or digit (no "
+            f"path separators, no leading '.' or '_')")
+    if name in _RESERVED_TASK_NAMES:
+        problems.append(f"{name!r}: reserved -- a peregrine command is named that")
+    return problems
 
 
 def _render(src: Path, dst: Path, replacements: dict[str, str]) -> Path:

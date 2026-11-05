@@ -539,3 +539,55 @@ def test_the_oracle_lint_tokens_can_be_turned_off_per_run(tmp_path):
     on = cli._oracle_lint_tokens({"loop": {}}, str(src))
     assert "special_helper_name" in on
     assert cli._oracle_lint_tokens({"loop": {"kb_lint_oracle_tokens": False}}, str(src)) == []
+
+
+def test_every_command_is_examined_not_just_the_first(tmp_path):
+    """BUG-SEED-17: both headless legs go through the gate, and the teacher's leg is
+    always the second command. A fixed source string plus `source in seen` used to
+    drop the second command's findings entirely, so a teacher that shipped its own
+    --settings / --bare / its own cd silently ran outside the agent policy."""
+    student = "claude -p --model x"
+    teacher = "cd /srv/ref && claude -p --settings /srv/ref/off.json --bare --model x"
+    assert ap.command_findings([student, teacher], {},
+                               labels=("student agent command",
+                                       "teacher agent command")) == [
+        "teacher agent command: --bare skips project settings and hooks",
+        "teacher agent command: --settings outranks the project settings the "
+        "agent policy is delivered in, and could turn its sandbox or hooks off",
+        "teacher agent command: changes directory before running the agent, so "
+        "the policy in the working directory would not be loaded",
+    ]
+    # the labels name the roles the caller passes, and a genuinely duplicated
+    # command is still reported once
+    both_dirty = ["cd /a && claude -p", "cd /a && claude -p"]
+    assert ap.command_findings(both_dirty, {},
+                               labels=("student agent command", "teacher agent command")) == [
+        "student agent command: changes directory before running the agent, so "
+        "the policy in the working directory would not be loaded",
+        "teacher agent command: changes directory before running the agent, so "
+        "the policy in the working directory would not be loaded",
+    ]
+    assert ap.command_findings(both_dirty, {}) == [
+        "agent command: changes directory before running the agent, so "
+        "the policy in the working directory would not be loaded",
+    ]
+
+
+def test_the_hook_blocks_when_the_event_does_not_parse(tmp_path):
+    """BUG-SEED-45: an unparseable event used to be allowed through with exit 0 --
+    silently fail-open, while an unreadable POLICY fails closed two lines above.
+    The event text is the model's own output channel, so a parse failure is a
+    tampering signal, not a reason to let the call through."""
+    p = subprocess.run([sys.executable, str(REPO / "scripts" / "agent_policy_hook.py"),
+                        str(_policy_file(tmp_path))], input="{not json", text=True,
+                       capture_output=True)
+    assert p.returncode == 2 and "BLOCKED" in p.stderr
+    empty = subprocess.run([sys.executable, str(REPO / "scripts" / "agent_policy_hook.py"),
+                            str(_policy_file(tmp_path))], input="", text=True, capture_output=True)
+    assert empty.returncode == 0          # no event at all is just no opinion
+
+
+def _policy_file(tmp_path):
+    p = tmp_path / "policy.json"
+    p.write_text(json.dumps(POLICY))
+    return p

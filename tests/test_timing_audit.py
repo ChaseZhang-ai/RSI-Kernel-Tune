@@ -222,6 +222,14 @@ def test_the_host_path_note_records_the_deployment_cost_without_touching_the_gat
     assert "inflated" not in note and "HOST-BOUND" not in note
 
 
+def test_the_host_path_note_names_both_directions():
+    # a thin wrapper reads as thinner than the reference's, a thick one as thicker
+    thin = host_path_note(0.02, 0.01522, basis=BASIS_CUPTI, ref_host_enqueue_ms=0.06463)
+    thick = host_path_note(0.08, 0.01522, basis=BASIS_CUPTI, ref_host_enqueue_ms=0.02)
+    assert "0.3x thinner" in thin and "thicker" not in thin
+    assert "4.0x thicker" in thick and "thinner" not in thick
+
+
 def test_the_host_path_note_is_silent_on_a_plain_basis_and_under_the_threshold():
     assert host_path_note(SPAN_HOST_MS, SPAN_DEVICE_MS, basis=BASIS_PLAIN) == ""
     assert host_path_note(0.004, 0.4085, basis=BASIS_CUPTI) == ""     # thin wrapper

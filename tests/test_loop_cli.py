@@ -773,6 +773,31 @@ def test_an_aborted_poll_leaves_the_job_adoptable(monkeypatch, tmp_path):
     assert rec["job"] == "5"              # the next run can pick it back up
 
 
+def test_a_poll_timeout_counts_toward_giving_the_job_up(monkeypatch, tmp_path):
+    """BUG-SEED-21: a job whose poll never reaches a terminal state must not stay
+    adoptable forever -- a restart used to re-adopt a wedged job, wait another full
+    poll window, die on the same timeout, and loop like that without end. Poll
+    timeouts feed the same give-up counter as a log that never arrives; a single
+    aborted poll still leaves the job adoptable (the guard above)."""
+    import json as _json
+
+    from peregrine_kernel.loop import cli
+
+    ws = _adoption_ws(tmp_path)
+    monkeypatch.setattr(cli, "_forge", _fake_forge([], status="Running"))
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    be = cli.RealBackend("demo", ws, None, "n", "e", poll_s=0.0, poll_timeout_s=0.0)
+    monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
+    (ws / ".git" / "pk-inflight.json").write_text(_json.dumps(
+        {"job": "5", "branch": "br", "mode": "all", "sha": "abc"}))
+    for attempt in range(cli._INFLIGHT_LOG_ATTEMPTS):
+        with pytest.raises(cli.BackendError, match="job 5"):
+            be.submit_gpu("br", "all")
+        if attempt < cli._INFLIGHT_LOG_ATTEMPTS - 1:
+            assert (ws / ".git" / "pk-inflight.json").exists()   # one miss is not a give-up
+    assert not (ws / ".git" / "pk-inflight.json").exists()       # the record is given up
+
+
 # --- the architecture reference is a precondition, not an input ----------------
 # Every mechanism gate line in a distilled milestone anchors to this reference's NCU
 # signature, and v1 is the one write with no rollback behind it. Measuring it after
@@ -866,6 +891,23 @@ def test_ref_rides_job_judgment():
     assert not _ref_rides_job({})  # target-ms-only run: no ref declared
     assert not _ref_rides_job({"ref_mode": "faref", "submit_op": "_recon"})
     assert not _ref_rides_job({"ref_cmd": "python ref.py", "submit_op": "_recon"})
+
+
+def test_label_only_ref_keys_declare_no_reference():
+    """BUG-C3-02: ref_name / ref_shape / ref_hardware / ref_ncu_cmd DESCRIBE a
+    reference, they do not deliver one -- a loop.toml carrying only labels used to
+    count as a declared reference, so a target-ms-only run was refused at the
+    window gate (EXIT_WINDOW_UNDECLARED, asking it to declare what it has no way
+    to declare) and the driver took the in-job-ratio path for readings no bench
+    can produce."""
+    from peregrine_kernel.loop.cli import _arm_has_reference, _ref_rides_job, _resolve_ref_spec
+    cfg = {"loop": {"ref_name": "cuDNN", "ref_shape": "B=1,H=128", "ref_hardware": "H100"}}
+    spec = _resolve_ref_spec(cfg)
+    assert spec and not _ref_rides_job(spec)
+    assert not _arm_has_reference(cfg)
+    assert _arm_has_reference({"loop": {"ref_cmd": "python3 measure.py"}})
+    assert _arm_has_reference({"loop": {"ref_mode": "sealref", "ref_submit_op": "_ref"}})
+    assert _arm_has_reference({"loop": {"arch_ref_ms": 1.0}})
 
 
 def test_unrecognized_model_flake_is_transient():
@@ -1311,3 +1353,88 @@ def test_harvest_only_runs_the_write_up_and_nothing_else(tmp_path, monkeypatch, 
     status.write_text("", encoding="utf-8")
     assert cli._harvest_only(ctx, args, tmp_path, tmp_path / "m.md", None) == 2
     assert len(called) == 1
+
+
+# --- BUG-SEED-10: an interrupted agent turn must not leave the agent's session ----
+
+def test_an_interrupted_agent_turn_ends_the_whole_session(tmp_path, monkeypatch):
+    """A Ctrl-C / SystemExit landing on the heartbeat thread must take down the whole
+    agent process group, not just the shell: the leg scripts spawn children (the model
+    process) that keep spending API usage after the loop is gone. The turn therefore
+    starts its own session (Popen start_new_session) and the interrupt kills the group
+    (_end_process_group), the way goal_ref's legs already did."""
+    import subprocess as sp
+    import uuid
+
+    from peregrine_kernel.loop import cli
+
+    marker = f"pk-seed10-orphan-{uuid.uuid4().hex[:8]}"
+    cmd = (f"bash -c 'python3 -c \"import time; time.sleep(300)\" {marker} & wait'")
+    be = cli.RealBackend("op", tmp_path, None, "n", "e")
+    be.agent_heartbeat_s = 0.05
+
+    def boom(*a, **k):
+        raise KeyboardInterrupt
+    monkeypatch.setattr("builtins.print", boom)
+
+    def _orphans():
+        return sp.run(["pgrep", "-f", marker], capture_output=True, text=True).stdout.split()
+
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            be._agent_turn(cmd, "p", "student")
+        assert _orphans() == []          # the grandchild did not survive the interrupt
+    finally:
+        sp.run(["pkill", "-f", marker], capture_output=True)
+
+
+# --- BUG-SEED-48: the submit retry budget is not a 30-minute hole ---------------
+
+def test_retry_call_sleeps_only_between_attempts(monkeypatch):
+    """The last failed attempt goes straight to the raise: sleeping after it only
+    delays the error by another backoff step."""
+    from peregrine_kernel.loop import cli
+    from peregrine_kernel.loop.driver import BackendError
+    b = _backend(monkeypatch, git_retries=3, git_retry_sleep=10.0)
+    sleeps = []
+    monkeypatch.setattr(cli.time, "sleep", lambda s: sleeps.append(s))
+
+    def fn():
+        return _FakeProc(1, stderr="nope")
+    with pytest.raises(BackendError):
+        b._retry_call(fn, what="git push")
+    assert sleeps == [10.0, 20.0]          # between attempts, not after the last
+
+
+def test_retry_call_lets_unexpected_errors_propagate(monkeypatch):
+    """The capture face is the expected transport classes (OSError / subprocess);
+    anything else is a bug in the caller, not a hiccup to paper over."""
+    from peregrine_kernel.loop import cli
+    b = _backend(monkeypatch, git_retries=3)
+
+    def fn():
+        raise TypeError("load_config changed shape")
+    with pytest.raises(TypeError):
+        b._retry_call(fn, what="git push")
+
+
+def test_a_hung_submit_retries_within_minutes_not_half_an_hour(monkeypatch, tmp_path):
+    """A submit whose subprocess hangs costs timeout x attempts; 3 x 600s plus a
+    tail sleep used to hold the loop hostage for about half an hour before the
+    error surfaced."""
+    import subprocess
+
+    from peregrine_kernel.loop import cli
+    timeouts = []
+
+    def fake_forge(op, verb, *a, **k):
+        timeouts.append(k.get("timeout"))
+        raise subprocess.TimeoutExpired(cmd="forge", timeout=k.get("timeout") or 0)
+    monkeypatch.setattr(cli, "_forge", fake_forge)
+    monkeypatch.setattr(cli.time, "sleep", lambda _: None)
+    be = cli.RealBackend("demo", tmp_path, None, "n", "e", poll_s=0.0)
+    monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
+    with pytest.raises(BackendError):
+        be.submit_gpu_start("br", "all")
+    assert timeouts == [cli._SUBMIT_TIMEOUT_S] * be.git_retries
+    assert cli._SUBMIT_TIMEOUT_S * be.git_retries <= 400   # minutes, not half an hour

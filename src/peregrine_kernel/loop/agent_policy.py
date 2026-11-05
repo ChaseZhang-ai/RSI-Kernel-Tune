@@ -479,8 +479,16 @@ _PY_CHDIR = re.compile(r"(?<![\w.])(?:os\.)?chdir\s*\(")
 
 
 def command_findings(cmds: list[str | None], env: dict[str, str],
-                     cwd: str | os.PathLike | None = None) -> list[str]:
+                     cwd: str | os.PathLike | None = None, *,
+                     labels: "list[str] | None" = None) -> list[str]:
     """Why some agent command would run the agent without loading the project settings.
+
+    EVERY command is examined: the caller passes one command per headless leg (the
+    student's, then the teacher's), and ``labels`` names them in the findings so the
+    two legs are tellable apart. Dedup is per (source, text) pair -- the same script
+    named twice is reported once, but the second leg's findings are never dropped
+    with the first leg's (BUG-SEED-17: a fixed source string plus `source in seen`
+    used to swallow the teacher's findings wholesale).
 
     Reads what the context-window gate reads (agentctx): the command text and the shell
     and python scripts it names, following the scripts those name in turn (a wrapper
@@ -490,8 +498,9 @@ def command_findings(cmds: list[str | None], env: dict[str, str],
     happens, this only refuses the shapes known to defeat it."""
     from peregrine_kernel.loop.agentctx import script_texts
 
+    labels = list(labels) if labels else ["agent command"] * len(cmds)
     texts: list[tuple[str, str]] = []
-    for cmd in cmds:
+    for cmd, label in zip(cmds, labels):
         if not cmd:
             continue
         texts.append(("agent command", cmd))

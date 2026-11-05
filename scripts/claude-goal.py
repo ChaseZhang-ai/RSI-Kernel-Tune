@@ -706,6 +706,16 @@ class GoalLeg:
         out = (r.stdout + r.stderr).strip()
         return (r.returncode == 0 and OK_LINE in out), out
 
+    def deliverable_or_note(self) -> tuple[bool, str]:
+        """deliverable(), with the check's own timeout handled: a hung check command
+        is no verdict either way, so it reads as "not confirmed" plus a note, and
+        watch()'s branches carry on (BUG-SEED-44: the TimeoutExpired used to escape
+        watch() and skip save_session)."""
+        try:
+            return self.deliverable()
+        except subprocess.TimeoutExpired as e:
+            return False, f"the deliverable check hung past its {e.timeout:.0f}s budget"
+
     def resend_goal(self, why: str) -> None:
         self.nudges += 1
         self.events.append(why)
@@ -723,7 +733,7 @@ class GoalLeg:
         while True:
             now = time.time()
             if self.deadline is not None and now >= self.deadline:
-                ok, out = self.deliverable()
+                ok, out = self.deliverable_or_note()
                 if ok:          # finished, the judge just had not said so yet
                     return "met", out
                 return "timeout", f"wall-clock deadline reached after {now - self.started:.0f}s"
@@ -744,7 +754,7 @@ class GoalLeg:
             if tr.met is not None:
                 # the turn that the judge closed finishes its bookkeeping first
                 if tr.last_kind == "turn_end" or quiet > self.settle_s or dead:
-                    ok, out = self.deliverable()
+                    ok, out = self.deliverable_or_note()
                     if ok:
                         return "met", out
                     false_met += 1
@@ -756,17 +766,17 @@ class GoalLeg:
                     acted_at_size, acted_at = tr.size, now
                     continue
             if tr.failed is not None and (tr.last_kind == "turn_end" or quiet > self.settle_s or dead):
-                ok, out = self.deliverable()
+                ok, out = self.deliverable_or_note()
                 if ok:
                     return "met", out
                 return "fail", f"goal judged impossible: {tr.failed.get('reason', '')[:600]}"
             if dead:
-                ok, out = self.deliverable()
+                ok, out = self.deliverable_or_note()
                 if ok:
                     return "met", out
                 return "fail", f"claude exited (status {status or '?'}) before the deliverable"
             if not alive:
-                ok, out = self.deliverable()
+                ok, out = self.deliverable_or_note()
                 if ok:
                     return "met", out
                 return "fail", "the tmux session disappeared before the deliverable"
@@ -805,7 +815,7 @@ class GoalLeg:
                 # the check is the authority, the judge only keeps the agent going
                 if checked_at_size != tr.size:
                     checked_at_size = tr.size
-                    ok, out = self.deliverable()
+                    ok, out = self.deliverable_or_note()
                     if ok:
                         return "met", out
             if state == "paused" and settled:

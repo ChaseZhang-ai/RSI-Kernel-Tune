@@ -105,8 +105,9 @@ _ENTRY_DONE_RE = ENTRY_DONE_RE
 # ran, so failing the eval would charge the kernel for the machine — resubmit instead.
 _LOST = {STATUS_LOST}
 
-# How many times a job's log may fail to arrive before the in-flight record is given
-# up: a restart re-adopts a recorded job, and one whose log never comes must not be
+# How many times a job may fail to make progress -- a log that never arrives, or a
+# poll that never reaches a terminal state -- before the in-flight record is given
+# up: a restart re-adopts a recorded job, and one that is wedged must not be
 # re-adopted forever.
 _INFLIGHT_LOG_ATTEMPTS = 3
 
@@ -260,6 +261,14 @@ def _forge(op: str, *args: str, timeout: float = 600.0,
         capture_output=True, text=True, cwd=_repo_root(), timeout=timeout,
         env=None if env is None else {**os.environ, **env},
     )
+
+
+# A submit is a local hand-off (stage the tree, lock, spawn the runner or one ssh
+# session), not the job itself -- the job's own clock is the [job] timeout. When the
+# submit subprocess hangs anyway, retrying it 3 x 600s held the loop hostage for
+# about half an hour before the error surfaced (BUG-SEED-48); this bounds the whole
+# budget to a few minutes.
+_SUBMIT_TIMEOUT_S = 120.0
 
 
 def _entry_task(mode: str) -> str:
@@ -581,7 +590,8 @@ class RealBackend:
         ``submit_gpu_finish``. The fused ``submit_gpu`` above stays the only
         gate-facing path."""
         sub = self._retry_call(
-            lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode),
+            lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode,
+                           timeout=_SUBMIT_TIMEOUT_S),
             what=f"submit {mode}")
         m = re.search(r"job=(\d+)", sub.stdout) or re.search(r'"id":\s*(\d+)', sub.stdout)
         if not m:
@@ -647,7 +657,8 @@ class RealBackend:
                       f"instead of resubmitting", flush=True)
             else:
                 sub = self._retry_call(
-                    lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode),
+                    lambda: _forge(self.op, "submit", "--branch", branch, "--mode", mode,
+                                   timeout=_SUBMIT_TIMEOUT_S),
                     what=f"submit {mode}")
                 m = re.search(r"job=(\d+)", sub.stdout) or re.search(r'"id":\s*(\d+)', sub.stdout)
                 if not m:
@@ -2686,9 +2697,13 @@ def _main(argv: list[str] | None = None) -> int:
     # the merge.
     window_problems = []
     window_cmds = [args.agent_cmd]
+    # who each command serves, for the policy gate's findings (the legs are named
+    # in the refusal: "teacher agent command: --settings ...")
+    window_labels = ["student agent command"]
     teacher_cmd = getattr(args, "teacher_agent_cmd", None)
     if teacher_cmd and teacher_cmd not in window_cmds:
         window_cmds.append(teacher_cmd)
+        window_labels.append("teacher agent command")
     if not args.allow_200k_window:
         # The agent inherits the launcher's environment, which unsets every
         # ANTHROPIC_* variable (the run scripts do `unset ANTHROPIC_* ...` so the
@@ -2795,7 +2810,8 @@ def _main(argv: list[str] | None = None) -> int:
     # The policy is delivered as project settings in the agent's working directory; a
     # leg that skips project settings or leaves the directory would run unrestricted.
     policy_problems += agent_policy_mod.command_findings(
-        window_cmds, dict(os.environ), args.workspace)
+        window_cmds, dict(os.environ), args.workspace,
+        labels=window_labels)
     if policy_problems:
         for f in policy_problems:
             sys.stderr.write(f"[loop]   {f}\n")

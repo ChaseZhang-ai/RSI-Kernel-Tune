@@ -298,3 +298,19 @@ def test_guard_off_does_nothing(tmp_path):
     rec = run_inner_iteration(ctx, 1, metric_before=2.5, last_good_ref="sha0", green=True)
     assert rec.verdict == "KEEP"
     assert not [c for c in be.calls if c[0] in ("restore", "harness-changes")]
+
+
+def test_an_overlay_that_cannot_be_built_refuses_the_job(tmp_path, monkeypatch):
+    """BUG-SEED-19: a build failure used to fall back to pushing ``ref`` itself --
+    the job silently ran the tree's own judge, exactly what the overlay exists to
+    prevent. Fail closed: the job does not start."""
+    card, ws = _card(tmp_path)
+    (ws / "eval" / "bench.py").write_text("print('PASS always')\n")
+    head = _commit(ws, "student")
+    be = _backend(ws, card)
+
+    def broken(ref, changes):
+        raise cli.BackendError("git read-tree failed")
+    monkeypatch.setattr(be, "_commit_overlay", broken)
+    with pytest.raises(cli.BackendError, match="fail-closed"):
+        be._with_job_env(head)

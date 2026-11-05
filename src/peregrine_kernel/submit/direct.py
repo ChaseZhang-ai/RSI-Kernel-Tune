@@ -33,6 +33,7 @@ import io
 import json
 import lzma
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -40,12 +41,13 @@ import subprocess
 import tarfile
 import time
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from peregrine_kernel.submit.config import SubmitConfig, is_secret_env
 from peregrine_kernel.submit.jobs import (BEGIN_MARKER, RUN_HEADROOM_S, STATUS_FAILED,
                                      STATUS_LOST, STATUS_SUCCEEDED,
-                                     TRANSPORT_ERROR_MARKER, locked)
+                                     TRANSPORT_ERROR_MARKER, locked,
+                                     proc_start_ticks)
 
 LOCAL_TREE = ".exec/tree"
 CMD_PREFIX = "cmd:"
@@ -108,6 +110,7 @@ INPUTS_SYNC_MIN_BYTES = 1 << 20   # files at/above this ride the store (the tax 
 INPUTS_DIR_SEGMENT = "inputs"     # a path component: <...>/inputs/<...> is input-tensor territory
 INPUTS_STORE_ENV = "PK_INPUTS_STORE"
 INPUTS_SYNC_ENV = "PK_INPUTS_SYNC"
+LOCAL_TREE_ROOT = LOCAL_TREE.split("/", 1)[0]   # ".exec": the extraction tree's root
 # --- WP19 (task 1 addendum, A-G24/B-B7): inputs manifest cost cut ------------------------
 # Every job used to read every input file twice in full (the source-side sha,
 # then the store-side recheck) — GB-scale tensors, per job. The source-side
@@ -120,6 +123,7 @@ INPUTS_SYNC_ENV = "PK_INPUTS_SYNC"
 # the memo is a cache, never a correctness single point.
 INPUTS_MANIFEST_NAME = "source-manifest.json"
 INPUTS_VERIFY_SAMPLE_STRIDE = 4   # full-hash this store entry in 1 of every N jobs
+RESTORE_CHUNK_BYTES = 1 << 20     # restore streams in chunks of this size
 
 
 def inputs_store_dir() -> Path:
@@ -164,24 +168,36 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _op_tree_identity(op_dir: Path) -> str:
+    """A digest of the op tree's absolute path: two checkouts are two trees."""
+    return hashlib.sha256(str(Path(op_dir).resolve()).encode()).hexdigest()[:12]
+
+
 def _inputs_manifest_entry(op_dir: Path, path: Path, memo: dict) -> dict | None:
     """One sync candidate: ``{path (in-tree), sha256, size}``, or None.
 
-    WP19 (task 1 addendum): the source-side hash is memoized by (size, mtime_ns) —
-    an unchanged file is not re-read. A stat mismatch, a missing memo or ANY
-    trouble falls back to the full hash (and refreshes the memo)."""
+    WP19 (task 1 addendum): the source-side hash is memoized by
+    (op tree, size, mtime_ns) — an unchanged file of the same tree is not
+    re-read. The record is bound to the op tree it was hashed from: the store
+    (and its memo) are shared by every op tree on the machine, and two trees
+    colliding on (path, size, mtime_ns) must not hand each other's sha over --
+    that delivered one tree's bytes into the other's job tree (BUG-CORPS-C-18).
+    A stat mismatch, a missing or foreign memo record or ANY trouble falls
+    back to the full hash (and refreshes the memo)."""
     try:
         rel = path.relative_to(op_dir).as_posix()
         st = path.stat()
         size, mtime = st.st_size, st.st_mtime_ns
+        op = _op_tree_identity(op_dir)
         cached = memo.get(rel)
-        if (isinstance(cached, dict) and cached.get("size") == size
+        if (isinstance(cached, dict) and cached.get("op") == op
+                and cached.get("size") == size
                 and cached.get("mtime_ns") == mtime
                 and isinstance(cached.get("sha256"), str)):
             h = cached["sha256"]
         else:
             h = _file_sha256(path)
-            memo[rel] = {"size": size, "mtime_ns": mtime, "sha256": h}
+            memo[rel] = {"op": op, "size": size, "mtime_ns": mtime, "sha256": h}
     except (OSError, ValueError):
         return None
     return {"path": rel, "sha256": h, "size": size}
@@ -212,9 +228,18 @@ def sync_inputs_to_store(cfg: SubmitConfig, store: Path | None = None) -> list |
     memo = _inputs_load_manifest(store)
     manifest: list[dict] = []
     for idx, path in enumerate(sorted(op_dir.rglob("*"))):
+        rel = path.relative_to(op_dir)
+        if LOCAL_TREE_ROOT in rel.parts:
+            # The extraction tree (LOCAL_TREE) is a previous job's workplace,
+            # not input territory: its inputs/ copies are restored data, and
+            # syncing them rebuilt a stale copy -- nested one level deeper --
+            # inside every new job tree (BUG-CH-I-01). Forget any junk entry an
+            # older sync memoized for it.
+            memo.pop(rel.as_posix(), None)
+            continue
         if not path.is_file() or path.stat().st_size < INPUTS_SYNC_MIN_BYTES:
             continue
-        if INPUTS_DIR_SEGMENT not in path.relative_to(op_dir).parts:
+        if INPUTS_DIR_SEGMENT not in rel.parts:
             continue
         entry = _inputs_manifest_entry(op_dir, path, memo)
         if entry is None:
@@ -266,18 +291,39 @@ def restore_inputs_from_store(tree: Path, manifest: list,
                               store: Path | None = None) -> None:
     """Materialize the synced inputs back into a freshly extracted tree.
 
-    Every file is verified against its manifest hash before it lands (the copy
-    is byte-identical or the call raises); a missing or mismatched store entry
-    raises, and the caller falls back to the full archive."""
+    Every file streams from the store in bounded chunks (holding a GB-scale
+    tensor in memory once OOM-killed the runner, and a Lost runner loops the
+    job -- BUG-CORPS-C-17), hashing as it goes: the copy lands only when it is
+    byte-identical to the manifest hash, and a missing or mismatched store
+    entry raises -- leaving no partial file behind -- so the caller falls back
+    to the full archive."""
     store = store if store is not None else inputs_store_dir()
     for entry in manifest:
+        rel = str(entry["path"])
+        if LOCAL_TREE_ROOT in PurePosixPath(rel).parts:
+            # A manifest (hand-edited, or polluted by the pre-CH-I-01 sync)
+            # must never rebuild the extraction tree inside a fresh job tree.
+            raise RuntimeError(f"manifest entry {rel!r} is inside the extraction "
+                               f"tree ({LOCAL_TREE}) -- refusing to rebuild it")
         src = store / entry["sha256"]
-        data = src.read_bytes()
-        if hashlib.sha256(data).hexdigest() != entry["sha256"]:
-            raise RuntimeError(f"input store hash mismatch: {entry['path']}")
         dest = tree / entry["path"]
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(data)
+        tmp = dest.with_name(f".{dest.name}.restore.{os.getpid()}")
+        h = hashlib.sha256()
+        try:
+            with open(src, "rb") as fin, open(tmp, "wb") as fout:
+                for chunk in iter(lambda: fin.read(RESTORE_CHUNK_BYTES), b""):
+                    h.update(chunk)
+                    fout.write(chunk)
+            if h.hexdigest() != entry["sha256"]:
+                raise RuntimeError(f"input store hash mismatch: {entry['path']}")
+            os.replace(tmp, dest)
+        except BaseException:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            raise
         try:
             os.chmod(dest, 0o644)
         except OSError:
@@ -336,16 +382,48 @@ def remote_tree(cfg: SubmitConfig) -> str:
     return f"{cfg.exec_workdir.rstrip('/')}/{run}/{op_dir.name}-{identity}"
 
 
+_ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _checked_env_key(name: str) -> str:
+    """A ``[env]`` key as it is spelled on the remote command line.
+
+    A key is interpolated into a line the host's shell parses, so only shell
+    identifiers travel, and they travel quoted: ``"A;id" = "1"`` is a legal
+    quoted TOML key, but interpolated raw it split ``export A;id=1=...`` into
+    two commands (BUG-CORPS-C-14). shlex.quote of a plain identifier is the
+    identifier itself, so sane keys are byte-for-byte what they always were."""
+    if not _ENV_KEY_RE.match(name):
+        raise ValueError(f"[env] key {name!r} is not a valid shell identifier "
+                         f"(expected [A-Za-z_][A-Za-z0-9_]*)")
+    return shlex.quote(name)
+
+
 def _entry_argv(cfg: SubmitConfig, mode: str) -> list[str]:
     if mode.startswith(CMD_PREFIX):
-        return ["bash", cfg.entry_script, "cmd", *shlex.split(mode[len(CMD_PREFIX):])]
+        return ["bash", cfg.entry_script, "cmd",
+                *_quoted_entry_args(mode[len(CMD_PREFIX):])]
     if mode.startswith(f"{MERGED_EVAL_NCU_PREFIX}:"):
         # allncu:<ncu command> — the merged task's NCU segment is the named
         # command (e.g. the vendored orchestration census runner), passed as
         # arguments exactly like the cmd task's (WP11 task 1).
         return ["bash", cfg.entry_script, MERGED_EVAL_NCU_PREFIX,
-                *shlex.split(mode[len(MERGED_EVAL_NCU_PREFIX) + 1:])]
+                *_quoted_entry_args(mode[len(MERGED_EVAL_NCU_PREFIX) + 1:])]
     return ["bash", cfg.entry_script, mode]
+
+
+def _quoted_entry_args(spec: str) -> list[str]:
+    """The arguments of a ``cmd:``/``allncu:`` spec, each shell-quoted.
+
+    gpu_entry.sh's cmd and allncu cases re-join their positional parameters
+    (``"$*"``) and hand the string to ``bash -c`` -- so a plain token stream is
+    not enough: an argument whose own quoting shlex.split stripped would have
+    its contents revived as live shell syntax on the far side of the rejoin
+    (``"a; b"`` ran as ``a`` then ``b``, a redirect ate a word, ...). Each
+    argument therefore travels as its quoted self, and the rejoin reconstructs
+    the original argv. shlex.quote of a plain token is the token itself, so
+    ordinary commands are byte-for-byte what they always were (BUG-CORPS-C-15)."""
+    return [shlex.quote(a) for a in shlex.split(spec)]
 
 
 def _job_env(cfg: SubmitConfig, tree_sha: str | None = None) -> dict:
@@ -479,10 +557,11 @@ class DirectRunner:
         parts = [f"cd {shlex.quote(remote_tree(self.cfg))}"]
         if self.cfg.exec_env_file:
             parts.append(f". {shlex.quote(self.cfg.exec_env_file)}")
-        parts += [f"export {k}={shlex.quote(str(v))}" for k, v in sorted(env.items())
+        parts += [f"export {_checked_env_key(k)}={shlex.quote(str(v))}" for k, v in sorted(env.items())
                   if k not in secrets]
         # a secret is read off stdin, never spelled on a command line `ps` shows
-        parts += [f"{{ IFS= read -r {k} || true; }} && export {k}" for k in secrets]
+        parts += [f"{{ IFS= read -r {_checked_env_key(k)} || true; }} && "
+                  f"export {_checked_env_key(k)}" for k in secrets]
         lock = shlex.quote(f"{self.cfg.exec_workdir.rstrip('/')}/.gpu{self.cfg.exec_gpu}.lock")
         entry = " ".join(shlex.quote(a) for a in _entry_argv(self.cfg, mode))
         # no begin marker here: the session script prints it, inside the setsid
@@ -568,6 +647,10 @@ class DirectRunner:
                                    stderr=subprocess.STDOUT, text=True,
                                    stdin=subprocess.PIPE if secrets else subprocess.DEVNULL,
                                    start_new_session=True)
+                # the ssh client's /proc identity, sampled while it is known alive:
+                # its pid must not be signalled after it was reaped and reused
+                # (BUG-CORPS-C-19)
+                child_start = proc_start_ticks(proc.pid)
                 if secrets:
                     try:
                         proc.stdin.write(secrets)
@@ -589,14 +672,14 @@ class DirectRunner:
                         rc = proc.wait(timeout=deadline)
                     except subprocess.TimeoutExpired:
                         self._stop_remote(log_file)
-                        _kill_group(proc)
+                        _kill_group(proc, child_start)
                         log_file.write(f"[direct] gpu_entry {mode} exceeded {deadline:.0f}s "
                                        f"-- killed\n")
                         log_file.flush()
                         return STATUS_FAILED
                     except BaseException:   # stopped (SIGTERM -> SystemExit) or interrupted
                         self._stop_remote(log_file)
-                        _kill_group(proc)
+                        _kill_group(proc, child_start)
                         raise
                     if rc == 0:
                         return STATUS_SUCCEEDED
@@ -685,11 +768,16 @@ def _descendants(root: int) -> list[int]:
 
 def _kill_session(proc, grace_s: float = STOP_GRACE_S) -> None:
     """End ``proc`` and everything below it. Its process group is not enough: gpu_entry's
-    `timeout` moves the task into a group of its own. The tree is read before the first
-    signal, while every member still hangs below ``proc``."""
+    `timeout` moves itself and the task into a group of their own. The tree is read before
+    the first signal, while every member still hangs below ``proc`` -- and each pid's
+    /proc identity is sampled with it, so a pid that exits and is reused before the
+    signal lands is left alone (BUG-CORPS-C-19)."""
     tree = [proc.pid, *_descendants(proc.pid)]
+    identity = {pid: proc_start_ticks(pid) for pid in tree}
     for sig in (signal.SIGTERM, signal.SIGKILL):
         for pid in tree:
+            if proc_start_ticks(pid) != identity[pid]:
+                continue   # gone, or the pid is somebody else's process now
             try:
                 os.kill(pid, sig)
             except (ProcessLookupError, PermissionError):
@@ -700,17 +788,23 @@ def _kill_session(proc, grace_s: float = STOP_GRACE_S) -> None:
             continue
         if sig == signal.SIGTERM:
             time.sleep(min(grace_s, 1.0))   # the rest of the tree, a moment to go too
-    _kill_group(proc)
+    _kill_group(proc, identity[proc.pid])
 
 
-def _kill_group(proc) -> None:
-    try:
-        os.killpg(proc.pid, 9)
-    except (ProcessLookupError, PermissionError, OSError):
+def _kill_group(proc, identity: str | None = None) -> None:
+    """Kill ``proc``'s process group. ``identity`` is the /proc starttime sampled
+    while ``proc`` was known alive (its callers hold one from spawn or tree-read
+    time): when the pid's occupant no longer matches -- the process was reaped
+    and its pid reused -- the group is not ours to signal. Without an identity
+    (no /proc on this platform) the old best-effort kill stands."""
+    if identity is None or proc_start_ticks(proc.pid) == identity:
         try:
-            proc.kill()
-        except OSError:
-            pass
+            os.killpg(proc.pid, 9)
+        except (ProcessLookupError, PermissionError, OSError):
+            try:
+                proc.kill()
+            except OSError:
+                pass
     try:
         proc.wait(timeout=30)
     except Exception:  # noqa: BLE001 -- best effort; the verdict is written either way

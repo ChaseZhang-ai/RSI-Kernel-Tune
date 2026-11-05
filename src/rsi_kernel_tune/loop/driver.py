@@ -1580,6 +1580,23 @@ def _compute_dtype_note(ctx: LoopContext) -> str:
             f"Work within it; going below it is a contract violation (REVERT).\n")
 
 
+def _compute_dtype_teacher_note(ctx: LoopContext) -> str:
+    """WP22 (docs/compute-dtype.md): the same declaration, addressed to the
+    teacher's diagnose / patch turns — one sentence: the precision axis is the
+    task publisher's locked constant, not a lever family to price or sweep, and
+    every structural / lever design must live inside it (the precision gate is
+    still the arbiter: a design that lands below the declaration fails the gate
+    and the round REVERTs). A default (fp32) declaration renders nothing:
+    pre-WP22 prompts, byte for byte."""
+    if ctx.compute_dtype == "fp32":
+        return ""
+    return (f"\n## Precision contract\n"
+            f"- This task's contract declares compute_dtype={ctx.compute_dtype}: design "
+            f"every lever and structure within that precision — the precision axis is the "
+            f"task's locked constant, not a lever to trade; arithmetic below the "
+            f"declaration fails the precision gate and the round REVERTs.\n")
+
+
 def _retrieval_note(ctx: LoopContext) -> str:
     """The retrieval permission's injection (rsi-run.toml [student] retrieval =
     "on"): public-source retrieval is allowed before tuning, via the existing
@@ -3735,6 +3752,7 @@ def _harness_edit_revert(ctx: LoopContext, iter_no: int, record, sha: str, base_
         correctness=None, verdict="REVERT", metric_before=metric_before,
         error=err, profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
         memo_lane=ctx.memo_lane,   # M3: every row carries its lane
+        compute_dtype=ctx.compute_dtype,   # WP22: every row carries its declaration
     )
     _wp18_kb_usage_flow(ctx, rec)
     append_record(ctx.status_path, rec)
@@ -3981,6 +3999,7 @@ def run_inner_iteration(
             correctness=None, verdict="REVERT", metric_before=metric_before,
             error=err, profiler={}, cluster=_active_cluster(ctx),
             memo_lane=ctx.memo_lane,   # M3: every row carries its lane
+        compute_dtype=ctx.compute_dtype,   # WP22: every row carries its declaration
         )
         _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
@@ -4023,6 +4042,7 @@ def run_inner_iteration(
             correctness=None, verdict="NEUTRAL", metric_before=metric_before, sha=sha,
             cluster=_active_cluster(ctx), base_sha=base_sha,
             memo_lane=ctx.memo_lane,   # M3: every row carries its lane
+        compute_dtype=ctx.compute_dtype,   # WP22: every row carries its declaration
         )
         _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
@@ -4216,6 +4236,7 @@ def run_inner_iteration(
                 gate_degraded=ev.gate_degraded,           # WP20: the gate's own visibility
                 gpu_state=ev.gpu_state or {},   # WP1 telemetry: objective, rides every eval
                 memo_lane=ctx.memo_lane,   # M3: every row carries its lane
+        compute_dtype=ctx.compute_dtype,   # WP22: every row carries its declaration
                 **_wp11_wallclock_fields(ctx, agent_s=wp11_agent_s, eval_s=eval_job_s,
                                          ncu_s=ncu_job_s, queue_s=queue_wait_s),
                 variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
@@ -4261,6 +4282,7 @@ def run_inner_iteration(
                                        # cache replay (both REVERT; the record says which)
             gpu_state=ev.gpu_state or {},
             memo_lane=ctx.memo_lane,   # M3: every row carries its lane
+        compute_dtype=ctx.compute_dtype,   # WP22: every row carries its declaration
             suspicious=True,      # WP9: the reward-hack marker
             variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
         )
@@ -4301,6 +4323,7 @@ def run_inner_iteration(
             per_shape_ratios=_ps_ratios, per_shape_best=_ps_best,
             replay_probe=rp, gpu_state=ev.gpu_state or {},
             memo_lane=ctx.memo_lane,
+            compute_dtype=ctx.compute_dtype,
             suspicious=True,                   # the reward-hack marker, fresh_recheck-same
             variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
         )
@@ -4341,6 +4364,7 @@ def run_inner_iteration(
             per_shape_ratios=_ps_ratios, per_shape_best=_ps_best,
             memo_fallback=mf, gpu_state=ev.gpu_state or {},
             memo_lane=ctx.memo_lane,
+            compute_dtype=ctx.compute_dtype,
             variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
         )
         _wp18_kb_usage_flow(ctx, rec)
@@ -4411,6 +4435,7 @@ def run_inner_iteration(
         # digest flags the unverified fallback; it never silently looks
         # verified). STRICT rows carry None (absent = strict).
         memo_lane=ctx.memo_lane,
+        compute_dtype=ctx.compute_dtype,
         memo_fallback=getattr(ev, "memo_fallback", None),
     )
     _wp4_note_regression(ctx, rec, iter_no, cluster)   # WP4: slow-decision bookkeeping (prior only)
@@ -9324,6 +9349,7 @@ def _mc_deliver_per_shape(ctx: LoopContext, be, iter_no: int, record, base_sha: 
         profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
         variant_timings=timings or None,
         memo_lane=ctx.memo_lane,   # M3: every row carries its lane
+        compute_dtype=ctx.compute_dtype,   # WP22: every row carries its declaration
     )
     append_record(ctx.status_path, rec)
     return {"rows": timings, "winner": None, "revert": rec, "git_moved": True}
@@ -9494,6 +9520,7 @@ def _mc_deliver(ctx: LoopContext, be, iter_no: int, record, base_sha: str,
             profiler={}, cluster=_active_cluster(ctx), base_sha=base_sha,
             variant_timings=timings or None,
             memo_lane=ctx.memo_lane,   # M3: every row carries its lane
+        compute_dtype=ctx.compute_dtype,   # WP22: every row carries its declaration
         )
         _wp18_kb_usage_flow(ctx, rec)
         append_record(ctx.status_path, rec)
@@ -11884,6 +11911,13 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     ncu_view += f"\n{_window_contract_binding(ctx)}\n"
     diagnose_extra = (f"{ncu_view}\n## Your past meta steps (reflect; do not repeat failed "
                       f"directions)\n{reflection}\n")
+    # --- WP22 (docs/compute-dtype.md): the declared compute precision is the
+    # task publisher's contract, standing for the whole run — the teacher designs
+    # every lever inside it (the precision axis is a user-locked constant, not a
+    # lever family; the gate still judges). One sentence; a default (fp32) run
+    # renders nothing here (byte-identical prompts).
+    if (dtype_note := _compute_dtype_teacher_note(ctx)):
+        diagnose_extra += dtype_note
     # Cross-run falsified levers (hw_kb/falsified_ledger.jsonl): the teacher
     # reads its dead levers as prior information for the design / pricing
     # decisions of this entry — never a gate. Empty / missing ledger: no section.
@@ -12763,8 +12797,11 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     # or budget spent (symmetric to the student's probe sub-loop and the KB certify loop).
     at_entry = _read_milestone(ctx)
     patch_out, violations = "", []
+    dtype_note = _compute_dtype_teacher_note(ctx)   # WP22: standing run contract
     for _ in range(max(1, ctx.max_patch_rounds)):
         extra = f"\n\n## DIAGNOSIS\n{diagnosis}\n"
+        if dtype_note:
+            extra += dtype_note
         if violations:
             extra += ("\n## Violations in your previous patch (fix them and resend)\n"
                       + "\n".join(f"- {v}" for v in violations) + "\n")
@@ -14055,7 +14092,8 @@ def _note_reopen(ctx: LoopContext, meta: "MetaResult", ref: str) -> None:
     append_record(ctx.status_path, IterationRecord(
         iter=len(records), decision_id="REOPEN", change=change,
         correctness=None, verdict="NEUTRAL", sha="",
-        memo_lane=ctx.memo_lane))
+        memo_lane=ctx.memo_lane,
+        compute_dtype=ctx.compute_dtype))
     ctx.reopen_note = (
         f"- **Reopened in place (REOPEN)**: the previous meta step's patch changed `{changed}`. "
         f"The workspace was **not** rolled back; it is still the best KEEP tree so far "
@@ -14496,7 +14534,8 @@ def _judge_patch(ctx: LoopContext, pending: _PendingPatch) -> str:
                     f"[{', '.join(pending.reopened)}] stand again, the reopened segment's "
                     f"rows are void."),
             correctness=None, verdict="NEUTRAL", sha="",
-            memo_lane=ctx.memo_lane))
+            memo_lane=ctx.memo_lane,
+        compute_dtype=ctx.compute_dtype))
         ctx.reopen_note = ""
     # The workspace is back on the pre-patch good tree: nothing the reverted patch
     # invalidated is rolled back any more, so its standing note must not survive into

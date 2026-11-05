@@ -264,6 +264,15 @@ class IterationRecord:
     # share one lane (the task snapshot pins it); build_digest asserts that and
     # stamps the digest with it, so no renderer can mix the lanes' numbers.
     memo_lane: bool = False
+    # --- WP22 (docs/compute-dtype.md): the declared compute precision ------------
+    #
+    # The declaration this row's numbers were produced under ("fp32" = the default
+    # and every pre-WP22 row: the append-only rule handles older files —
+    # load_records drops unknown keys and a row without the field reads fp32).
+    # All rows of a run share it (the task snapshot pins it, the driver stamps it);
+    # build_digest refuses a row set that mixes declarations — numbers read under
+    # different compute_dtype declarations are never one comparison.
+    compute_dtype: str = "fp32"
     # The MEMO lane's fallback verdict as it stood on this row (the WP9 fresh
     # child re-purposed: {"mode": "regen"|"process", "pass": bool|None, ...}).
     # pass=False rides the REVERT it caused (the evidence face); pass=None rides
@@ -590,20 +599,31 @@ def build_digest(records: list[IterationRecord], target: dict,
     mixes lanes is refused at render time rather than silently juxtaposed —
     cross-lane numbers never share a comparison column.
 
-    WP22 (docs/run-configuration.md §precision): likewise one declared precision
-    per digest. ``compute_dtype`` is the run's declaration (the task snapshot pins
-    it; the driver passes it here), stamped on the digest so no renderer can read
-    an fp16 run's numbers as comparable with an fp32 run's — omitted on the
-    default "fp32", so every pre-WP22 digest is byte-identical. The rows carry
-    no dtype (the trajectory shape is frozen; the declaration is run-level, like
-    the lane is) — the carry guard drops a levers.json priced under another
-    declaration, which is where two declarations could otherwise meet.
+    WP22 (docs/compute-dtype.md): likewise one declared precision per digest.
+    ``compute_dtype`` is the run's declaration (the task snapshot pins it; the
+    driver passes it here), stamped on the digest so no renderer can read an
+    fp16 run's numbers as comparable with an fp32 run's — omitted on the default
+    "fp32", so every pre-WP22 digest is byte-identical. Every row carries its
+    declaration (``IterationRecord.compute_dtype``, the driver stamps it beside
+    the lane), and a row set that mixes declarations is refused at render time
+    like a mixed-lane set — numbers read under different declarations are never
+    one comparison. (The carry guard additionally drops a levers.json priced
+    under another declaration — the two runs' faces where declarations could
+    otherwise meet.)
     """
     lanes = {bool(r.memo_lane) for r in records}
     if len(lanes) > 1:
         raise ValueError(
             "the trajectory mixes STRICT and MEMO rows — cross-lane numbers are "
             "never rendered in one digest (docs/industrial-lane.md §3)")
+    dtypes = {getattr(r, "compute_dtype", "fp32") for r in records}
+    if len(dtypes) > 1:
+        raise ValueError(
+            "the trajectory mixes rows read under different compute_dtype "
+            "declarations ("
+            + ", ".join(sorted(dtypes)) + ") — numbers read under different "
+            "declared precisions are never rendered in one digest "
+            "(docs/compute-dtype.md)")
     lane = "memo" if (records and records[-1].memo_lane) else "strict"
     kept = [r for r in records
             if r.verdict == "KEEP" and gate_ms(r, gate_window) is not None]

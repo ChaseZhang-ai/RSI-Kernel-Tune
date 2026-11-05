@@ -826,11 +826,20 @@ def write_report(run, task, rc: int) -> Path:
     # latency over the task's repeating input stream, never a compute-speedup
     # claim, and STRICT remains the only source of paper capability numbers.
     lane = "memo" if task.protocol.memo_lane else "strict"
+    # WP22 (docs/compute-dtype.md): the report face names the declared compute
+    # precision too — numbers read under a non-default declaration are never
+    # comparable with another declaration's. fp32 (the default) adds no line:
+    # every pre-WP22 report is byte-identical.
+    dtype = task.precision.compute_dtype
+    dtype_note = (f"\n- compute_dtype: {dtype} — every number below was read under this "
+                  f"declaration and is never comparable with a run declared otherwise"
+                  if dtype != "fp32" else "")
     lines = [f"# {run.name}", "", f"- task: {task.name} ({task.mode} mode)",
              f"- lane: {lane}"
              + (" — service latency over the task's repeating input stream; the "
                 "speedup below is not a compute-speedup claim and is never comparable "
-                "with STRICT numbers" if lane == "memo" else ""),
+                "with STRICT numbers" if lane == "memo" else "")
+             + dtype_note,
              f"- status: {rec.get('status')} (stop: {rec.get('stop') or 'unknown'}, "
              f"loop exit {rc})"]
     if rec.get("target_met"):
@@ -880,14 +889,23 @@ def cmd_export(argv) -> int:
     # (and the --out confirmation line). A MEMO export is service latency over
     # its task's repeating input stream: never quote it as a compute speedup.
     lane = "memo" if task.protocol.memo_lane else "strict"
+    # WP22 (docs/compute-dtype.md): the export's provenance names the declaration
+    # too — the kernel was optimized at exactly this dtype (never below it), and
+    # its numbers are not comparable with a run declared otherwise. fp32 (the
+    # default) adds nothing: pre-WP22 export output, byte for byte.
+    dtype = task.precision.compute_dtype
+    dtype_note = (f"[rsi-kernel-tune] export compute_dtype: {dtype} — optimized at "
+                  f"exactly this declared precision; numbers are not comparable with a "
+                  f"run declared otherwise\n" if dtype != "fp32" else "")
     note = (f"[rsi-kernel-tune] export lane: {lane}"
             + (" — service latency over the task's repeating input stream; not a "
                "compute-speedup claim, never comparable with STRICT numbers"
-               if lane == "memo" else "") + "\n")
+               if lane == "memo" else "") + "\n" + dtype_note)
     sys.stderr.write(note)
     if args.out:
         Path(args.out).write_text(best["kernel"], encoding="utf-8")
-        _say(f"wrote {args.out} (the best kernel, {best['sha'][:12]}, lane {lane})")
+        _say(f"wrote {args.out} (the best kernel, {best['sha'][:12]}, lane {lane}"
+             + (f", compute_dtype {dtype}" if dtype != "fp32" else "") + ")")
     else:
         sys.stdout.write(best["kernel"])
     return 0

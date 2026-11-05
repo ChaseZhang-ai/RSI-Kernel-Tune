@@ -396,6 +396,42 @@ def test_loop_start_flags_a_single_input_archive_under_a_multi_workload_bench(tm
     assert _target_workloads_problems("demo", tmp_path / "nowhere", (single,)) == []
 
 
+def test_a_one_shape_multi_group_card_is_a_multi_workload_bench(tmp_path):
+    """HUNT5: the static scan read only problem.json's shape ``group`` — a ONE-shape
+    card whose workload defines several input_groups (the wp21mini smoke's card:
+    std-1/2/3) read as a single-input bench, so the fresh-start target gate refused
+    a workload mismatch that does not exist (the baseline archives and the gate
+    reading are the geomean over the SAME three input groups; benchkit times every
+    input group of every shape through timing.measure_windows_workloads). The
+    smoke died at loop exit 17 before any student eval."""
+    from rsi_kernel_tune.baseline import ROLE_ARCHITECTURE, RefBaseline
+    from rsi_kernel_tune.loop.cli import _target_workloads_problems
+    from rsi_kernel_tune.window_contract import bench_times_workloads
+
+    op_dir = tmp_path / "op"
+    (op_dir / "eval" / "problem").mkdir(parents=True)
+    (op_dir / "eval" / "bench.py").write_text(
+        "from benchkit import run_bench\n\n"
+        "if __name__ == \"__main__\":\n    raise SystemExit(run_bench())\n",
+        encoding="utf-8")
+    problem = {"definition": {"name": "wp21mini"},
+               "workload": {"uuid": "tiny", "axes": {"n": 4},
+                            "input_groups": [{"name": f"std-{i}"} for i in (1, 2, 3)]}}
+    (op_dir / "eval" / "problem" / "problem.json").write_text(json.dumps(problem),
+                                                             encoding="utf-8")
+    assert bench_times_workloads(op_dir) is True
+    multi = RefBaseline(op="demo", ms=2.0, n_workloads=3, workloads=["std-1", "std-2", "std-3"],
+                        role=ROLE_ARCHITECTURE)
+    assert _target_workloads_problems("demo", op_dir, (multi, multi)) == []
+    problem["workload"]["input_groups"] = [{"name": "std-1"}]
+    (op_dir / "eval" / "problem" / "problem.json").write_text(json.dumps(problem),
+                                                             encoding="utf-8")
+    assert bench_times_workloads(op_dir) is False
+    (op_dir / "eval" / "problem" / "problem.json").write_text("{\"group\": [{}, {}]}",
+                                                             encoding="utf-8")
+    assert bench_times_workloads(op_dir) is True     # a shape group still counts
+
+
 def test_the_finish_ratio_refuses_ref_runs_over_other_workloads():
     from rsi_kernel_tune.loop.cli import _fresh_ref_workloads_mismatch
     confirm = {"workloads": [{"name": n} for n in ("a", "b", "c")]}

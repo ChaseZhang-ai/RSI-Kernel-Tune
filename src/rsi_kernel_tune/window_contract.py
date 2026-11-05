@@ -812,13 +812,22 @@ def bench_times_workloads(op_dir: Path) -> bool | None:
     except (OSError, SyntaxError):
         return None
     if any(isinstance(n, ast.Call) and _callee_name(n) == BENCH_CALL for n in ast.walk(tree)):
-        # a generated card: a shape GROUP (problem.json "group") reports the geomean
+        # a generated card: a shape GROUP (problem.json "group") reports the geomean,
+        # and so does a ONE-shape card whose workload defines several input_groups —
+        # benchkit times every input group of every shape through
+        # timing.measure_windows_workloads, so the gate reading's n_workloads is the
+        # input_groups count. Reading only shape groups here made the fresh-start
+        # target gate refuse such a card for a workload mismatch that does not
+        # exist (observed: the wp21mini smoke, loop exit 17 before any student eval).
         try:
             problem = json.loads((Path(op_dir) / "eval" / "problem" / "problem.json")
                                  .read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return False
-        return len(problem.get("group") or []) > 1
+        if len(problem.get("group") or []) > 1:
+            return True
+        wl = problem.get("workload") or {}
+        return len(wl.get("input_groups") or []) > 1
     return any(isinstance(n, ast.Call) and _callee_name(n) == MULTI_WORKLOAD_CALL
                for n in ast.walk(tree))
 

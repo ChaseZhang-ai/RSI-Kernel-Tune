@@ -1752,7 +1752,10 @@ def _write_student_digest(ctx: LoopContext) -> None:
 
 # A gate closure row ("M0-gate") vs an ordinary decision ("D0.7"). Gate rows always get
 # the full eval — they are where a scaffold phase's deferred verification is spent.
-_GATE_ROW = re.compile(r"gate", re.IGNORECASE)
+# Anchored like _STAG_GATE_ROW/_GATE_ID below (the decision id is free text: a
+# bare substring match read "D1.4-mitigate-spill" as a gate row — losing the
+# scaffold exemption, gaining the gate-only refusals and reuse privileges).
+_GATE_ROW = re.compile(r"M\d+-gate$", re.IGNORECASE)
 # The ref's per-segment construction table travels WHOLE into the distill prompt:
 # a real table (five regions, seven segments, hand-offs, precision, warp rows) is
 # ~9k characters; a 4k cut fell inside the decisive region's first hand-off line.

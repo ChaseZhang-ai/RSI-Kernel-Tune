@@ -60,9 +60,9 @@ def test_temperature_guard_falls_through_to_the_last_usable_reading(tmp_path):
     """A junk newest row must not blind the guard: the scan continues to older
     rows, so a real over-limit reading still closes the window."""
     ctx = _ctx(tmp_path, FakeBackend([], []))
-    rows = [{"iter": 0, "decision_id": "D1.1", "verdict": "KEEP",
+    rows = [{"iter": 0, "decision_id": "D1.1", "change": "x", "verdict": "KEEP",
              "correctness": True, "gpu_state": {"temperature_c": 95.0}},
-            {"iter": 1, "decision_id": "D1.2", "verdict": "KEEP",
+            {"iter": 1, "decision_id": "D1.2", "change": "y", "verdict": "KEEP",
              "correctness": True, "gpu_state": {"temperature_c": {"c": 80}}}]
     with open(ctx.status_path, "a", encoding="utf-8") as fh:
         for row in rows:

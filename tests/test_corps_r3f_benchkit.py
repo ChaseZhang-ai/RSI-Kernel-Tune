@@ -130,13 +130,18 @@ def test_replay_probe_child_sees_the_workload_scope(tmp_path, monkeypatch):
     """The probe child applies the parent's workload scope: its shape list is the
     scoped single view named like the parent's timing block (the workload uuid),
     not the whole group under group-entry names nothing can match."""
-    bk = _benchkit()
+    import shutil
     card = _group_card(tmp_path)
+    shutil.copy2(EVAL_SRC / "benchkit.py", card / "eval" / "benchkit.py")
+    spec = importlib.util.spec_from_file_location("corps_r3f_card_benchkit",
+                                                  card / "eval" / "benchkit.py")
+    bk = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bk)
     monkeypatch.setenv(bk.WORKLOAD_SCOPE_ENV, "wl1")
+    monkeypatch.chdir(card)   # the bench child loads eval/problem/problem.json from cwd
     seen: list[dict] = []
     monkeypatch.setattr(bk, "_run_replay_probe_child", lambda problem: seen.append(problem) or 0)
-    rc = bk.run_bench(["--mode", "correctness", "--replay-probe",
-                       str(card / "eval" / "problem" / "problem.json")])
+    rc = bk.run_bench(["--mode", "correctness", "--replay-probe"])
     assert rc == 0 and len(seen) == 1
     # the parent, scoped, names its single timing block by the workload uuid
     parent = json.loads(json.dumps(_GROUP_PROBLEM))
@@ -157,7 +162,7 @@ def test_scoped_child_and_parent_shape_names_match(tmp_path, monkeypatch):
     monkeypatch.setenv(bk.WORKLOAD_SCOPE_ENV, "wl1")
     parent = json.loads(json.dumps(_GROUP_PROBLEM))
     bk.apply_workload_scope(parent)
-    parent_names = {str(b.get("name")) for b in bk._task_shapes(parent)}
+    parent_names = {str(v["_wl_name"]) for v in bk._task_shapes(parent)}
     child = json.loads(json.dumps(_GROUP_PROBLEM))
     bk.apply_workload_scope(child)
     child_names = {str(v["_wl_name"]) for v in bk._task_shapes(child)}

@@ -2447,6 +2447,13 @@ def run_bench(argv=None, problem_path=None) -> int:
     if args.fresh_recheck:
         return _run_fresh_recheck_child(problem, args)
     if args.replay_probe:
+        # the child measures the SAME workload the parent timed: without the
+        # scope it reloads the whole group under the group-entry names, while the
+        # scoped parent names its single timing block by the workload uuid — the
+        # two name sets never intersect, so every scoped meta job read the probe
+        # unavailable (fail-safe, but blind) after paying the probe protocol on
+        # all the shapes whose readings were then dropped
+        apply_workload_scope(problem)
         return _run_replay_probe_child(problem)
     install_wp20_sentinels()   # --- WP20: armed before any foreign code imports
     _SCOPE.clear()

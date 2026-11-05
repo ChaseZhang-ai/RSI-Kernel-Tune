@@ -11935,7 +11935,7 @@ def run_meta_step(ctx: LoopContext, *, best_before: float | None = None,
     if priced is not None:
         # a group card: the same readings on its other meta workloads (one job each)
         diagnose_extra += _meta_workload_readings(ctx, priced, "audit" if audit else "plateau")
-    if cwt := combined_workload_test(_on_cluster(load_records(ctx.status_path), ctx),
+    if cwt := combined_workload_test(_on_cluster(live_records, ctx),
                                      ctx.gate_window, floor=ctx.resolvable_floor,
                                      cap=ctx.resolvable_cap):
         # WP15 Stouffer advisory (contract C8: judgment is NOT here — the main

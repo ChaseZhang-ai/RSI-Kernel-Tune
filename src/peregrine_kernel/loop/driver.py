@@ -14131,8 +14131,23 @@ def _pkg_step_ok(k: int, n: int) -> bool:
 
 
 def _pkg_decl(change: str) -> re.Match | None:
+    """The delivery's opening ``part k of n`` declaration when it names a valid,
+    in-policy package step (``1 <= k < n <= _PKG_MAX_STEPS``), else None.
+
+    One validity predicate on purpose: every reader of the declaration — the
+    scaffold exemption here (_declared_construction), the pricing HOLD
+    (_open_package_tail) — must judge the same string the same way. The
+    predicate used to live only downstream, so a malformed opening like
+    ``part 0 of 3`` bought a free eval as "under construction" on the scaffold
+    side while the pricing side rejected it as malformed and rolled the same
+    delivery back at price; it also lets an over-cap ``part 1 of 99`` ride the
+    exemption no pricing path would ever honor. A malformed declaration is no
+    plea at all: the delivery is evaluated and priced normally."""
     head = (change or "").split("\n", 1)[0]
-    return _PKG_DECL.search(_PKG_SENT_END.split(head, 1)[0])
+    m = _PKG_DECL.search(_PKG_SENT_END.split(head, 1)[0])
+    if m and not (1 <= int(m.group(1)) < int(m.group(2)) <= _PKG_MAX_STEPS):
+        return None
+    return m
 
 
 def _declared_construction(change: str) -> str | None:
@@ -16935,8 +16950,10 @@ def _report_waives(ctx: LoopContext, *patterns) -> bool:
     if ctx.recon_path is None:
         return False
     try:
-        text = ctx.recon_path.read_text()
-    except OSError:
+        text = ctx.recon_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        # a bad byte in the report waives the marker, it does not stop the run
+        # (UnicodeDecodeError is a ValueError, it would pass an OSError-only net)
         return False
     return all(p.search(text) is not None for p in patterns)
 

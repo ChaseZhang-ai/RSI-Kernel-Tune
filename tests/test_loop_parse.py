@@ -70,6 +70,36 @@ def test_malformed_turn_raises():
         parse_student_turn("just some prose with no record, no probe, no exhausted marker")
 
 
+def test_cited_markers_are_prose_not_requests():
+    """A marker is read only where the protocol puts it — on a line of its own.
+    Matching the whole text once let a turn that merely cited the vocabulary
+    reach the probe branch (a GPU job on a path the student only mentioned) or
+    end a phase that was still alive; the recon marker already needed the same
+    protection (its gate), and the meta diagnose path works around this parser
+    for exactly this reason."""
+    with pytest.raises(ValueError):
+        parse_student_turn("I considered running PROBE_REQUEST: notes/p.py "
+                           "but decided against it.")
+    with pytest.raises(ValueError):
+        parse_student_turn("nothing here is EXHAUSTED: out of ideas yet — "
+                           "the next variant is queued.")
+    # a record turn citing the markers in its OBJECTIVE fields stays a record
+    record = RECORD_TEXT + "notes: the change quotes `PROBE_REQUEST: timeline` only as history\n"
+    turn = parse_student_turn(record)
+    assert isinstance(turn, Record)
+
+
+def test_markers_on_their_own_line_are_still_requests():
+    # the wrapped spellings agents copy from the prompts verbatim, and a list
+    # item, all still parse: only word characters ahead of the marker on its
+    # line turn it into prose.
+    assert parse_student_turn("`PROBE_REQUEST: notes/x.py`").path == "notes/x.py"
+    turn = parse_student_turn("prose first\n- PROBE_REQUEST: notes/y.py")
+    assert isinstance(turn, ProbeRequest) and turn.path == "notes/y.py"
+    turn = parse_student_turn("prose first\nEXHAUSTED: reached M5, no further decision")
+    assert isinstance(turn, Exhausted) and "M5" in turn.reason
+
+
 def test_parse_eval_from_gpu_entry_json():
     log = """
 [task] Correctness + Performance
@@ -342,6 +372,44 @@ def test_parse_eval_reads_the_window_basis_and_the_reference_enqueue_clock():
     assert ev.host_bound_ratio is None
     assert ev.host_enqueue_ms == 0.06463
     assert ev.ref_host_enqueue_ms == 0.01911
+
+
+def test_parse_eval_filters_non_finite_readings():
+    """The JSON decoder accepts NaN / Infinity literals, and a NaN reading used
+    to ride into the trajectory untouched: min() is order-dependent on it
+    (min([nan, 2.5]) is nan, so the NaN hijacks every best it precedes),
+    comparisons against it are never true (a plateau check stalls forever), and
+    medians over lists holding it are arbitrary. The probe path already refuses
+    a non-finite max_diff; the eval's timing readings get the same posture — a
+    non-finite number parses as an absent reading, never as a passing one."""
+    log = ('=== JSON ===\n{"correctness": {"pass": true}, "performance": {'
+           '"bwd_median_ms": NaN, "mfu": Infinity, "device_median_ms": NaN, '
+           '"ref_median_ms": 9.9, "vs_ref": NaN, "host_enqueue_ms": NaN, '
+           '"device_readings_ms": [1.0, NaN, 2.0], '
+           '"ref_device_readings_ms": [Infinity], '
+           '"workloads": [{"name": "w0", "device_median_ms": NaN, "vs_ref": 0.9, '
+           '"device_readings_ms": [NaN, 3.0]}]}}')
+    ev = parse_eval(log)
+    assert ev.correctness is True
+    assert ev.bwd_median_ms is None and ev.mfu is None
+    assert ev.device_median_ms is None and ev.vs_ref is None
+    assert ev.host_enqueue_ms is None
+    assert ev.ref_median_ms == 9.9                      # finite readings survive
+    assert ev.device_readings_ms == [1.0, 2.0]
+    assert ev.ref_device_readings_ms == []
+    assert "device_median_ms" not in ev.workloads[0]
+    assert ev.workloads[0]["vs_ref"] == 0.9
+    assert ev.workloads[0]["device_readings_ms"] == [3.0]
+
+
+def test_parse_eval_scalar_readings_reject_bool_and_str():
+    # float(True) is 1.0 ms and float("2.5") parses: a malformed block must not
+    # manufacture a reading out of either.
+    ev = parse_eval('{"correctness": {"pass": true}, "performance": {'
+                    '"bwd_median_ms": true, "device_median_ms": "2.5", '
+                    '"vs_ref": null}}')
+    assert ev.bwd_median_ms is None and ev.device_median_ms is None
+    assert ev.vs_ref is None
 
 
 # --- per-contract verdicts: what a probe printed is what gets recorded ----

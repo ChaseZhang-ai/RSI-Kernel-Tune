@@ -119,6 +119,16 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     EXHAUSTED ended the run). Otherwise the record block fields are extracted
     from anywhere in the text (agents often emit prose before the block).
 
+    A marker is recognized only on a line of its own — the protocol places it
+    there ("end your turn with EXACTLY one of ..."), and only markdown wrappers
+    may sit between the line start and the marker word, because agents copy the
+    prompts' wrapped spellings verbatim. Matching the whole text instead read a
+    sentence that merely cited the vocabulary as a request: a record turn
+    quoting ``PROBE_REQUEST: ...`` in its change note went back out as a GPU
+    probe job on a path the student only mentioned, and a quoted ``EXHAUSTED:``
+    ended a phase that was still alive. RECON_REQUEST carries the same hazard
+    with a caller gate instead (next paragraph).
+
     RECON_REQUEST is only a valid shape for the reconnaissance caller
     (``allow_recon=True``). Recognizing it everywhere let a student turn that
     merely echoed the marker — likely in a blackbox run, where the vocabulary
@@ -327,6 +337,26 @@ _WORKLOAD_KEYS = ("device_median_ms", "bwd_median_ms", "ref_device_ms", "vs_ref_
 # the medians were kept and the spread dropped, which made every workload's noise
 # figure unrecoverable from the trajectory.
 _WORKLOAD_LIST_KEYS = ("device_readings_ms", "ref_device_readings_ms")
+
+
+def _finite(v) -> float | None:
+    """``v`` as a finite float, else None — a non-finite number is an absent
+    reading, never a passing one.
+
+    The JSON decoder accepts NaN / Infinity literals, so a malformed bench
+    block carries them straight past parsing; downstream, min() is
+    order-dependent on a NaN (min([nan, 2.5]) is nan, so one NaN reading
+    hijacks the running best it precedes), comparisons against one are never
+    True (a plateau check then never fires), and medians over lists holding
+    one are arbitrary. The probe path already refuses a non-finite max_diff
+    (_audit_pass); the eval's timing readings get the same posture. bool is
+    rejected too (float(True) is 1.0 ms), and a str is a malformed block, not
+    a reading.
+    """
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return None
+    v = float(v)
+    return v if math.isfinite(v) else None
 
 
 def readings_spread_pct(readings) -> float | None:

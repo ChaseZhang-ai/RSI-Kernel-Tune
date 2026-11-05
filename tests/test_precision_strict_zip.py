@@ -1,3 +1,6 @@
+# Copyright 2026 The Peregrine-Kernel Authors
+# SPDX-License-Identifier: Apache-2.0
+
 """BUG-SEED-24 — PrecisionRecorder.measure silently truncated mismatched inputs.
 
 ``zip(outputs, ref_outputs, truth)`` without ``strict=True`` stops at the shortest
@@ -52,3 +55,46 @@ def test_a_mismatch_is_on_the_record_not_a_judge_crash():
     block = rec.block()
     assert block["rows"][-1]["status"] == "unavailable"
     assert any("zip()" in r.get("why", "") for r in block["rows"])
+
+
+def _unavailable_why(rec, case):
+    rows = [r for r in rec.rows if r.get("case") == case
+            and r.get("status") == "unavailable"]
+    return rows[0]["why"] if len(rows) == 1 else None
+
+
+def test_unequal_output_lists_leave_an_unavailable_row_not_a_silent_pass():
+    """Two kernel outputs against one reference output: the unmeasured second
+    output used to vanish (one pass row, no unavailable row, nothing said).
+    The mismatch must now fail the case closed."""
+    rec = P.PrecisionRecorder()
+    rec.measure("case0", [torch.zeros(2), torch.ones(3)], [torch.zeros(2)],
+                [torch.zeros(2)], names=["out0", "out1"])
+    why = _unavailable_why(rec, "case0")
+    assert why is not None, "the length mismatch was truncated silently"
+    assert why.startswith("ValueError:")
+    assert "zip()" in why
+
+
+def test_unequal_truth_lists_leave_an_unavailable_row_not_a_silent_pass():
+    """The strictness covers every side of the zip: a truth list longer than
+    the outputs must surface the same way, not truncate the extra truths."""
+    rec = P.PrecisionRecorder()
+    rec.measure("case1", [torch.zeros(2)], [torch.zeros(2)],
+                [torch.zeros(2), torch.ones(3)])
+    why = _unavailable_why(rec, "case1")
+    assert why is not None, "the length mismatch was truncated silently"
+    assert why.startswith("ValueError:")
+    assert "zip()" in why
+
+
+def test_equal_length_multi_output_still_measures_every_output():
+    """The strict zip must not break the honest multi-output path: equal-length
+    lists still yield one row per output and no unavailable row."""
+    a = torch.randn(4, 8)
+    b = torch.randn(4, 8)
+    rec = P.PrecisionRecorder()
+    rec.measure("case2", [a.clone(), b.clone()], [a, b], [a.clone(), b.clone()],
+                names=["out0", "out1"])
+    assert [r["output"] for r in rec.rows] == ["out0", "out1"]
+    assert all(r["status"] == "pass" for r in rec.rows)

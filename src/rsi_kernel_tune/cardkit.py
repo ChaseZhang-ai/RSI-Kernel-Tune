@@ -560,7 +560,7 @@ rkt_build_cache_key() {
 
 rkt_build_cache_brain() {  # verify <root> <key> | promote <root> <key> <staging>
 python3 - "$@" <<'FKCACHE'
-import hashlib, json, os, sys
+import hashlib, json, os, shutil, sys
 
 def sha(path):
     h = hashlib.sha256()
@@ -569,16 +569,30 @@ def sha(path):
             h.update(chunk)
     return h.hexdigest()
 
+def entry_verifies(entry):
+    """The verify op's exact check, reused by promote: an existing entry is only
+    "another job cached this key first" while every listed artifact still hashes
+    to its manifest record. A corrupt entry (a truncated .so, a broken manifest,
+    a deleted artifact) would otherwise fail every future verify while promote
+    kept skipping it — the key poisoned forever, every job rebuilding and
+    discarding a healthy build."""
+    try:
+        with open(os.path.join(entry, "manifest.json")) as fh:
+            manifest = json.load(fh)
+        for rel, want in manifest.get("artifacts", {}).items():
+            p = os.path.join(entry, rel)
+            if not os.path.isfile(p) or sha(p) != want:
+                return False
+        return True
+    except (OSError, ValueError):
+        return False
+
 op, root, key = sys.argv[1], sys.argv[2], sys.argv[3]
 entry = os.path.join(root, key)
 manifest_path = os.path.join(entry, "manifest.json")
 if op == "verify":
-    with open(manifest_path) as fh:
-        manifest = json.load(fh)
-    for rel, want in manifest.get("artifacts", {}).items():
-        p = os.path.join(entry, rel)
-        if not os.path.isfile(p) or sha(p) != want:
-            raise SystemExit(2)          # any mismatch -> the caller builds fresh
+    if not entry_verifies(entry):
+        raise SystemExit(2)              # any mismatch -> the caller builds fresh
     print(entry)
 elif op == "promote":
     staging = sys.argv[4]
@@ -593,7 +607,9 @@ elif op == "promote":
     with open(os.path.join(staging, "manifest.json"), "w") as fh:
         json.dump({"artifacts": artifacts}, fh)
     if os.path.exists(entry):
-        raise SystemExit(0)              # another job cached this key first: same content
+        if entry_verifies(entry):
+            raise SystemExit(0)          # another job cached this key first: same content
+        shutil.rmtree(entry)             # a corrupt entry would poison the key forever
     os.replace(staging, entry)
 FKCACHE
 }

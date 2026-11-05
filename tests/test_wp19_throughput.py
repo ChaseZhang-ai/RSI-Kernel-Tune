@@ -431,6 +431,76 @@ fi
     assert "BUILT" in r3.stdout                  # a tampered entry is a fresh build
 
 
+def test_a_poisoned_entry_is_replaced_by_the_next_clean_build(tmp_path):
+    """HUNT5: promote used to skip whenever the key's entry already existed, so one
+    truncated artifact (or any corrupt entry) poisoned the key forever: verify
+    refused it on every later job, every job rebuilt fresh, and the exit trap
+    deleted the healthy rebuild while the corrupt entry stayed. First-cache-wins
+    only holds while the winner is self-consistent: a corrupt entry is replaced
+    by the fresh build's own staging, a healthy one is never touched."""
+    import subprocess
+    tree = _key_tree(tmp_path / "tree")
+    script = _cache_functions_script(tree)
+    home = tmp_path / "home"
+    home.mkdir()
+    store = home / ".cache" / "rsi_kernel_tune-build"
+    harness = r"""
+set -uo pipefail
+harness_script="$1"; home="$2"; mode="$3"
+source "$harness_script"
+export HOME="$home" RKT_BUILD_CACHE=1 RKT_BUILD_CACHE_KEY_NARROW=1 RKT_TREE_SHA256=shaH
+rkt_build_cache_setup
+case "$mode" in
+  build)   printf 'FAKE-ELF-V1\n' > "$RKT_KERNEL_BUILD_DIR/rkt_kernel_mod.so" ;;
+  rebuild) printf 'FAKE-ELF-V2\n' > "$RKT_KERNEL_BUILD_DIR/rkt_kernel_mod.so" ;;
+esac
+exit 0
+"""
+    h = tmp_path / "job.sh"
+    h.write_text(harness, encoding="utf-8")
+
+    def job(mode) -> str:
+        r = subprocess.run(["bash", str(h), str(script), str(home), mode],
+                           capture_output=True, text=True, env=_bash_env(), cwd=tree,
+                           timeout=60)
+        assert r.returncode == 0, r.stderr
+        return r.stdout
+
+    def verdict() -> str:
+        out = job("verify-only")               # setup only: its HIT/MISS call is the verdict
+        lines = [l for l in out.splitlines() if "build cache:" in l]
+        assert lines, out[-400:]
+        return lines[-1]
+
+    job("build")                               # MISS -> artifacts in staging -> trap promotes
+    hit = verdict()
+    assert "HIT" in hit and "hash-verified" in hit
+    key = hit.split()[4]
+    so = store / key / "rkt_kernel_mod.so"
+    assert so.read_text(encoding="utf-8") == "FAKE-ELF-V1\n"
+    so.write_text("TRUNCATED", encoding="utf-8")          # poison the cached artifact
+    assert "MISS" in verdict()                            # the per-artifact recheck refuses it
+    job("rebuild")                                        # a clean task exits 0: trap promotes
+    assert "HIT" in verdict()                             # the key is healed, not poisoned forever
+    assert so.read_text(encoding="utf-8") == "FAKE-ELF-V2\n"
+    # a HEALTHY entry keeps first-cache-wins: a racing promote of another job's
+    # staging must not replace it
+    staging = tmp_path / "staging_race"
+    staging.mkdir()
+    (staging / "rkt_kernel_mod.so").write_text("FAKE-ELF-V3\n", encoding="utf-8")
+    r = subprocess.run(
+        ["bash", "-c",
+         'source "$1"; rkt_build_cache_brain promote "$RKT_H_STORE" "$RKT_H_KEY" '
+         '"$RKT_H_STAGING"; echo "rc=$?"',
+         "harness", str(script)],
+        capture_output=True, text=True,
+        env={**_bash_env(), "RKT_H_STORE": str(store), "RKT_H_KEY": key,
+             "RKT_H_STAGING": str(staging)},
+        cwd=tree, timeout=60)
+    assert "rc=0" in r.stdout, r.stderr
+    assert so.read_text(encoding="utf-8") == "FAKE-ELF-V2\n"
+
+
 def test_the_narrowed_key_normalizes_cflags_whitespace(tmp_path):
     """HUNT5: the enumerator hashed the RAW fk-cuda-cflags text while the builder
     tokenizes every flags line with .split() (benchkit.py cuda_kernel_flags) —

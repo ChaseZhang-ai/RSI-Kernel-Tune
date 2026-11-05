@@ -1365,6 +1365,19 @@ def _fresh_recheck_mode(problem: dict) -> str:
     return "regen" if _task_custom(problem)[1] is not None else "process"
 
 
+def _fresh_recheck_timeout_s() -> int:
+    """The recheck child's wall-clock ceiling: ``RKT_FRESH_RECHECK_TIMEOUT_S``
+    overrides; an unreadable value keeps the default. The probe's timeout knob
+    carries the same guard (a junk knob must not crash the bench here — this
+    read fires after every timing window has closed, so a bare ``int()`` would
+    waste the whole eval before the JSON is emitted)."""
+    try:
+        return int(_defensive_env("RKT_FRESH_RECHECK_TIMEOUT_S")
+                   or FRESH_RECHECK_TIMEOUT_S)
+    except ValueError:
+        return FRESH_RECHECK_TIMEOUT_S
+
+
 def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
     """One fresh-process correctness run over the SAME card: returns the parsed
     verdict, or None when the child could not produce one (env failure — a 'no
@@ -1387,8 +1400,7 @@ def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
         proc = subprocess.run(
             [sys.executable, str(bench), "--mode", "correctness", "--fresh-recheck"],
             cwd=str(root), env=env, capture_output=True, text=True,
-            timeout=int(os.environ.get("RKT_FRESH_RECHECK_TIMEOUT_S",
-                                       FRESH_RECHECK_TIMEOUT_S)))
+            timeout=_fresh_recheck_timeout_s())
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"pass": None, "detail": f"recheck child did not run: {type(exc).__name__}: {exc}"}
     for line in proc.stdout.splitlines():

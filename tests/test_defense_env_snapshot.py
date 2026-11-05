@@ -127,6 +127,7 @@ def test_a_kernel_env_write_never_reaches_the_spawned_children(monkeypatch):
     bk._capture_kernel_import_env()
     monkeypatch.setenv("RKT_FRESH_SEED", "0")            # the kernel's import write
     monkeypatch.setenv("RKT_MEMO_LANE", "1")
+    monkeypatch.setenv("RKT_FRESH_RECHECK_TIMEOUT_S", "junk")
     problem = {"_dir": str(REPO)}                          # never loaded by the stub
     bk._fresh_child(problem, seed=None)
     bk._probe_child({})
@@ -135,7 +136,23 @@ def test_a_kernel_env_write_never_reaches_the_spawned_children(monkeypatch):
         env = call["env"]
         assert env.get("RKT_FRESH_SEED") != "0"            # the write did not inherit
         assert env.get(bk.MEMO_LANE_ENV) != "1"
+    assert runs[0]["timeout"] == bk.FRESH_RECHECK_TIMEOUT_S   # junk kept the default
     assert runs[1]["timeout"] == bk.REPLAY_PROBE_TIMEOUT_S
+
+
+def test_the_fresh_recheck_timeout_knob_keeps_the_sibling_contract(monkeypatch):
+    """The recheck child's timeout read kept the bare ``int()`` the probe's own
+    timeout knob was fixed for (test_replay_probe_timeout_env.py): the raise
+    happened in subprocess.run's argument evaluation, after every timing window
+    closed and before _emit — the eval JSON was never printed and the whole GPU
+    eval was wasted. Junk keeps the default; a parseable override applies."""
+    bk = _benchkit()
+    monkeypatch.setenv("RKT_FRESH_RECHECK_TIMEOUT_S", "junk")
+    assert bk._fresh_recheck_timeout_s() == bk.FRESH_RECHECK_TIMEOUT_S
+    monkeypatch.setenv("RKT_FRESH_RECHECK_TIMEOUT_S", "600")
+    assert bk._fresh_recheck_timeout_s() == 600
+    monkeypatch.delenv("RKT_FRESH_RECHECK_TIMEOUT_S", raising=False)
+    assert bk._fresh_recheck_timeout_s() == bk.FRESH_RECHECK_TIMEOUT_S
 
 
 # -- the child-level attack, at the spawn the production parent buys ------------------

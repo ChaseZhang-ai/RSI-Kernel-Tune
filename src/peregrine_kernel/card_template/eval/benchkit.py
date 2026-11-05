@@ -885,7 +885,12 @@ def kernel_fence(problem: dict) -> str | None:
         return None
     card = Path(problem["_dir"]).parent.parent
     kfile = problem.get("kernel_file", "kernel.py")
-    src = (card / kfile).read_text()
+    # fixed utf-8 replace decode: the fence is a byte-level pattern scan over a
+    # file the operator wrote, and one non-UTF-8 byte (a latin-1 coding cookie,
+    # a high byte in a .cu comment) must read as replacement chars, not kill the
+    # bench with UnicodeDecodeError before any verdict exists (load_cuda_entry's
+    # staged read guards the same failure)
+    src = (card / kfile).read_text(encoding="utf-8", errors="replace")
     cuda = Path(kfile).suffix in CUDA_KERNEL_SUFFIXES
     if cuda:
         try:

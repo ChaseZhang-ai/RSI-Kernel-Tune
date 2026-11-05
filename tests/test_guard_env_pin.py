@@ -12,6 +12,7 @@ RKT_REPLAY_PROBE_RATIO convicts nothing. run_bench pins the bench-start values
 and every guard read consults the pin; these tests pin the contract."""
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -126,6 +127,12 @@ def test_kernel_env_kill_cannot_disarm_the_probe_at_the_production_seam(bk, monk
     monkeypatch.setattr(bk, "_probe_child",
                         lambda problem: {"shapes": [{"name": "w0",
                                                      "probe_median_ms": 2.0}]})
+    # record the live value BEFORE the simulated kernel import writes through
+    # os.environ directly: monkeypatch teardown then restores the true original,
+    # so the leak the kernel models never outlives this test (a bare exec write
+    # leaked RKT_REPLAY_PROBE=0 into the process and broke later fresh-module
+    # readers in the full suite — the exact global-state leak class CH-K names).
+    monkeypatch.setenv("RKT_REPLAY_PROBE", os.environ.get("RKT_REPLAY_PROBE", ""))
     bk._pin_guard_env()
     try:
         ns: dict = {}
@@ -144,6 +151,7 @@ def test_kernel_env_kill_cannot_skip_the_recheck_gate(bk, monkeypatch):
     parent-side recheck read 'a child never nests' and silently skip; pinned,
     the gate still runs."""
     bk._pin_guard_env()
+    monkeypatch.setenv("RKT_FRESH_RECHECK", os.environ.get("RKT_FRESH_RECHECK", ""))
     try:
         ns: dict = {}
         exec("import os\nos.environ['RKT_FRESH_RECHECK'] = '1'\n", ns)

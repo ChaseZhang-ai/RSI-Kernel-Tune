@@ -2,9 +2,9 @@
 
 Audit-corps correction order (2026-11-05): every review and fix in this wave targets the
 **latest** repository, peregrine-kernel (`src/peregrine_kernel/`), based on `origin/main`
-= `8977b63`. Branch `feat/corps-fix`, not pushed, not merged. The legacy `ForgeKernel/`
-tree was out of bounds for this entire wave; the corps' earlier findings made there were
-re-convicted on this codebase one by one before any fix landed.
+= `8977b63`. Branch `feat/corps-fix`, not pushed, not merged. The legacy upstream
+snapshot tree was out of bounds for this entire wave; the corps' earlier findings made
+there were re-convicted on this codebase one by one before any fix landed.
 
 ## Triage outcome (61 legacy findings re-convicted on latest)
 

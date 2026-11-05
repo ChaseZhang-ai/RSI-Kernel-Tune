@@ -1,7 +1,8 @@
 """Ports of the audit-r2 archive's monitor / resume regression tests.
 
-Source: audit-r2-2026-11-05/forgekernel-untracked-tests/test_monitor_resume_
-fixes.py, ported to the latest tree per the correction order of 2026-11-05.
+Source: the audit-r2-2026-11-05 archive's untracked test directory (legacy-snapshot
+naming), file test_monitor_resume_fixes.py, ported to the latest tree per the
+correction order of 2026-11-05.
 
 Subset rationale (full inventory in the porting report of CHANGES-corps-fix.md):
 the archive's other twenty tests are covered by this session's wave

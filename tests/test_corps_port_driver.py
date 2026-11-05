@@ -1,8 +1,9 @@
 """Ports of the audit-r2 archive's measurement regression tests (loop/driver).
 
-Source: audit-r2-2026-11-05/forgekernel-untracked-tests/test_driver_measurement_
-fixes.py, ported to the latest tree per the correction order of 2026-11-05
-(``forgekernel`` -> ``peregrine_kernel``, coordinates re-anchored).
+Source: the audit-r2-2026-11-05 archive's untracked test directory (legacy-snapshot
+naming), file test_driver_measurement_fixes.py, ported to the latest tree per the
+correction order of 2026-11-05 (legacy package name -> ``peregrine_kernel``,
+coordinates re-anchored).
 
 Subset rationale (full inventory in the porting report of CHANGES-corps-fix.md):
 the archive's eleven other tests are covered by this session's wave or their

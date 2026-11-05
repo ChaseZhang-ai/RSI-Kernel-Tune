@@ -1,10 +1,11 @@
 """Ports of the audit-r2 archive's submit-channel regression tests.
 
-Source: audit-r2-2026-11-05/forgekernel-untracked-tests/test_cli_submit_fixes.py
-(written against the archived ``forgekernel`` snapshot). Ported per the
-correction order of 2026-11-05: every assertion was re-checked against the
-latest semantics, mechanical renames applied (``forgekernel`` ->
-``peregrine_kernel``, ``FK_*`` -> ``PK_*``), and coordinates re-anchored.
+Source: the audit-r2-2026-11-05 archive's untracked test directory (legacy-snapshot
+naming), file test_cli_submit_fixes.py (written against the archived legacy
+snapshot). Ported per the correction order of 2026-11-05: every assertion was
+re-checked against the latest semantics, mechanical renames applied (legacy
+package name -> ``peregrine_kernel``, ``FK_*`` -> ``PK_*``), and coordinates
+re-anchored.
 
 Subset rationale (full inventory in the porting report of CHANGES-corps-fix.md):
 only the tests that ADD coverage over the in-session test_corps_fix_* wave are

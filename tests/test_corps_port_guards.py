@@ -1,7 +1,8 @@
 """Ports of the audit-r2 archive's guard / eval regression tests.
 
-Source: audit-r2-2026-11-05/forgekernel-untracked-tests/test_guard_fixes.py,
-ported to the latest tree per the correction order of 2026-11-05.
+Source: the audit-r2-2026-11-05 archive's untracked test directory (legacy-snapshot
+naming), file test_guard_fixes.py, ported to the latest tree per the correction
+order of 2026-11-05.
 
 Subset rationale (full inventory in the porting report of CHANGES-corps-fix.md):
 the archive's other eleven tests are covered by this session's wave
@@ -9,8 +10,8 @@ the archive's other eleven tests are covered by this session's wave
 scan, load_entry's sys.path position; test_corps_fix_misc.py covers the
 host-path note; test_corps_fix_benchkit.py covers the precision length
 mismatch) or their premises were removed with the WP24 de-boarding (the
-FlashInfer-Bench judge, the board task cards, card_harness listings of the
-board surface) or no longer hold on the current timing.py aggregate (the
+external benchmark-board judge, the board task cards, card_harness listings of
+the board surface) or no longer hold on the current timing.py aggregate (the
 workloads_performance degrade-to-None behavior: the aggregates are rounded
 directly today). The four tests below add coverage nothing else pins:
 
@@ -26,9 +27,10 @@ directly today). The four tests below add coverage nothing else pins:
   rewritten, because the archive's contract changed: a missing reading is
   skipped today, only a non-positive one degrades the aggregate.
 
-Note the archive's ``from forgekernel.timing_audit import BASIS_CUPTI`` import
-bug: BASIS_CUPTI lives in ``peregrine_kernel.baseline`` -- not needed here
-because the host-path-note tests it served are covered by test_corps_fix_misc.
+Note the archive's wrong-source import bug (it imported BASIS_CUPTI from the
+timing_audit module): BASIS_CUPTI lives in ``peregrine_kernel.baseline`` -- not
+needed here because the host-path-note tests it served are covered by
+test_corps_fix_misc.
 """
 
 from __future__ import annotations

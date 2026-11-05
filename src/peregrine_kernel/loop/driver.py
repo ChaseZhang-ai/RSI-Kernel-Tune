@@ -14913,7 +14913,11 @@ def run_recon_step(ctx: LoopContext) -> ReconResult:
                 # reading wins, cluster > 1 contradicts the denial, and
                 # LAUNCH-DISPUTED owns the disagreement from the report's side.
                 prev = launch_facts.get("cluster") or (0, 0, 0)
-                if cluster[0] * cluster[1] * cluster[2] >= prev[0] * prev[1] * prev[2]:
+                # strictly greater: on a product tie the recorded (main kernel's)
+                # reading stands — a tie means the later round profiled a same-
+                # size helper, and the comment above rules the write-up's own
+                # clustered reading is not demoted by one
+                if cluster[0] * cluster[1] * cluster[2] > prev[0] * prev[1] * prev[2]:
                     launch_facts.update(cluster=cluster, round=r, source=(
                         "LAUNCH-OK" if _LAUNCH_OK.search(log) else
                         "launch__cluster_dim_* metric in the job log"))

@@ -668,15 +668,47 @@ CUDA_FLAG_OK = re.compile(
 
 
 def cuda_kernel_flags(src: str) -> list[str]:
-    """nvcc flags of a CUDA kernel file: the defaults, the file's fk-cuda-cflags, the arch.
-    Raises ValueError on a flag outside CUDA_FLAG_OK."""
+    """nvcc flags of a CUDA kernel file: the defaults, the run configuration's
+    toolchain file's flags ([language] toolchain_config, through RKT_TOOLCHAIN_CONFIG
+    in submit.toml [env] -- absent adds nothing), the file's fk-cuda-cflags, the arch.
+    Raises ValueError on a flag outside CUDA_FLAG_OK, wherever it came from."""
     extra = [f for line in CUDA_FLAGS_LINE.findall(src) for f in line.split()]
     if bad := [f for f in extra if not CUDA_FLAG_OK.fullmatch(f)]:
         raise ValueError(f"fk-cuda-cflags: {bad} not allowed (code generation / diagnostics "
                          f"flags only: no paths, libraries or linker options)")
-    flags = CUDA_DEFAULT_CFLAGS + [f for f in extra if f not in CUDA_DEFAULT_CFLAGS]
+    declared = toolchain_config_flags()
+    flags = CUDA_DEFAULT_CFLAGS + [f for f in declared if f not in CUDA_DEFAULT_CFLAGS] \
+        + [f for f in extra if f not in CUDA_DEFAULT_CFLAGS and f not in declared]
     if not any(f.startswith(("-gencode", "-arch")) for f in flags):
         flags.append(CUDA_GENCODE)
+    return flags
+
+
+TOOLCHAIN_CONFIG_ENV = "RKT_TOOLCHAIN_CONFIG"
+
+
+def toolchain_config_flags() -> list[str]:
+    """The extra build flags the run configuration's [language] toolchain_config file
+    names (a new language's toolchain/compile config, passed through to the eval
+    templates' build face). One flag per whitespace-separated token, '#' comments.
+    Every flag passes the same CUDA_FLAG_OK allow-list as the kernel's own
+    fk-cuda-cflags lines: the file widens the build for the language's toolchain,
+    never the attack surface (no paths, libraries or linker options)."""
+    path = os.environ.get(TOOLCHAIN_CONFIG_ENV, "").strip()
+    if not path:
+        return []
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as e:
+        raise ValueError(f"toolchain config {path!r} cannot be read: {e}") from None
+    flags: list[str] = []
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        flags.extend(line.split())
+    if bad := [f for f in flags if not CUDA_FLAG_OK.fullmatch(f)]:
+        raise ValueError(f"toolchain config {path!r}: {bad} not allowed (the same "
+                         f"code-generation / diagnostics flags as fk-cuda-cflags: no "
+                         f"paths, libraries or linker options)")
     return flags
 
 

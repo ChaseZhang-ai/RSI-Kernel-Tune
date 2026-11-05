@@ -637,7 +637,8 @@ def write_judge(run, task, check_dir: Path, deny: list[str], feedback: str = "")
     policy = AgentPolicy(oracle_mode="blackbox" if blackbox else "source",
                          repo_root=repo_root(), ref_source_paths=tuple(Path(p) for p in deny),
                          ref_source_urls=(), teacher_trees=(), dsl_source_dirs=(),
-                         secret_files=(), language=task.loop_language)
+                         secret_files=(), language=task.loop_language,
+                         syntax_docs=os.environ.get("RKT_RUN_SYNTAX_DOCS", "").strip())
     be = RealBackend(task.name, check_dir, None, "rsi-kernel-tune-judge", "rsi-kernel-tune-judge@localhost",
                      teacher_agent_cmd=agent_command(task.teacher, "teacher"),
                      agent_policy=policy)
@@ -740,6 +741,11 @@ def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
         # default (env unset) is the L0 contract -- optimize from scratch -- and adds
         # no flag at all.
         argv.append("--student-retrieval")
+    if (syntax := os.environ.get("RKT_RUN_SYNTAX_DOCS", "").strip()):
+        # The run configuration's [language] syntax reference: injected into every
+        # teacher and student brief by the loop's agent policy ("read it first").
+        # Env unset (no [language] section, the default) adds no flag at all.
+        argv += ["--syntax-docs", syntax]
     if resuming:
         argv += ["--allow-preexisting-artifacts", "--allow-dirty-kb"]
     if harvest_only:

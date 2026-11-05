@@ -168,6 +168,11 @@ class AgentPolicy:
     # ref_from_goal session's ledger, state and candidates (goal_ref.session_read_only_paths)
     # — the records its deliverable check and its acceptance trust.
     deny_write: tuple[Path, ...] = ()
+    # The run configuration's language reference (rsi_kernel_tune.runconfig
+    # [language], threaded through --syntax-docs): a syntax/style file the teacher
+    # and student read first when the run is in a language the prompts do not
+    # assume. Empty (the default, every run without the section) renders nothing.
+    syntax_docs: str = ""
     hook_python: str = field(default_factory=lambda: sys.executable)
 
     def _teacher_denied(self) -> bool:
@@ -325,6 +330,12 @@ class AgentPolicy:
 
     def notice(self, role: str) -> str:
         lines = ["## Runtime environment constraints (enforced by the harness, not advice)"]
+        if self.syntax_docs:
+            # The run configuration's language reference (docs/run-configuration.md
+            # §language): one line at the top of every brief, both roles -- the
+            # syntax/style file is the first thing to read in a language the
+            # prompts do not assume. Absent by default: byte-identical notices.
+            lines.append(f"- language syntax reference: {self.syntax_docs} (read it first)")
         cuda = lang_mode.is_cuda(self.language)
         if self.offline(role):
             lines.append(

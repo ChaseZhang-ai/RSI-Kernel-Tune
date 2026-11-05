@@ -2615,6 +2615,13 @@ def _main(argv: list[str] | None = None) -> int:
     p.add_argument("--student-retrieval", action="store_true",
                    help="the student may use public-source retrieval (survey tools) "
                         "before tuning; default off (from scratch, the L0 contract)")
+    # The run configuration's language reference (rsi_kernel_tune.runconfig
+    # [language] syntax_docs; the launcher threads it through the environment):
+    # a syntax/style file injected at the top of every teacher and student brief
+    # ("read it first") when the run is in a language the prompts do not assume.
+    p.add_argument("--syntax-docs", default="",
+                   help="path to a language syntax/style reference injected into the "
+                        "teacher and student briefs; default empty (no line)")
     p.add_argument("--allow-host-bound-ref", action="store_true",
                    help="derive target from a reference whose device window is HOST-BOUND "
                         "(its reading is python dispatch cost, so the target is loose by "
@@ -3067,6 +3074,10 @@ def _main(argv: list[str] | None = None) -> int:
         # -- the reference's checkouts and repositories, the teacher-only trees --
         # stays denied to the student: retrieval is not the answer.
         policy = dataclasses.replace(policy, student_online=True)
+    if args.syntax_docs:
+        # The language reference rides every brief's notice block (both roles),
+        # one line: "language syntax reference: <path> (read it first)".
+        policy = dataclasses.replace(policy, syntax_docs=args.syntax_docs)
     backend = RealBackend(args.op, workspace, args.agent_cmd, args.git_name, args.git_email,
                           teacher_agent_cmd=args.teacher_agent_cmd, agent_policy=policy,
                           agent_heartbeat_s=args.agent_heartbeat_s)

@@ -155,6 +155,14 @@ def _child_env(cfg: RunConfig, *, gpu: str, environ=None) -> dict:
     merged["RKT_GPU"] = gpu
     if cfg.student.may_retrieve:
         merged[RETRIEVAL_ENV] = "1"
+    if cfg.language.syntax_docs:
+        # the [language] syntax reference, injected into every teacher and student
+        # brief by the loop's agent policy ("read it first")
+        merged["RKT_RUN_SYNTAX_DOCS"] = cfg.language.syntax_docs
+    if cfg.language.toolchain_config:
+        # the [language] toolchain config, passed through to the eval templates'
+        # build face (taskcard puts it in the card's submit.toml [env])
+        merged["RKT_RUN_TOOLCHAIN_CONFIG"] = cfg.language.toolchain_config
     return merged
 
 

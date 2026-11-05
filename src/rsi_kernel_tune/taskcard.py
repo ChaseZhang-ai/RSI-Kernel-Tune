@@ -20,6 +20,7 @@ readable.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -258,6 +259,13 @@ def write_submit(tree: Path, task, machine, timeout: int = JOB_TIMEOUT_S) -> Pat
     # stays byte-identical to the pre-WP22 shape (absent = fp32, the house pattern).
     if task.precision.compute_dtype != "fp32":
         lines.append(f'RKT_COMPUTE_DTYPE = "{task.precision.compute_dtype}"')
+    # The run configuration's [language] toolchain config (rsi_kernel_tune.runconfig;
+    # the launcher threads it through RKT_RUN_TOOLCHAIN_CONFIG): passed through to
+    # the eval templates' build face, which reads the file's extra flags
+    # (eval/benchkit.py, the same allow-list as the kernel's own flag lines).
+    # Env unset (no [language] section, the default) adds no line at all.
+    if (toolchain := os.environ.get("RKT_RUN_TOOLCHAIN_CONFIG", "").strip()):
+        lines.append(f'RKT_TOOLCHAIN_CONFIG = {json.dumps(toolchain)}')
     p = Path(tree) / "submit.toml"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p

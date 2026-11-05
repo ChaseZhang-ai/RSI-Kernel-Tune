@@ -94,11 +94,11 @@ MEMO_LANE_ENV = "RKT_MEMO_LANE"
 
 def _memo_lane() -> bool:
     """The lane switch: RKT_MEMO_LANE=1 is the MEMO industrial lane; absent (the
-    house pattern: absent means off) or 0/off is STRICT. Read from the
-    kernel-import snapshot: a kernel that flips the environment at its own
-    import must not move its own lane."""
+    house pattern: absent means off) or a value that reads as off (0 / off /
+    false / no) is STRICT. Read from the kernel-import snapshot: a kernel that
+    flips the environment at its own import must not move its own lane."""
     return (_defensive_env(MEMO_LANE_ENV) or "").strip().lower() \
-        not in ("", "0", "off")
+        not in ("", "0", "off", "false", "no")
 
 
 def _recheck_seed_shift() -> int:

@@ -198,6 +198,26 @@ def test_replay_probe_ratio_rejects_non_threshold_values(monkeypatch):
     assert bk._replay_probe_ratio() == 5.0    # a real override still applies
 
 
+def test_memo_lane_env_literals_that_read_as_off_are_off(monkeypatch):
+    """The lane is opt-in: only a value that asserts MEMO turns it on. A literal
+    that reads as off ("false", "no") must not flip the lane on by accident —
+    the TOML surface rejects "yes" loudly (a TaskError), but the env surface
+    used to read "false" as MEMO: a STRICT task whose job env carried
+    RKT_MEMO_LANE=false (submit.local.toml's [env] merge, or the remote
+    env_file sourced before every job) stamped every eval lane={memo:true} and
+    the driver refused every reading as lane contamination. The two surfaces'
+    literals must adjudicate the same."""
+    bk = _benchkit()
+    for off in ("", "0", "off", "false", "FALSE", "no", "No"):
+        monkeypatch.setenv(bk.MEMO_LANE_ENV, off)
+        assert bk._memo_lane() is False, off
+    for on in ("1", "true", "TRUE", "yes"):
+        monkeypatch.setenv(bk.MEMO_LANE_ENV, on)
+        assert bk._memo_lane() is True, on
+    monkeypatch.delenv(bk.MEMO_LANE_ENV, raising=False)
+    assert bk._memo_lane() is False           # absent = strict, the house pattern
+
+
 def test_probe_task_input_pins_reach_the_shift_reader(monkeypatch):
     """The probe child's per-call pin writes the live env AND the snapshot (the
     shift reads go through the snapshot), and restores both — a shift the spawn

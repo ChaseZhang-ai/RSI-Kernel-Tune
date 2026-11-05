@@ -312,11 +312,38 @@ def _shown(path: Path) -> str:
 
 def cmd_run(argv) -> int:
     """Run a run: from the start when it is new, else from where it stopped (every step
-    that is done is skipped)."""
+    that is done is skipped). With --config, run every kernel task of the unified run
+    configuration (rsi_kernel_tune.parallelrun) in parallel instead."""
     p = argparse.ArgumentParser(prog="rsi-kernel-tune run",
-                                description="Run a run, or continue one that has started.")
-    p.add_argument("run", help="the run directory (.artifacts/<op>_<id>)")
+                                description="Run a run, or continue one that has started; "
+                                            "--config runs a whole rsi-run.toml in parallel.")
+    p.add_argument("run", nargs="?", default=None,
+                   help="the run directory (.artifacts/<op>_<id>)")
+    p.add_argument("--config", default=None,
+                   help="a run configuration (rsi-run.toml): run every [kernel] of it, "
+                        "one concurrent slot per kernel task by default "
+                        "(docs/run-configuration.md)")
     args = p.parse_args(argv)
+    if args.config and args.run:
+        sys.stderr.write("[rsi-kernel-tune] give either a run directory or --config, "
+                         "not both\n")
+        return 2
+    if args.config:
+        from rsi_kernel_tune.parallelrun import drive as drive_config
+        from rsi_kernel_tune.runconfig import load_runconfig
+        try:
+            cfg = load_runconfig(args.config)
+        except Exception as e:  # noqa: BLE001 -- the config's own refusal is the message
+            sys.stderr.write(f"[rsi-kernel-tune] {e}\n")
+            return 2
+        try:
+            return drive_config(cfg)
+        except Exception as e:  # noqa: BLE001
+            sys.stderr.write(f"[rsi-kernel-tune] {e}\n")
+            return 2
+    if not args.run:
+        sys.stderr.write("[rsi-kernel-tune] a run directory (or --config) is required\n")
+        return 2
     try:
         run = open_run(args.run)
         machine = load_machine()

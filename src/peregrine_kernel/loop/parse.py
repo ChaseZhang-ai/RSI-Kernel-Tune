@@ -489,8 +489,18 @@ def _correctness_fail_detail(corr_obj: dict) -> str:
     checks = [c for c in corr_obj.get("checks") or () if isinstance(c, dict)]
     if not checks:
         return ""
-    ranked = sorted(checks, key=lambda c: (float("inf") if c.get("error") is None
-                                           else float(c["error"])), reverse=True)
+
+    def _rank_error(c: dict) -> float:
+        # An own-bench card may write a human-readable verdict string in a
+        # check's error ("got 3, expected 1 (way over tol)"); corr_margin_ratio
+        # guards the same field with isinstance for exactly that reason. A bare
+        # float() here escaped parse_eval with a ValueError and let one odd
+        # bench row kill the whole run through the safety net.
+        e = c.get("error")
+        return float(e) if isinstance(e, (int, float)) and not isinstance(e, bool) \
+            else float("inf")
+
+    ranked = sorted(checks, key=_rank_error, reverse=True)
     parts = []
     for c in ranked[:CORRECTNESS_FAIL_TOP_K]:
         where = "/".join(str(c.get(k)) for k in ("workload", "group") if c.get(k))

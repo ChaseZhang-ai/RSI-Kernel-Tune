@@ -27,6 +27,19 @@ from test_binref import base, repo  # noqa: F401  (the fixtures card_lb builds o
 
 REPO = Path(__file__).resolve().parents[1]
 
+
+class _Any:
+    """Permissive stand-in for torch when the real package is absent (same
+    shape as the ones in test_sealref/test_wp10_search_depth): every attribute
+    read and every call on the fake torch module yields another _Any."""
+
+    def __init__(self, *a, **k): pass
+    def __getattr__(self, n): return _Any()
+    def __call__(self, *a, **k): return _Any()
+    def __iter__(self): return iter(())
+    def __hash__(self): return id(self)
+
+
 STUDENT = """// fk-cuda-cflags: -Xptxas=-v -lineinfo
 #include <torch/extension.h>
 // a comment naming dlopen and ref_bin is not a reach

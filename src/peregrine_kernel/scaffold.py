@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import sys
 from pathlib import Path
 
 # Template files copied verbatim (with ``<op>`` -> op) from src/peregrine_kernel/card_template/.
@@ -139,15 +140,45 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--base-dir", default=None, help="main-repo root override (testing)")
     p.add_argument("--no-git", action="store_true", help="skip git init + initial commit")
+    p.add_argument(
+        "--allow-unguarded-harness", action="store_true",
+        help="with --no-git: acknowledge that a card without git cannot feed the "
+             "harness overlay/revert guards — every job then runs whatever harness "
+             "copies (gpu_entry.sh, eval/) the run tree happens to carry, and a "
+             "delivery that edits them is neither overlaid back to the card nor "
+             "refused. Cards for real runs should keep git.")
     args = p.parse_args(argv)
+    base = Path(args.base_dir) if args.base_dir else _repo_root()
+    op_dir = base / "operators" / args.op
+
+    if args.no_git:
+        # BUG-CORPS-C-05: the harness overlay and the driver's revert both read the
+        # card's TRACKED harness files (loop/harness_guard.card_harness_files); a card
+        # that is not a git repository returns None and both guards silently degrade to
+        # "the job runs the run tree's own copies" — exactly the self-judged eval a
+        # delivery that edits eval/ wants. So a git-less card in the live repository is
+        # refused unless the degradation is named on purpose; an explicit --base-dir is
+        # a staging/test target by contract (see --base-dir), where the card's provenance
+        # is the operator's own choice — warned, not refused.
+        why = ("a card without git cannot feed the harness overlay/revert guards: every "
+               "job would run whatever gpu_entry.sh / eval/ the run tree carries, and a "
+               "delivery that edits them is neither corrected nor refused")
+        if not args.allow_unguarded_harness:
+            if args.base_dir is None:
+                sys.stderr.write(f"[new] error: refusing --no-git for {op_dir}: {why}.\n"
+                                 f"[new] drop --no-git (recommended), or pass "
+                                 f"--allow-unguarded-harness to accept an unguarded "
+                                 f"card on purpose.\n")
+                return 2
+            sys.stderr.write(f"[new] WARNING: {op_dir} will not be a git repository "
+                             f"({why}). Fine for a staging/test scaffold; do not run "
+                             f"loops on it.\n")
 
     try:
         created = new_operator(args.op, kernel_file=args.kernel_file, base_dir=args.base_dir)
     except ValueError as e:
         print(f"[new] {e}")
         return 2
-    base = Path(args.base_dir) if args.base_dir else _repo_root()
-    op_dir = base / "operators" / args.op
 
     if not args.no_git:
         _git_init(op_dir, args.op)
@@ -156,7 +187,9 @@ def main(argv: list[str] | None = None) -> int:
     for path in dict.fromkeys(created):
         print(f"  + {path.relative_to(op_dir.parent)}")
     if args.no_git:
-        print("[new] (skipped git init)")
+        print("[new] (skipped git init)" + (""
+              if args.allow_unguarded_harness else " (staging target: harness guards "
+              "degraded — see the warning above)"))
     else:
         print(f"[new] git repo initialized at {op_dir}")
     return 0

@@ -218,11 +218,21 @@ def teacher_only_paths(root: Path, op: str) -> list[Path]:
 def session_read_only_paths(op_dir: Path) -> list[Path]:
     """What the generating session may read but never write (its policy's deny_write):
     the records the harness judges it by — state (deadline, bar), the ledger the check
-    reads, the candidates the acceptance re-measures — and the session's spec.json (the
-    check command and the condition), which sits inside its own working directory."""
+    reads, the candidates the acceptance re-measures —, the session's spec.json (the
+    check command and the condition), which sits inside its own working directory, and
+    the spool side the harness writes: the responses (a session that could write a
+    response would answer its own evaluation request with a forged verdict and
+    ``pending()`` would skip serving it), the request logs, and the spool's context.json
+    (which names the file an evaluation snapshots) — BUG-CORPS-C-09: the spool lives in
+    the workspace, which the agent owns, and used to be writable whole. ``requests/``
+    stays writable: the agent-side eval command creates the request there. Known
+    boundary: a submitted request's request.json stays rewritable until the loop serves
+    it — the kinds it may ask for (eval / exec) are ones the session may ask for openly
+    anyway, so the edit buys no channel the protocol does not already grant."""
     p = Paths.of(Path(op_dir).resolve())
     return [p.state, p.ledger, p.candidates, p.acceptance, p.reference, p.session,
-            p.turn / "spec.json"]
+            p.turn / "spec.json",
+            p.spool / "responses", p.spool / "logs", p.spool / "context.json"]
 
 
 def load_state(op_dir: Path) -> dict | None:
@@ -877,10 +887,17 @@ def _src_dir() -> Path:
 
 
 def command(*args: str, python: str | None = None) -> str:
-    """A shell command running this module with THIS checkout's package."""
+    """A shell command running this module with THIS checkout's package.
+
+    ``-P`` keeps the working directory off ``sys.path`` and ``-s`` skips the user site
+    dir: the agent runs this from its workspace (a clone of the card it may write), and
+    a ``peregrine_kernel`` package planted there — or carried in by a card — would
+    otherwise shadow this module and forge the very eval/exec/check CLI the session's
+    verdicts and deliverable check ride on (BUG-CORPS-C-10). ``PYTHONPATH`` still names
+    this checkout, so the real module is what answers."""
     return ("PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=" + shlex.quote(str(_src_dir())) + " "
-            + " ".join(shlex.quote(x) for x in (python or sys.executable, "-W",
-                                                 "ignore::RuntimeWarning", "-m",
+            + " ".join(shlex.quote(x) for x in (python or sys.executable, "-P", "-s",
+                                                 "-W", "ignore::RuntimeWarning", "-m",
                                                  "peregrine_kernel.loop.goal_ref", *args)))
 
 

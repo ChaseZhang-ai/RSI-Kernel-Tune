@@ -22,13 +22,18 @@ if the script also has a safe one (fail-safe: refuse rather than let a silent
 auto-compaction run and only be discoverable afterwards).
 
 No leg needs fixing when it is first-party: the official endpoint (`unset` /
-``env -u ANTHROPIC_BASE_URL``) grants the 1M window, so those are not findings.
+``env -u ANTHROPIC_BASE_URL``) grants the 1M window, so those are not findings. The
+first-party state is read per statement, not per file: an ``unset`` governs the calls
+after it in its execution path, an ``ANTHROPIC_BASE_URL=...`` re-declaration turns the
+gateway back on with its value, and past a case/if branch's end neither is trusted (a
+mixed wrapper's gateway leg must stay visible — BUG-CORPS-C-12).
 
 ``inspect_agent_cmd`` builds the leg table; ``window_findings`` reads it.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -48,30 +53,53 @@ MODEL_ENV = "ANTHROPIC_MODEL"
 _CLAUDE_ID = re.compile(r"^(?:claude-)?(?:opus|sonnet|fable|haiku)(?:[-.][0-9][0-9a-z.-]*)?$", re.I)
 _ONE_M = re.compile(r"\[1m\]$", re.I)
 
-# Flag variables a wrapper uses to hold the base model. ``ANTHROPIC_MODEL`` is
-# deliberately absent: the ``\b`` before MODEL fails on the underscore, and that
-# spelling is read from the environment / settings.json instead.
+# The flag variables a wrapper conventionally holds its base model in. Any variable a
+# ``--model $VAR`` token references is resolved from the source's assignments and the
+# environment (BUG-CORPS-C-06: restricting the resolution to this whitelist silently
+# dropped legs whose wrapper used another name); ``ANTHROPIC_MODEL`` stays absent from
+# this comment's concern — that spelling is read from the environment / settings.json.
 _FLAG_VARS = ("MODEL_FLAG", "STUDENT_FLAG", "TEACHER_FLAG")
-_VAR_ASSIGN = re.compile(
-    r"\b(?:export\s+)?(MODEL_FLAG|STUDENT_FLAG|TEACHER_FLAG)="
-    r"(\"[^\"\n]*\"|'[^'\n]*'|[^\s;&|]+)")
 
 # ``--model X`` / ``--model=X``. The value is a quoted or bare token, possibly a
 # ``$VAR`` / ``${VAR}`` reference; the loop unquotes it and resolves the variable.
 _USE = re.compile(r"--model(?:=|\s+)(\"[^\"]*\"|'[^']*'|[^\s;&|]+)")
+# One ``$NAME`` / ``${NAME}`` reference inside a --model token (a bare ``$1`` or ``$@``
+# has no name the reader can resolve).
+_VAR_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
 
 # Generic ``VAR=value`` shell assignment, used to resolve config-dir and flag
 # variables (including inside case branches).
 _SH_ASSIGN = re.compile(r"\b(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"\n]*\"|'[^'\n]*'|[^\s;&|]+)")
 _CONFIG_DIR_ASSIGN = re.compile(r"\bCLAUDE_CONFIG_DIR=(\"[^\"\n]*\"|'[^'\n]*'|[^\s;&|]+)")
 _WINDOW_ASSIGN = re.compile(r"\bCLAUDE_CODE_AUTO_COMPACT_WINDOW=['\"]?([0-9_]+)")
-_SCRIPT_TOKEN = re.compile(r"(?<![\w/.-])((?:~|\$HOME|/)?[\w./~$-]*\.(?:sh|bash|zsh))\b")
+# The shell and python scripts an agent command may name. A wrapper chains through
+# another script (``agent-claude.sh`` execs ``claude-goal.sh`` which execs
+# ``claude-goal.py``), and a ``cd`` / ``--setting-sources`` in the second hop defeats
+# the policy just the same, so the entries are not only ``.sh``: ``.py`` wrappers and
+# extensionless executables are read too. An extensionless name is matched only when a
+# path prefix (``/``, ``~``, ``$HOME``, ``$VAR``, ``./``, ``../``) or an interpreter
+# (``bash run-agent``) pins it as a file — bare command words (``claude``, ``git``) are
+# never read. Data files (``.json``, ``.toml``, ...) are not matched, and a binary is
+# skipped after a NUL sniff, so the installed ``claude`` executable is never scanned.
+_SCRIPT_TOKEN = re.compile(r"(?<![\w/.-])((?:~|\$HOME|\$[A-Za-z_]\w*|\./|\.\./|/)?"
+                           r"[\w./~$+-]*\.(?:sh|bash|zsh|py))\b")
+_SCRIPT_BARE = re.compile(r"(?<![\w/.-])((?:~|\$HOME|\$[A-Za-z_]\w*|\./|\.\./|/)"
+                          r"[\w./~$+-]*)")
+_SCRIPT_INTERP = re.compile(r"\b(?:bash|sh|zsh|python3?)\s+((?!-)[\w][\w./~+-]*)")
+_SCRIPT_SUFFIXES = (".sh", ".bash", ".zsh", ".py")
 
 # ``unset ANTHROPIC_BASE_URL`` / ``env -u ANTHROPIC_BASE_URL`` and their
 # variable forms make a leg first-party (official endpoint, 1M window, no clamp).
-# `unset` governs every claude call after it in the source — the first-party
-# recipe, where the wrapper strips the gateway vars once and the whole file runs
-# first-party. `env -u` governs only the one statement it prefixes.
+# ``unset`` governs every claude call after it in its execution path, until the
+# variable is assigned again; ``env -u`` governs only the one statement it prefixes.
+# A wrapper that MIXES the two (an unset for one branch, a later re-injection for the
+# gateway branch) is read per statement: after an ``unset`` a leg is first-party only
+# until a ``ANTHROPIC_BASE_URL=...`` assignment turns the gateway back on, with the
+# assigned value readable as the gateway (BUG-CORPS-C-12: a whole-source flag made the
+# re-injected legs invisible). An unset inside a case/if branch does not carry past
+# the branch's end — the reader cannot tell which branch ran, so past ``esac``/``fi``/
+# ``done`` the environment governs again (fail-safe: a bare id then reads as a finding
+# rather than silently running clamped).
 # ``unset`` takes a whitespace-separated name list (backslash continuations
 # already joined by ``_join_continuations``); ANTHROPIC_BASE_URL may sit anywhere
 # in it. ``env`` may carry several ``-u NAME`` before the command.
@@ -79,6 +107,12 @@ _UNSET_BASE = re.compile(
     r"\bunset\s+(?:[A-Za-z_][A-Za-z0-9_]*\s+)*ANTHROPIC_BASE_URL\b")
 _ENV_U_BASE = re.compile(
     r"\benv\s+(?:-[ui]\s+[A-Za-z_][A-Za-z0-9_]*\s+|-[A-Za-z]+\s+)*-u\s+ANTHROPIC_BASE_URL\b")
+_GATEWAY_ASSIGN = re.compile(
+    r"\b(?:export\s+)?ANTHROPIC_BASE_URL=(\"[^\"]*\"|'[^']*'|[^\s;&|]+)")
+# The end of a case/if/loop body: beyond it, which branch ran is unknowable. Anchored
+# at the statement's head (statement splitting already cut on `;` `&&` `||` and
+# newlines), so a bare `done` mid-statement (`echo done && claude`) is not one.
+_BLOCK_CLOSE = re.compile(r"^\s*(?:esac|fi|done)\b")
 _CONTINUATION = re.compile(r"\\\n\s*")
 
 _STATEMENT_SPLIT = re.compile(r";|&&|\|\||\n")
@@ -165,7 +199,7 @@ def _resolve_window(inline: int | None, config_dir: str | None,
 
 
 def _resolve_gateway(config_dir: str | None, env: Mapping[str, str],
-                     first_party: bool, source_unset: bool) -> bool:
+                     first_party: bool, declared: str | None) -> bool:
     """Whether a leg runs behind a gateway.
 
     A leg that names its own config dir is governed solely by that dir's
@@ -174,14 +208,54 @@ def _resolve_gateway(config_dir: str | None, env: Mapping[str, str],
     dir (e.g. a fallback wrapper: the first-party branch unsets the vars, the
     gateway branch sets CLAUDE_CONFIG_DIR to a dir whose env has BASE_URL).
     A leg with no config dir is governed by the process environment, unless the
-    source unsets BASE_URL (then it is first-party)."""
+    source unsets BASE_URL (then it is first-party) — or the source re-declares
+    the variable itself (``export ANTHROPIC_BASE_URL=...``), in which case the
+    declared value is the gateway (the launch gate strips ANTHROPIC_* from the
+    environment it reads, so a wrapper that carries its own gateway value must
+    be visible here, not only through ``env``)."""
     if config_dir:
         s = _settings_env(config_dir)
         if s is not None:
             return bool(s.get(GATEWAY_ENV))
     if first_party:
         return False
-    return bool(env.get(GATEWAY_ENV))
+    return bool(declared) or bool(env.get(GATEWAY_ENV))
+
+
+def _leg_values(token: str, flags: Mapping[str, list[str]],
+                assigns: Mapping[str, str], env: Mapping[str, str],
+                source: str) -> list[str]:
+    """The concrete ids a ``--model`` token holding ``$``-references may send: one per
+    value of each variable it names (a wrapper's branches are mutually exclusive; each
+    value becomes its own leg, fail-safe). A variable assigned nowhere readable and not
+    in the environment raises: a silent skip would launch that leg with the gate blind
+    (BUG-CORPS-C-06). A variable assigned an unresolvable value (``MODEL=${1:?...}``,
+    filled in from the wrapper's arguments at runtime) yields no leg — that boundary is
+    the static reader's, and the model id such an invocation sends is visible in the
+    command line itself, not behind this reader."""
+    names = [a or b for a, b in _VAR_REF.findall(token)]
+    if not names:
+        return []          # $1 / $# / $* — no name the reader can resolve
+    for n in names:
+        if n not in flags and n not in env and n not in assigns:
+            raise ValueError(
+                f"--model {token} ({source}): ${n} is assigned nowhere the reader can "
+                f"see and is not in the environment, so the window gate cannot tell "
+                f"what model this leg would send (a silent skip here has launched "
+                f"clamped legs). Assign the variable in the wrapper, export it, or "
+                f"pass --allow-200k-window if the clamp is intended.")
+    per: list[list[str]] = []
+    for n in names:
+        vals = flags.get(n) or ([env[n]] if n in env else [])
+        if not vals:
+            vals = [assigns[n]] if n in assigns else [""]
+        per.append(vals)
+    out = []
+    for combo in itertools.product(*per):
+        v = _expand(token, dict(zip(names, combo)), {})
+        if v and not v.startswith("$"):
+            out.append(v)
+    return out
 
 
 def _join_continuations(text: str) -> str:
@@ -194,51 +268,112 @@ def _statements(text: str) -> list[str]:
     return [s for s in _STATEMENT_SPLIT.split(_join_continuations(text)) if s.strip()]
 
 
+def _script_candidates(text: str) -> list[str]:
+    """The raw tokens of ``text`` that may name a script: the suffixed entries
+    (``.sh`` / ``.bash`` / ``.zsh`` / ``.py``), extensionless paths (``./run-agent``,
+    ``$HERE/run-agent``), and extensionless names behind an interpreter
+    (``bash run-agent``). Bare command words are not candidates; a token with a data
+    extension (``.json``, ``.toml``) is not, either."""
+    out = []
+    for rx in (_SCRIPT_TOKEN, _SCRIPT_BARE, _SCRIPT_INTERP):
+        for m in rx.finditer(text):
+            tok = m.group(1)
+            if tok.endswith("/"):
+                continue
+            ext = os.path.splitext(tok)[1]
+            if rx is not _SCRIPT_TOKEN and ext and ext not in _SCRIPT_SUFFIXES:
+                continue        # .json / .toml / .md — data, not a script
+            if tok not in out:
+                out.append(tok)
+    return out
+
+
+def _read_script(path: str) -> str | None:
+    """The text of a script file, or None when it is not readable text. A file whose
+    first kilobyte carries a NUL byte is a binary (the installed ``claude`` executable,
+    for one) and is never scanned: pattern hits inside compiled code would be noise."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(1024)
+            if b"\0" in head:
+                return None
+            return head.decode("utf-8", errors="replace") + \
+                f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def script_texts(entry: str, env: Mapping[str, str],
+                 cwd: str | os.PathLike | None = None,
+                 depth: int = 2) -> list[tuple[str, str]]:
+    """``[(path, text)]`` for the scripts an agent command names, following the scripts
+    those texts name in turn up to ``depth`` levels (a wrapper that execs another
+    wrapper defeats the policy as surely as the first). Not followed: a script named
+    through a value only the runtime can compute, and one already read (a cycle or a
+    repeat) — the pragmatic depth; a third hop is a different wrapper's business."""
+    texts: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    frontier = [entry]
+    for _ in range(max(1, depth)):
+        nxt: list[str] = []
+        for text in frontier:
+            for raw in _script_candidates(text):
+                path = _expand(raw, {}, env)
+                if not os.path.isabs(path) and cwd is not None:
+                    path = os.path.join(os.fspath(cwd), path)
+                key = os.path.normpath(path)
+                if key in seen or not os.path.isfile(path):
+                    continue
+                seen.add(key)
+                body = _read_script(path)
+                if body is not None:
+                    texts.append((path, body))
+                    nxt.append(body)
+        frontier = nxt
+    return texts
+
+
 def inspect_agent_cmd(cmd: str | None, env: Mapping[str, str] | None = None,
                       cwd: str | os.PathLike | None = None) -> AgentCmdFacts:
-    """Build the leg table from an ``--agent-cmd`` string, the shell scripts it
-    names (one level), the config dirs they select, and the process environment.
-    ``env`` is what the agent inherits — pass ``os.environ`` for a real run,
-    ``{}`` in tests."""
+    """Build the leg table from an ``--agent-cmd`` string, the shell and python scripts
+    it names (and the scripts those name in turn), the config dirs they select, and the
+    process environment. ``env`` is what the agent inherits — pass ``os.environ`` for a
+    real run, ``{}`` in tests.
+
+    Raises ``ValueError`` when a ``--model $VAR`` names a variable that is assigned
+    nowhere in the readable sources and is not in the environment: the gate cannot tell
+    what model that leg would send, and a silent skip would run it unaudited
+    (BUG-CORPS-C-06)."""
     env = dict(env or {})
     facts = AgentCmdFacts(cmd=cmd or "")
     if not cmd:
         return facts
     texts: list[tuple[str, str]] = [("cmd", cmd)]
-    for m in _SCRIPT_TOKEN.finditer(cmd):
-        raw = m.group(1)
-        path = _expand(raw, {}, env)
-        if not os.path.isabs(path) and cwd is not None:
-            path = os.path.join(os.fspath(cwd), path)
-        if os.path.isfile(path):
-            try:
-                texts.append((path, Path(path).read_text(encoding="utf-8", errors="replace")))
-                facts.scripts.append(path)
-            except OSError:
-                facts.unreadable.append(path)
+    for path, body in script_texts(cmd, env, cwd):
+        texts.append((path, body))
+        facts.scripts.append(path)
 
     # Assignment context per source (merged across branches: the reader cannot
     # select a case branch, so every assignment in the source is in scope). This
-    # resolves config-dir and flag variables wherever they are used.
+    # resolves config-dir, gateway and model variables wherever they are used.
     source_assigns: dict[str, dict[str, str]] = {}
     source_flags: dict[str, dict[str, list[str]]] = {}
-    source_unset_base: dict[str, bool] = {}
     for source, text in texts:
         assigns = {k: _unquote(v) for k, v in _SH_ASSIGN.findall(text)}
         for _ in range(2):
             assigns = {k: _expand(v, assigns, env) for k, v in assigns.items()}
         source_assigns[source] = assigns
+        # every RESOLVED value each variable is assigned (a wrapper's case branches are
+        # mutually exclusive; the reader cannot select one, so the set is taken and
+        # each value becomes its own leg). Not just the flag vars: any ``--model $VAR``
+        # whose variable is assigned somewhere readable must resolve (C-06).
         flags: dict[str, list[str]] = {}
-        for vm in _VAR_ASSIGN.finditer(text):
-            name, val = vm.group(1), _unquote(vm.group(2))
-            resolved = _expand(val, assigns, env)
-            if not resolved.startswith("$"):
-                flags.setdefault(name, []).append(resolved)
+        for name, raw in _SH_ASSIGN.findall(text):
+            resolved = _expand(_unquote(raw), assigns, env)
+            bucket = flags.setdefault(name, [])
+            if not resolved.startswith("$") and resolved not in bucket:
+                bucket.append(resolved)
         source_flags[source] = flags
-        # `unset`/`env -u ANTHROPIC_BASE_URL` anywhere in the source makes every
-        # claude call in it first-party (splitting on statements would miss the
-        # unset, which governs everything after it).
-        source_unset_base[source] = bool(_UNSET_BASE.search(_join_continuations(text)))
 
     # Statement-level scan: a leg is one model id sent by one claude invocation,
     # sharing that statement's inline window / config-dir / first-party flag.
@@ -247,13 +382,29 @@ def inspect_agent_cmd(cmd: str | None, env: Mapping[str, str] | None = None,
     for source, text in texts:
         assigns = source_assigns[source]
         flags = source_flags[source]
-        src_unset = source_unset_base[source]
+        unset_active = False
+        gw_declared: str | None = None
         for stmt in _statements(text):
+            # the gateway state flows through the source: an `unset` turns it off from
+            # its statement on, an assignment turns it back on with its value; past a
+            # case/if/loop body's end neither is trusted (which branch ran is unknown).
+            if _BLOCK_CLOSE.search(stmt):
+                unset_active = False
+                gw_declared = None
             stmt_assigns = {**assigns,
                             **{k: _unquote(v) for k, v in _SH_ASSIGN.findall(stmt)}}
             for _ in range(2):
                 stmt_assigns = {k: _expand(v, stmt_assigns, env)
                                 for k, v in stmt_assigns.items()}
+            m_unset = _UNSET_BASE.search(stmt)
+            m_set = _GATEWAY_ASSIGN.search(stmt)
+            if m_unset or m_set:
+                if m_unset and (not m_set or m_unset.start() <= m_set.start()):
+                    unset_active = True
+                    gw_declared = None
+                else:
+                    unset_active = False
+                    gw_declared = _expand(_unquote(m_set.group(1)), stmt_assigns, env)
             cfg_dir = None
             for dm in _CONFIG_DIR_ASSIGN.finditer(stmt):
                 d = _expand(_unquote(dm.group(1)), stmt_assigns, env)
@@ -262,7 +413,7 @@ def inspect_agent_cmd(cmd: str | None, env: Mapping[str, str] | None = None,
             inline_win = None
             for wm in _WINDOW_ASSIGN.finditer(stmt):
                 inline_win = int(wm.group(1).replace("_", ""))
-            first_party = src_unset or bool(_ENV_U_BASE.search(stmt))
+            first_party = unset_active or bool(_ENV_U_BASE.search(stmt))
             uses = list(_USE.finditer(stmt))
             if cfg_dir and uses:
                 # --model on this statement overrides the dir's ANTHROPIC_MODEL, so
@@ -270,30 +421,27 @@ def inspect_agent_cmd(cmd: str | None, env: Mapping[str, str] | None = None,
                 dirs_with_model_flag.add(cfg_dir)
             for um in uses:
                 token = _unquote(um.group(1))
-                raw = token
                 if token.startswith("$"):
-                    # a $-reference: every value the flag var may hold. The var is
-                    # usually assigned in the wrapper; if not, it falls through to
-                    # the environment ("") and produces no leg rather than a bogus "".
-                    name = token.lstrip("$").lstrip("{").rstrip("}")
-                    values = flags.get(name) or ([env[name]] if name in env else [])
-                    for value in values:
-                        v = _expand(value, stmt_assigns, env)
+                    # a $-reference: every value the variable may hold, one leg each.
+                    values = _leg_values(token, flags, assigns, env, source)
+                    ref_names = [a or b for a, b in _VAR_REF.findall(token)]
+                    for v in values:
                         if not v or v.startswith("$"):
                             continue
                         win = _resolve_window(inline_win, cfg_dir, env)
-                        gw = _resolve_gateway(cfg_dir, env, first_party, src_unset)
+                        gw = _resolve_gateway(cfg_dir, env, first_party, gw_declared)
                         key = (v, source, win, gw, first_party)
                         if key not in seen:
                             seen.add(key)
                             facts.legs.append(Leg(v, source, win, gw, first_party,
-                                                  cfg_dir, inline_win, name))
+                                                  cfg_dir, inline_win,
+                                                  ",".join(ref_names)))
                 else:
-                    value = _expand(raw, stmt_assigns, env)
+                    value = _expand(token, stmt_assigns, env)
                     if value.startswith("$"):
                         continue
                     win = _resolve_window(inline_win, cfg_dir, env)
-                    gw = _resolve_gateway(cfg_dir, env, first_party, src_unset)
+                    gw = _resolve_gateway(cfg_dir, env, first_party, gw_declared)
                     key = (value, source, win, gw, first_party)
                     if key not in seen:
                         seen.add(key)

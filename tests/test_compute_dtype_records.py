@@ -267,3 +267,40 @@ def test_the_declared_dtype_ladder_is_the_task_ladder():
         os.environ.pop("RKT_COMPUTE_DTYPE", None)
         if old is not None:
             os.environ["RKT_COMPUTE_DTYPE"] = old
+
+
+# -- the eval JSON names the declaration ------------------------------------------------
+
+def test_eval_json_stamps_a_non_default_declaration():
+    bk = _benchkit("fp16", "wp22_emit_fp16")
+    seen: dict = {}
+
+    def fake_print(_):
+        seen.setdefault("lines", []).append(_)
+
+    import builtins
+    real = builtins.print
+    builtins.print = fake_print
+    try:
+        bk._emit({"correctness": {"pass": True}})
+    finally:
+        builtins.print = real
+    payload = json.loads(seen["lines"][-1])
+    assert payload["compute_dtype"] == "fp16"
+
+
+def test_eval_json_fp32_emits_no_stamp_byte_identical():
+    bk = _benchkit(None, "wp22_emit_fp32")
+    seen: list = []
+
+    def fake_print(line):
+        seen.append(line)
+
+    import builtins
+    real = builtins.print
+    builtins.print = fake_print
+    try:
+        bk._emit({"correctness": {"pass": True}})
+    finally:
+        builtins.print = real
+    assert "compute_dtype" not in seen[-1]

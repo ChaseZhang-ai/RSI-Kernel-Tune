@@ -1352,6 +1352,11 @@ def _emit(result: dict) -> None:
         # M3: every reading carries its lane. MEMO cards only — a STRICT eval JSON
         # emits nothing here (absent = strict) and stays byte-identical.
         result = {**result, "lane": {"memo": True}}
+    if _compute_dtype() != "fp32":
+        # WP22 (docs/compute-dtype.md): every reading names the declaration its
+        # numbers were read under (the gate's reference side ran there). fp32 —
+        # the default — emits nothing: pre-WP22 eval JSONs, byte for byte.
+        result = {**result, "compute_dtype": _compute_dtype()}
     if _SCOPE:
         result = {**result, "workload_scope": dict(_SCOPE)}
     if _RESUSAGE:

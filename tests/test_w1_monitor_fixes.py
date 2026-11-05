@@ -15,9 +15,12 @@ peregrine_kernel tree. CPU only.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
+
+from peregrine_kernel import monitor
 
 
 # --- W1-LIF-01: the CLI defaults to the card's own kernel file ---------------------

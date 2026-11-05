@@ -243,8 +243,12 @@ def test_cli_has_no_board_surface():
     from peregrine_kernel import __main__ as cli_main
     import peregrine_kernel.launch as launch
     assert not hasattr(launch, "new_board_task")
-    assert not hasattr(launch, "cmd_export") or "export_solution" not in \
-        launch.cmd_export.__doc__ or True
+    # cmd_export survives the de-board only as the run's kernel-source export:
+    # it must never come back as the board's export_solution surface, whatever
+    # the attribute's fate.  str() keeps a __doc__-less function from blowing
+    # the check up.
+    assert not hasattr(launch, "cmd_export") \
+        or "export_solution" not in str(launch.cmd_export.__doc__)
     src = Path(cli_main.__file__).read_text()
     assert "leaderboard" not in src.lower()
     assert "leaderboard" not in Path(launch.__file__).read_text().lower()

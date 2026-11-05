@@ -456,15 +456,30 @@ def drive(run, machine, *, resuming: bool = False, harvest_only: bool = False) -
         except Exception as e:  # noqa: BLE001 -- the record must say why the run stopped
             run.update(status=runs_mod.STATUS_FAILED, error=f"{type(e).__name__}: {e}")
             raise
-        stop = loop_stop(run, task) if rc == 0 else None
-        met = rc == 0 and confirmed_at_target(run, task)
-        # The stop word never completes a run by itself: DONE needs the final
-        # confirmation to meet the target with no correctness alarm on that kernel
-        # (the `peregrine run` contract in __main__), while a budget that runs out
-        # after the target was met still ends DONE.
-        final = runs_mod.STATUS_DONE if met else runs_mod.STATUS_STOPPED
-        run.update(status=final, loop_rc=rc, stop=stop, target_met=met)
-        write_report(run, task, rc)
+        # The finalization used to run outside every handler (BUG-CORPS-C-02): an
+        # exception here escaped with the record still at "running" and a bare
+        # traceback, and a restart loop would rerun the run forever. It must land a
+        # terminal status and a defined exit code whatever it hits.
+        try:
+            stop = loop_stop(run, task) if rc == 0 else None
+            met = rc == 0 and confirmed_at_target(run, task)
+            # The stop word never completes a run by itself: DONE needs the final
+            # confirmation to meet the target with no correctness alarm on that kernel
+            # (the `peregrine run` contract in __main__), while a budget that runs out
+            # after the target was met still ends DONE.
+            final = runs_mod.STATUS_DONE if met else runs_mod.STATUS_STOPPED
+            run.update(status=final, loop_rc=rc, stop=stop, target_met=met)
+        except Exception as e:  # noqa: BLE001 -- the record must say why the run stopped
+            run.update(status=runs_mod.STATUS_FAILED, loop_rc=rc,
+                       error=f"{type(e).__name__}: finalizing the run: {e}")
+            _say(f"finalizing the run failed ({type(e).__name__}: {e}): the run is "
+                 f"failed (rc 3)")
+            return 3
+        try:
+            write_report(run, task, rc)
+        except Exception as e:  # noqa: BLE001
+            # the record is already terminal; a missing report must not un-finish it
+            _say(f"writing the report failed ({type(e).__name__}: {e})")
         return 0 if final == runs_mod.STATUS_DONE else 2
 
 
@@ -494,6 +509,14 @@ def confirmed_at_target(run, task) -> bool:
 
 
 def _drive(run, task, machine, *, resuming: bool, harvest_only: bool) -> int:
+    if harvest_only:
+        # docs/kb-harvest.md: a harvest is one teacher turn and no GPU job. The
+        # preamble below submits GPU jobs (the judge's calibration, the NCU probe)
+        # and used to burn them even on a run that never started, before the loop
+        # refused it: a harvest reads the trajectory as it stands and the loop
+        # decides whether there is one (BUG-CORPS-C-01).
+        run.update(stage="harvesting")
+        return run_loop(run, task, resuming=resuming, harvest_only=True)
     check_dir = run.dir / judge_mod.CHECK_DIR
     op_dir = run.operators_dir / task.name
     deny = deny_paths(run, task)

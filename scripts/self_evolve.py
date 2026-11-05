@@ -189,7 +189,6 @@ def _best_tree_census_sections(run, best: dict) -> dict:
     cache = run.ws / "notes" / "wp11-stall-price"
     if dossier and cache.is_dir():
         import hashlib as _h
-        want = _h.sha256(dossier.encode("utf-8")).hexdigest()
         for log_file in sorted(cache.glob("*.log")):
             try:
                 text = log_file.read_text(encoding="utf-8", errors="replace")

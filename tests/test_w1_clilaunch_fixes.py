@@ -20,6 +20,7 @@ import pytest
 from peregrine_kernel import launch
 
 from test_launch import (  # tests/ is on sys.path under pytest
+    _start,
     _task,
     repo,  # noqa: F401 -- the shared fixture
 )

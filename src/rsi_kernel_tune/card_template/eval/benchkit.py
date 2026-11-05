@@ -97,10 +97,10 @@ MEMO_LANE_ENV = "RKT_MEMO_LANE"
 
 def _memo_lane() -> bool:
     """The lane switch: RKT_MEMO_LANE=1 is the MEMO industrial lane; absent (the
-    house pattern: absent means off) or 0/off is STRICT. Read through the
+    house pattern: absent means off) or 0/off/false/no is STRICT. Read through the
     bench-start pin (see the guard-knobs block) so the in-process kernel cannot
     re-route the recheck verdict into the MEMO branch mid-run."""
-    return (_guard_env_get(MEMO_LANE_ENV) or "").strip().lower() not in ("", "0", "off")
+    return (_guard_env_get(MEMO_LANE_ENV) or "").strip().lower() not in ("", "0", "off", "false", "no")
 
 
 def _recheck_seed_shift() -> int:
@@ -1212,6 +1212,40 @@ def call_impl(problem: dict, fn, inputs: list, dps: bool, device, *, no_grad: bo
 
 # --- correctness protocols -----------------------------------------------------------
 
+# --- the kernel-import env snapshot -------------------------------------------------
+#
+# The defense gates below (the lane switch, the fresh-recheck's child-nests guard and
+# seed shift, the replay probe's switch / threshold / timeout / child marker) read the
+# environment AFTER the kernel module has run in this process, and no fence covers a
+# kernel that mutates ``os.environ`` (the sealed-reference and CUDA fences ban
+# ``environ``; a definition-reference card runs unfenced and a binary-reference card's
+# KERNEL_FENCE does not name it). One import-time ``os.environ["RKT_FRESH_SEED"] = "0"``
+# in the kernel file used to neutralize the recheck child's layer-2 seed shift — a
+# content-keyed cache then re-served the recheck's draw and passed (reproduced on CPU,
+# tests/test_defense_env_snapshot.py). The house pattern is the precision switch's
+# ("read once, at import -- before any kernel module runs"): capture the environment at
+# the kernel-import boundary and read the defense gates from the capture. Reads before
+# any kernel import (the tests' posture, and the child's own spawn-time state) fall
+# through to the live environment, so operator and launcher behavior is unchanged.
+_ENV_AT_KERNEL_IMPORT: "dict[str, str] | None" = None
+
+
+def _capture_kernel_import_env() -> None:
+    """Freeze the environment as the launcher made it, at the kernel-import boundary
+    (the one seam every kernel load flows through, parent and children alike)."""
+    global _ENV_AT_KERNEL_IMPORT
+    if _ENV_AT_KERNEL_IMPORT is None:
+        _ENV_AT_KERNEL_IMPORT = dict(os.environ)
+
+
+def _defensive_env(name: str, default: "str | None" = None) -> "str | None":
+    """A defense gate's env read: the pre-kernel-import capture when one exists
+    (a kernel that flips the environment at import must not lower its own
+    defenses), else the live environment."""
+    src = _ENV_AT_KERNEL_IMPORT if _ENV_AT_KERNEL_IMPORT is not None else os.environ
+    return src.get(name, default)
+
+
 def _impl(problem: dict, which: str):
     """(callable, dps) for ``kernel`` (the student's), ``ref`` (the in-job reference)
     or ``definition`` (the definition's own reference run)."""
@@ -1219,6 +1253,7 @@ def _impl(problem: dict, which: str):
     if which == "kernel":
         kpath = card / problem.get("kernel_file", "kernel.py")
         load = load_cuda_entry if kpath.suffix in CUDA_KERNEL_SUFFIXES else load_entry
+        _capture_kernel_import_env()   # the defense gates freeze here, before foreign code runs
         return load(kpath, problem.get("entry", "run")), bool(problem.get("dps", True))
     ref = problem.get("reference_impl") or {"kind": "definition"}
     if which == "definition" or ref.get("kind") == "definition":
@@ -1417,6 +1452,19 @@ def _fresh_recheck_mode(problem: dict) -> str:
     differs from the timed draw (the judge's make_inputs draws per group),
     'process' when only the allocation is fresh (file-based inputs)."""
     return "regen" if _task_custom(problem)[1] is not None else "process"
+
+
+def _fresh_recheck_timeout_s() -> int:
+    """The recheck child's wall-clock ceiling: ``RKT_FRESH_RECHECK_TIMEOUT_S``
+    overrides; an unreadable value keeps the default. The probe's timeout knob
+    carries the same guard (a junk knob must not crash the bench here — this
+    read fires after every timing window has closed, so a bare ``int()`` would
+    waste the whole eval before the JSON is emitted)."""
+    try:
+        return int(_defensive_env("RKT_FRESH_RECHECK_TIMEOUT_S")
+                   or FRESH_RECHECK_TIMEOUT_S)
+    except ValueError:
+        return FRESH_RECHECK_TIMEOUT_S
 
 
 def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
@@ -1618,7 +1666,7 @@ def _replay_probe_timeout_s() -> int:
     overrides; an unreadable value keeps the default. A junk knob must not
     crash the bench here — this read fires after every timing window has
     closed, so a bare ``int()`` would waste the whole eval before the JSON
-    is emitted."""
+    is emitted. Snapshot-read like the switch."""
     try:
         return int(_guard_env_get(REPLAY_PROBE_TIMEOUT_ENV) or REPLAY_PROBE_TIMEOUT_S)
     except ValueError:

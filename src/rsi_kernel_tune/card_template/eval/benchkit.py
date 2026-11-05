@@ -2095,13 +2095,36 @@ PRECISION_ENV_OFF = os.environ.get(PRECISION_ENV, "").strip().lower() in ("0", "
 # declaration. "fp32" (absent) is the historical behavior byte for byte.
 COMPUTE_DTYPE_ENV = "RKT_COMPUTE_DTYPE"
 COMPUTE_DTYPES = ("fp32", "tf32", "bf16", "fp16", "fp8")
+COMPUTE_DTYPE_DEFAULT = "fp32"
 # Read once, at import -- before any kernel module runs in this process. The value
 # is harness-written (taskcard, from the validated [precision] declaration); a
 # hand-edited garbage value is refused outright, never read as the default.
-COMPUTE_DTYPE = os.environ.get(COMPUTE_DTYPE_ENV, "").strip().lower() or "fp32"
+COMPUTE_DTYPE = os.environ.get(COMPUTE_DTYPE_ENV, "").strip().lower() \
+    or COMPUTE_DTYPE_DEFAULT
 if COMPUTE_DTYPE not in COMPUTE_DTYPES:
     raise ValueError(f"{COMPUTE_DTYPE_ENV}={COMPUTE_DTYPE!r} is not a declared compute "
                      f"precision (one of {', '.join(COMPUTE_DTYPES)})")
+
+
+def _compute_dtype() -> str:
+    """The declared compute precision through the guard chain (the bench-start
+    pin > the kernel-import snapshot > live; see ``_guard_env_get``). The
+    import-time read above validates the launch-time value and refuses garbage;
+    this chain read keeps a kernel's post-import env write from moving the
+    declaration mid-measure. When every trusted layer says absent, the
+    import-validated value stands: the pin and the snapshot are captured in this
+    same process AFTER this module's import (they cannot disagree with it — and
+    a pinned None with a non-fp32 import is a state production never reaches),
+    so the frozen value is the one the harness was launched with. A value import
+    never validated falls back to the frozen one too, instead of crashing a
+    precision row."""
+    v = _guard_env_get(COMPUTE_DTYPE_ENV)
+    if v is None:
+        return COMPUTE_DTYPE
+    v = v.strip().lower() or COMPUTE_DTYPE_DEFAULT
+    return v if v in COMPUTE_DTYPES else COMPUTE_DTYPE
+
+
 # The torch dtype the declared outputs live on (None: tf32 keeps fp32 storage -- its
 # declaration is honored by the matmul flag, not by a cast).
 _COMPUTE_TORCH = {"fp32": None, "tf32": None, "bf16": torch.bfloat16,
@@ -2111,7 +2134,7 @@ _COMPUTE_TORCH = {"fp32": None, "tf32": None, "bf16": torch.bfloat16,
 def _to_declared(t):
     """One reference output on the declared output dtype's grid (a no-op cast for
     tf32 / anything not float)."""
-    to = _COMPUTE_TORCH[COMPUTE_DTYPE]
+    to = _COMPUTE_TORCH[_compute_dtype()]
     if to is None or not isinstance(t, torch.Tensor) or not t.is_floating_point():
         return t
     return t.to(to)
@@ -2127,11 +2150,12 @@ def _refs_at_declared(problem: dict, ref_run, pristine, refs: list, device) -> l
     then says exactly what was measured (dtype = the declared output dtype). The
     float64 truth is untouched (truth_of lifts on its own); the tolerance verdict's
     refs are untouched (this runs inside the precision measure only)."""
-    if COMPUTE_DTYPE == "fp32":
+    declared = _compute_dtype()
+    if declared == "fp32":
         return refs
     P = _precision()
     try:
-        if COMPUTE_DTYPE == "tf32":
+        if declared == "tf32":
             m, c = torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32
             torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = True
             try:
@@ -2140,8 +2164,8 @@ def _refs_at_declared(problem: dict, ref_run, pristine, refs: list, device) -> l
             finally:
                 torch.backends.cuda.matmul.allow_tf32 = m
                 torch.backends.cudnn.allow_tf32 = c
-        elif COMPUTE_DTYPE in ("bf16", "fp16"):
-            to = torch.bfloat16 if COMPUTE_DTYPE == "bf16" else torch.float16
+        elif declared in ("bf16", "fp16"):
+            to = torch.bfloat16 if declared == "bf16" else torch.float16
             # the truth side's own lift, pointed at the declaration: the reference's
             # float inputs land on the declared dtype first (a reference computing on
             # fp32 operands does not become fp16 by casting alone), and every
@@ -2169,7 +2193,7 @@ def _precision_measure(problem: dict, prec, case: str, outs: list, refs: list, r
                        pristine, device, stress: str | None = None) -> None:
     P = _precision()
     names = list(problem["definition"]["outputs"])
-    if COMPUTE_DTYPE != "fp32":
+    if _compute_dtype() != "fp32":
         # WP22: the reference side of every row is the reference AT the declaration
         refs = _refs_at_declared(problem, ref_run, pristine, refs, device)
     prec.measure(case, outs, refs,

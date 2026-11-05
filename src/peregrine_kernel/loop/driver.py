@@ -19137,7 +19137,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
             # was cut short at first green, and judging a rebuild patch at M0 is
             # predetermined (best_after < best_before) — it would revert correct
             # foundations for running out of runway, not for being wrong.
-            if meta_steps >= max_meta:
+            if meta_steps >= meta_cap:
                 _log("meta/m0-audit: meta budget exhausted -> skipping audit")
                 seg_green = True
                 start_iter = len(load_records(ctx.status_path))

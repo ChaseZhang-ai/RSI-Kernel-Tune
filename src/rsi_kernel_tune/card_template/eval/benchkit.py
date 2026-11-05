@@ -100,7 +100,8 @@ def _memo_lane() -> bool:
     house pattern: absent means off) or 0/off/false/no is STRICT. Read through the
     bench-start pin (see the guard-knobs block) so the in-process kernel cannot
     re-route the recheck verdict into the MEMO branch mid-run."""
-    return (_guard_env_get(MEMO_LANE_ENV) or "").strip().lower() not in ("", "0", "off", "false", "no")
+    return (_defensive_env(MEMO_LANE_ENV) or "").strip().lower() \
+        not in ("", "0", "off", "false", "no")
 
 
 def _recheck_seed_shift() -> int:
@@ -108,10 +109,10 @@ def _recheck_seed_shift() -> int:
     generator seeds: in the child, drawn inputs must differ in content from the
     timed draw (the same shift cannot fire in the parent — the env is child-only,
     and the default shift is 0 outside a recheck)."""
-    if not _guard_env_get(FRESH_RECHECK_ENV):
+    if not _defensive_env(FRESH_RECHECK_ENV):
         return 0
     try:
-        return int(_guard_env_get(FRESH_SEED_ENV) or 7919)
+        return int(_defensive_env(FRESH_SEED_ENV, 7919))
     except ValueError:
         return 7919
 
@@ -1471,7 +1472,8 @@ def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
     """One fresh-process correctness run over the SAME card: returns the parsed
     verdict, or None when the child could not produce one (env failure — a 'no
     reading', never counted as a fail)."""
-    env = _guard_env_apply(dict(os.environ))
+    env = dict(_ENV_AT_KERNEL_IMPORT) if _ENV_AT_KERNEL_IMPORT is not None \
+        else dict(os.environ)
     env[FRESH_RECHECK_ENV] = "1"
     if seed is not None:
         env[FRESH_SEED_ENV] = str(seed)
@@ -1507,8 +1509,10 @@ def _fresh_recheck_block(problem: dict) -> "dict | None":
     on a MEMO card (RKT_MEMO_LANE) the caller attaches this same block as
     ``memo_fallback`` instead of ``fresh_recheck`` (docs/industrial-lane.md
     §6.3); nothing here reads the lane."""
-    if _guard_env_get(FRESH_RECHECK_ENV):
-        return None                      # a child never nests
+    if _defensive_env(FRESH_RECHECK_ENV):
+        return None                      # a child never nests (the launcher's marker,
+                                         # read from the snapshot — a kernel that set
+                                         # the env at import must not silence the recheck)
     mode = _fresh_recheck_mode(problem)
     child = _fresh_child(problem, seed=None)
     block = {"mode": mode, "layers": [child], "pass": child.get("pass")}
@@ -1715,8 +1719,12 @@ def _unpin_guard_env() -> None:
 
 
 def _guard_env_get(key: str) -> "str | None":
-    """A guard knob read: the pinned bench-start value while a bench run is
-    active, the live environment otherwise (direct readers, tests)."""
+    """A guard knob read, in trust order: the kernel-import snapshot while one
+    exists (a kernel that flips the environment at its own import must not
+    move its own defenses), then the pinned bench-start value while a bench
+    run is active, the live environment otherwise (direct readers, tests)."""
+    if _ENV_AT_KERNEL_IMPORT is not None and key in _ENV_AT_KERNEL_IMPORT:
+        return _ENV_AT_KERNEL_IMPORT[key]
     if _GUARD_ENV is not None and key in _GUARD_ENV:
         return _GUARD_ENV[key]
     return os.environ.get(key)
@@ -1727,6 +1735,9 @@ def _guard_env_apply(env: dict) -> dict:
     inherits what the harness configured, not what the kernel mutated (the
     recheck child's layer-2 shift rides the ambient RKT_FRESH_SEED when the
     parent pins no explicit seed, so the ambient value must be the pinned one)."""
+    if _ENV_AT_KERNEL_IMPORT is not None:
+        for k, v in _ENV_AT_KERNEL_IMPORT.items():
+            env[k] = v
     if _GUARD_ENV is None:
         return env
     for k, v in _GUARD_ENV.items():
@@ -1756,10 +1767,13 @@ def _probe_task_inputs(view: dict, group: dict, device, seed: int) -> list:
     one repeated draw. The judged and recheck draws never run this path."""
     saved = os.environ.get(FRESH_SEED_ENV)
     saved_pin = _GUARD_ENV.get(FRESH_SEED_ENV) if _GUARD_ENV is not None else None
+    saved_snap = (_ENV_AT_KERNEL_IMPORT or {}).get(FRESH_SEED_ENV)
     drawn = str(seed - int(group.get("seed", 0)))
     os.environ[FRESH_SEED_ENV] = drawn
     if _GUARD_ENV is not None:
         _GUARD_ENV[FRESH_SEED_ENV] = drawn
+    if _ENV_AT_KERNEL_IMPORT is not None:
+        _ENV_AT_KERNEL_IMPORT[FRESH_SEED_ENV] = drawn
     try:
         return task_inputs(view, group, device)
     finally:
@@ -1772,6 +1786,11 @@ def _probe_task_inputs(view: dict, group: dict, device, seed: int) -> list:
                 _GUARD_ENV[FRESH_SEED_ENV] = None
             else:
                 _GUARD_ENV[FRESH_SEED_ENV] = saved_pin
+        if _ENV_AT_KERNEL_IMPORT is not None:
+            if saved_snap is None:
+                _ENV_AT_KERNEL_IMPORT.pop(FRESH_SEED_ENV, None)
+            else:
+                _ENV_AT_KERNEL_IMPORT[FRESH_SEED_ENV] = saved_snap
 
 
 def _probe_check_finite(inp: list) -> None:
@@ -1906,7 +1925,8 @@ def _probe_child(problem: dict) -> dict:
     one (env failure — a no-reading, never counted as a fail). The fresh-recheck
     child's spawn shape, with the probe's seed shift on the draw env and the
     probe's own child marker (no nesting)."""
-    env = _guard_env_apply(dict(os.environ))
+    env = dict(_ENV_AT_KERNEL_IMPORT) if _ENV_AT_KERNEL_IMPORT is not None \
+        else dict(os.environ)
     env[FRESH_RECHECK_ENV] = "1"   # the draw-shift gate the child's task_inputs reads
     env[FRESH_SEED_ENV] = str(REPLAY_PROBE_SEED_SHIFT)
     env[REPLAY_PROBE_CHILD_ENV] = "1"

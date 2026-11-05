@@ -6,7 +6,6 @@ from rsi_kernel_tune.loop.driver import (
     run_kb_certify,
     run_meta_step,
     run_two_layer,
-    MetaResult,
     KbCertifyResult,
 )
 from rsi_kernel_tune.loop.parse import (
@@ -21,6 +20,6 @@ from rsi_kernel_tune.loop.parse import (
 
 __all__ = [
     "LoopContext", "MetaResult", "run_inner_iteration", "run_inner_loop",
-    "run_meta_step", "run_kb_certify", "run_two_layer", "MetaResult", "KbCertifyResult", "Record", "ProbeRequest", "Exhausted",
+    "run_meta_step", "run_kb_certify", "run_two_layer", "KbCertifyResult", "Record", "ProbeRequest", "Exhausted",
     "parse_student_turn", "parse_eval", "parse_probe_verdict", "detect_plateau",
 ]

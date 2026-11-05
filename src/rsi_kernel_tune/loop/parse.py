@@ -688,9 +688,15 @@ def parse_eval(text: str) -> EvalResult:
         return EvalResult(correctness=False,
                           error=f"eval JSON carries workload_scope={json.dumps(scope)}: a group card "
                                 f"timed on part of its group is a meta reading, not a gate")
-    corr_obj = obj.get("correctness", {}) or {}
+    corr_obj = obj.get("correctness")
+    corr_obj = corr_obj if isinstance(corr_obj, dict) else {}
     correct = bool(corr_obj.get("pass", False))
-    perf = obj.get("performance") or {}
+    perf = obj.get("performance")
+    perf = perf if isinstance(perf, dict) else {}
+    # both reads wear the same isinstance guard as every other dict-typed field
+    # below: a truthy non-dict block (`"performance": [1]` — a malformed bench
+    # or a mangled job log) must degrade to the no-reading shape like the rest,
+    # not escape parse_eval as an AttributeError
     ms = perf.get("bwd_median_ms")
     mfu = perf.get("bwd_mfu_pct", perf.get("mfu"))
 

@@ -94,6 +94,29 @@ def test_open_run_refuses_a_plain_directory(tmp_path):
         open_run(tmp_path)
 
 
+def test_open_run_refuses_a_non_dict_run_record(tmp_path):
+    """HUNT5: run.json holding valid JSON that is not an object (a truncated or
+    hand-mangled record) used to crash open_run with a bare AttributeError at
+    rec.get -- the documented rejection, not a traceback."""
+    t = load_task(_task(tmp_path, MINIMAL), kb_root=_kb(tmp_path))
+    run = new_run(t, root=tmp_path / "runs")
+    (run.dir / "run.json").write_text("[]")
+    with pytest.raises(RunError, match="does not hold a run record"):
+        open_run(run.dir)
+
+
+def test_list_runs_skips_a_junk_run_record(tmp_path):
+    """HUNT5: the no-argument status listing reads every run.json under .artifacts/;
+    a non-object record in one directory must not take the listing down with a
+    TypeError (list indices must be integers)."""
+    t = load_task(_task(tmp_path, MINIMAL), kb_root=_kb(tmp_path))
+    run = new_run(t, root=tmp_path / "runs")
+    junk = tmp_path / "runs" / "junk_000000"
+    junk.mkdir()
+    (junk / "run.json").write_text("[]")
+    assert [r.name for r in list_runs(tmp_path / "runs")] == [run.name]
+
+
 def test_update_keeps_the_record_whole(tmp_path):
     t = load_task(_task(tmp_path, MINIMAL), kb_root=_kb(tmp_path))
     run = new_run(t, root=tmp_path / "runs")

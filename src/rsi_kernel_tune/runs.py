@@ -141,6 +141,10 @@ def open_run(path: str | Path) -> Run:
         rec = json.loads(f.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         raise RunError(f"{f} does not parse: {e}") from None
+    if not isinstance(rec, dict):
+        # valid JSON that is not an object (a truncated or hand-mangled record):
+        # the documented rejection, not a bare AttributeError at rec.get below
+        raise RunError(f"{f} does not hold a run record")
     for key in ("task", "id", "snapshot_sha256"):
         if not rec.get(key):
             raise RunError(f"{f} has no {key!r}")
@@ -161,8 +165,8 @@ def list_runs(root: Path | None = None) -> list[Run]:
                 try:
                     rec = json.loads((d / RUN_FILE).read_text(encoding="utf-8"))
                     out.append(Run(dir=d, task_name=rec["task"], id=rec["id"]))
-                except (OSError, ValueError, KeyError):
-                    continue
+                except (OSError, ValueError, KeyError, TypeError):
+                    continue   # TypeError: valid JSON that is not an object -- junk, skip it
     return out
 
 

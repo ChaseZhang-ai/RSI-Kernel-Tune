@@ -518,7 +518,12 @@ for b in ("eval/benchkit.py", "eval/bench.py", "eval/problem/problem.json"):
     files[b] = sha(p)
 
 kernel_text = (root / kf).read_text(encoding="utf-8", errors="replace")
-cflags = "".join(re.findall(r'^[ \t]*//[ \t]*fk-cuda-cflags:(.*)$', kernel_text, re.M))
+# the builder tokenizes each fk-cuda-cflags line with .split() (benchkit.py
+# cuda_kernel_flags), so whitespace between and around the tokens never changes
+# the compile: hash the normalized tokens, not the raw text — a cosmetic edit of
+# the flags comment line must not move the key and lose the hit
+cflags = "".join(" ".join(line.split())
+                 for line in re.findall(r'^[ \t]*//[ \t]*fk-cuda-cflags:(.*)$', kernel_text, re.M))
 payload = "\n".join(f"{rel}:{files[rel]}" for rel in sorted(files))
 payload += f"\ncflags:{cflags}\n"
 print(hashlib.sha256(payload.encode("utf-8")).hexdigest())

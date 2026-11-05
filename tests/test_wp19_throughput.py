@@ -431,6 +431,29 @@ fi
     assert "BUILT" in r3.stdout                  # a tampered entry is a fresh build
 
 
+def test_the_narrowed_key_normalizes_cflags_whitespace(tmp_path):
+    """HUNT5: the enumerator hashed the RAW fk-cuda-cflags text while the builder
+    tokenizes every flags line with .split() (benchkit.py cuda_kernel_flags) —
+    a whitespace-only edit of the flags comment line produced a distinct key for
+    a byte-identical compile: same nvcc input, permanent miss."""
+    tree = _key_tree(tmp_path / "tree")
+    script = _cache_functions_script(tree)
+    narrow = {"RKT_BUILD_CACHE_KEY_NARROW": 1}
+    k0 = _key_of(tree, script, **narrow)
+    (tree / "kernel.cu").write_text(
+        '// fk-cuda-cflags: -O3   \n#include "util.cuh"\n__global__ void k(){}\n',
+        encoding="utf-8")
+    assert _key_of(tree, script, **narrow) == k0       # trailing whitespace: same tokens
+    (tree / "kernel.cu").write_text(
+        '// fk-cuda-cflags:   -O3\n#include "util.cuh"\n__global__ void k(){}\n',
+        encoding="utf-8")
+    assert _key_of(tree, script, **narrow) == k0       # leading whitespace: same tokens
+    (tree / "kernel.cu").write_text(
+        '// fk-cuda-cflags: -O3 --use_fast_math\n#include "util.cuh"\n__global__ void k(){}\n',
+        encoding="utf-8")
+    assert _key_of(tree, script, **narrow) != k0       # a real flag: a different compile
+
+
 # --- task 1 addendum (A-G24/B-B7): the inputs manifest memo --------------------------
 
 def _b7_op(tmp_path: Path, n: int = 2) -> tuple[Path, "direct.SubmitConfig"]:

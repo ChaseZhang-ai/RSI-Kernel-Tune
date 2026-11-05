@@ -76,14 +76,23 @@ def read_env_file(path: str | Path) -> dict:
         if not sep or not _KEY_RE.match(key):
             bad.append(f"line {n} is not KEY=VALUE")
             continue
-        value = value.strip()
         if value[:1] in ("'", '"'):
+            value = value.strip()
             try:
                 parts = shlex.split(value)
             except ValueError:
                 bad.append(f"line {n}: unbalanced quotes")
                 continue
             value = parts[0] if parts else ""
+        else:
+            # An inline comment is a '#' preceded by whitespace: "REMOTE_HOST=host # alias"
+            # reads "host", "KEY= # none" reads empty, while a '#' glued to the value is
+            # part of it (COLOR=#ff0000) -- the doc's "# comments" (BUG-CORPS-C-04).
+            for i, ch in enumerate(value):
+                if ch == "#" and i > 0 and value[i - 1].isspace():
+                    value = value[:i]
+                    break
+            value = value.strip()
         out[key] = value
     if bad:
         raise MachineError([f"{p}: {b}" for b in bad])

@@ -487,7 +487,7 @@ def build_kb_menu(*, readings: dict, resusage: dict | None = None,
     rows = parse_symptom_rows(index_text) if index_text else []
 
     hints: list[str] = []
-    lever_forms: list[str] = []
+    lever_forms: list[tuple] = []
     shown: set[str] = set()
     for rule in RULES:
         fires = rule.when(readings, resusage)

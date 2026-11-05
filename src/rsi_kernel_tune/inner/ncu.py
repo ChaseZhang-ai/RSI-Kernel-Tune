@@ -196,7 +196,7 @@ def parse_resusage_text(text: str) -> list[dict]:
     second arch in the same fatbin) is overwritten by its later reading. A
     function block with no readable numbers yields no entry — an unparseable
     dump degrades to [], never a raise."""
-    out: list[dict] = {}
+    out: dict[str, dict] = {}
     order: list[str] = []
     current: str | None = None
     for line in text.splitlines():

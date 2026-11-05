@@ -29,7 +29,7 @@ from peregrine_kernel.loop import screening  # noqa: E402
 from peregrine_kernel.loop import driver as drv  # noqa: E402
 from peregrine_kernel.loop.driver import (  # noqa: E402
     BackendError, _arch_probe_ms, _arch_probe_stamp, _canonical_recipe_hash,
-    _node_dirty_reason, _run_arch_probes, _sm_clock_drift, _sweep_job,
+    _mc_job, _node_dirty_reason, _run_arch_probes, _sm_clock_drift, _sweep_job,
     _sweep_spec_refused, _wp17_apply_cfg, _wp17_maybe_cert_candidates_head,
 )
 from peregrine_kernel.skills import lever_pricing_run as lpr  # noqa: E402
@@ -247,21 +247,33 @@ def test_settled_job_rebuy_policy():
     assert len(be.submits) == 1
 
 
-def test_sweep_and_mc_job_delegation_keep_their_words():
+def test_sweep_and_mc_job_delegation_keep_their_words(monkeypatch):
     """The channel wrappers keep their exact log vocabulary (SWEEP/recipe,
     MC/prescreen) — the byte-level contract the migration must not reword."""
     logs = []
+    monkeypatch.setattr(drv, "_log", logs.append)   # the wrappers log through the driver sink
+    # a dirty first attempt is re-bought once, under the SWEEP/recipe wording
     be = _JobBe(["NODE-DIRTY\n", "SWEEP-OK variants=1 rounds=3 base_ms=1.0\n"])
     log, _ = _sweep_job(be, "br", "cmd", "iter1: sweep d1")
     assert len(be.submits) == 2
     assert "SWEEP-OK" in log
-    assert any("re-running the same recipe once" in ln for ln in logs) or True
-    drv._log = print   # the wrappers log through the driver sink; spot-check one
+    assert any("re-running the same recipe once" in ln for ln in logs)
+    # a verdict-less first attempt is resubmitted once, same recipe wording
+    logs.clear()
     be = _JobBe(["nothing\n", "SWEEP-OK variants=1 rounds=3 base_ms=1.0\n"])
     _sweep_job(be, "br", "cmd", "iter1: sweep d1")
+    assert any("resubmitting the same recipe once" in ln for ln in logs)
+    # the MC prescreen wrapper keeps its own MC/prescreen vocabulary
+    logs.clear()
     be2 = _JobBe(["nothing\n", "MC-OK variants=1 rounds=2 winner=v0\n"])
-    from peregrine_kernel.loop.driver import _mc_job
     _mc_job(be2, "br", "cmd", "iter1: mc prescreen d1")
+    assert any("resubmitting the same prescreen once" in ln for ln in logs)
+    assert not any("prescreen" in ln and "recipe" in ln for ln in logs)
+    logs.clear()
+    be3 = _JobBe(["NODE-DIRTY pid 3\n", "MC-OK variants=1 rounds=2 winner=v0\n"])
+    log3, _ = _mc_job(be3, "br", "cmd", "iter1: mc prescreen d1")
+    assert len(be3.submits) == 2 and "MC-OK" in log3
+    assert any("re-running the same prescreen once" in ln for ln in logs)
 
 
 def test_pair_outcome_floor_rule():

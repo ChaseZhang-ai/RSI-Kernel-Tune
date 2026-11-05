@@ -460,14 +460,22 @@ _BARE_FLAG = re.compile(r"(?<![\w-])--bare\b")
 _SETTINGS_FLAG = re.compile(r"(?<![\w-])--settings(?:=|\s)")
 # `env -C dir claude` changes directory without a cd.
 _ENV_CHDIR = re.compile(r"(?<![\w-])env\s[^\n;&|]*?(?<![\w-])(?:-C|--chdir)[=\s]")
-# A statement-level cd, including one opening a subshell -- `(cd /x && claude -p)`.
-# `$(cd "$(dirname "$0")" && pwd)` is how wrappers compute their own directory and
-# changes nothing for the agent, so a cd inside a command substitution counts only when
-# that substitution also runs the agent.
+# A statement-level cd, including one opening a subshell -- `(cd /x && claude -p)` --
+# and the `command cd` / `builtin cd` spellings (BUG-CORPS-C-07: `command cd /x` ran
+# the agent from another directory past the plain-word pattern).
 _CD_STMT = re.compile(
-    r"(?:^|[;&|\"']|(?<!\$)\(|\bthen\b|\bdo\b|\belse\b)\s*(?:builtin\s+)?(?:cd|pushd)\s",
+    r"(?:^|[;&|\"']|(?<!\$)\(|\bthen\b|\bdo\b|\belse\b)\s*"
+    r"(?:(?:builtin|command)\s+)?(?:cd|pushd)\s",
     re.M)
-_CD_SUBST = re.compile(r"\$\(\s*(?:builtin\s+)?(?:cd|pushd)\s[^\n]*claude", re.M | re.I)
+_CD_SUBST = re.compile(
+    r"\$\(\s*(?:(?:builtin|command)\s+)?(?:cd|pushd)\s[^\n]*claude", re.M | re.I)
+# A python wrapper's own directory change (scripts/claude-goal.py is a .py wrapper):
+# `os.chdir(...)` / bare `chdir(` in the source. The shell statement pattern above is
+# NOT applied to .py text — its separators are shell syntax, and a shell command a
+# python file builds in a string literal (`cd` inside a generated launcher) would read
+# as this file's own behavior. That boundary is pragmatic: a .py wrapper that changes
+# the directory only through a subprocess's cwd= argument is still not seen.
+_PY_CHDIR = re.compile(r"(?<![\w.])(?:os\.)?chdir\s*\(")
 
 
 def command_findings(cmds: list[str | None], env: dict[str, str],
@@ -475,31 +483,19 @@ def command_findings(cmds: list[str | None], env: dict[str, str],
     """Why some agent command would run the agent without loading the project settings.
 
     Reads what the context-window gate reads (agentctx): the command text and the shell
-    scripts it names (one level). Static, so it cannot see
-    a script that computes its own flags, nor a directory change whose command is only
-    reachable through a variable; the per-turn installation still happens, this only
-    refuses the shapes known to defeat it."""
-    from peregrine_kernel.loop.agentctx import _SCRIPT_TOKEN, _expand
-
-    def scripts_in(text: str) -> list[tuple[str, str]]:
-        out = []
-        for m in _SCRIPT_TOKEN.finditer(text):
-            path = _expand(m.group(1), {}, env)
-            if not os.path.isabs(path) and cwd is not None:
-                path = os.path.join(os.fspath(cwd), path)
-            if os.path.isfile(path):
-                try:
-                    out.append((path, Path(path).read_text(encoding="utf-8", errors="replace")))
-                except OSError:
-                    pass
-        return out
+    and python scripts it names, following the scripts those name in turn (a wrapper
+    that execs another wrapper defeats the policy as surely as the first). Static, so
+    it cannot see a script that computes its own flags, nor a directory change whose
+    command is only reachable through a variable; the per-turn installation still
+    happens, this only refuses the shapes known to defeat it."""
+    from peregrine_kernel.loop.agentctx import script_texts
 
     texts: list[tuple[str, str]] = []
     for cmd in cmds:
         if not cmd:
             continue
         texts.append(("agent command", cmd))
-        texts += scripts_in(cmd)
+        texts += script_texts(cmd, env, cwd)
 
     # Every agent command rides the same "agent command" source: keying the dedup on
     # the source alone dropped the second command's findings whole (the teacher leg
@@ -525,9 +521,25 @@ def command_findings(cmds: list[str | None], env: dict[str, str],
         if _ENV_CHDIR.search(body):
             findings.append(f"{source}: env -C runs the agent in another directory, so "
                             f"the policy in the working directory would not be loaded")
-        if _CD_STMT.search(body) or _CD_SUBST.search(body):
-            findings.append(f"{source}: changes directory before running the agent, so "
-                            f"the policy in the working directory would not be loaded")
+        # The shell statement cd is shell syntax: applied to a .py wrapper's text, the
+        # `cd` inside a launcher script it builds as a string literal would read as this
+        # file's own behavior (scripts/claude-goal.py does exactly that, for the same
+        # directory the policy is installed in). A .py wrapper is read for os.chdir()
+        # instead; both keep the --settings / --bare / env -C shapes.
+        if source.endswith(".py"):
+            if _PY_CHDIR.search(body):
+                findings.append(f"{source}: changes directory (os.chdir) before running "
+                                f"the agent, so the policy in the working directory "
+                                f"would not be loaded")
+        else:
+            if _CD_STMT.search(body) or _CD_SUBST.search(body):
+                findings.append(f"{source}: changes directory before running the agent, "
+                                f"so the policy in the working directory would not be "
+                                f"loaded")
+            if _PY_CHDIR.search(body):
+                findings.append(f"{source}: changes directory (chdir) before running "
+                                f"the agent, so the policy in the working directory "
+                                f"would not be loaded")
     return findings
 
 

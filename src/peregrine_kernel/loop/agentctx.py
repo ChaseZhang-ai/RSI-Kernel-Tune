@@ -65,7 +65,22 @@ _USE = re.compile(r"--model(?:=|\s+)(\"[^\"]*\"|'[^']*'|[^\s;&|]+)")
 _SH_ASSIGN = re.compile(r"\b(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"\n]*\"|'[^'\n]*'|[^\s;&|]+)")
 _CONFIG_DIR_ASSIGN = re.compile(r"\bCLAUDE_CONFIG_DIR=(\"[^\"\n]*\"|'[^'\n]*'|[^\s;&|]+)")
 _WINDOW_ASSIGN = re.compile(r"\bCLAUDE_CODE_AUTO_COMPACT_WINDOW=['\"]?([0-9_]+)")
-_SCRIPT_TOKEN = re.compile(r"(?<![\w/.-])((?:~|\$HOME|/)?[\w./~$-]*\.(?:sh|bash|zsh))\b")
+# The shell and python scripts an agent command may name. A wrapper chains through
+# another script (``agent-claude.sh`` execs ``claude-goal.sh`` which execs
+# ``claude-goal.py``), and a ``cd`` / ``--setting-sources`` in the second hop defeats
+# the policy just the same, so the entries are not only ``.sh``: ``.py`` wrappers and
+# extensionless executables are read too. An extensionless name is matched only when a
+# path prefix (``/``, ``~``, ``$HOME``, ``$VAR``, ``./``, ``../``) or an interpreter
+# (``bash run-agent``) pins it as a file — bare command words (``claude``, ``git``) are
+# never read. Data files (``.json``, ``.toml``, ...) are not matched, and a binary is
+# skipped after a NUL sniff, so the installed ``claude`` executable is never scanned.
+_SCRIPT_TOKEN = re.compile(r"(?<![\w/.-])((?:~|\$HOME|\$[A-Za-z_]\w*|\./|\.\./|/)?"
+                           r"[\w./~$+-]*\.(?:sh|bash|zsh|py))\b")
+_SCRIPT_BARE = re.compile(r"(?<![\w/.-])((?:~|\$HOME|\$[A-Za-z_]\w*|\./|\.\./|/)"
+                          r"[\w./~$+-]*)")
+_SCRIPT_INTERP = re.compile(r"\b(?:bash|sh|zsh|python3?)\s+((?!-)[\w][\w./~+-]*)")
+_SCRIPT_SUFFIXES = (".sh", ".bash", ".zsh", ".py")
+
 
 # ``unset ANTHROPIC_BASE_URL`` / ``env -u ANTHROPIC_BASE_URL`` and their
 # variable forms make a leg first-party (official endpoint, 1M window, no clamp).
@@ -194,28 +209,85 @@ def _statements(text: str) -> list[str]:
     return [s for s in _STATEMENT_SPLIT.split(_join_continuations(text)) if s.strip()]
 
 
+def _script_candidates(text: str) -> list[str]:
+    """The raw tokens of ``text`` that may name a script: the suffixed entries
+    (``.sh`` / ``.bash`` / ``.zsh`` / ``.py``), extensionless paths (``./run-agent``,
+    ``$HERE/run-agent``), and extensionless names behind an interpreter
+    (``bash run-agent``). Bare command words are not candidates; a token with a data
+    extension (``.json``, ``.toml``) is not, either."""
+    out = []
+    for rx in (_SCRIPT_TOKEN, _SCRIPT_BARE, _SCRIPT_INTERP):
+        for m in rx.finditer(text):
+            tok = m.group(1)
+            if tok.endswith("/"):
+                continue
+            ext = os.path.splitext(tok)[1]
+            if rx is not _SCRIPT_TOKEN and ext and ext not in _SCRIPT_SUFFIXES:
+                continue        # .json / .toml / .md — data, not a script
+            if tok not in out:
+                out.append(tok)
+    return out
+
+
+def _read_script(path: str) -> str | None:
+    """The text of a script file, or None when it is not readable text. A file whose
+    first kilobyte carries a NUL byte is a binary (the installed ``claude`` executable,
+    for one) and is never scanned: pattern hits inside compiled code would be noise."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(1024)
+            if b"\0" in head:
+                return None
+            return head.decode("utf-8", errors="replace") + \
+                f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def script_texts(entry: str, env: Mapping[str, str],
+                 cwd: str | os.PathLike | None = None,
+                 depth: int = 2) -> list[tuple[str, str]]:
+    """``[(path, text)]`` for the scripts an agent command names, following the scripts
+    those texts name in turn up to ``depth`` levels (a wrapper that execs another
+    wrapper defeats the policy as surely as the first). Not followed: a script named
+    through a value only the runtime can compute, and one already read (a cycle or a
+    repeat) — the pragmatic depth; a third hop is a different wrapper's business."""
+    texts: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    frontier = [entry]
+    for _ in range(max(1, depth)):
+        nxt: list[str] = []
+        for text in frontier:
+            for raw in _script_candidates(text):
+                path = _expand(raw, {}, env)
+                if not os.path.isabs(path) and cwd is not None:
+                    path = os.path.join(os.fspath(cwd), path)
+                key = os.path.normpath(path)
+                if key in seen or not os.path.isfile(path):
+                    continue
+                seen.add(key)
+                body = _read_script(path)
+                if body is not None:
+                    texts.append((path, body))
+                    nxt.append(body)
+        frontier = nxt
+    return texts
+
+
 def inspect_agent_cmd(cmd: str | None, env: Mapping[str, str] | None = None,
                       cwd: str | os.PathLike | None = None) -> AgentCmdFacts:
-    """Build the leg table from an ``--agent-cmd`` string, the shell scripts it
-    names (one level), the config dirs they select, and the process environment.
-    ``env`` is what the agent inherits — pass ``os.environ`` for a real run,
-    ``{}`` in tests."""
+    """Build the leg table from an ``--agent-cmd`` string, the shell and python scripts
+    it names (and the scripts those name in turn), the config dirs they select, and the
+    process environment. ``env`` is what the agent inherits — pass ``os.environ`` for a
+    real run, ``{}`` in tests."""
     env = dict(env or {})
     facts = AgentCmdFacts(cmd=cmd or "")
     if not cmd:
         return facts
     texts: list[tuple[str, str]] = [("cmd", cmd)]
-    for m in _SCRIPT_TOKEN.finditer(cmd):
-        raw = m.group(1)
-        path = _expand(raw, {}, env)
-        if not os.path.isabs(path) and cwd is not None:
-            path = os.path.join(os.fspath(cwd), path)
-        if os.path.isfile(path):
-            try:
-                texts.append((path, Path(path).read_text(encoding="utf-8", errors="replace")))
-                facts.scripts.append(path)
-            except OSError:
-                facts.unreadable.append(path)
+    for path, body in script_texts(cmd, env, cwd):
+        texts.append((path, body))
+        facts.scripts.append(path)
 
     # Assignment context per source (merged across branches: the reader cannot
     # select a case branch, so every assignment in the source is in scope). This

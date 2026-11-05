@@ -574,14 +574,29 @@ def install() -> None:
     prof = os.environ.get(ENV_PROFILE, "").strip()
     if not prof or _state.get("installed"):
         return
+    # PK_MON_MAX_CALLS is operator-reachable (submit.toml [env] rides through): a
+    # typo used to raise ValueError out of install(), so sitecustomize only left a
+    # one-line stderr note and the job watched nothing. An unreadable value keeps
+    # the default, and the reason lands in the hook json's errors.
+    raw_calls = (os.environ.get(ENV_MAX_CALLS) or "").strip()
+    try:
+        max_calls = int(raw_calls) if raw_calls else 64
+        junk_calls = False
+    except ValueError:
+        max_calls = 64
+        junk_calls = True
     _state.update({
         "installed": True, "profile": prof, "pid": os.getpid(), "argv": sys.argv[:4],
         "started": time.time(), "calls": [], "errors": [], "perturbed": 0,
         "reseeded": 0, "seed_offset": 0, "kernel_module": None,
-        "max_calls": int(os.environ.get(ENV_MAX_CALLS, "64") or 64),
+        "default_reseeded": False,
+        "max_calls": max_calls,
         "kernel_path": os.environ.get(ENV_KERNEL) or None,
         "out": os.environ.get(ENV_OUT) or None,
     })
+    if junk_calls:
+        _err(f"{ENV_MAX_CALLS}={raw_calls!r} is not an integer -- using the default",
+             ValueError(raw_calls))
     root = os.environ.get(ENV_ROOT)
     _state["root"] = os.path.realpath(root) if root else None
     if _state["kernel_path"]:

@@ -171,3 +171,65 @@ were re-anchored rather than deleted. Statistical-threshold defaults unchanged.
   verified this way.
 - Final full suite on this branch tip: see the closing report (must be green, 2692 +
   additions, zero failures).
+
+## W1 corps wave (parallel fix line, rebased onto this branch)
+
+A second corps line (W1) ran the same correction order in parallel: an eight-agent
+triage of the legacy findings plus its own wave-1 discoveries against this
+repository, then nine file-partitioned fix agents. Its raw commits were deduplicated
+against the fixes above — for every finding this branch already carries, the W1
+line surrendered its own implementation and kept this one — and only the faces this
+branch lacked were re-landed here (41 cherry-picks):
+
+- **kernel deliverables** (`kernels/`, untouched by the wave above): fp8_gemm cache
+  keys to full tensor identity with held references (the fp4 `_tensor_identity`
+  discipline), conv3d_fwd no longer pip-installs + `os.execve`s at import, from_agent
+  / fp8 two-slot result rotation, dsa_sparse_bwd k2 key carries `sm_scale`,
+  empty-sequence NaN guards in the two paged-decode kernels, b200 shape validation,
+  dsa_score_recompute epilogue predicates, gen0 key carries device/dtype/strides.
+- **the black-box guard vocabulary** (`scripts/blackbox-guard.sh`, untouched): a bad
+  `BLACKBOX_EXTRA` regex now fails closed at source time, `--set full` /
+  `--section SourceCounters` / `--page source` and the attribute-chain introspection
+  spellings are denied, the guard's own file is `realpath`ed, and `\bstrings\b` no
+  longer bites "f-strings".
+- **scripts the wave above does not reach**: `agent-claude.sh` goal branch carries
+  `PK_GOAL_TIMEOUT`, `claude-goal.py` refusal exits honor the stdout contract and
+  lose the dead `met_seen_at`, `timeout-run.py` maps signal deaths to 128+n, the
+  two skills recipes fail with a verdict line instead of an IndexError traceback,
+  `self_evolve` distinguishes infra failure (rc 3) from a natural chain end,
+  `baseline_cli --from-json` reports a broken archive cleanly.
+- **monitor CLI**: `--kernel-file` resolves from the card, and the monitor hook's
+  `_chain` never executes a sitecustomize planted in the workspace (defense in
+  depth on top of the gpu_entry PYTHONPATH fix), tmp dump names are thread-scoped.
+- **cli/launch seams**: a config-phase `SystemExit` lands FAILED in the run record;
+  `peregrine status` survives a torn status.jsonl line; `hours` is documented as the
+  whole loop wall clock in both places.
+- **parse/inner/judge/misc**: `_correctness_error` reads tensor names from the bench
+  JSON (SEED-47's dq/dk/dv hardcode was still present here), `_gate_ratio` rejects
+  non-finite ratios, "PROBE PASSED" keeps its max_diff capture, `meta_trajectory`
+  validates outcomes at the update entry, `judge` spans every shape's axes,
+  `window_contract` reports a malformed shape instead of crashing, `goal_ref`'s
+  accepted-reference declarations land under their own window's key.
+- **driver** (W1-discovered, not in the legacy ledger): teacher `ablation_rounds`
+  prose degrades instead of killing a 20h run; the in-place reopen checkpoint is the
+  cluster-aware best; the paired re-anchor memo expires like the absolute channel's;
+  a paid-for parity hit rebuilds into the paired memo across restarts (one pinned
+  test re-anchored, see below).
+- **tests**: the archived fix-wave batch's W1-relevant sections were ported and
+  rewritten per the current tree; seven new `test_w1_*_fixes.py` files carry the
+  faces above.
+
+Surrendered to this branch (kept yours): SEED-07/08/09/10/11/12/13/14/15/16/17/
+19/20/21/22/23/24/25/26/27/28/31/32/33/35/36/38/39/40/41/42/43/44/45/46/48/50 and
+C1-02/C1-03/C3-01/C3-02/C5-02/C5-03/T2C-01/T2C-02/T5C-01/T6C-01/T7C-01. Two policy
+notes for the reviewer: SEED-18 — this branch documents the clock-lock budget as
+attempts-total and declares the lost_retries asymmetry intentional; W1's alternative
+(counter unification, `>=` → `>`, one more resubmit) is preserved on branch
+`feat/corps-fix-w1-driver` for adjudication. SEED-45 — this branch makes the
+agent-policy hook fail closed on unreadable events; W1 had judged fail-open correct
+and only documented it. Reported, not fixed: SEED-04's trend de-sloping half (the
+reuse-pool half landed as T1C-01), and the frozen-surface items W1-DRV-03
+(median-vs-min residual) and W1-DRV-05 (voided trees still set the absolute-branch
+bar) await adjudication.
+
+Full suite on this branch: **2976 passed**, 0 failed.

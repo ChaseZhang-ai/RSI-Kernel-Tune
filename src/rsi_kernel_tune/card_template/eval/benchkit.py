@@ -1340,6 +1340,46 @@ def _fresh_recheck_timeout_s() -> int:
         return FRESH_RECHECK_TIMEOUT_S
 
 
+def _last_verdict_payload(stdout: str, marker: str, face_keys: "tuple[str, ...]") -> "dict | None":
+    """The child verdict transport: the last verdict line carrying the STRONGEST
+    verdict face present anywhere in the child's stdout (faces are ordered,
+    strongest first: the recheck's ``pass`` beat is its only face; the probe's
+    ``shapes`` payload is its conviction face, ``status`` its degrade face), so
+    a face-bearing line can only be superseded by a LATER line of a face at
+    least as strong. The child's bench prints its verdict as the process's LAST
+    stdout act, but a source-reference kernel is exec'd into the child too —
+    code that runs BEFORE (module import) and code that can register to run
+    AFTER (atexit, a non-daemon shutdown thread) the real line. The first-match
+    scan the transport used before read an import-time forged line ahead of the
+    real verdict (repro'd: a zeros kernel shipped recheck pass=True; the recon
+    replay cheat shipped probe 'pass' off a forged 0.001 ms median). The
+    face-bearing last-line rule restores the honest order for anything printed
+    before the bench's own line — the import-time forgery, the trivial form —
+    and a malformed, face-less, or WEAKER-face line appended later cannot mask
+    a real conviction (a probe's status-only 'unavailable' after the real
+    shapes payload degrades nothing; the scan keeps the conviction face). A
+    well-formed, equal-or-stronger-face line printed AFTER the real one by
+    shutdown-registered code remains a transport limit of running the kernel
+    inside the child process (reported; closing it needs a transport the
+    kernel cannot author)."""
+    best: "list" = [None] * len(face_keys)   # last payload per face, strongest first
+    for line in stdout.splitlines():
+        if line.startswith(marker):
+            try:
+                obj = json.loads(line[len(marker):])
+            except ValueError:
+                continue
+            if isinstance(obj, dict):
+                for i, k in enumerate(face_keys):
+                    if k in obj:
+                        best[i] = obj
+                        break
+    for payload in best:
+        if payload is not None:
+            return payload
+    return None
+
+
 def _fresh_recheck_mode(problem: dict) -> str:
     """Which layers this card's recheck runs: 'regen' when the draw's CONTENT
     differs from the timed draw (the judge's make_inputs draws per group),
@@ -1369,12 +1409,9 @@ def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
             timeout=_fresh_recheck_timeout_s())
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"pass": None, "detail": f"recheck child did not run: {type(exc).__name__}: {exc}"}
-    for line in proc.stdout.splitlines():
-        if line.startswith(_VERDICT_LINE):
-            try:
-                return json.loads(line[len(_VERDICT_LINE):])
-            except ValueError:
-                break
+    verdict = _last_verdict_payload(proc.stdout, _VERDICT_LINE, ("pass",))
+    if verdict is not None:
+        return verdict
     return {"pass": None,
             "detail": f"recheck child printed no verdict (rc={proc.returncode})"}
 
@@ -1807,12 +1844,10 @@ def _probe_child(problem: dict) -> dict:
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"status": "unavailable",
                 "detail": f"probe child did not run: {type(exc).__name__}: {exc}"}
-    for line in proc.stdout.splitlines():
-        if line.startswith(PROBE_VERDICT_LINE):
-            try:
-                return json.loads(line[len(PROBE_VERDICT_LINE):])
-            except ValueError:
-                break
+    verdict = _last_verdict_payload(proc.stdout, PROBE_VERDICT_LINE,
+                                    ("shapes", "status"))
+    if verdict is not None:
+        return verdict
     return {"status": "unavailable",
             "detail": f"probe child printed no verdict (rc={proc.returncode})"}
 

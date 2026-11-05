@@ -26,6 +26,7 @@ import os
 import signal
 import subprocess
 import sys
+import tarfile
 import time
 from pathlib import Path
 
@@ -54,6 +55,15 @@ CLOCK_LOCK_REFUSED_MARKER = "[gpu_entry.sh] REFUSED: this card times under a con
 
 # How long past the task's own timeout the runner waits before killing it.
 RUN_HEADROOM_S = 180
+
+# Exception shapes that mean the machine or its tooling failed UNDER the runner
+# (a file racing a deletion, a full disk, mkdir refused, git refusing the
+# archive, a spawn failure): no kernel code was judged, so the verdict is
+# Lost -- the loop resubmits instead of charging the iteration. Anything else
+# (a mode string shlex cannot split, ...) is how the caller asked, not how the
+# machine answered: Failed, and named as a usage error in the log (a Lost
+# would only resubmit a deterministic mistake forever).
+INFRA_FAULTS = (OSError, RuntimeError, subprocess.SubprocessError, tarfile.TarError)
 
 
 def clock_lock_refusal(log: str | None) -> str | None:
@@ -203,8 +213,16 @@ def runner_main(cfg: SubmitConfig, job_id: str, mode: str, branch: str) -> int:
                          "resubmits it\n")
                 raise
             except Exception as e:  # noqa: BLE001 -- the verdict must still be written
-                lf.write(f"[jobs] runner crashed: {e!r}\n")
-                status = STATUS_FAILED
+                if isinstance(e, INFRA_FAULTS):
+                    status = STATUS_LOST
+                    lf.write(f"[jobs] runner infrastructure fault "
+                             f"({type(e).__name__}: {e}) -- recorded {STATUS_LOST}: "
+                             f"the loop resubmits, the kernel is not charged\n")
+                else:
+                    status = STATUS_FAILED
+                    lf.write(f"[jobs] usage error in the runner request "
+                             f"({type(e).__name__}: {e}) -- recorded {STATUS_FAILED} "
+                             f"(NOT a kernel failure; fix the caller)\n")
     finally:
         res = result_path(op_dir, job_id)
         tmp = res.with_suffix(".tmp")

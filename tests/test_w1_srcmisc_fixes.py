@@ -1,3 +1,9 @@
+"""Regression tests for the W1 src-misc fix line (audit-corps FA5b, dedup rebuild).
+
+Only the W1-unique faces live here (P3-6 / P3-7); the corps' own tests on this
+branch cover the shared ones (SEED-16 / SEED-17 / SEED-23 / SEED-24 / SEED-26).
+"""
+
 # --- P3-6: the judge's axis check spans every shape, not only the first -------------
 
 def test_judge_axis_check_spans_every_shapes_axes(tmp_path):

@@ -1552,8 +1552,17 @@ def main(argv=None) -> int:
             print(f"TIMELINE-FAIL reason=markers ({e})", flush=True)
             return 0
         except ValueError as e:
-            print(f"TIMELINE-FAIL reason=markers ({e})", flush=True)
-            return 0
+            if attempt_mode != modes[-1] or result is None:
+                print(f"TIMELINE-FAIL reason=markers ({e})", flush=True)
+                return 0
+            # the perturbation-triggered waits rerun hit a tree whose markers
+            # carry no .begin/.end pair (a legal, segment-only marking style):
+            # the mode=all table this loop already read is complete -- deliver
+            # it with a warning instead of failing the whole probe (the
+            # SiteCapExceeded fall-through's same discipline)
+            print(f"TIMELINE-WARN {e} — keeping the mode={modes[0]} table "
+                  f"already read", flush=True)
+            break
         slab_path = os.path.join(tempfile.gettempdir(), f"tl_slab_{attempt_mode}.npy")
         camp_path = os.path.join(tempfile.gettempdir(), f"tl_slab_{attempt_mode}_campaign.npy")
         for p in (slab_path, camp_path):

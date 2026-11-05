@@ -18746,7 +18746,11 @@ def _wp5_apply_cfg(ctx: LoopContext) -> None:
             v = int(raw) if is_int else float(raw)
         except (TypeError, ValueError):
             return d
-        if isinstance(raw, bool) or (is_int and v < lo) or not math.isfinite(v):
+        # the lower bound applies to BOTH key classes: a negative float
+        # (meta_hours_per_round) used to slip through here and make the
+        # headroom extension's "never into a wall clock that cannot fund a
+        # round" check vacuously true
+        if isinstance(raw, bool) or v < lo or not math.isfinite(v):
             return d
         return v
 

@@ -419,6 +419,11 @@ class RealBackend:
             raise box["exc"]
         return proc.returncode, box.get("out", ""), box.get("err", "")
 
+    def _session_file(self, role: str) -> Path:
+        """Where a scope's session id lives (see _session_env)."""
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", self.agent_session_scope or "")
+        return Path(self.workspace) / ".pk-sessions" / f"{safe}.{role}"
+
     def _session_env(self, role: str) -> dict:
         """WP19 (task 6): the resume env for this turn, or {} when resume is
         off / no scope is named. The scope's session id lives in a file under
@@ -427,19 +432,38 @@ class RealBackend:
         driver clears the scope, so a NEW meta entry starts a fresh session."""
         if not self.resume_session or not self.agent_session_scope:
             return {}
-        safe = re.sub(r"[^A-Za-z0-9._-]", "_", self.agent_session_scope)
-        sid_file = Path(self.workspace) / ".pk-sessions" / f"{safe}.{role}"
+        sid_file = self._session_file(role)
         try:
             if sid_file.is_file():
                 sid = sid_file.read_text(encoding="utf-8").strip()
                 if sid:
                     return {"PK_AGENT_SESSION_ID": sid, "PK_AGENT_SESSION_MODE": "resume"}
+            safe = sid_file.name.rsplit(".", 1)[0]
             sid = f"{safe}-{role}-{uuid.uuid4().hex[:12]}"
             sid_file.parent.mkdir(parents=True, exist_ok=True)
             sid_file.write_text(sid, encoding="utf-8")
             return {"PK_AGENT_SESSION_ID": sid, "PK_AGENT_SESSION_MODE": "create"}
         except OSError:
             return {}   # resume is an optimization: any trouble runs the baseline
+
+    def _forget_session(self, role: str) -> None:
+        """Drop a scope's recorded session id so the next turn CREATES a fresh
+        session (see _session_env).
+
+        Called when a turn that RESUMED its session failed on something other
+        than an API outage: a hard failure on ``--resume`` usually means the id
+        is dead or stale (the sid file outlives the process that minted it),
+        and retrying would re-enter the same dead session for every remaining
+        attempt — the whole run then dies as agent_failed on one stale file.
+        The id is an optimization (see _session_env), never a commitment; the
+        next attempt mints a fresh one, failure tail still attached.
+        """
+        if not self.resume_session or not self.agent_session_scope:
+            return
+        try:
+            self._session_file(role).unlink(missing_ok=True)
+        except OSError:
+            pass    # resume is an optimization: any trouble runs the baseline
 
     @staticmethod
     def _prepend_env(cmd: str, env: dict) -> str:
@@ -492,6 +516,13 @@ class RealBackend:
                       f"— waiting {sleep_s:.0f}s before retrying: {last}", flush=True)
                 time.sleep(sleep_s)
                 continue  # deliberately does not consume a hiccup attempt
+            if session_env.get("PK_AGENT_SESSION_MODE") == "resume":
+                # A hard failure on a RESUMED session usually means the recorded
+                # id is dead or stale (the sid file outlives the process that
+                # minted it): forget it, or every remaining attempt re-enters
+                # the same dead session and the run dies as agent_failed on one
+                # stale file.
+                self._forget_session(role)
             attempt += 1
             time.sleep(self.agent_retry_sleep * attempt)  # transient backoff
         raise AgentError(f"agent command failed after {self.agent_retries} attempts: {last}")

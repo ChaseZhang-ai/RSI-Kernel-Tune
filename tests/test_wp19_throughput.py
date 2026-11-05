@@ -1054,7 +1054,9 @@ def test_t4_digest_on_projects_existing_fields_only(tmp_path):
     lines = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()]
     assert len(lines) == 1 + 6                    # summary + one line per decision
     summary = lines[0]
-    assert set(summary) == {"sol", "target", "achieved", "flags"}   # the digest head
+    # the digest head now carries the clock header too (C-T2-01: build_digest
+    # computed it, the writer never wrote it)
+    assert set(summary) == {"sol", "target", "achieved", "flags", "clock"}
     # decision rows are the standing projection fields (zero new types)
     assert set(lines[1]) == {"iter", "id", "change", "correctness",
                              "metric_before", "metric_after", "verdict"}

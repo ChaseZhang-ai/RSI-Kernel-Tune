@@ -1036,7 +1036,7 @@ def test_kb_certify_quarantines_a_persistent_leak(tmp_path):
     res = run_kb_certify(ctx, diagnosis="G3")
     assert res.certified is False and res.recipe is None
     assert not (kb / "sm90" / "r.md").exists()
-    quarantined = tmp_path / "repo" / "kb_quarantine" / "r.md"
+    quarantined = tmp_path / "repo" / "kb_quarantine" / "sm90__r.md"
     assert quarantined.is_file() and "oracle" in quarantined.read_text()
 
 
@@ -1046,7 +1046,9 @@ def test_inner_iteration_probe_budget_exhausted_is_graceful_revert(tmp_path):
     ctx = _ctx(tmp_path, be)
     ctx.max_probe_rounds = 4
     rec = run_inner_iteration(ctx, 0, metric_before=2.66, last_good_ref="sha-prev")
-    assert rec is not None and rec.verdict == "REVERT" and rec.correctness is False
+    # correctness None, not False (BUG-SEED-02): nothing was evaluated here, and
+    # a False would drop the never-evaluated workspace into scaffold mode on resume
+    assert rec is not None and rec.verdict == "REVERT" and rec.correctness is None
     assert "probe" in rec.error.lower()
     assert ("reset", "sha-prev") in be.calls
     assert len(load_records(ctx.status_path)) == 1

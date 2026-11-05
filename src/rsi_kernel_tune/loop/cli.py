@@ -14,6 +14,7 @@ or GPU jobs.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import re
@@ -2605,6 +2606,15 @@ def _main(argv: list[str] | None = None) -> int:
                    help="the declared compute precision ([precision] compute_dtype): "
                         "the kernel computes at exactly this dtype and never below it; "
                         "default fp32 (the historical behavior)")
+    # The run configuration's retrieval permission (rsi_kernel_tune.runconfig,
+    # [student] retrieval; the launcher threads it through the environment):
+    # "on" lets the student survey public sources before tuning. Retrieval is not
+    # the answer -- the reference implementation itself and any optimized
+    # implementation of it stay denied (the deny lists are untouched); the default
+    # (absent) is the L0 contract, optimize from scratch.
+    p.add_argument("--student-retrieval", action="store_true",
+                   help="the student may use public-source retrieval (survey tools) "
+                        "before tuning; default off (from scratch, the L0 contract)")
     p.add_argument("--allow-host-bound-ref", action="store_true",
                    help="derive target from a reference whose device window is HOST-BOUND "
                         "(its reading is python dispatch cost, so the target is loose by "
@@ -3051,6 +3061,12 @@ def _main(argv: list[str] | None = None) -> int:
             _student_denied_oracle(oracle_mode, args.oracle, cfg, declared_oracle)),
         dsl_source_dirs_default=dsl_source.dirs if dsl_source.defaulted else (),
         language=language)
+    if args.student_retrieval:
+        # The retrieval permission (rsi-run.toml [student] retrieval = "on"): the
+        # student may go online for public material. Everything the deny lists hold
+        # -- the reference's checkouts and repositories, the teacher-only trees --
+        # stays denied to the student: retrieval is not the answer.
+        policy = dataclasses.replace(policy, student_online=True)
     backend = RealBackend(args.op, workspace, args.agent_cmd, args.git_name, args.git_email,
                           teacher_agent_cmd=args.teacher_agent_cmd, agent_policy=policy,
                           agent_heartbeat_s=args.agent_heartbeat_s)
@@ -3156,6 +3172,9 @@ def _main(argv: list[str] | None = None) -> int:
         # WP22: the task snapshot's declared compute precision — the launcher
         # re-read <run>/task/ and passes it; the default is fp32.
         compute_dtype=_compute_dtype(args.compute_dtype),
+        # The retrieval permission (rsi-run.toml [student] retrieval; the default
+        # off is the L0 contract).
+        retrieval=bool(args.student_retrieval),
         ref_baseline=ref_baseline, arch_baseline=arch_baseline,
         window_contract=window_contract,
         deadline_epoch=time.time() + args.hours * 3600, backend=backend, now=time.time,

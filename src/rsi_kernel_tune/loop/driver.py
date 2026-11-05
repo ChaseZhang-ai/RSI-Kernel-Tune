@@ -266,6 +266,13 @@ class LoopContext:
     # reference at it, arithmetic below it is a contract violation, and runs of
     # different declarations never share a comparison column.
     compute_dtype: str = "fp32"
+    # The run configuration's retrieval permission (rsi_kernel_tune.runconfig,
+    # [student] retrieval; launch threads it through as --student-retrieval).
+    # False — the default — is the L0 contract (optimize from scratch) and renders
+    # nothing anywhere. True lets the student survey public sources before tuning;
+    # it widens NO deny list: the reference implementation itself, and any
+    # optimized implementation of it, stay unreadable (retrieval ≠ the answer).
+    retrieval: bool = False
     meta_status_path: Path | None = None  # meta-loop trajectory (meta agent's memory)
     fresh_recipe: str | None = None  # a just-certified KB recipe to point the student at
     # In-place reopening of structural / split patches: keep the best green tree
@@ -1517,6 +1524,10 @@ def _student_prompt(ctx: LoopContext, iter_no: int, probe_feedback: str = "") ->
         # run (the declaration never changes mid-run). A default (fp32) run renders
         # nothing here — its prompts stay byte-identical to pre-WP22.
         extra += note
+    if note := _retrieval_note(ctx):
+        # The retrieval permission, standing for the whole run. Off (the default)
+        # renders nothing — the L0 contract, byte-identical prompts.
+        extra += note
     if probe_feedback:
         extra += probe_feedback
     bindings = _bindings(ctx)
@@ -1567,6 +1578,23 @@ def _compute_dtype_note(ctx: LoopContext) -> str:
     return (f"\n## Precision contract\n"
             f"- This task's contract declares compute_dtype={ctx.compute_dtype}. "
             f"Work within it; going below it is a contract violation (REVERT).\n")
+
+
+def _retrieval_note(ctx: LoopContext) -> str:
+    """The retrieval permission's injection (rsi-run.toml [student] retrieval =
+    "on"): public-source retrieval is allowed before tuning, via the existing
+    survey tools. Two lines, standing for the whole run. It widens nothing: the
+    reference implementation and any optimized implementation of it stay denied
+    (the deny lists and the hook are untouched) — retrieval is not the answer.
+    Off (the default) renders nothing: the L0 contract's prompts, byte for byte."""
+    if not ctx.retrieval:
+        return ""
+    return (
+        "\n## Retrieval permission\n"
+        "- Public-source retrieval is allowed for this run: use the survey tools "
+        "(WebSearch / WebFetch) for docs, papers, issues and benchmarks before you tune.\n"
+        "- Retrieval is not the answer: the reference implementation itself, and any "
+        "optimized implementation of it, stay unreadable — write your own.\n")
 
 
 def _student_digest_path(ctx: LoopContext) -> Path:

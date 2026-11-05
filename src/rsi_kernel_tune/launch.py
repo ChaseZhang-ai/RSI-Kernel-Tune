@@ -706,6 +706,13 @@ def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
         # precision; the launcher re-read it and passes it to the loop like every
         # other task key. A run never changes the declaration.
         argv += ["--compute-dtype", task.precision.compute_dtype]
+    if os.environ.get("RKT_STUDENT_RETRIEVAL", "").strip() == "1":
+        # The run configuration's [student] retrieval = "on" (rsi_kernel_tune.runconfig;
+        # the parallel driver threads it here through the environment, like RKT_GPU):
+        # the student may survey public sources first, then tune on that basis. The
+        # default (env unset) is the L0 contract -- optimize from scratch -- and adds
+        # no flag at all.
+        argv.append("--student-retrieval")
     if resuming:
         argv += ["--allow-preexisting-artifacts", "--allow-dirty-kb"]
     if harvest_only:

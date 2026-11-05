@@ -143,13 +143,32 @@ def summarize(contract: str, block) -> dict:
     return {k: v for k, v in out.items() if v is not None}
 
 
-def gate_failure(contract: str, summary: dict) -> str | None:
-    """The REVERT text when the contract makes this record a correctness failure."""
+def gate_failure(contract: str, summary: dict, compute_dtype: str = "fp32") -> str | None:
+    """The REVERT text when the contract makes this record a correctness failure.
+
+    ``compute_dtype`` (WP22, docs/run-configuration.md §precision) is the task's
+    declared precision. "fp32" — the default — renders the historical text byte for
+    byte (keep the reference's precision: nothing below fp32 is legal). Any other
+    declared value renders the declaration's contract instead: the reference itself
+    is evaluated at the declared dtype (eval/precision.py's measure unchanged), so
+    the same relative bound (k*e_ref + floor) now convicts exactly the arithmetic
+    BELOW the declaration — working within the declaration, at or above its
+    precision, is not a failure."""
     if contract != STRICT or summary.get("status") != "fail":
         return None
     w = summary.get("worst") or {}
     ratio = w.get("ratio")
     where = f"{w.get('case')}{' [stress ' + w['stress'] + ']' if w.get('stress') else ''} {w.get('output')}"
+    if compute_dtype != "fp32":
+        return (f"precision gate (strict, compute_dtype={compute_dtype}): {where}: the kernel's output is "
+                f"{'x' + format(ratio, '.3g') + ' ' if isinstance(ratio, (int, float)) else ''}"
+                f"farther from the float64 truth than a reference evaluated at "
+                f"{compute_dtype} (e_cand {w.get('e_cand')} > "
+                f"{summary.get('k')}*e_ref({w.get('e_ref')}) + floor = {w.get('limit')}). This task's contract declares compute_dtype={compute_dtype}: "
+                f"work within it — arithmetic below the declaration (any coarser "
+                f"intermediate, accumulator or operand dtype) is a contract violation (REVERT)"
+                + (f"; failed {summary.get('n_failed')} of {summary.get('n_checks')} checks"
+                   if summary.get("n_failed") else ""))
     return (f"precision gate (strict): {where}: the kernel's output is "
             f"{'x' + format(ratio, '.3g') + ' ' if isinstance(ratio, (int, float)) else ''}"
             f"farther from the float64 truth than the reference's own (e_cand {w.get('e_cand')} > "

@@ -126,6 +126,14 @@ def next_generation(task, best: dict, dest: Path, step: float, run=None, best_da
             f"{'memo' if task.protocol.memo_lane else 'strict'} -> {dest.name} "
             f"{'memo' if child.protocol.memo_lane else 'strict'}): a child inherits "
             f"its parent's lane — a mismatch is a bug (docs/industrial-lane.md §6.7)")
+    # WP22 (docs/run-configuration.md §precision): the declared compute precision
+    # inherits with the task.toml the same way; a chain is one declaration end to end.
+    if child.precision.compute_dtype != task.precision.compute_dtype:
+        raise ValueError(
+            f"the generation chain changed compute_dtype ({task.dir.name} "
+            f"{task.precision.compute_dtype} -> {dest.name} "
+            f"{child.precision.compute_dtype}): a child inherits its parent's declared "
+            f"precision — a mismatch is a bug (docs/run-configuration.md §precision)")
     return dest
 
 
@@ -246,6 +254,10 @@ def _write_carry(task, run, dest: Path, best: dict | None = None) -> None:
             _levers_obj = None
         if isinstance(_levers_obj, dict):
             _levers_obj["memo_lane"] = bool(task.protocol.memo_lane)
+            # WP22: the carry's declared-precision stamp beside the lane's (the
+            # child's PRIOR-INPUT injection drops a mismatching carry the same way).
+            if task.precision.compute_dtype != "fp32":
+                _levers_obj["compute_dtype"] = task.precision.compute_dtype
             levers = json.dumps(_levers_obj, indent=1) + "\n"
     _put(_CARRY_LEVERS, levers, "the parent's last lever price table")
     stamp = ""

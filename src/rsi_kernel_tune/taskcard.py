@@ -253,6 +253,11 @@ def write_submit(tree: Path, task, machine, timeout: int = JOB_TIMEOUT_S) -> Pat
     # byte-identical to the pre-M3 shape (absent = strict, the house pattern).
     if task.protocol.memo_lane:
         lines.append('RKT_MEMO_LANE = "1"')
+    # WP22 (docs/compute-dtype.md): the declared compute precision reaches the card's
+    # jobs as job env. The default fp32 adds no line, so a default task's submit.toml
+    # stays byte-identical to the pre-WP22 shape (absent = fp32, the house pattern).
+    if task.precision.compute_dtype != "fp32":
+        lines.append(f'RKT_COMPUTE_DTYPE = "{task.precision.compute_dtype}"')
     p = Path(tree) / "submit.toml"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p

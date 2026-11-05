@@ -1830,6 +1830,78 @@ PRECISION_ENV = "RKT_PRECISION"
 # Read once, at import -- before any kernel module runs in this process.
 PRECISION_ENV_OFF = os.environ.get(PRECISION_ENV, "").strip().lower() in ("0", "off")
 
+# --- WP22 (docs/run-configuration.md §precision): the declared compute precision ---
+# The task declares ITS precision (compute_dtype; taskcard puts it in submit.toml
+# [env] as this variable). The precision gate's reference side evaluates the
+# reference at the declared dtype -- e_ref is then "how far the reference sits from
+# the float64 truth when it too computes at the declaration", and the gate's
+# relative bound (k*e_ref + floor, floor = the DECLARED output dtype's ulp via
+# eval/precision.py's unchanged measure) convicts exactly the arithmetic BELOW the
+# declaration. "fp32" (absent) is the historical behavior byte for byte.
+COMPUTE_DTYPE_ENV = "RKT_COMPUTE_DTYPE"
+COMPUTE_DTYPES = ("fp32", "tf32", "bf16", "fp16", "fp8")
+# Read once, at import -- before any kernel module runs in this process. The value
+# is harness-written (taskcard, from the validated [precision] declaration); a
+# hand-edited garbage value is refused outright, never read as the default.
+COMPUTE_DTYPE = os.environ.get(COMPUTE_DTYPE_ENV, "").strip().lower() or "fp32"
+if COMPUTE_DTYPE not in COMPUTE_DTYPES:
+    raise ValueError(f"{COMPUTE_DTYPE_ENV}={COMPUTE_DTYPE!r} is not a declared compute "
+                     f"precision (one of {', '.join(COMPUTE_DTYPES)})")
+# The torch dtype the declared outputs live on (None: tf32 keeps fp32 storage -- its
+# declaration is honored by the matmul flag, not by a cast).
+_COMPUTE_TORCH = {"fp32": None, "tf32": None, "bf16": torch.bfloat16,
+                  "fp16": torch.float16, "fp8": torch.float8_e4m3fn}
+
+
+def _to_declared(t):
+    """One reference output on the declared output dtype's grid (a no-op cast for
+    tf32 / anything not float)."""
+    to = _COMPUTE_TORCH[COMPUTE_DTYPE]
+    if to is None or not isinstance(t, torch.Tensor) or not t.is_floating_point():
+        return t
+    return t.to(to)
+
+
+def _refs_at_declared(problem: dict, ref_run, pristine, refs: list, device) -> list:
+    """The reference evaluated at the declared compute precision (WP22). tf32 runs
+    the reference with tf32 matmuls on; bf16 / fp16 lift the reference's float
+    computation to the declared dtype (eval/precision.py's own _Upcast mechanism,
+    the truth side's mirror image); fp8 has no general compute path, so its native
+    run is quantized to the declared output grid. A declaration-side run that the
+    reference cannot survive falls back to quantizing the native outputs -- the row
+    then says exactly what was measured (dtype = the declared output dtype). The
+    float64 truth is untouched (truth_of lifts on its own); the tolerance verdict's
+    refs are untouched (this runs inside the precision measure only)."""
+    if COMPUTE_DTYPE == "fp32":
+        return refs
+    P = _precision()
+    try:
+        if COMPUTE_DTYPE == "tf32":
+            m, c = torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32
+            torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = True
+            try:
+                out = call_impl(problem, ref_run, _clone(P.restore(pristine)), False,
+                                device, no_grad=True)
+            finally:
+                torch.backends.cuda.matmul.allow_tf32 = m
+                torch.backends.cudnn.allow_tf32 = c
+        elif COMPUTE_DTYPE in ("bf16", "fp16"):
+            to = torch.bfloat16 if COMPUTE_DTYPE == "bf16" else torch.float16
+            # the truth side's own lift, pointed at the declaration: the reference's
+            # float inputs land on the declared dtype first (a reference computing on
+            # fp32 operands does not become fp16 by casting alone), and every
+            # float32/16/bf16 dtype and cast it asks for inside becomes `to` as well
+            lifted = [P._lift_input(x, to) for x in P.restore(pristine)]
+            with P._Upcast(to):
+                out = call_impl(problem, ref_run, _clone(lifted), False,
+                                device, no_grad=True)
+        else:                                   # fp8: native run, grid quantization below
+            out = call_impl(problem, ref_run, _clone(P.restore(pristine)), False,
+                            device, no_grad=True)
+        return [_to_declared(r) for r in normalize_outputs(problem, out, device)]
+    except Exception:  # noqa: BLE001 -- the declaration-side run is best-effort; say what ran
+        return [_to_declared(r) for r in refs]
+
 
 def _precision_snapshot(prec, inp: list):
     """A host copy of ``inp`` taken before the reference or the kernel touches it (None
@@ -1842,6 +1914,9 @@ def _precision_measure(problem: dict, prec, case: str, outs: list, refs: list, r
                        pristine, device, stress: str | None = None) -> None:
     P = _precision()
     names = list(problem["definition"]["outputs"])
+    if COMPUTE_DTYPE != "fp32":
+        # WP22: the reference side of every row is the reference AT the declaration
+        refs = _refs_at_declared(problem, ref_run, pristine, refs, device)
     prec.measure(case, outs, refs,
                  lambda: P.truth_of(ref_run, P.restore(pristine),
                                     normalize=lambda r: normalize_outputs(problem, r, device)),

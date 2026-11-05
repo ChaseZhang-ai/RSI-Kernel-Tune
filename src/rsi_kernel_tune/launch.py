@@ -701,6 +701,11 @@ def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
         # launcher re-read it (load_task above) and passes it to the loop like
         # every other task key. A run never changes lanes.
         argv.append("--memo-lane")
+    if task.precision.compute_dtype != "fp32":
+        # WP22 (docs/compute-dtype.md): the task snapshot pins the declared compute
+        # precision; the launcher re-read it and passes it to the loop like every
+        # other task key. A run never changes the declaration.
+        argv += ["--compute-dtype", task.precision.compute_dtype]
     if resuming:
         argv += ["--allow-preexisting-artifacts", "--allow-dirty-kb"]
     if harvest_only:

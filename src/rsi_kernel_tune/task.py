@@ -28,6 +28,9 @@
     ratio  = 1.2                    # x the reference's speed (or ms = <absolute target>)
     timing = "device"               # device | e2e
 
+    [precision]                     # optional: the compute precision YOU declare
+    compute_dtype = "fp32"          # fp32 (default) | tf32 | bf16 | fp16 | fp8
+
     [agent]                         # both agents; [agent.teacher] / [agent.student] for one
     backend   = "claude"
     provider  = "native"            # or a table of global_config/backends.toml
@@ -86,6 +89,12 @@ TIMINGS = ("device", "e2e")
 BACKENDS = ("claude",)
 ROLES = ("teacher", "student")
 MIN_INPUT_GROUPS = 3
+# WP22 (docs/compute-dtype.md): the declared compute precisions a task may pin.
+# "fp32" is the default and the historical behavior; the others declare THE dtype
+# the kernel computes at (a user decision — the optimizer never picks one), with
+# arithmetic below the declaration a contract violation the precision gate convicts.
+COMPUTE_DTYPES = ("fp32", "tf32", "bf16", "fp16", "fp8")
+COMPUTE_DTYPE_DEFAULT = "fp32"
 
 MODE_SOURCE = "source"
 MODE_BLACKBOX = "blackbox"
@@ -145,6 +154,12 @@ _KEYS = {
     # Teacher read-set only — the student faces no new information channel.
     "agent.role": {"backend", "provider", "model", "effort", "timeout_s",
                    "prior_survey", "prior_art"},
+    # WP22: [precision] declares THE compute precision the task is optimized at
+    # (docs/compute-dtype.md): one declared value, the task publisher's decision —
+    # never the optimizer's. "fp32" (the default, absent table) is today's
+    # behavior byte for byte; any other declared dtype moves the precision gate's
+    # reference side to that dtype and forbids arithmetic below the declaration.
+    "precision": {"compute_dtype"},
     "budget": {"hours", "max_meta", "reference_hours"},
 }
 _KEYS["agent"] = _KEYS["agent.role"] | set(ROLES)
@@ -215,6 +230,20 @@ class Protocol:
     memo_lane: bool = False
 
 
+# WP22 (docs/compute-dtype.md): the compute precision the task declares. One frozen
+# value, the task publisher's decision ("The precision of the optimized kernel is YOUR
+# decision"): the system optimizes at exactly the declared dtype and never below it.
+# "fp32" — the default — is every task before WP22 and changes nothing.
+@dataclass(frozen=True)
+class Precision:
+    compute_dtype: str = COMPUTE_DTYPE_DEFAULT
+    # Whether a [precision] table was present in the merged config (vs the fp32
+    # default a task without one takes). A run-config-level declaration may fill
+    # in an undeclared task, but never silently override a task's own explicit
+    # declaration -- a conflict between the two is refused (runconfig).
+    declared: bool = False
+
+
 @dataclass(frozen=True)
 class AgentSpec:
     backend: str
@@ -251,6 +280,7 @@ class Task:
     budget: Budget
     notes: tuple = field(default=())   # non-fatal remarks worth printing at launch
     protocol: Protocol = field(default_factory=Protocol)
+    precision: Precision = field(default_factory=Precision)
 
     @property
     def mode(self) -> str:
@@ -319,6 +349,7 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
     reference = _read_reference(d, cfg, problems)
     target = _read_target(cfg, problems)
     protocol = _read_protocol(cfg, problems)
+    precision = _read_precision(cfg, problems)
     teacher = _read_agent(cfg.get("agent", {}), "teacher", problems)
     student = _read_agent(cfg.get("agent", {}), "student", problems)
     budget = _read_budget(cfg, problems)
@@ -341,7 +372,8 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
                          f"adds {s.groups_to_add}")
     return Task(name=name, dir=d, language=language, arch=arch, description=description,
                 shapes=tuple(shapes), reference=reference, target=target, teacher=teacher,
-                student=student, budget=budget, notes=tuple(notes), protocol=protocol)
+                student=student, budget=budget, notes=tuple(notes), protocol=protocol,
+                precision=precision)
 
 
 def read_task_toml(task_dir: str | Path) -> dict:
@@ -413,7 +445,7 @@ def dump_task_toml(cfg: dict) -> str:
         raise TypeError(f"{type(v).__name__} is not a task.toml value")
 
     out = []
-    for table in ("task", "protocol", "reference", "target", "agent", "budget"):
+    for table in ("task", "protocol", "precision", "reference", "target", "agent", "budget"):
         body = cfg.get(table)
         if not isinstance(body, dict):
             continue
@@ -700,6 +732,19 @@ def _read_protocol(cfg: dict, problems: list[str]) -> Protocol:
         memo_lane = False
     return Protocol(sm_clock_mhz=mhz("sm_clock_mhz"), mem_clock_mhz=mhz("mem_clock_mhz"),
                     memo_lane=memo_lane)
+
+
+def _read_precision(cfg: dict, problems: list[str]) -> Precision:
+    """[precision]: the declared compute precision (WP22, docs/compute-dtype.md).
+    A single frozen value — the task publisher's decision, never the optimizer's
+    (a typo must not read as the default, the resolve_contract rule)."""
+    t = _table(cfg, "precision", problems)
+    dtype = t.get("compute_dtype", COMPUTE_DTYPE_DEFAULT)
+    if dtype not in COMPUTE_DTYPES:
+        problems.append(f"[precision] compute_dtype must be one of "
+                        f"{', '.join(COMPUTE_DTYPES)}, got {dtype!r}")
+        dtype = COMPUTE_DTYPE_DEFAULT
+    return Precision(compute_dtype=dtype, declared="precision" in cfg)
 
 
 def _read_agent(agents: dict, role: str, problems: list[str]) -> AgentSpec:

@@ -1441,6 +1441,16 @@ def _cfg_int(section: dict | None, key: str, default: int) -> int:
         raise SystemExit(f"[loop] {key} must be an integer, got {raw!r}") from None
 
 
+def _compute_dtype(value: str) -> str:
+    """The declared compute precision (--compute-dtype): validated, so a typo is a
+    refusal at launch, never a silent fall-back to fp32 (the resolve_contract rule)."""
+    from rsi_kernel_tune.task import COMPUTE_DTYPES
+    if value not in COMPUTE_DTYPES:
+        raise SystemExit(f"[loop] --compute-dtype must be one of "
+                         f"{', '.join(COMPUTE_DTYPES)}, got {value!r}")
+    return value
+
+
 def _cfg_float(section: dict | None, key: str, default: float, *, label: str = "") -> float:
     """A [loop] float knob; same readable refusal as _cfg_int. ``label`` names the
     knob as it appears in loop.toml when the section and the display differ (the
@@ -2587,6 +2597,14 @@ def _main(argv: list[str] | None = None) -> int:
                         "memoization on repeated content is legal, the timed reading "
                         "is service latency over the task's repeating input stream; "
                         "default off (STRICT — the only source of paper numbers)")
+    # WP22 (docs/run-configuration.md §precision): the declared compute precision.
+    # The launcher derives it from the task snapshot it re-read ([precision]
+    # compute_dtype) and passes it here, like every other task key; absent = fp32.
+    # A run never changes the declaration.
+    p.add_argument("--compute-dtype", default="fp32",
+                   help="the declared compute precision ([precision] compute_dtype): "
+                        "the kernel computes at exactly this dtype and never below it; "
+                        "default fp32 (the historical behavior)")
     p.add_argument("--allow-host-bound-ref", action="store_true",
                    help="derive target from a reference whose device window is HOST-BOUND "
                         "(its reading is python dispatch cost, so the target is loose by "
@@ -3135,6 +3153,9 @@ def _main(argv: list[str] | None = None) -> int:
         # M3: the task snapshot's lane (docs/industrial-lane.md §6.5) — the
         # launcher re-read <run>/task/ and passes it; the default is STRICT.
         memo_lane=bool(args.memo_lane),
+        # WP22: the task snapshot's declared compute precision — the launcher
+        # re-read <run>/task/ and passes it; the default is fp32.
+        compute_dtype=_compute_dtype(args.compute_dtype),
         ref_baseline=ref_baseline, arch_baseline=arch_baseline,
         window_contract=window_contract,
         deadline_epoch=time.time() + args.hours * 3600, backend=backend, now=time.time,
@@ -3650,6 +3671,11 @@ def _main(argv: list[str] | None = None) -> int:
     # every number the summary quotes belongs to it, and the two lanes' numbers
     # are never compared.
     summary["lane"] = "memo" if ctx.memo_lane else "strict"
+    # WP22 (docs/run-configuration.md §precision): the summary carries the declared
+    # compute precision the same way (omitted on the default fp32, so a default
+    # summary stays byte-identical to pre-WP22).
+    if ctx.compute_dtype != "fp32":
+        summary["compute_dtype"] = ctx.compute_dtype
     print(f"[loop] done: {json.dumps(summary)}")
     (op_dir / SUMMARY_FILE).write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
     records = status_path.read_text(encoding="utf-8").count("\n")

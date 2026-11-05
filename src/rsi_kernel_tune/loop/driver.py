@@ -257,6 +257,15 @@ class LoopContext:
     # is a run-level fact: every IterationRecord carries it, the briefs' contract
     # paragraph and the carry check read it, and the lanes' numbers never mix.
     memo_lane: bool = False
+    # WP22 (docs/run-configuration.md §precision): the task's declared compute
+    # precision, read from the loaded task snapshot's [precision] compute_dtype
+    # (launch re-reads it and passes --compute-dtype here, like every other task
+    # key). "fp32" — the default — is every run before WP22 and changes nothing.
+    # Any other value is the user's precision declaration: the kernel computes at
+    # exactly this dtype, the precision gate's reference side evaluates the
+    # reference at it, arithmetic below it is a contract violation, and runs of
+    # different declarations never share a comparison column.
+    compute_dtype: str = "fp32"
     meta_status_path: Path | None = None  # meta-loop trajectory (meta agent's memory)
     fresh_recipe: str | None = None  # a just-certified KB recipe to point the student at
     # In-place reopening of structural / split patches: keep the best green tree
@@ -1232,7 +1241,8 @@ def _precision_reading(ctx: LoopContext, ev, iter_no: int) -> dict:
                  f"generated card needs the current eval/benchkit.py), so the "
                  f"precision_contract cannot be applied; rows record `unreported`")
         return summary
-    if (why := precision_gate.gate_failure(contract, summary)) and ev.correctness:
+    if (why := precision_gate.gate_failure(contract, summary,
+                                           compute_dtype=ctx.compute_dtype)) and ev.correctness:
         ev.correctness = False
         ev.error = why
     elif summary.get("status") == "fail":
@@ -1502,6 +1512,11 @@ def _student_prompt(ctx: LoopContext, iter_no: int, probe_feedback: str = "") ->
         # lane never changes mid-run). STRICT runs render nothing here — their
         # prompts stay byte-identical to pre-M3.
         extra += note
+    if note := _compute_dtype_note(ctx):
+        # WP22: the declared precision's contract sentence, standing for the whole
+        # run (the declaration never changes mid-run). A default (fp32) run renders
+        # nothing here — its prompts stay byte-identical to pre-WP22.
+        extra += note
     if probe_feedback:
         extra += probe_feedback
     bindings = _bindings(ctx)
@@ -1537,6 +1552,21 @@ def _memo_lane_note(ctx: LoopContext) -> str:
         "wrong answer there is a hard REVERT in every lane.\n"
         "- This lane's numbers are never comparable with STRICT-lane numbers and never a "
         "compute-speedup claim; STRICT remains the only source of paper capability numbers.\n")
+
+
+def _compute_dtype_note(ctx: LoopContext) -> str:
+    """WP22 (docs/run-configuration.md §precision): the declared precision's
+    contract for the student prompt — one sentence, standing for the whole run.
+    It is the whole contract: the student implements at the declared dtype, and
+    arithmetic below the declaration is a violation the precision gate convicts
+    (e_cand > 3*e_ref(reference at the declared dtype) + floor(declared output
+    dtype) -- see eval/precision.py, whose measure this note never changes).
+    A default (fp32) declaration renders nothing: pre-WP22 prompts, byte for byte."""
+    if ctx.compute_dtype == "fp32":
+        return ""
+    return (f"\n## Precision contract\n"
+            f"- This task's contract declares compute_dtype={ctx.compute_dtype}. "
+            f"Work within it; going below it is a contract violation (REVERT).\n")
 
 
 def _student_digest_path(ctx: LoopContext) -> Path:
@@ -1733,7 +1763,8 @@ def _write_student_digest(ctx: LoopContext) -> None:
     try:
         records = load_records(ctx.status_path)
         digest = build_digest(records, {"value": ctx.target_ms},
-                              gate_window=ctx.gate_window)
+                              gate_window=ctx.gate_window,
+                              compute_dtype=ctx.compute_dtype)
         n = ctx.student_tail_lines or 50
         rows = digest.get("decisions", [])
         digest["decisions"] = rows[-n:] if len(rows) > n else rows
@@ -4156,7 +4187,7 @@ def run_inner_iteration(
                 corr_margin_ratio=ev.corr_margin_ratio,   # WP20: the judge's edge the REVERT sat on
                 gate_degraded=ev.gate_degraded,           # WP20: the gate's own visibility
                 gpu_state=ev.gpu_state or {},   # WP1 telemetry: objective, rides every eval
-                memo_lane=ctx.memo_lane,        # M3: every row carries its lane
+                memo_lane=ctx.memo_lane,   # M3: every row carries its lane
                 **_wp11_wallclock_fields(ctx, agent_s=wp11_agent_s, eval_s=eval_job_s,
                                          ncu_s=ncu_job_s, queue_s=queue_wait_s),
                 variant_timings=variant_timings,   # WP10 MC-DELIVERY: objective variant table
@@ -18696,15 +18727,43 @@ def _carry_lane(ctx: LoopContext, d: Path) -> bool:
     return levers["memo_lane"]
 
 
+_CARRY_DTYPE_DROPPED: set[str] = set()
+"""carry directories whose compute_dtype mismatch was already logged once."""
+
+
+def _carry_dtype(ctx: LoopContext, d: Path) -> str:
+    """The carried generation's declared compute precision, from the top-level
+    ``compute_dtype`` key of ``carry/levers.json`` (WP22; scripts/self_evolve.py
+    writes it when non-default). No stamp = fp32, the default and every pre-WP22
+    carry."""
+    try:
+        levers = json.loads((d / "levers.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "fp32"
+    if not isinstance(levers, dict):
+        return "fp32"
+    v = levers.get("compute_dtype", "fp32")
+    return str(v) if isinstance(v, str) and v.strip() else "fp32"
+
+
 def _carry_binding(ctx: LoopContext) -> str:
     """{CARRY}: the parent generation's closing record, rendered with its
     discipline line. A missing directory renders ``(none)``. A carry whose lane
     stamp mismatches this task's lane is dropped outright — lever prices and
     ARCH_PROBE readings are priors over a measurement stream, and across lanes
     the stream differs (docs/industrial-lane.md §6.7): the hand-edited case is
-    the one this defends, since a self_evolve chain inherits one lane."""
+    the one this defends, since a self_evolve chain inherits one lane. WP22: a
+    carry declared at another compute_dtype is dropped for the same reason — a
+    price read under one declared precision is not a prior under another."""
     d = Path(ctx.carry_dir) if (ctx.carry_dir or "").strip() else None
     if d is None or not d.is_dir():
+        return "(none)"
+    if _carry_dtype(ctx, d) != ctx.compute_dtype:
+        if str(d) not in _CARRY_DTYPE_DROPPED:
+            _CARRY_DTYPE_DROPPED.add(str(d))
+            _log(f"carry compute_dtype {_carry_dtype(ctx, d)} != task compute_dtype "
+                 f"{ctx.compute_dtype} — carried prices not valid here; starting "
+                 f"without them")
         return "(none)"
     if _carry_lane(ctx, d) != ctx.memo_lane:
         if str(d) not in _CARRY_LANE_DROPPED:

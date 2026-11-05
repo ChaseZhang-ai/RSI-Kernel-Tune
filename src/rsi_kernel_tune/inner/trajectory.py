@@ -572,7 +572,8 @@ def memo_fallback_unknown_flag(records: list[IterationRecord]) -> dict | None:
 
 
 def build_digest(records: list[IterationRecord], target: dict,
-                 gate_window: str = GATE_WINDOW_DEFAULT) -> dict:
+                 gate_window: str = GATE_WINDOW_DEFAULT,
+                 compute_dtype: str = "fp32") -> dict:
     """Assemble the Layer-1 digest (target/achieved/curve/decisions/regressions/profiler).
 
     Objective-only: decisions carry the technique + measured metrics; regressions
@@ -588,6 +589,15 @@ def build_digest(records: list[IterationRecord], target: dict,
     with the newest row's lane (all rows of a run share it), and a row set that
     mixes lanes is refused at render time rather than silently juxtaposed —
     cross-lane numbers never share a comparison column.
+
+    WP22 (docs/run-configuration.md §precision): likewise one declared precision
+    per digest. ``compute_dtype`` is the run's declaration (the task snapshot pins
+    it; the driver passes it here), stamped on the digest so no renderer can read
+    an fp16 run's numbers as comparable with an fp32 run's — omitted on the
+    default "fp32", so every pre-WP22 digest is byte-identical. The rows carry
+    no dtype (the trajectory shape is frozen; the declaration is run-level, like
+    the lane is) — the carry guard drops a levers.json priced under another
+    declaration, which is where two declarations could otherwise meet.
     """
     lanes = {bool(r.memo_lane) for r in records}
     if len(lanes) > 1:
@@ -650,6 +660,10 @@ def build_digest(records: list[IterationRecord], target: dict,
         # the header rows) — every number below it belongs to this lane, and
         # "strict" is the only source of paper capability numbers.
         "lane": lane,
+        # WP22: the digest's declared-precision stamp — every reading below it was
+        # taken under this compute_dtype declaration. "fp32" is omitted (the default
+        # and every pre-WP22 digest stays byte-identical).
+        **({} if compute_dtype == "fp32" else {"compute_dtype": compute_dtype}),
         "target": target,
         "achieved": achieved,
         # WP14 per-shape ledger: each workload's historical best (gate window), the

@@ -7576,9 +7576,18 @@ def _run_sweep_request_per_shape(ctx: LoopContext, be, iter_no: int, path: str,
     same-job ratios from different jobs are not one measurement; the per-column
     winners are the teacher's per_shape composition input, and the landing is
     the student's ordinary delivery (full eval gate)."""
-    from peregrine_kernel.skills.lever_pricing_run import META_ROUNDS  # the merge's clamp
+    from peregrine_kernel.loop.meta_shapes import META_ROUNDS  # the pricing channel's clamp
     spec = dict(spec)
-    spec["rounds"] = max(1, min(int(spec.get("rounds", 3)), META_ROUNDS))
+    try:
+        rounds = int(spec.get("rounds", 3))
+    except (TypeError, ValueError):
+        # the same face as the non-per-shape branch's safe failure: the recipe's
+        # rounds is teacher-authored input, and a mistyped one is refused back
+        # (never a driver crash) — screening.sweep_spec_refused does not check it
+        return _sweep_request_refusal(
+            path, f"The milestone recipe's `rounds` is {spec.get('rounds')!r}, not an "
+                  f"integer — the per-shape sweep refuses the recipe as malformed.")
+    spec["rounds"] = max(1, min(rounds, META_ROUNDS))
     spec_name = f"__sweep_{decision_id}.json"
     spec_path = Path(ctx.workspace) / "notes" / spec_name
     per_wl: dict = {}

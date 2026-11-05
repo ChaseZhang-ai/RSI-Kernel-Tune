@@ -579,6 +579,34 @@ class DirectRunner:
         d = shlex.quote(remote_tree(self.cfg))
         return f"rm -rf {d} && mkdir -p {d} && tar xJ -C {d}"
 
+    def _session_file(self) -> str:
+        """The host-side session-id file for this op:
+        ``<workdir>/<run>/.pk_jobs/<op>.sid`` -- a sibling of the job's tree, outside
+        the tree the next sync's ``rm -rf`` wipes, so an orphaned session (its ssh
+        client dead) can always still be stopped."""
+        tree = remote_tree(self.cfg)
+        parent, _, op = tree.rpartition("/")
+        return f"{parent}/{SESSION_DIR}/{op}.sid"
+
+    def _session_script(self) -> str:
+        """The remote session (``setsid --wait sh -c`` runs this): write the session's
+        id, then hold the GPU lock for the entry command ("$0" is the lock, "$@" the
+        entry command).
+
+        The begin marker prints only once flock HOLDS the lock -- it is the
+        "everything after it is the job" boundary (jobs.py), so queueing time lands
+        before it and a deadline spent queueing can never read as a failed run (a
+        setsid/flock startup failure never sees the marker either). The wait itself
+        is logged in the driver's telemetry format, measured on the host -- the ssh
+        mirror of the local delivery's queue telemetry."""
+        gpu = shlex.quote(str(self.cfg.exec_gpu))
+        sid = shlex.quote(self._session_file())
+        held = (f'echo "[direct] GPU {gpu} acquired after '
+                f'$(( $(date +%s) - $PK_QUEUE_T0 ))s wait"; echo {BEGIN_MARKER}; '
+                f'exec "$@"')
+        return ('echo $$ > ' + sid + ' && export PK_QUEUE_T0=$(date +%s) '
+                '&& exec flock "$0" sh -c ' + shlex.quote(held) + ' sh "$@"')
+
     def _exec_cmd(self, mode: str) -> str:
         env = _job_env(self.cfg)
         secrets = sorted(k for k in env if is_secret_env(k))
@@ -597,7 +625,7 @@ class DirectRunner:
         return " && ".join(parts)
 
     def _stop_cmd(self) -> str:
-        f = shlex.quote(f"{remote_tree(self.cfg)}/{SESSION_FILE}")
+        f = shlex.quote(self._session_file())
         return (f"[ -f {f} ] || exit 0; s=$(cat {f}); pkill -TERM -s \"$s\"; "
                 f"sleep {STOP_GRACE_S}; pkill -KILL -s \"$s\"; rm -f {f}; exit 0")
 
@@ -676,6 +704,10 @@ class DirectRunner:
                     # of run
                     rc = proc.wait(timeout=deadline + queue_budget)
                 except subprocess.TimeoutExpired:
+                    # The marker prints only once the host lock is held: a whole
+                    # deadline without it is a job that queued past its window and
+                    # NEVER ran -- the machine was busy, not the kernel wrong.
+                    ran = _began(log_file, start, BEGIN_MARKER)
                     self._stop_remote(log_file)
                     _kill_group(proc, child_start)
                     if _began(log_file, start, BEGIN_MARKER):

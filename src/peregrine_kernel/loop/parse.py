@@ -138,6 +138,16 @@ def parse_student_turn(text: str, *, allow_recon: bool = False) -> StudentTurn:
     guarded the same way: the marker vocabulary counts only in the line shape
     the prompt actually demands.
 
+    A marker is recognized only on a line of its own — the protocol places it
+    there ("end your turn with EXACTLY one of ..."), and only markdown wrappers
+    may sit between the line start and the marker word, because agents copy the
+    prompts' wrapped spellings verbatim. Matching the whole text instead read a
+    sentence that merely cited the vocabulary as a request: a record turn
+    quoting ``PROBE_REQUEST: ...`` in its change note went back out as a GPU
+    probe job on a path the student only mentioned, and a quoted ``EXHAUSTED:``
+    ended a phase that was still alive. RECON_REQUEST carries the same hazard
+    with a caller gate instead (next paragraph).
+
     RECON_REQUEST is only a valid shape for the reconnaissance caller
     (``allow_recon=True``). Recognizing it everywhere let a student turn that
     merely echoed the marker — likely in a blackbox run, where the vocabulary

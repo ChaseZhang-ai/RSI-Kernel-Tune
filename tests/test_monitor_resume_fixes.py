@@ -49,3 +49,54 @@ def test_digest_carries_the_clock_telemetry_header():
     # a trajectory with no gpu_state telemetry carries an empty clock header
     d2 = build_digest([_ir(0, bwd_median_ms=3.0)], {"value": 2.0}, gate_window="e2e")
     assert d2["clock"] == {}
+
+# -- PORT union: monitor/resume faces (parse_log, classify joins, results scan) --
+
+import json
+
+from peregrine_kernel import monitor
+from peregrine_kernel.inner.results import parse_perf
+
+
+def _p_rec(profile, card_pass=True, *, calls=()):
+    """A per-profile record the way runtime/run.py writes it."""
+    return {"profile": profile, "card_pass": card_pass, "rc": 0, "seconds": 1.0,
+            "cases": [],
+            "hook": {"calls": list(calls), "perturbed": 0, "reseeded": 0,
+                     "errors": []}}
+
+
+def _call(i=0, *, abs_sum=10.0):
+    return {"fn": "call", "i": i, "inputs_nonfinite": 0, "in_sums": [1.0],
+            "outputs": [{"nan": 0, "posinf": 0, "neginf": 0, "abs_sum": abs_sum,
+                         "sq_sum": abs_sum / 2}]}
+
+
+def test_parse_log_a_complete_final_json_still_wins():
+    final = {"profiles": [_p_rec("base")], "skipped": [], "complete": True}
+    text = (f"{monitor.PROFILE_MARKER}\n{json.dumps(_p_rec('base'))}\n"
+            f"{monitor.MARKER}\n{json.dumps(final)}")
+    res = monitor.parse_log(text)
+    assert res == final and res["complete"] is True
+
+
+def test_cross_run_comparison_joins_calls_ignoring_pids():
+    def rec(profile, pid, abs_sum, card_pass=True):
+        block = _p_rec(profile, card_pass, calls=[_call(abs_sum=abs_sum)])
+        block["hook"]["calls"][0]["pid"] = pid
+        return block
+
+    res = {"complete": True,
+           "profiles": [rec("base", 100, 10.0), rec("repeat", 200, 10.1)]}
+    v = monitor.classify(res)
+    assert v["status"] == "warn" and "race" in v["findings"][0]["what"]
+    # unchanged inputs across two different pids still read as "not applicable"
+    res = {"complete": True,
+           "profiles": [rec("base", 100, 10.0), rec("amp", 200, 10.0)]}
+    v = monitor.classify(res)
+    assert v["not_applicable"] == ["amp"]
+
+
+def test_json_scan_survives_braces_inside_strings():
+    text = 'noise {"performance": {"bwd_median_ms": 1.0, "label": "a}b{c"}} {"x": 1}'
+    assert parse_perf(text)["bwd_median_ms"] == 1.0

@@ -51,6 +51,7 @@ from peregrine_kernel.loop import cli, harness_guard  # noqa: E402
 from peregrine_kernel.loop.goal_ref import library_findings  # noqa: E402
 
 lb = _load_eval("benchkit")
+precision = _load_eval("precision")
 
 
 # --- BUG-SEED-07: a tree-root module the harness imports without naming it is harness --
@@ -435,3 +436,44 @@ def test_a_student_root_module_drifts_and_is_dropped_from_the_job_tree(tmp_path)
     shown = subprocess.run(["git", "-C", str(ws), "show", f"{job}:sitecustomize.py"],
                            check=True, capture_output=True).stdout
     assert shown == b"# the card's own root helper\n"
+
+
+# --- PORT union: the precision stress record measures real draws (adapted to this tree's loaders) ---
+
+# --- the precision stress record measures real draws -------------------------------
+
+TASK_JUDGE = """import torch
+
+def run(x, w):
+    y = x.to(torch.float64)
+    y = y * torch.rsqrt(y.pow(2).mean(dim=-1, keepdim=True) + 1e-6) * w.to(torch.float64)
+    return y.to(x.dtype)
+"""
+
+
+def _task_problem() -> dict:
+    defn = {"name": "rms", "axes": {"m": {"type": "var"}, "n": {"type": "var"}},
+            "inputs": {"x": {"shape": ["m", "n"], "dtype": "float32"},
+                       "w": {"shape": ["n"], "dtype": "float32"}},
+            "outputs": {"y": {"shape": ["m", "n"], "dtype": "float32"}},
+            "reference": TASK_JUDGE}
+    return {"definition": defn,
+            "workload": {"uuid": "s", "axes": {"m": 4, "n": 16},
+                         "input_groups": [{"name": "plain", "kind": "generated", "seed": 1},
+                                          {"name": "spiky", "kind": "generated", "seed": 2}]},
+            "dps": False, "_dir": "."}
+
+
+def test_the_precision_stress_record_measures_real_draws():
+    problem = _task_problem()
+
+    def kernel(x, w):
+        return x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + 1e-6) * w
+
+    prec = precision.PrecisionRecorder()
+    lb._precision_stress(problem, kernel, False, "cpu", prec)
+    rows = [r for r in prec.rows if r.get("case") == "stress"]
+    assert {r.get("stress") for r in rows} == set(precision.STRESS_PROFILES)
+    assert all(r["status"] in ("pass", "fail") for r in rows), prec.rows
+    # the regression this pins: not one row may say the stress had nothing to move
+    assert not any("no plain random float input" in str(r.get("why")) for r in prec.rows)

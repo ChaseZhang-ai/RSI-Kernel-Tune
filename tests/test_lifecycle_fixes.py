@@ -158,3 +158,21 @@ def test_stop_at_target_with_a_confirmed_best_still_completes(repo, monkeypatch)
     rc, rec = _confirmed_run(repo, monkeypatch, "target", _confirmed(1.3))
     assert rc == 0
     assert rec["status"] == "done" and rec["target_met"] is True
+
+# -- PORT union: milestone required-section presence / order ----------------------
+
+def test_a_missing_section_4_is_still_reported():
+    from peregrine_kernel.milestone import validate_milestone
+    from test_milestone import VALID
+    text = VALID.replace("## 4. Known dead ends", "## 4b. Dead ends live elsewhere")
+    assert any("missing required section: ## 4." in x for x in validate_milestone(text))
+
+
+def test_sections_out_of_order_are_still_reported():
+    from peregrine_kernel.milestone import validate_milestone
+    from test_milestone import VALID
+    sec5 = "## 5. Global correctness / performance gate\natol=5, rtol=0.05; MFU ≥95% target.\n\n"
+    sec6 = "## 6. Rules\nOne variable per round; anti-plagiarism clause; INFEASIBLE clause.\n\n"
+    swapped = VALID.replace(sec5 + sec6, sec6 + sec5)
+    assert swapped != VALID
+    assert any("out of order" in x for x in validate_milestone(swapped))

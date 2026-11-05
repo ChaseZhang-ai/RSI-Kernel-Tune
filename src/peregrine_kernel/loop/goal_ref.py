@@ -887,10 +887,17 @@ def _src_dir() -> Path:
 
 
 def command(*args: str, python: str | None = None) -> str:
-    """A shell command running this module with THIS checkout's package."""
+    """A shell command running this module with THIS checkout's package.
+
+    ``-P`` keeps the working directory off ``sys.path`` and ``-s`` skips the user site
+    dir: the agent runs this from its workspace (a clone of the card it may write), and
+    a ``peregrine_kernel`` package planted there — or carried in by a card — would
+    otherwise shadow this module and forge the very eval/exec/check CLI the session's
+    verdicts and deliverable check ride on (BUG-CORPS-C-10). ``PYTHONPATH`` still names
+    this checkout, so the real module is what answers."""
     return ("PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=" + shlex.quote(str(_src_dir())) + " "
-            + " ".join(shlex.quote(x) for x in (python or sys.executable, "-W",
-                                                 "ignore::RuntimeWarning", "-m",
+            + " ".join(shlex.quote(x) for x in (python or sys.executable, "-P", "-s",
+                                                 "-W", "ignore::RuntimeWarning", "-m",
                                                  "peregrine_kernel.loop.goal_ref", *args)))
 
 

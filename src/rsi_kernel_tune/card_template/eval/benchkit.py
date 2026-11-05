@@ -75,6 +75,9 @@ import torch
 # already carries fresh content; the env pins the child's shift explicitly.
 FRESH_SEED_ENV = "RKT_FRESH_SEED"
 FRESH_RECHECK_ENV = "RKT_FRESH_RECHECK"
+# WP22 (docs/compute-dtype.md): the declared compute precision (set from the
+# task's validated [precision] declaration; see the COMPUTE_DTYPES block below).
+COMPUTE_DTYPE_ENV = "RKT_COMPUTE_DTYPE"
 
 # --- M3: the two-lane contract (docs/industrial-lane.md §6.3) --------------------
 #
@@ -1703,6 +1706,7 @@ GUARD_ENV_KEYS = (
     REPLAY_PROBE_DEVICE_ENV, REPLAY_PROBE_CHILD_ENV,
     "RKT_FRESH_RECHECK_TIMEOUT_S",
     "RKT_FRESH_RECHECK_DEVICE", GATE_DEGRADED_RATIO_ENV, CLOCK_ENV,
+    COMPUTE_DTYPE_ENV,   # WP22: the declared compute precision is a guard knob too
 )
 _GUARD_ENV: "dict[str, str | None] | None" = None
 
@@ -2093,7 +2097,6 @@ PRECISION_ENV_OFF = os.environ.get(PRECISION_ENV, "").strip().lower() in ("0", "
 # relative bound (k*e_ref + floor, floor = the DECLARED output dtype's ulp via
 # eval/precision.py's unchanged measure) convicts exactly the arithmetic BELOW the
 # declaration. "fp32" (absent) is the historical behavior byte for byte.
-COMPUTE_DTYPE_ENV = "RKT_COMPUTE_DTYPE"
 COMPUTE_DTYPES = ("fp32", "tf32", "bf16", "fp16", "fp8")
 COMPUTE_DTYPE_DEFAULT = "fp32"
 # Read once, at import -- before any kernel module runs in this process. The value

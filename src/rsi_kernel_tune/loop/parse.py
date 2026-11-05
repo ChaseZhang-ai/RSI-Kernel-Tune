@@ -1189,6 +1189,21 @@ def _mad_sigma(values) -> float | None:
     return 1.4826 * statistics.median(abs(v - med) for v in vals)
 
 
+def _finite_positive(v) -> float | None:
+    """One raw per-window reading as a positive finite float, else None — the
+    same door posture the list fields apply (_float_list / readings_spread_pct),
+    at _window_pairs' door too: a bool is float(True) == 1.0 ms, a None/str is a
+    malformed row, and a NaN/inf reading is a broken measurement, not a small
+    one. The raw arrays ride the trajectory as the bench wrote them, so a junk
+    entry must be DROPPED here — a bare float() escaped as a TypeError that
+    killed the whole resolution estimate (and detect_plateau with it), and a
+    bool slipped in as a 1.0 ms reading."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    v = float(v)
+    return v if v > 0.0 and math.isfinite(v) else None
+
+
 def _window_pairs(rec, gate_window: str) -> list[float]:
     """One record's per-window paired ratios (ref_i / kernel_i, index-aligned raw
     device readings), deviated around the record's OWN robust center — what
@@ -1207,9 +1222,11 @@ def _window_pairs(rec, gate_window: str) -> list[float]:
             groups.append((w["ref_device_readings_ms"], w["device_readings_ms"]))
     out = []
     for refs, kers in groups:
-        n = min(len(refs), len(kers))
-        ratios = [float(r) / float(k) for r, k in zip(refs[:n], kers[:n])
-                  if float(k) > 0.0 and float(r) > 0.0]
+        ratios = []
+        for r, k in zip(refs, kers):
+            fr, fk = _finite_positive(r), _finite_positive(k)
+            if fr is not None and fk is not None:
+                ratios.append(fr / fk)
         if len(ratios) < 2:
             continue
         center = statistics.median(ratios)
@@ -1293,8 +1310,14 @@ def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
                  and getattr(r, "reading_of", None) is None]
     recent = _drift_clean(evaluated[-RESOLVABLE_SAMPLES:], RESOLVABLE_MIN_SAMPLES)
     ratios = [v for r in recent if (v := _gate_ratio(r, gate_window)) is not None]
+    # the injection seam reads the samples at the estimator's door too: a
+    # non-finite ratio (the JSON dialect can carry a NaN/Infinity literal) is a
+    # missing reading, never a sample — the records path applies SEED-22's rule
+    # in _gate_ratio, and an admitted +inf here silently grew the sample COUNT,
+    # flipping a data-poor run (the cap fallback) into a spurious estimate.
     extra = [float(v) for v in ((raw or {}).get("ratios") or ())
-             if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0.0]
+             if isinstance(v, (int, float)) and not isinstance(v, bool)
+             and math.isfinite(v) and v > 0.0]
     if len(ratios) + len(extra) < RESOLVABLE_MIN_SAMPLES:
         return cap
     # within-job: window deviations off the records' raw readings (+ injected pairs)

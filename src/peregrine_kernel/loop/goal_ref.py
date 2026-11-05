@@ -74,6 +74,7 @@ student as a teacher-only tree):
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -472,6 +473,107 @@ _DYNAMIC_LIB_PATTERNS = (
     (re.compile(r"\b__import__\s*\(\s*[\"'](" + _LIBS_ALT + r")[\"']"),
      "dynamically imports the kernel library {0}"),
 )
+
+_CPP_SUFFIXES = (".cu", ".cuh", ".cpp", ".cc", ".h", ".hpp")
+# load_inline-style keyword names whose string value is source code
+_SOURCE_KEYWORDS = ("cuda_sources", "cpp_sources", "cuda_source", "cpp_source",
+                    "sources", "source", "code", "cuda_code", "headers")
+
+
+def _lib_root(dotted: str) -> str | None:
+    """The import's root name when it is a kernel library ("flashinfer.rope" ->
+    "flashinfer")."""
+    root = dotted.strip().split(".")[0] if dotted and dotted.strip() else ""
+    return root if root in _PY_LIBS else None
+
+
+def _attr_root(node) -> str | None:
+    """The Name at the base of an attribute chain ("importlib.util" -> "importlib")."""
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else None
+
+
+def _string_findings(text: str) -> list[str]:
+    """Library signatures inside a string constant (a load_inline cuda_sources value
+    carries the #include / cublas calls the stripped body hides)."""
+    out = []
+    for rx, what in _LIB_PATTERNS[-2:]:
+        for m in rx.finditer(text):
+            entry = what.format(*(m.groups() or ("",)))
+            if entry not in out:
+                out.append(entry)
+    return out
+
+
+def _import_findings_regex(src: str) -> list[str]:
+    """The fallback for a source that does not parse: statement-splitting over
+    semicolons, newlines and (paren) continuations, every name of the statement
+    checked -- `import os, flashinfer` and `a = 1;import flashinfer` included."""
+    flat = re.sub(r"\\\n", " ", src).replace("(", " ").replace(")", " ")
+    found: list[str] = []
+    for line in flat.split("\n"):
+        for stmt in line.split(";"):
+            stmt = stmt.strip()
+            if stmt.startswith("from "):
+                cut = stmt.find(" import ")
+                names = [stmt[5:cut if cut != -1 else len(stmt)].strip()]
+            elif stmt.startswith("import "):
+                names = [n.strip().split()[0] for n in stmt[7:].split(",") if n.strip()]
+            else:
+                continue
+            for dotted in names:
+                if lib := _lib_root(dotted):
+                    text = f"imports the kernel library {lib}"
+                    if text not in found:
+                        found.append(text)
+    return found
+
+
+def _import_findings(src: str, depth: int = 0) -> list[str]:
+    """Every kernel-library name a python source imports. An AST over the source as-is:
+    every alias of every import statement, dynamic imports whose target is a literal
+    (importlib.import_module / `__import__`), exec/eval of a literal, and the source
+    strings of compiled-in calls (load_inline's cuda_sources). A variable target cannot
+    be read -- the heuristic names what it can see only."""
+    try:
+        tree = ast.parse(src)
+    except (SyntaxError, ValueError):
+        return _import_findings_regex(src)
+    found: list[str] = []
+
+    def add(text: str) -> None:
+        if text not in found:
+            found.append(text)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if lib := _lib_root(alias.name):
+                    add(f"imports the kernel library {lib}")
+        elif isinstance(node, ast.ImportFrom):
+            if node.module and not node.level and (lib := _lib_root(node.module)):
+                add(f"imports the kernel library {lib}")
+        elif isinstance(node, ast.Call):
+            func = node.func
+            bootstrap = isinstance(func, ast.Name) and func.id in ("exec", "eval")
+            dynamic = (isinstance(func, ast.Name) and func.id == "__import__") or (
+                isinstance(func, ast.Attribute) and func.attr == "import_module"
+                and _attr_root(func.value) == "importlib")
+            target = node.args[0] if node.args else None
+            literal = target if isinstance(target, ast.Constant) and \
+                isinstance(target.value, str) else None
+            if bootstrap and literal is not None and depth < 2:
+                for text in _import_findings(literal.value, depth + 1):
+                    add(text)
+            elif dynamic and literal is not None and (lib := _lib_root(literal.value)):
+                add(f"dynamically imports the kernel library {lib}")
+            for kw in node.keywords:
+                if kw.arg in _SOURCE_KEYWORDS and isinstance(kw.value, ast.Constant) \
+                        and isinstance(kw.value.value, str):
+                    for text in _string_findings(kw.value.value):
+                        add(text)
+    return found
 
 
 def _py_import_libs(body: str) -> list[str]:

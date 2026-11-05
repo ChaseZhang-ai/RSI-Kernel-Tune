@@ -1335,9 +1335,11 @@ def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
         env[FRESH_SEED_ENV] = str(seed)
     bench = (Path(__file__).parent / "bench.py").resolve()
     root = (Path(__file__).parent.parent).resolve()   # the workspace (eval/ below it)
+    # the inherited front stays in front: the correctness monitor's hook directory is
+    # there, and a workspace-root sitecustomize.py must never overtake it
     env["PYTHONPATH"] = os.pathsep.join(
-        [str(root), str(root / "eval")]
-        + [p for p in [env.get("PYTHONPATH", "")] if p])
+        [p for p in [env.get("PYTHONPATH", "")] if p]
+        + [str(root / "eval"), str(root)])
     try:
         proc = subprocess.run(
             [sys.executable, str(bench), "--mode", "correctness", "--fresh-recheck"],
@@ -1685,9 +1687,10 @@ def _probe_child(problem: dict) -> dict:
     env[REPLAY_PROBE_CHILD_ENV] = "1"
     bench = (Path(__file__).parent / "bench.py").resolve()
     root = (Path(__file__).parent.parent).resolve()   # the workspace (eval/ below it)
+    # the inherited front stays in front (the monitor's hook directory), as in _fresh_child
     env["PYTHONPATH"] = os.pathsep.join(
-        [str(root), str(root / "eval")]
-        + [p for p in [env.get("PYTHONPATH", "")] if p])
+        [p for p in [env.get("PYTHONPATH", "")] if p]
+        + [str(root / "eval"), str(root)])
     try:
         proc = subprocess.run(
             [sys.executable, str(bench), "--mode", "correctness", "--replay-probe"],
@@ -2477,7 +2480,17 @@ def run_bench(argv=None, problem_path=None) -> int:
     print(f"[bench] definition={problem['definition']['name']} "
           f"{describe_card_workloads(problem)}")
 
-    ref_fn, ref_dps = _impl(problem, "ref")
+    try:
+        ref_fn, ref_dps = _impl(problem, "ref")
+    except Exception as e:  # noqa: BLE001 — the card's own reference failing to load
+        # is the card's finding, not the bench's crash: the same structured verdict
+        # channel a compile error takes, so the job parses and reports instead of a
+        # bare traceback with no JSON block
+        why = f"{type(e).__name__}: {e}"
+        print(f"[bench] correctness: REFERENCE_ERROR — {why[-6000:]}")
+        _emit({"correctness": {"pass": False, "status": "REFERENCE_ERROR",
+                               "error": why[-6000:]}, "performance": None})
+        return 0
     if args.mode == "calibrate":
         return _task_calibrate(problem, ref_fn, ref_dps, device)
     if args.mode == "ref":

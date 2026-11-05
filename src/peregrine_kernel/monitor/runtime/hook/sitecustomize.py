@@ -74,4 +74,11 @@ def _chain() -> None:
         sys.path[:] = saved
 
 
+def _owned(entry: str, roots: list) -> bool:
+    directory = os.path.abspath(entry or os.curdir)
+    if directory == _HERE:
+        return True
+    return any(directory == r or directory.startswith(r + os.sep) for r in roots)
+
+
 _chain()

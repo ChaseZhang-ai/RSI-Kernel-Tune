@@ -1651,25 +1651,40 @@ def _ensure_arch_baseline(op: str, op_dir: Path, cfg: dict, *, measure: bool = T
     refuses to substitute the e2e number). They are second choice on purpose: a
     hand-transcribed constant cannot tell that the shape or the image moved under it,
     and an earlier run of this operator was anchored to one that had.
+
+    ``measure=False`` (--dry-run / --harvest-only) reports what a real run would
+    do without writing anything: the plan a dry run prints may name the declared
+    values, but archiving them here would short-circuit their own measurement.
     """
     existing = _cluster_guarded(op, load_baseline(op_dir, ROLE_ARCHITECTURE))
     declared = _declared_arch_baseline(op, cfg)
+    # A declared-sourced archive (the only writer that leaves samples_ms empty;
+    # measure_and_archive always records its runs) is the saved image of
+    # loop.toml. When the toml moves — arch_ref_device_ms added for the device
+    # default, a corrected reading — the archive must follow it, not shadow it:
+    # returning the stale image here sent operators into a dead end where the
+    # prescribed fix (declare the device reading) changed nothing until they
+    # knew to hand-delete arch_baseline.json. A MEASURED archive is never
+    # overwritten by declared values.
+    refresh = (existing is not None and declared is not None
+               and not existing.samples_ms and asdict(existing) != asdict(declared))
+    if not measure:
+        # --dry-run / --harvest-only report the plan without writing it. Archiving
+        # the declared constants here would be the very phase product the fresh
+        # gate refuses a real start over (a dry run manufacturing the
+        # contamination it warns about), and a real start would then load that
+        # archive before the measurement branch was ever reached — target_ms and
+        # every mechanism gate anchored to a hand-transcribed number forever.
+        # Report what a real run WOULD archive, archive nothing. The same guard
+        # _ensure_ref_baseline has always carried.
+        return declared if refresh else (existing or declared)
+    if refresh:
+        print(f"[loop] the archived architecture baseline is a saved image of "
+              f"loop.toml's declared values and the toml changed — refreshing "
+              f"the archive from loop.toml")
+        save_baseline(op_dir, declared)
+        return declared
     if existing:
-        # A declared-sourced archive (the only writer that leaves samples_ms empty;
-        # measure_and_archive always records its runs) is the saved image of
-        # loop.toml. When the toml moves — arch_ref_device_ms added for the device
-        # default, a corrected reading — the archive must follow it, not shadow it:
-        # returning the stale image here sent operators into a dead end where the
-        # prescribed fix (declare the device reading) changed nothing until they
-        # knew to hand-delete arch_baseline.json. A MEASURED archive is never
-        # overwritten by declared values.
-        if declared is not None and not existing.samples_ms \
-                and asdict(existing) != asdict(declared):
-            print(f"[loop] the archived architecture baseline is a saved image of "
-                  f"loop.toml's declared values and the toml changed — refreshing "
-                  f"the archive from loop.toml")
-            save_baseline(op_dir, declared)
-            return declared
         return existing
 
     spec = _arch_ref_spec(cfg)

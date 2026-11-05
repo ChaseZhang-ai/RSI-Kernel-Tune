@@ -1240,11 +1240,12 @@ def _capture_kernel_import_env() -> None:
 
 
 def _defensive_env(name: str, default: "str | None" = None) -> "str | None":
-    """A defense gate's env read: the pre-kernel-import capture when one exists
-    (a kernel that flips the environment at import must not lower its own
-    defenses), else the live environment."""
-    src = _ENV_AT_KERNEL_IMPORT if _ENV_AT_KERNEL_IMPORT is not None else os.environ
-    return src.get(name, default)
+    """A defense gate's env read: the one trust chain (``_guard_env_get``), with the
+    caller's default applied when every trusted layer says absent. A pinned /
+    captured None is AUTHORITATIVE absence — a value the kernel wrote later cannot
+    revive it — so the default, not the live environment, is what the reader gets."""
+    v = _guard_env_get(name)
+    return default if v is None else v
 
 
 def _impl(problem: dict, which: str):
@@ -1472,8 +1473,8 @@ def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
     """One fresh-process correctness run over the SAME card: returns the parsed
     verdict, or None when the child could not produce one (env failure — a 'no
     reading', never counted as a fail)."""
-    env = dict(_ENV_AT_KERNEL_IMPORT) if _ENV_AT_KERNEL_IMPORT is not None \
-        else dict(os.environ)
+    env = _guard_env_apply(dict(_ENV_AT_KERNEL_IMPORT) if _ENV_AT_KERNEL_IMPORT is not None
+                           else dict(os.environ))
     env[FRESH_RECHECK_ENV] = "1"
     if seed is not None:
         env[FRESH_SEED_ENV] = str(seed)
@@ -1719,14 +1720,23 @@ def _unpin_guard_env() -> None:
 
 
 def _guard_env_get(key: str) -> "str | None":
-    """A guard knob read, in trust order: the kernel-import snapshot while one
-    exists (a kernel that flips the environment at its own import must not
-    move its own defenses), then the pinned bench-start value while a bench
-    run is active, the live environment otherwise (direct readers, tests)."""
-    if _ENV_AT_KERNEL_IMPORT is not None and key in _ENV_AT_KERNEL_IMPORT:
-        return _ENV_AT_KERNEL_IMPORT[key]
+    """The ONE defensive env read, in trust order:
+    1. the pinned bench-start value while a bench run is active — the operator's
+       configuration; a pinned None is AUTHORITATIVE absence (the key was not set
+       at bench start, and no later write may revive it),
+    2. the kernel-import snapshot while one exists — the launcher-made world
+       before any foreign code ran; a key it lacks reads absent for the same
+       reason (the capture is a whole-world snapshot, so absence is a fact about
+       launch time, not an invitation to read what the kernel wrote since),
+    3. the live environment (direct readers, tests, processes with neither a pin
+       nor a capture).
+    Every guard knob read in this file goes through here (or through
+    ``_defensive_env``, its default-applying form), so one flip behaves the same
+    at every seam."""
     if _GUARD_ENV is not None and key in _GUARD_ENV:
         return _GUARD_ENV[key]
+    if _ENV_AT_KERNEL_IMPORT is not None:
+        return _ENV_AT_KERNEL_IMPORT.get(key)
     return os.environ.get(key)
 
 
@@ -1734,10 +1744,12 @@ def _guard_env_apply(env: dict) -> dict:
     """Force the pinned knob values into a child-spawn environment: a child
     inherits what the harness configured, not what the kernel mutated (the
     recheck child's layer-2 shift rides the ambient RKT_FRESH_SEED when the
-    parent pins no explicit seed, so the ambient value must be the pinned one)."""
-    if _ENV_AT_KERNEL_IMPORT is not None:
-        for k, v in _ENV_AT_KERNEL_IMPORT.items():
-            env[k] = v
+    parent pins no explicit seed, so the ambient value must be the pinned one).
+    A pinned None pops the key: the child inherits the key's bench-start
+    ABSENCE, not the kernel's later write. The caller builds the base
+    environment from the kernel-import snapshot when one exists (the
+    launcher-made world — the kernel's own writes ride nowhere), else the live
+    environment; this only layers the pin on top."""
     if _GUARD_ENV is None:
         return env
     for k, v in _GUARD_ENV.items():
@@ -1925,8 +1937,8 @@ def _probe_child(problem: dict) -> dict:
     one (env failure — a no-reading, never counted as a fail). The fresh-recheck
     child's spawn shape, with the probe's seed shift on the draw env and the
     probe's own child marker (no nesting)."""
-    env = dict(_ENV_AT_KERNEL_IMPORT) if _ENV_AT_KERNEL_IMPORT is not None \
-        else dict(os.environ)
+    env = _guard_env_apply(dict(_ENV_AT_KERNEL_IMPORT) if _ENV_AT_KERNEL_IMPORT is not None
+                           else dict(os.environ))
     env[FRESH_RECHECK_ENV] = "1"   # the draw-shift gate the child's task_inputs reads
     env[FRESH_SEED_ENV] = str(REPLAY_PROBE_SEED_SHIFT)
     env[REPLAY_PROBE_CHILD_ENV] = "1"

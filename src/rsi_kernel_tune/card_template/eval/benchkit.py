@@ -418,6 +418,9 @@ def gate_degraded(block) -> "bool | None":
         ratio = float(_guard_env_get(GATE_DEGRADED_RATIO_ENV) or GATE_DEGRADED_RATIO)
     except ValueError:
         ratio = GATE_DEGRADED_RATIO
+    if not math.isfinite(ratio):
+        ratio = GATE_DEGRADED_RATIO   # nan compares False against every share —
+                                      # the accounting row would claim "not degraded"
     unavailable = sum(1 for r in rows
                       if isinstance(r, dict) and r.get("status") == "unavailable")
     return unavailable > ratio * len(rows)
@@ -1525,11 +1528,20 @@ def _replay_probe_enabled() -> bool:
 
 def _replay_probe_ratio() -> float:
     """The suspected threshold: ``RKT_REPLAY_PROBE_RATIO`` overrides; an
-    unreadable value keeps the conservative default."""
+    unreadable value keeps the conservative default. A value that reads as a
+    float but voids the knob's meaning keeps it too: a non-finite ratio
+    convicts nothing (nan/inf compare False against every reading — the probe
+    silently fails OPEN), a ratio <= 0 convicts everything (every honest
+    kernel's re-time exceeds it — the probe fails CLOSED on the whole fleet).
+    Both spellings ride the eval JSON's ``ratio_threshold`` and would look like
+    a deliberate configuration, so they fall back to the default instead."""
     try:
-        return float(_guard_env_get(REPLAY_PROBE_RATIO_ENV) or REPLAY_PROBE_RATIO_DEFAULT)
+        ratio = float(_guard_env_get(REPLAY_PROBE_RATIO_ENV) or REPLAY_PROBE_RATIO_DEFAULT)
     except ValueError:
         return REPLAY_PROBE_RATIO_DEFAULT
+    if not math.isfinite(ratio) or ratio <= 0:
+        return REPLAY_PROBE_RATIO_DEFAULT
+    return ratio
 
 
 def _replay_probe_timeout_s() -> int:

@@ -146,6 +146,55 @@ def test_kernel_env_kill_cannot_disarm_the_probe_at_the_production_seam(bk, monk
         bk._unpin_guard_env()
 
 
+def test_probe_child_marker_kill_line_cannot_disarm_the_probe(bk, monkeypatch):
+    """The probe's own no-nesting marker (RKT_REPLAY_PROBE_CHILD) gates
+    _maybe_replay_probe's FIRST line — the one guard read that was still live
+    after the pin landed. A source-reference kernel writing '1' into it at
+    import made the PARENT bench read 'a probe child never probes' and skip
+    WP29 entirely (no child spawn, no replay_probe block, the cheat ships
+    clean); pinned, the marker reads what the harness configured."""
+    monkeypatch.setattr(bk, "_probe_child",
+                        lambda problem: {"shapes": [{"name": "w0",
+                                                     "probe_median_ms": 2.0}]})
+    monkeypatch.setenv("RKT_REPLAY_PROBE", os.environ.get("RKT_REPLAY_PROBE", ""))
+    monkeypatch.setenv("RKT_REPLAY_PROBE_CHILD",
+                       os.environ.get("RKT_REPLAY_PROBE_CHILD", ""))
+    bk._pin_guard_env()
+    try:
+        ns: dict = {}
+        exec("import os\nos.environ['RKT_REPLAY_PROBE_CHILD'] = '1'\n", ns)
+        result = {"correctness": {"pass": True},
+                  "performance": {"device_median_ms": 0.005}}
+        bk._maybe_replay_probe(result, {}, ARGS, BLOCKS)
+        assert result["replay_probe"]["status"] == "suspected"
+    finally:
+        bk._unpin_guard_env()
+
+
+def test_pinned_child_marker_does_not_leak_into_a_spawn_env(bk, monkeypatch):
+    """The marker joins the pin, so a kernel-mutated ambient value is also
+    scrubbed from child-spawn environments (only pinned keys are applied, and a
+    pinned-None key is popped): the recheck child must not inherit the parent
+    kernel's marker."""
+    runs: list = []
+
+    def _run(*argv, **kwargs):
+        runs.append(kwargs)
+        class _P:
+            returncode = 0
+            stdout = ""
+        return _P()
+
+    monkeypatch.setattr(bk, "subprocess", SimpleNamespace(run=_run))
+    bk._pin_guard_env()
+    try:
+        monkeypatch.setenv("RKT_REPLAY_PROBE_CHILD", "1")   # the kernel's write
+        bk._fresh_child({}, seed=None)
+        assert "RKT_REPLAY_PROBE_CHILD" not in runs[0]["env"]
+    finally:
+        bk._unpin_guard_env()
+
+
 def test_kernel_env_kill_cannot_skip_the_recheck_gate(bk, monkeypatch):
     """A set RKT_FRESH_RECHECK in the poisoned environment would make the
     parent-side recheck read 'a child never nests' and silently skip; pinned,

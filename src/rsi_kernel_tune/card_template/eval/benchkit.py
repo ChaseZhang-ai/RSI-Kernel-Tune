@@ -1567,14 +1567,19 @@ def _replay_probe_timeout_s() -> int:
 # nests" guard reads it in the parent), a mutated RKT_FRESH_SEED changes the
 # recheck child's layer-2 draw shift (a content-keyed cache would then see the
 # judged content again), RKT_MEMO_LANE=1 on a STRICT card re-routes the recheck
-# verdict into the MEMO branch. run_bench pins every knob this file reads from
+# verdict into the MEMO branch, RKT_REPLAY_PROBE_CHILD=1 makes the parent bench
+# read "a probe child never probes" at _maybe_replay_probe's first line and
+# silently skip WP29 (the marker gates the only process that can spawn a probe —
+# the probe child itself returns at the --replay-probe branch long before it).
+# run_bench pins every knob this file reads from
 # the environment at entry — BEFORE any kernel code runs — and every guard read
 # consults the pin: the conviction chain sees exactly what the harness was
 # configured with, not what the kernel left in the process environment.
 GUARD_ENV_KEYS = (
     FRESH_RECHECK_ENV, FRESH_SEED_ENV, MEMO_LANE_ENV,
     REPLAY_PROBE_ENV, REPLAY_PROBE_RATIO_ENV, REPLAY_PROBE_TIMEOUT_ENV,
-    REPLAY_PROBE_DEVICE_ENV, "RKT_FRESH_RECHECK_TIMEOUT_S",
+    REPLAY_PROBE_DEVICE_ENV, REPLAY_PROBE_CHILD_ENV,
+    "RKT_FRESH_RECHECK_TIMEOUT_S",
     "RKT_FRESH_RECHECK_DEVICE", GATE_DEGRADED_RATIO_ENV, CLOCK_ENV,
 )
 _GUARD_ENV: "dict[str, str | None] | None" = None
@@ -1866,7 +1871,7 @@ def _maybe_replay_probe(result: dict, problem: dict, args, blocks: list) -> None
     the block rides the eval JSON's top level and the DRIVER owns the verdict.
     The switch-off path returns before anything runs — with RKT_REPLAY_PROBE=0
     the bench is byte-identical to pre-WP29 (no child spawn, no block)."""
-    if os.environ.get(REPLAY_PROBE_CHILD_ENV):
+    if _guard_env_get(REPLAY_PROBE_CHILD_ENV):
         return                                # a probe child never probes
     if _memo_lane():
         # M3 (docs/industrial-lane.md §6.3): the probe is STRICT-side ammunition

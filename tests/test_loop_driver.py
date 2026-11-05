@@ -7056,8 +7056,12 @@ def test_paired_reanchor_replaces_the_cross_channel_drift_transport(tmp_path, mo
     assert out is not None and out["verdict"] == "target"
     assert out["estimator"] == "paired-in-job"
     assert calls == []                                          # no fresh ref channel
-    # below parity: paired residual in the note, memoised per best
-    ctx2 = _reanchor_ctx(tmp_path, samples=[2.0, 2.0, 2.0], calls=calls)
+    # below parity: paired residual in the note, memoised per best. A fresh run
+    # directory: since W1-DRV-08 a persisted parity "target" verdict on the same
+    # run rebuilds into the memo and would short-circuit this phase (that reuse
+    # is covered by test_w1_driver_fixes).
+    (tmp_path / "below").mkdir()
+    ctx2 = _reanchor_ctx(tmp_path / "below", samples=[2.0, 2.0, 2.0], calls=calls)
     ctx2.ref_in_job = True
     ctx2.backend = _ConfirmBackend([], [_EVAL_CONFIRM(2.07, 2.03), _EVAL_CONFIRM(2.07, 2.01)])
     append_record(ctx2.status_path, IterationRecord(
@@ -7066,7 +7070,7 @@ def test_paired_reanchor_replaces_the_cross_channel_drift_transport(tmp_path, mo
     assert _phantom_gap_reanchor(ctx2, 2.07) is None
     assert ctx2.reanchor_note and "Same-card paired re-measure" in ctx2.reanchor_note
     assert "+2.5%" in ctx2.reanchor_note                       # 1/0.9758 - 1
-    rec = _json.loads((tmp_path / "reanchor.jsonl").read_text().splitlines()[-1])
+    rec = _json.loads((tmp_path / "below" / "reanchor.jsonl").read_text().splitlines()[-1])
     assert rec["verdict"] == "confirmed_gap" and rec["estimator"] == "paired-in-job"
     assert calls == []
     # unchanged best: the verdict is reused, nothing re-bought

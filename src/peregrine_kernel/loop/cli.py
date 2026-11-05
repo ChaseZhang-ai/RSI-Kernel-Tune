@@ -865,29 +865,38 @@ class RealBackend:
 
     def harness_changes(self, base: str, head: str) -> list[str] | None:
         """The harness paths ``head`` changes relative to ``base`` (added, removed or
-        edited; committed trees). None when git cannot say."""
+        edited; committed trees). None when git cannot say.
+
+        ``-z`` like the overlay side reads its listings: without it git quotes a
+        non-ASCII path ("eval/b\\303\\251nch.py"), the quoted spelling matches no
+        harness prefix, and a delivery that edited the judge escapes the REVERT.
+        """
         out = subprocess.run(["git", "-C", str(self.workspace), "diff", "--name-only",
-                              "--no-renames", base, head, "--", *harness_guard.HARNESS_PATHSPECS],
+                              "--no-renames", "-z", base, head, "--",
+                              *harness_guard.HARNESS_PATHSPECS],
                              capture_output=True, text=True)
         if out.returncode != 0:
             return None
-        return harness_guard.harness_only(out.stdout.splitlines(), self.kernel_file)
+        return harness_guard.harness_only(
+            [p for p in out.stdout.split("\0") if p], self.kernel_file)
 
     def harness_drift(self, anchor: str) -> list[str] | None:
         """Harness paths where the WORKING TREE differs from ``anchor``: committed or not,
         and untracked files under the harness directories (a reset keeps those, the next
-        ``git add -A`` would commit them). None when git cannot say."""
+        ``git add -A`` would commit them). None when git cannot say. Both listings run
+        with ``-z`` for the same reason harness_changes does."""
         ws = str(self.workspace)
-        diff = subprocess.run(["git", "-C", ws, "diff", "--name-only", "--no-renames", anchor,
-                               "--", *harness_guard.HARNESS_PATHSPECS],
+        diff = subprocess.run(["git", "-C", ws, "diff", "--name-only", "--no-renames",
+                               "-z", anchor, "--", *harness_guard.HARNESS_PATHSPECS],
                               capture_output=True, text=True)
-        new = subprocess.run(["git", "-C", ws, "ls-files", "--others", "--exclude-standard",
-                              "--", *harness_guard.HARNESS_PATHSPECS],
+        new = subprocess.run(["git", "-C", ws, "ls-files", "-z", "--others",
+                              "--exclude-standard", "--", *harness_guard.HARNESS_PATHSPECS],
                              capture_output=True, text=True)
         if diff.returncode != 0 or new.returncode != 0:
             return None
-        return harness_guard.harness_only(diff.stdout.splitlines() + new.stdout.splitlines(),
-                                          self.kernel_file)
+        return harness_guard.harness_only(
+            [p for p in diff.stdout.split("\0") + new.stdout.split("\0") if p],
+            self.kernel_file)
 
     def restore_harness(self, anchor: str, paths: list[str], message: str) -> str:
         """Put ``paths`` back to their ``anchor`` content (removed when ``anchor`` has no

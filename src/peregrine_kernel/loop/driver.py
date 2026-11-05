@@ -1663,10 +1663,19 @@ def _lane_temperature_check(ctx: LoopContext) -> "tuple[bool, str]":
         return True, ""
     for r in reversed(records):
         temp = (r.gpu_state or {}).get("temperature_c")
-        if temp is not None:
-            if float(temp) >= _LANE_TEMP_MAX_C:
-                return False, f"last gpu_state temperature {temp}C >= {_LANE_TEMP_MAX_C}C"
-            return True, ""
+        if temp is None:
+            continue
+        try:
+            t = float(temp)
+        except (TypeError, ValueError):
+            # parse_eval never validates the gpu_state block's contents, and a
+            # damaged value sits in status.jsonl across restarts: a guard that
+            # raised here would break the window deterministically (its
+            # load_records twin is guarded for exactly that reason)
+            continue
+        if t >= _LANE_TEMP_MAX_C:
+            return False, f"last gpu_state temperature {temp}C >= {_LANE_TEMP_MAX_C}C"
+        return True, ""
     return True, ""
 
 

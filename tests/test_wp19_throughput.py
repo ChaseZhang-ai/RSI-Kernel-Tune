@@ -51,8 +51,11 @@ _WP20_FIELDS = ("board_span_unstable", "corr_margin_ratio", "fresh_recheck_form"
                 "gate_degraded", "judge_edge_recheck")
 _WP29_FIELDS = ("replay_probe",)
 _M3_FIELDS = ("memo_lane", "memo_fallback")
+# WP22: the declared compute precision on every row (default "fp32" — the
+# merge-base value, unchanged); stamped by the driver beside the lane.
+_WP22_FIELDS = ("compute_dtype",)
 _STRIP_FIELDS = _WP11_TELEMETRY + _WP15_FIELDS + _WP14_FIELDS + _WP20_FIELDS \
-    + _WP29_FIELDS + _M3_FIELDS
+    + _WP29_FIELDS + _M3_FIELDS + _WP22_FIELDS
 
 import pytest
 

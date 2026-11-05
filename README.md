@@ -44,6 +44,12 @@ below and in [NOTICE](NOTICE).
 
 ## Quick start
 
+Prefer one file that fills in everything a run needs (API provider/models + key-file
+pointer, the kernel(s) to optimize, the precision YOU declare, the student's retrieval
+permission, the concurrency)? See [docs/run-configuration.md](docs/run-configuration.md):
+`rsi-kernel-tune config init` writes the commented `rsi-run.toml`, and
+`rsi-kernel-tune run --config rsi-run.toml` runs every kernel task of it in parallel.
+
 ```bash
 rsi-kernel-tune init myop                       # tasks/myop/ scaffold: fill description.md / shapes.json / reference/
 rsi-kernel-tune new tasks/myop --dry-run        # plan preview (judge, calibration, loop config)

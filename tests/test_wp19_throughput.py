@@ -1597,15 +1597,19 @@ def test_t7_reconcile_refute_runs_full_suite(tmp_path, monkeypatch):
     assert not list(Path(ctx.evidence_dir).glob("ref_role_exposure.txt"))
 
 
-def test_t7_no_carry_is_byte_identical_baseline(tmp_path):
+def test_t7_no_carry_is_byte_identical_baseline(tmp_path, capsys):
     # No-carry status quo: without a carry census the ref pricing path runs untouched
-    ctx = _ctx(tmp_path, FakeBackend([], []))
+    be = FakeBackend([], [])
+    ctx = _ctx(tmp_path, be)
     ctx.ref_price_dir = None                        # the baseline early return
     driver._ensure_ref_pricing(ctx)                 # must not raise, must not log carry
-    assert True
+    assert be.calls == []                           # the baseline buys no job at all
+    out = capsys.readouterr().out
+    assert "carry census reconciliation" not in out  # no reconcile verdict is logged
+    assert "carry census sha mismatch" not in out    # and no mismatch is logged either
 
 
-def test_t7_sha_mismatch_is_not_citable(tmp_path):
+def test_t7_sha_mismatch_is_not_citable(tmp_path, capsys):
     # the child's reference kernel differs from the census's: the carry is not
     # even confirmed — the baseline path runs, no confirmation job is bought
     ctx, be = _t7_ctx(tmp_path, None, ref_kernel="def other(x):\n    return x\n",
@@ -1613,7 +1617,10 @@ def test_t7_sha_mismatch_is_not_citable(tmp_path):
     driver._ensure_ref_pricing(ctx)
     submits = [c[1] for c in be.calls if c[0] == "gpu"]
     assert submits == []                            # no confirmation bought
-    assert any("sha mismatch" in c for c in be.prompts) or True
+    # the refusal is logged on the driver sink (never cited into an agent prompt)
+    out = capsys.readouterr().out
+    assert "carry census sha mismatch — not citable" in out
+    assert all("sha mismatch" not in p for p in be.prompts)
     assert not list(Path(ctx.evidence_dir).glob("ref_role_exposure.txt"))
 
 

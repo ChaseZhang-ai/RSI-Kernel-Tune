@@ -1189,6 +1189,21 @@ def _mad_sigma(values) -> float | None:
     return 1.4826 * statistics.median(abs(v - med) for v in vals)
 
 
+def _finite_positive(v) -> float | None:
+    """One raw per-window reading as a positive finite float, else None — the
+    same door posture the list fields apply (_float_list / readings_spread_pct),
+    at _window_pairs' door too: a bool is float(True) == 1.0 ms, a None/str is a
+    malformed row, and a NaN/inf reading is a broken measurement, not a small
+    one. The raw arrays ride the trajectory as the bench wrote them, so a junk
+    entry must be DROPPED here — a bare float() escaped as a TypeError that
+    killed the whole resolution estimate (and detect_plateau with it), and a
+    bool slipped in as a 1.0 ms reading."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    v = float(v)
+    return v if v > 0.0 and math.isfinite(v) else None
+
+
 def _window_pairs(rec, gate_window: str) -> list[float]:
     """One record's per-window paired ratios (ref_i / kernel_i, index-aligned raw
     device readings), deviated around the record's OWN robust center — what
@@ -1207,9 +1222,11 @@ def _window_pairs(rec, gate_window: str) -> list[float]:
             groups.append((w["ref_device_readings_ms"], w["device_readings_ms"]))
     out = []
     for refs, kers in groups:
-        n = min(len(refs), len(kers))
-        ratios = [float(r) / float(k) for r, k in zip(refs[:n], kers[:n])
-                  if float(k) > 0.0 and float(r) > 0.0]
+        ratios = []
+        for r, k in zip(refs, kers):
+            fr, fk = _finite_positive(r), _finite_positive(k)
+            if fr is not None and fk is not None:
+                ratios.append(fr / fk)
         if len(ratios) < 2:
             continue
         center = statistics.median(ratios)

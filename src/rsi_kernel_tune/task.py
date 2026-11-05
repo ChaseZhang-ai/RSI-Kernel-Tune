@@ -93,7 +93,7 @@ MODE_GENERATE = "generate"   # no reference: a /goal session writes one, then so
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # `rsi-kernel-tune <name> ...` dispatches these as commands, so no task (operator tree) may be one.
-RESERVED_NAMES = frozenset({"init", "new", "run", "status", "harvest", "export"})
+RESERVED_NAMES = frozenset({"init", "new", "run", "status", "harvest", "export", "config"})
 
 
 def check_new_task_name(name: str) -> None:

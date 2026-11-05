@@ -11,6 +11,13 @@
 `rsi-kernel-tune run` exits 0 when the final confirmation meets the target (and the correctness
 monitor raised no alarm on that kernel), and 2 otherwise.
 
+`rsi-kernel-tune config init` writes rsi-run.toml, the unified run configuration
+(one file: API provider/models + key-file pointer, the kernel(s) to optimize, the
+declared compute precision, the student's retrieval permission, the concurrency and
+-- for a new language -- its syntax reference and toolchain config);
+`rsi-kernel-tune run --config rsi-run.toml` runs every kernel task of that file in
+parallel (docs/run-configuration.md).
+
 `rsi-kernel-tune help internal` lists the lower-level commands the loop itself uses.
 """
 
@@ -52,6 +59,10 @@ def main(argv: list[str] | None = None) -> int:
         from rsi_kernel_tune.launch import COMMANDS
 
         return COMMANDS[argv[0]](argv[1:])
+    if argv[0] == "config":
+        from rsi_kernel_tune.runconfig import cmd_config
+
+        return cmd_config(argv[1:])
 
     if len(argv) >= 2 and argv[1] == "ncu-trace":
         from rsi_kernel_tune.inner.ncu import main as ncu_main

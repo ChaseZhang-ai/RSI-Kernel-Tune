@@ -113,6 +113,17 @@ NETWORK_BASH_PREFIXES = (
 # own accounting).
 CLUSTER_BASH_PREFIXES = ("ssh", "scp", "rsync", "python -m peregrine_kernel.submit",
                          "python3 -m peregrine_kernel.submit")
+# The same cluster commands inside a shell wrapper's payload: a prefix rule stops at
+# `bash`, so `bash -c 'ssh …'` walks past every `Bash(ssh:*)` rule (BUG-CORPS-C-08).
+# These rules peer one level into the usual spellings — `bash` / `sh` / `zsh` with
+# `-c` (and its `-lc` / `-xc` cousins, the leading `*` eats whatever flags and the
+# opening quote come between) — and require the cluster command in the payload. A
+# payload computed at runtime (`bash -c "$X"`) still walks past; that indirection is
+# the hook's message layer and the sandbox's, not a text rule's.
+CLUSTER_WRAPPER_RULES = tuple(
+    f"Bash({shell} *-c *{cmd}*)"
+    for shell in ("bash", "sh", "zsh")
+    for cmd in ("ssh", "scp", "rsync", "python* -m peregrine_kernel.submit"))
 
 
 def _abs(p: str | Path) -> Path:
@@ -250,6 +261,11 @@ class AgentPolicy:
                      if c not in NETWORK_BASH_PREFIXES]
         elif self.no_cluster(role):
             deny += [f"Bash({c}:*)" for c in CLUSTER_BASH_PREFIXES]
+        if self.no_cluster(role):
+            # the wrapper payloads: a GPU machine reached through `bash -c` is the same
+            # denial, spelled one level deeper (BUG-CORPS-C-08). An offline student gets
+            # them too — the sandbox refuses the connection anyway, these name the rule.
+            deny += list(CLUSTER_WRAPPER_RULES)
         for p in denied:
             # Both spellings: gitignore semantics make `p/**` everything UNDER p, which
             # for a file (a source run's oracle) is nothing at all. Read rules are the

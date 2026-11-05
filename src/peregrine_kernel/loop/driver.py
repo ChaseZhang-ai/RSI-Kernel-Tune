@@ -9976,9 +9976,11 @@ def _wp18_null_marker(info: dict) -> str:
 
 def _wp18_stamp_priced_null(ctx: LoopContext, table: list) -> None:
     """Stamp the milestone's decision lines for null/noop levers with their
-    measured-dead reading. Idempotent (an existing PRICED_NULL marker on the
-    citation is replaced, one standing verdict per line); best-effort — a
-    milestone write failure logs and moves on."""
+    measured-dead reading. Idempotent per lever (an existing PRICED_NULL marker
+    on that lever's own citations is replaced, one standing verdict per line)
+    and lever-isolated: stamping one lever never strips another lever's marker,
+    and a standing [RE-PRICED … SUSPENDED] verdict on a citation is preserved.
+    Best-effort — a milestone write failure logs and moves on."""
     nulls = _wp18_null_levers(table)
     if not nulls:
         return
@@ -9988,19 +9990,23 @@ def _wp18_stamp_priced_null(ctx: LoopContext, table: list) -> None:
         _log(f"meta/price-stamp: could not read the milestone ({e})")
         return
     marked = text
+    stamped: list = []
     for name, info in nulls.items():
         if not _cited_levers(marked).count(name) and not info["decision_ids"]:
             continue
-        # one standing verdict per citation: an earlier PRICED_NULL marker is
-        # replaced, not stacked (the RE-PRICED pattern the citation marker
-        # strips natively only knows its own tag)
-        clean = re.sub(r"\s*\[" + _PRICED_NULL_TAG + r"[^\]\n]*\]", "", marked)
-        marked = _mark_lever_citations(clean, name, _wp18_null_marker(info))
+        # the per-lever citation match consumes (replaces) only THIS lever's
+        # earlier PRICED_NULL markers; other levers' stamps and the RE-PRICED
+        # verdicts stay untouched
+        after = _mark_lever_citations(marked, name, _wp18_null_marker(info),
+                                      keep_reprice=True)
+        if after != marked:
+            stamped.append(name)
+        marked = after
     if marked != text:
         try:
             _write_milestone(ctx, marked)
-            _log(f"meta/price-stamp: PRICED_NULL stamped on {len(nulls)} measured-dead "
-                 f"lever citation(s): {', '.join(sorted(nulls))}")
+            _log(f"meta/price-stamp: PRICED_NULL stamped on {len(stamped)} measured-dead "
+                 f"lever citation(s): {', '.join(sorted(stamped))}")
         except (OSError, ValueError) as e:
             _log(f"meta/price-stamp: could not write the milestone ({e})")
 
@@ -10607,13 +10613,24 @@ def _reprice_marker(rv: dict) -> str:
     return tag + "]"
 
 
-def _mark_lever_citations(text: str, name: str, marker: str) -> str:
+def _mark_lever_citations(text: str, name: str, marker: str,
+                          keep_reprice: bool = False) -> str:
     """Put ``marker`` after every `lever:<name>` citation in ``text`` (after its
-    [MEASURED …] tag when one follows), replacing any earlier RE-PRICED marker
-    on that citation — one standing verdict per citation, the latest."""
+    [MEASURED …] tag when one follows), replacing any earlier PRICED_NULL marker
+    on that citation and — unless ``keep_reprice`` — any earlier RE-PRICED
+    marker: one standing verdict per citation, the latest. With
+    ``keep_reprice`` (the PRICED_NULL channel) a standing [RE-PRICED …
+    SUSPENDED] verdict is preserved: the suspension forbids landing the rung,
+    the null stamp only annotates the price, and neither may erase the other."""
+    null_tag = r"(?:\s*\[" + _PRICED_NULL_TAG + r"[^\]\n]*\])*"
+    reprice_tag = r"((?:\s*\[" + _REPRICE_TAG + r"[^\]\n]*\])*)"
     pat = re.compile(r"(\blever\s*[:：]\s*`?" + re.escape(name) + r"`?(?![A-Za-z0-9_\-]))"
-                     r"((?:\s*\[MEASURED[^\]\n]*\])?)((?:\s*\[" + _REPRICE_TAG + r"[^\]\n]*\])*)")
-    return pat.sub(lambda m: f"{m.group(1)}{m.group(2)} {marker}", text)
+                     r"((?:\s*\[MEASURED[^\]\n]*\])?)" + null_tag + reprice_tag + null_tag)
+
+    def _sub(m: "re.Match") -> str:
+        tail = m.group(3) if keep_reprice else ""
+        return f"{m.group(1)}{m.group(2)} {marker}{tail}"
+    return pat.sub(_sub, text)
 
 
 def _revision_line(rv: dict) -> str:

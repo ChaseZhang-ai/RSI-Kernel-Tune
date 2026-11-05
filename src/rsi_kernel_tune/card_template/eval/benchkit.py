@@ -1318,6 +1318,20 @@ FRESH_RECHECK_TIMEOUT_S = 1800
 _VERDICT_LINE = "FRESH-RECHECK-VERDICT "
 
 
+def _fresh_recheck_timeout_s() -> int:
+    """The recheck child's wall-clock ceiling: ``RKT_FRESH_RECHECK_TIMEOUT_S``
+    overrides; an unreadable value keeps the default. The same contract as the
+    probe's ``_replay_probe_timeout_s``: this read fires after every timing
+    window has closed, so a bare ``int()`` on a junk knob would raise out of
+    ``_fresh_child`` with no try on the path — the eval JSON is never emitted
+    and the whole GPU eval (correctness + every window) is wasted."""
+    try:
+        return int(os.environ.get("RKT_FRESH_RECHECK_TIMEOUT_S")
+                   or FRESH_RECHECK_TIMEOUT_S)
+    except ValueError:
+        return FRESH_RECHECK_TIMEOUT_S
+
+
 def _fresh_recheck_mode(problem: dict) -> str:
     """Which layers this card's recheck runs: 'regen' when the draw's CONTENT
     differs from the timed draw (the judge's make_inputs draws per group),
@@ -1344,8 +1358,7 @@ def _fresh_child(problem: dict, *, seed: int | None) -> "dict | None":
         proc = subprocess.run(
             [sys.executable, str(bench), "--mode", "correctness", "--fresh-recheck"],
             cwd=str(root), env=env, capture_output=True, text=True,
-            timeout=int(os.environ.get("RKT_FRESH_RECHECK_TIMEOUT_S",
-                                       FRESH_RECHECK_TIMEOUT_S)))
+            timeout=_fresh_recheck_timeout_s())
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"pass": None, "detail": f"recheck child did not run: {type(exc).__name__}: {exc}"}
     for line in proc.stdout.splitlines():

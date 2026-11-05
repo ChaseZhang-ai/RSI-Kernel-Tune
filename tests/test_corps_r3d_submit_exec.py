@@ -1,8 +1,12 @@
 """Regression tests for the audit-corps R3D wave on the submit exec path.
 
-BUG-CORPS-C-14: a ``[env]`` key that is not a shell identifier used to reach
-the remote command line raw (``export A;id=1=...``) -- a host-side injection
-face. Keys are now whitelisted (``[A-Za-z_][A-Za-z0-9_]*``) and quoted.
+* BUG-CORPS-C-14: a ``[env]`` key that is not a shell identifier used to reach
+  the remote command line raw (``export A;id=1=...``) -- a host-side injection
+  face. Keys are now whitelisted (``[A-Za-z_][A-Za-z0-9_]*``) and quoted.
+* BUG-CORPS-C-15: ``cmd:``/``allncu:`` arguments travel through gpu_entry.sh's
+  ``bash -c "$*"`` rejoin, where shlex-stripped quoting used to come back as
+  live shell syntax. Arguments now travel shell-quoted so the rejoin
+  reconstructs the original argv faithfully.
 
 Test style follows tests/test_direct_delivery.py (the fake ssh stand-in and the
 op-tree fixture live there; duplicated here so these tests stand alone).
@@ -10,6 +14,7 @@ op-tree fixture live there; duplicated here so these tests stand alone).
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -142,3 +147,58 @@ def test_a_valid_env_key_still_travels_quoted(tmp_path):
     assert status == ds.STATUS_SUCCEEDED
     remote = fake.execs[0][-1]
     assert "export B_COL='x y; z'" in remote
+
+
+# -- BUG-CORPS-C-15: cmd/allncu arguments survive the remote "$*" rejoin --------
+
+
+def _rejoin_entry(task: str) -> str:
+    """A gpu_entry.sh standing in for the template's cmd/allncu cases: TASK is
+    shifted off and the rest re-joined into ``bash -c "$*"``."""
+    return ('#!/bin/bash\n'
+            'TASK="${1:-help}"\n'
+            'shift\n'
+            f'case "$TASK" in\n'
+            f'  {task}) bash -c "$*" ;;\n'
+            'esac\n'
+            'echo "task=$TASK finished"\n')
+
+
+def test_cmd_arguments_survive_the_entry_rejoin(tmp_path):
+    """The template's cmd task re-joins its positional parameters (``"$*"``) and
+    hands them to ``bash -c``: an argument's own quoting must survive the join
+    instead of coming back as live shell syntax."""
+    _op(tmp_path, entry=_rejoin_entry("cmd"))
+    _, status, log = _run(load_config("op", base_dir=tmp_path),
+                          mode='cmd:printf \'<%s>\' "hello world" "x;y"')
+    assert status == ds.STATUS_SUCCEEDED
+    assert "<hello world><x;y>" in log
+
+
+def test_allncu_arguments_survive_the_entry_rejoin(tmp_path):
+    _op(tmp_path, entry=_rejoin_entry("allncu"))
+    _, status, log = _run(load_config("op", base_dir=tmp_path),
+                          mode='allncu:printf \'%s|\' "a b"')
+    assert status == ds.STATUS_SUCCEEDED
+    assert "a b|" in log
+
+
+def test_ssh_transport_keeps_the_quoted_arguments_literal(tmp_path):
+    """The remote sh parses the transport quoting off; the arguments' own
+    quoting must remain literal characters for gpu_entry.sh's ``"$*"``."""
+    cfg = _ssh_cfg(tmp_path)
+    fake = _FakeSsh([(0, True)])
+    status, log = _ssh_run(cfg, fake)
+    assert status == ds.STATUS_SUCCEEDED
+    remote = fake.execs[0][-1]
+    tail = remote.split("setsid --wait sh -c", 1)[1]
+    tokens = shlex.split(tail)[2:]       # past the session script and the lock path
+    assert tokens[:3] == ["bash", "gpu_entry.sh", "perf"]
+
+
+def test_plain_tokens_stay_unquoted():
+    """Ordinary commands are byte-for-byte what they always were."""
+    cfg = type("C", (), {"entry_script": "gpu_entry.sh"})()
+    assert direct._entry_argv(cfg, "cmd:ls -la") == \
+        ["bash", "gpu_entry.sh", "cmd", "ls", "-la"]
+    assert direct._entry_argv(cfg, "perf") == ["bash", "gpu_entry.sh", "perf"]

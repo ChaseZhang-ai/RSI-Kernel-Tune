@@ -356,14 +356,29 @@ def _checked_env_key(name: str) -> str:
 
 def _entry_argv(cfg: SubmitConfig, mode: str) -> list[str]:
     if mode.startswith(CMD_PREFIX):
-        return ["bash", cfg.entry_script, "cmd", *shlex.split(mode[len(CMD_PREFIX):])]
+        return ["bash", cfg.entry_script, "cmd",
+                *_quoted_entry_args(mode[len(CMD_PREFIX):])]
     if mode.startswith(f"{MERGED_EVAL_NCU_PREFIX}:"):
         # allncu:<ncu command> — the merged task's NCU segment is the named
         # command (e.g. the vendored orchestration census runner), passed as
         # arguments exactly like the cmd task's (WP11 task 1).
         return ["bash", cfg.entry_script, MERGED_EVAL_NCU_PREFIX,
-                *shlex.split(mode[len(MERGED_EVAL_NCU_PREFIX) + 1:])]
+                *_quoted_entry_args(mode[len(MERGED_EVAL_NCU_PREFIX) + 1:])]
     return ["bash", cfg.entry_script, mode]
+
+
+def _quoted_entry_args(spec: str) -> list[str]:
+    """The arguments of a ``cmd:``/``allncu:`` spec, each shell-quoted.
+
+    gpu_entry.sh's cmd and allncu cases re-join their positional parameters
+    (``"$*"``) and hand the string to ``bash -c`` -- so a plain token stream is
+    not enough: an argument whose own quoting shlex.split stripped would have
+    its contents revived as live shell syntax on the far side of the rejoin
+    (``"a; b"`` ran as ``a`` then ``b``, a redirect ate a word, ...). Each
+    argument therefore travels as its quoted self, and the rejoin reconstructs
+    the original argv. shlex.quote of a plain token is the token itself, so
+    ordinary commands are byte-for-byte what they always were (BUG-CORPS-C-15)."""
+    return [shlex.quote(a) for a in shlex.split(spec)]
 
 
 def _job_env(cfg: SubmitConfig, tree_sha: str | None = None) -> dict:

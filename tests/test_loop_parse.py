@@ -682,3 +682,20 @@ def test_spelled_out_verdict_words_keep_the_max_diff():
     assert parse_probe_verdict("PROBE FAIL max_diff=9.9\n").max_diff == 9.9
     v = parse_probe_verdict("PROBE PASSED\n")     # really carries no max_diff
     assert v.passed is False and "no max_diff" in v.reason
+
+
+def test_parse_eval_degrades_a_truthy_non_dict_block_like_the_rest():
+    """`"correctness": [1]` / `"performance": [1]` — a malformed bench or a
+    mangled job log — must degrade to the no-reading shape (correctness False,
+    no timings) exactly like every other malformed payload, not escape
+    parse_eval as an AttributeError out of `.get` (the only two dict-typed
+    reads that lacked the isinstance guard the sibling fields all wear)."""
+    ev = parse_eval('=== JSON ===\n{"correctness": [1], '
+                    '"performance": {"bwd_median_ms": 2.5}}')
+    assert ev.correctness is False
+    assert ev.bwd_median_ms == 2.5       # the well-formed sibling block still parses
+    ev2 = parse_eval('=== JSON ===\n{"correctness": {"pass": true}, '
+                     '"performance": [1]}')
+    assert ev2.correctness is True        # the bench's own verdict stands
+    assert ev2.bwd_median_ms is None
+    assert ev2.device_median_ms is None

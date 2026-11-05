@@ -21,7 +21,7 @@ from peregrine_kernel.loop.driver import run_inner_iteration  # noqa: E402
     ("eval/bench.py", True), ("eval/problem/problem.json", True), ("gpu_entry.sh", True),
     ("ref_bin/binref_x.so", True), (".gitattributes", True), ("./eval/timing.py", True),
     ("kernel.py", False), ("notes/probe.py", False),
-    ("evaluation.py", True),                       # a tree-root module shadows the bench
+    ("evaluation.py", False),                      # not a stdlib/judge/site name: a root sibling stays the student's
     ("sitecustomize.py", True), ("json.py", True),
     ("gpu_entry.sh.bak", False), ("window.toml", False), ("README.md", False),
 ])
@@ -302,17 +302,30 @@ def test_guard_off_does_nothing(tmp_path):
     assert not [c for c in be.calls if c[0] in ("restore", "harness-changes")]
 
 
-def test_an_overlay_that_cannot_be_built_refuses_the_job(tmp_path, monkeypatch):
-    """BUG-SEED-19: a build failure used to fall back to pushing ``ref`` itself --
-    the job silently ran the tree's own judge, exactly what the overlay exists to
-    prevent. Fail closed: the job does not start."""
+def test_an_overlay_that_cannot_be_built_degrades_loudly(tmp_path, monkeypatch, capsys):
+    """BUG-SEED-19, this tree's ruling: an overlay the backend cannot build must
+    never read as "nothing to overlay" -- the degraded job is announced twice (a
+    plain note where the fall-through used to hide, then a WARNING with a
+    structured trace), and the record of the degradation travels with the run
+    (_note_overlay_fallback), so a job that runs the tree's own copies is always
+    visible as such. (The fix-c line's fail-closed refusal is preserved on that
+    branch for adjudication.)"""
     card, ws = _card(tmp_path)
     (ws / "eval" / "bench.py").write_text("print('PASS always')\n")
     head = _commit(ws, "student")
     be = _backend(ws, card)
+    noted = []
+    monkeypatch.setattr(be, "_note_overlay_fallback",
+                        lambda ref, why: noted.append((ref, why)))
 
     def broken(ref, changes):
         raise cli.BackendError("git read-tree failed")
     monkeypatch.setattr(be, "_commit_overlay", broken)
-    with pytest.raises(cli.BackendError, match="fail-closed"):
-        be._with_job_env(head)
+    sha = be._with_job_env(head)
+    assert sha == head                      # the job still starts (degraded, not refused)
+    out = capsys.readouterr().out
+    assert "could not overlay the card's files" in out
+    assert "WARNING" in out and "run the tree's own copies" in out
+    assert noted and noted[0][0] == head and "git read-tree failed" in noted[0][1]
+
+

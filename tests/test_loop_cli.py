@@ -1406,22 +1406,27 @@ def test_retry_call_sleeps_only_between_attempts(monkeypatch):
     assert sleeps == [10.0, 20.0]          # between attempts, not after the last
 
 
-def test_retry_call_lets_unexpected_errors_propagate(monkeypatch):
-    """The capture face is the expected transport classes (OSError / subprocess);
-    anything else is a bug in the caller, not a hiccup to paper over."""
+def test_retry_call_retries_any_failure_then_wraps_it(monkeypatch, capsys):
+    """Adapted at the merge to this tree's capture face (BUG-SEED-48): every
+    failure is a retryable hiccup -- each attempt is announced so a log reader can
+    tell a retrying call from a stalled one -- and a call that exhausts its budget
+    raises BackendError carrying the last error. (The fix-c line's narrower
+    transport-only capture lives on that branch for adjudication.)"""
     from peregrine_kernel.loop import cli
     b = _backend(monkeypatch, git_retries=3)
 
     def fn():
         raise TypeError("load_config changed shape")
-    with pytest.raises(TypeError):
+    with pytest.raises(BackendError, match="load_config changed shape"):
         b._retry_call(fn, what="git push")
+    out = capsys.readouterr().out
+    assert out.count("retrying") == b.git_retries - 1
 
 
 def test_a_hung_submit_retries_within_minutes_not_half_an_hour(monkeypatch, tmp_path):
-    """A submit whose subprocess hangs costs timeout x attempts; 3 x 600s plus a
-    tail sleep used to hold the loop hostage for about half an hour before the
-    error surfaced."""
+    """A submit whose subprocess hangs surfaces its error after ONE timeout: a
+    hung call is not retried (it would multiply the wait), so the loop is held
+    for the single window, never for 3 x 600s plus a tail sleep."""
     import subprocess
 
     from peregrine_kernel.loop import cli
@@ -1436,5 +1441,7 @@ def test_a_hung_submit_retries_within_minutes_not_half_an_hour(monkeypatch, tmp_
     monkeypatch.setattr(cli.RealBackend, "_branch_sha", lambda self, b: "abc")
     with pytest.raises(BackendError):
         be.submit_gpu_start("br", "all")
-    assert timeouts == [cli._SUBMIT_TIMEOUT_S] * be.git_retries
-    assert cli._SUBMIT_TIMEOUT_S * be.git_retries <= 400   # minutes, not half an hour
+    # a hung call is HUNG, not transient: one timeout, then the error -- it is
+    # never retried into 3 x 600s (minutes, never half an hour)
+    assert timeouts == [cli._SUBMIT_TIMEOUT_S]
+    assert cli._SUBMIT_TIMEOUT_S <= 400

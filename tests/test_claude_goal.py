@@ -435,4 +435,4 @@ def test_a_hung_deliverable_check_still_saves_a_resumable_session(tmp_path, monk
     rc = leg.run()
     assert rc == 124 and cleaned == [1]
     sess = json.loads((tmp_path / "session.json").read_text())
-    assert sess["resumable"] is True and sess["why"] == "check-hung"
+    assert sess["resumable"] is True and sess["why"] == "check_timeout"

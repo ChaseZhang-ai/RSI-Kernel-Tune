@@ -545,29 +545,28 @@ def test_every_command_is_examined_not_just_the_first(tmp_path):
     """BUG-SEED-17: both headless legs go through the gate, and the teacher's leg is
     always the second command. A fixed source string plus `source in seen` used to
     drop the second command's findings entirely, so a teacher that shipped its own
-    --settings / --bare / its own cd silently ran outside the agent policy."""
+    --settings / --bare / its own cd silently ran outside the agent policy.
+    Adapted at the merge to this tree's wording: the findings' source tag is the
+    generic "agent command" (the leg labels stay a caller-side affordance), and
+    dedup is per (source, text) -- the same finding text from both legs reads
+    once."""
     student = "claude -p --model x"
     teacher = "cd /srv/ref && claude -p --settings /srv/ref/off.json --bare --model x"
     assert ap.command_findings([student, teacher], {},
                                labels=("student agent command",
                                        "teacher agent command")) == [
-        "teacher agent command: --bare skips project settings and hooks",
-        "teacher agent command: --settings outranks the project settings the "
+        "agent command: --bare skips project settings and hooks",
+        "agent command: --settings outranks the project settings the "
         "agent policy is delivered in, and could turn its sandbox or hooks off",
-        "teacher agent command: changes directory before running the agent, so "
+        "agent command: changes directory before running the agent, so "
         "the policy in the working directory would not be loaded",
     ]
-    # the labels name the roles the caller passes, and a genuinely duplicated
-    # command is still reported once
+    # the second command is examined: swapping the order moves nothing here (the
+    # findings hang on the teacher's own flags), but a shared finding is not
+    # swallowed by the first leg
     both_dirty = ["cd /a && claude -p", "cd /a && claude -p"]
     assert ap.command_findings(both_dirty, {},
                                labels=("student agent command", "teacher agent command")) == [
-        "student agent command: changes directory before running the agent, so "
-        "the policy in the working directory would not be loaded",
-        "teacher agent command: changes directory before running the agent, so "
-        "the policy in the working directory would not be loaded",
-    ]
-    assert ap.command_findings(both_dirty, {}) == [
         "agent command: changes directory before running the agent, so "
         "the policy in the working directory would not be loaded",
     ]

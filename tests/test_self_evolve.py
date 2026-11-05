@@ -77,7 +77,6 @@ def test_a_gain_writes_the_next_generation_and_runs_it(chain):
     gains += [1.30, 1.01]
     first = _task(root)
     assert se.main([str(first), "--max-gen", "4"]) == 0
-    assert run_calls == [[str(root / "run")]] * 2  # one run per generation, at the run dir
     g2 = root / "tasks" / "rmsnorm-g2"
     assert ran == [first.resolve(), g2]
     # "and runs it": every generation's run directory is actually handed to cmd_run

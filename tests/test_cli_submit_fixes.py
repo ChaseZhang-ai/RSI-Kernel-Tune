@@ -139,19 +139,23 @@ def test_the_remote_begin_marker_is_printed_by_the_lock_holder(tmp_path):
     assert remote.count(ds.BEGIN_MARKER) == 1        # the old bare pre-session echo is gone
 
 
-def test_a_dropped_ssh_connection_is_lost_whatever_the_log_shows(tmp_path):
-    """ssh exits 255 when the connection dies (a ~3 min network blip kills the client
-    long before the remote session): the outcome is unknowable, so Lost -- the kernel
-    is not charged for a job that may well have succeeded. The orphaned remote
-    session is still cleaned up best-effort (reachable: its sid file lives outside
-    the synced tree)."""
+def test_a_dropped_ssh_connection_is_lost_when_the_job_was_in_flight(tmp_path):
+    """Adapted at the merge to this tree's verdict split (BUG-SEED-12): ssh rc 255
+    with the begin marker on the log means the job RAN and its outcome is now
+    unknowable -- Lost, the orphaned session ended best-effort. A rc 255 with NO
+    marker never began: it is a transport failure that retries into
+    TRANSPORT_ERROR, not a Lost."""
     cfg = _ssh_op(tmp_path)
-    for began in (True, False):
-        fake = _SshFake([(255, began)])
-        status, log = _ssh_run(cfg, fake)
-        assert status == ds.STATUS_LOST, f"began={began}"
-        assert "outcome on the host is unknown" in log
-        assert fake.stops
+    fake = _SshFake([(255, True)])
+    status, log = _ssh_run(cfg, fake)
+    assert status == ds.STATUS_LOST
+    assert "outcome on the host is unknown" in log
+    assert fake.stops
+
+    fake = _SshFake([(255, False)] * direct.TRANSPORT_ATTEMPTS)
+    status, log = _ssh_run(cfg, fake)
+    assert status == ds.STATUS_FAILED and ds.TRANSPORT_ERROR_MARKER in log
+    assert not fake.stops
 
 
 def test_a_relayed_remote_exit_code_is_still_a_charged_failure(tmp_path):
@@ -204,5 +208,5 @@ def test_clock_lock_retry_counts_total_submits_and_says_so(monkeypatch, capsys):
         be.submit_gpu("b", "all")
     assert len(seen) == be.clock_lock_retries == 3
     out = capsys.readouterr().out
-    assert "resubmitting (1/3)" in out and "resubmitting (2/3)" in out
+    assert "resubmitting (attempt 2 of 3)" in out and "resubmitting (attempt 3 of 3)" in out
     assert "3 refusal(s) in a row" in str(why.value)

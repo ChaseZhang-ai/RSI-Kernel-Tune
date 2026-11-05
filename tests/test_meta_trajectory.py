@@ -209,7 +209,7 @@ def test_an_illegal_outcome_is_refused_not_written(tmp_path):
     try:
         update_last_outcome(p, outcome="BANANA")
     except ValueError as e:
-        assert "BANANA" in str(e) and "PENDING" in str(e), e
+        assert "BANANA" in str(e), e                # this tree names the bad value only
     else:
         raise AssertionError("the illegal outcome was written")
     recs = load_meta_records(p)

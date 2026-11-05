@@ -223,11 +223,14 @@ def test_the_host_path_note_records_the_deployment_cost_without_touching_the_gat
 
 
 def test_the_host_path_note_names_both_directions():
-    # a thin wrapper reads as thinner than the reference's, a thick one as thicker
+    # Adapted at the merge to this tree's wording (BUG-SEED-23): the note's
+    # subject is the in-job reference, so the direction word follows the
+    # reference against the student -- a faster reference is thinner, a slower
+    # one is thicker.
     thin = host_path_note(0.02, 0.01522, basis=BASIS_CUPTI, ref_host_enqueue_ms=0.06463)
     thick = host_path_note(0.08, 0.01522, basis=BASIS_CUPTI, ref_host_enqueue_ms=0.02)
-    assert "0.3x thinner" in thin and "thicker" not in thin
-    assert "4.0x thicker" in thick and "thinner" not in thick
+    assert "3.2x thicker" in thin and "thinner" not in thin
+    assert "4.0x thinner" in thick and "thicker" not in thick
 
 
 def test_the_host_path_note_is_silent_on_a_plain_basis_and_under_the_threshold():

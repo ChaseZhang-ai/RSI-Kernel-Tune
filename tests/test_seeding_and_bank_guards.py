@@ -144,16 +144,21 @@ def test_quarantine_keeps_each_archs_path_and_never_renames_over(tmp_path):
     _quarantine_leaky_kb(ctx, ["sm90/overview.md:1: banned narrative",
                                "sm100/overview.md:2: banned narrative"])
     qdir = tmp_path / "kb_quarantine"
-    assert (qdir / "sm90" / "overview.md").read_text(encoding="utf-8") == "leak narrative sm90\n"
-    assert (qdir / "sm100" / "overview.md").read_text(encoding="utf-8") == "leak narrative sm100\n"
+    # Adapted at the merge to this tree's quarantine naming (BUG-SEED-49): the
+    # destination flattens the entry's relative path (``sm90/overview.md`` ->
+    # ``sm90__overview.md``), so two archs' same-named entries never rename onto
+    # one file; a residual collision (a root-level lookalike) breaks the tie by
+    # number.
+    assert (qdir / "sm90__overview.md").read_text(encoding="utf-8") == "leak narrative sm90\n"
+    assert (qdir / "sm100__overview.md").read_text(encoding="utf-8") == "leak narrative sm100\n"
     assert not (kb / "sm90" / "overview.md").exists()
     assert not (kb / "sm100" / "overview.md").exists()
 
     # a re-quarantine of the same relative path lands beside the first one
     (kb / "sm100" / "overview.md").write_text("leak again\n", encoding="utf-8")
     _quarantine_leaky_kb(ctx, ["sm100/overview.md:1: banned narrative"])
-    assert (qdir / "sm100" / "overview.md").read_text(encoding="utf-8") == "leak narrative sm100\n"
-    assert (qdir / "sm100" / "overview.q1.md").read_text(encoding="utf-8") == "leak again\n"
+    assert (qdir / "sm100__overview.md").read_text(encoding="utf-8") == "leak narrative sm100\n"
+    assert (qdir / "sm100__overview__1.md").read_text(encoding="utf-8") == "leak again\n"
 
 
 # --- BUG-SEED-35: a flaked verdict probe degrades, the run continues -----------
@@ -188,9 +193,10 @@ def test_a_flaked_verdict_probe_degrades_instead_of_ending_the_run(tmp_path, cap
     pv, log, readings = _run_meta_verdict_probe(ctx, be, "fs-demo-metaprobe",
                                                 "notes/p.py", 1)
     assert pv.passed is False and pv.found is False
-    assert pv.reason == "job failed (git push failed after retries)"
+    assert pv.reason.startswith("job failed (git push failed after retries)")
     assert log == "" and readings == []
-    assert "meta: verdict probe notes/p.py job failed" in capsys.readouterr().out
+    # this tree announces the degrade through the verdict reason (the teacher
+    # prompt), not a stdout log line
 
     # the WP19 batch path degrades the same way: None is its "never really ran"
     # answer, which the caller reads as "fall back to the per-script path"
@@ -244,7 +250,7 @@ def test_a_smaller_full_role_table_does_not_replace_the_banked_one(tmp_path, cap
     banked = (tmp_path / "evidence" / "ref_role_exposure.txt").read_text(encoding="utf-8")
     assert "mma-consumer" in banked and "20000" in banked
     assert "copy-producer" not in banked
-    assert "kept banked samples=20000 over the smaller samples=800" \
+    assert "kept the banked account (20000 stall samples) over this log's smaller one (800)" \
         in capsys.readouterr().out
 
     # a larger full table supersedes, as before
@@ -283,10 +289,13 @@ def test_head_and_best_role_tables_bank_under_their_own_names(tmp_path):
 
     priced = _price_student_trees(ctx, load_records(ctx.status_path))
     ev = tmp_path / "evidence"
+    # Adapted at the merge to this tree's banking contract: the best tree's
+    # account rides student_role_exposure_best.txt; the HEAD-tree pricing pass
+    # reads roles only to discard them (persist_roles=False) -- the banked
+    # evidence must not describe a different tree than the verdicts beside it.
     best_banked = (ev / "student_role_exposure_best.txt").read_text(encoding="utf-8")
-    head_banked = (ev / "student_role_exposure.txt").read_text(encoding="utf-8")
     assert "mma-consumer" in best_banked and "83.0" in best_banked
-    assert "copy-producer" in head_banked and "61.0" in head_banked
+    assert not (ev / "student_role_exposure.txt").exists()
     # the diagnose view's ledger and the banked best file are the same reading
     assert priced.roles == best_banked
 

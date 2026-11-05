@@ -39,7 +39,7 @@ def test_verdict_probe_backend_error_degrades_to_no_verdict(tmp_path):
     ctx = _ctx(tmp_path, be)
     res = run_meta_step(ctx)
     assert res.patch_class == "structural"
-    assert "the probe job never ran: GPU flake: queue 503" in be.prompts[1]
+    assert "job failed (GPU flake: queue 503)" in be.prompts[1]
     assert "PROBE PASS/FAIL" in be.prompts[1]          # the standing protocol note
     recs = load_meta_records(ctx.meta_status_path)
     assert recs[0].probe_rounds == 1
@@ -52,7 +52,10 @@ def test_run_meta_verdict_probe_returns_a_no_verdict_reading(tmp_path):
     pv, log, readings = _run_meta_verdict_probe(
         _ctx(tmp_path, be), be, "fs-demo-metaprobe", "notes/p.py", 1)
     assert pv.found is False and readings == []
-    assert "the probe job never ran: GPU flake: queue 503" in log
+    # this tree's degrade: a no-verdict ProbeVerdict whose reason names the job
+    # failure; the log stays empty (nothing ran)
+    assert log == ""
+    assert "job failed" in pv.reason and "GPU flake: queue 503" in pv.reason
 
 
 def test_probe_manifest_backend_error_falls_back_and_degrades(tmp_path):
@@ -75,6 +78,6 @@ def test_probe_manifest_backend_error_falls_back_and_degrades(tmp_path):
     assert res.patch_class == "structural"
     recs = load_meta_records(ctx.meta_status_path)
     assert recs[0].probe_rounds == 1 and recs[0].probe_readings == []
-    # both scripts' degrade reasons ride the one re-prompt
-    assert "the probe job never ran: GPU flake: queue 503" in be.prompts[1]
-    assert be.prompts[1].count("the probe job never ran") == 2
+    # the batch job's degrade reason rides the one re-prompt (this tree banks
+    # the manifest degrade as one message, not one per script)
+    assert "job failed (GPU flake: queue 503)" in be.prompts[1]

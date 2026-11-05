@@ -90,11 +90,16 @@ def test_cited_markers_are_prose_not_requests():
 
 
 def test_markers_on_their_own_line_are_still_requests():
-    # the wrapped spellings agents copy from the prompts verbatim, and a list
-    # item, all still parse: only word characters ahead of the marker on its
-    # line turn it into prose.
-    assert parse_student_turn("`PROBE_REQUEST: notes/x.py`").path == "notes/x.py"
-    turn = parse_student_turn("prose first\n- PROBE_REQUEST: notes/y.py")
+    # Adapted at the merge to this tree's marker contract: the markers are LINES
+    # anchored at line start (WP19) -- only whitespace may precede them. A
+    # backtick-quoted or list-dash spelling a student cites from the prompts is
+    # PROSE (a citation must not burn a GPU job or end a phase); a real
+    # line-start marker still parses wherever it stands in the text.
+    with pytest.raises(ValueError):
+        parse_student_turn("`PROBE_REQUEST: notes/x.py`")
+    with pytest.raises(ValueError):
+        parse_student_turn("prose first\n- PROBE_REQUEST: notes/y.py")
+    turn = parse_student_turn("prose first\nPROBE_REQUEST: notes/y.py")
     assert isinstance(turn, ProbeRequest) and turn.path == "notes/y.py"
     turn = parse_student_turn("prose first\nEXHAUSTED: reached M5, no further decision")
     assert isinstance(turn, Exhausted) and "M5" in turn.reason
@@ -646,12 +651,14 @@ def test_a_record_citing_a_marker_is_not_routed_by_the_marker():
 
 
 def test_a_stray_probe_manifest_echo_parses_as_a_manifest_request():
-    """WP19: PROBE-MANIFEST is meta-side vocabulary. A student turn that echoes
-    it does not fall through to the ordinary shapes — it parses as
-    ProbeRequest(manifest=True), which the student-facing driver answers with a
-    not-available feedback round (the round is spent, but no job runs and no
-    phase ends). (The old comment claimed a fall-through the code never had.)"""
-    turn = parse_student_turn("the manifest I saw earlier was PROBE-MANIFEST: notes/batch.txt")
+    """WP19: PROBE-MANIFEST is meta-side vocabulary, matched at line start like
+    every marker. A student turn that ECHOES it mid-prose is prose (a citation
+    must not spend a round); a turn that ends with the marker on its own line
+    parses as ProbeRequest(manifest=True), which the student-facing driver
+    answers with a not-available feedback round (no job runs, no phase ends)."""
+    with pytest.raises(ValueError):
+        parse_student_turn("the manifest I saw earlier was PROBE-MANIFEST: notes/batch.txt")
+    turn = parse_student_turn("PROBE-MANIFEST: notes/batch.txt")
     assert isinstance(turn, ProbeRequest) and turn.manifest
     assert turn.path == "notes/batch.txt"
 

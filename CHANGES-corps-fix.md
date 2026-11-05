@@ -591,7 +591,7 @@ ledger. Worktrees clean; nothing pushed.
 # CHANGES-corps-fix — the audit-corps fix-d batch (monitor / resume / trajectory)
 
 Branch `feat/corps-fix-d`, cut from origin/main `8977b63`. Nine B-class bugs
-from the R2 audit (handoff/修复bug.md, triage T2/T3/T4), fixed one per commit,
+from the R2 audit (the shared handoff ledger, triage T2/T3/T4), fixed one per commit,
 each reproduced first via the ported regression pins (red on this base), then
 turned green.
 
@@ -638,13 +638,14 @@ One commit carries the digest telemetry half of the ported pins:
 
 ## 2. Deliberate decisions
 
-- **SEED-43 middle-line semantics**: the corps fix-d brief's prose ("中间行失败
-  仍告警丢弃该行不炸全程") and the archived pin
+- **SEED-43 middle-line semantics**: the corps fix-d brief's prose (a failing
+  middle line is dropped with an alarm, without blowing up the whole run) and
+  the archived pin
   (`test_load_records_still_raises_on_a_broken_middle_line`, endorsed by
-  triage-t5: "顺带钉住不因上条修复放开中段") disagree. The pin wins: a middle
-  line failing to parse still raises. A silently skipped middle row would make
-  resume decisions on a trajectory with a hole; tolerance is exactly the torn
-  tail.
+  triage-t5: pin that the previous fix did not loosen the middle segment)
+  disagree. The pin wins: a middle line failing to parse still raises. A
+  silently skipped middle row would make resume decisions on a trajectory with
+  a hole; tolerance is exactly the torn tail.
 - **test_dependency_warnings_flag_one_sided_downstream_claims extended**: the
   existing test asserted the exact warning list, and the `_ARROW_MS` fixture
   genuinely carries a one-sided ⊗ D0.3 — which is now (correctly) warned. The

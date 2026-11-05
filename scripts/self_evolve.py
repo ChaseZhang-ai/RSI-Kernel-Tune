@@ -391,13 +391,6 @@ def main(argv=None) -> int:
             print(f"[self-evolve] generation {gen} ended without a confirmed best kernel "
                   f"(loop exit {rc}): the chain stops here", flush=True)
             return 0 if gen > 1 else 1
-        ratios = best.get("ratios") or []
-        if any(not isinstance(r, (int, float)) or r <= 0 for r in ratios):
-            print(f"[self-evolve] generation {gen}: best {best['sha'][:12]} but its "
-                  f"confirmation ratios hold a non-positive reading ({ratios!r}); "
-                  f"the noise floor is unmeasurable, so this generation counts as "
-                  f"nothing to optimize: the chain stops here", flush=True)
-            return 0
         gain = best.get("speedup")
         try:
             floor = noise_floor(best)

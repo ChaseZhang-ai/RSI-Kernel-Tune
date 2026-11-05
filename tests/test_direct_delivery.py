@@ -253,9 +253,9 @@ def test_two_clones_of_one_op_never_share_a_remote_tree(tmp_path):
     tree_a, tree_b = direct.remote_tree(cfg_a), direct.remote_tree(cfg_b)
     assert tree_a != tree_b
     # the configured workdir and the run/op layout are kept, the op name now
-    # carrying the clone key
-    assert re.search(r"^/data/fk/wk6/op-[0-9a-f]{12}$", tree_a), tree_a
-    assert re.search(r"^/data/fk/wk6/op-[0-9a-f]{12}$", tree_b), tree_b
+    # carrying the clone key (this tree pins an 8-hex digest of the clone path)
+    assert re.search(r"^/data/fk/wk6/op-[0-9a-f]{8}$", tree_a), tree_a
+    assert re.search(r"^/data/fk/wk6/op-[0-9a-f]{8}$", tree_b), tree_b
     # one clone derives one tree: the extract, exec and stop commands of its
     # jobs must agree on it
     assert direct.remote_tree(cfg_a) == tree_a

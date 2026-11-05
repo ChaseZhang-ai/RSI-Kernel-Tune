@@ -57,6 +57,10 @@ CMD_PREFIX = "cmd:"
 # (in the job's tree): stopping the job ends its whole session. A process group is not
 # enough -- gpu_entry's `timeout` moves itself and the task into a group of their own.
 SESSION_FILE = ".pk_job.sid"
+# The .pk_jobs directory (a-line union): the host-side session-id files live in
+# <workdir>/<run>/.pk_jobs/ -- outside the job tree the next sync wipes, so an
+# orphaned session stays stoppable (see _session_file).
+SESSION_DIR = ".pk_jobs"
 # Written in the session the job runs in (before it waits on the lock, so a merely
 # queued session is still stoppable). _session_script builds it: the session id,
 # then gpu_entry under the GPU lock ("$0" is the lock file, "$@" the entry command).

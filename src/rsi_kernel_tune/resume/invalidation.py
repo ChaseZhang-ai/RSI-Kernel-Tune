@@ -117,7 +117,6 @@ def compute_reopen(
     # point at decisions later in the list (companions especially), so one
     # ordered pass is not enough.
     while True:
-        hot = changed | reopen
         grew = False
         # ⊗ is a pair obligation, not a directed edge: a decision named by a
         # reopened declaration joins even when it declares nothing itself, so a

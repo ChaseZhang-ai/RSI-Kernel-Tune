@@ -35,7 +35,7 @@ import time
 import traceback
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from collections import Counter, deque
+from collections import deque
 from typing import Callable, Protocol
 
 from rsi_kernel_tune.inner.ncu import (kernels_from_ncu, match_resusage, parse_resusage_lines,
@@ -5570,7 +5570,6 @@ def _quarantine_leaky_kb(ctx: LoopContext, findings: list[str]) -> None:
     lookalike name) breaks the tie by number."""
     qdir = lang_mode.kb_repo_root(ctx.kb_dir) / "kb_quarantine"
     rels = sorted({f.split(":", 1)[0] for f in findings})
-    batch_names = Counter(Path(rel).name for rel in rels)
     for rel in rels:
         src = kb_read_dir(ctx).parent / rel
         if src.is_file():
@@ -6052,10 +6051,9 @@ def run_kb_harvest(ctx: LoopContext) -> list[str]:
     # survey's CANDIDATE-DRAFT lines as deduped queue rows, and aggregate the
     # run's KB-MENU hit telemetry (both best-effort, never the harvest's fate).
     try:
-        drafts = _wp18_land_candidate_drafts(ctx)
+        _wp18_land_candidate_drafts(ctx)
     except Exception as e:  # noqa: BLE001 — a draft is not worth a harvest
         _log(f"meta/kb-harvest: candidate drafts unavailable ({e.__class__.__name__}: {e})")
-        drafts = []
     try:
         hits = _wp18_kbmenu_hits_summary(ctx)
         if hits:
@@ -7088,7 +7086,7 @@ def _run_lever_pricing(ctx: LoopContext, priced: "PricedTrees", bindings: dict,
                 pass
             # WP19 (task 8, B-B9): the lever-design turn's wall clock lands in
             # its run-end bucket (stdout only — no record field)
-            out = _wp11_teacher_timed(
+            _wp11_teacher_timed(
                 ctx, _agent_turn,
                 be, render_prompt(_meta_prompt(ctx, prompt_file), bindings,
                                   extra=design_extra),
@@ -8473,8 +8471,6 @@ def _run_pattern_search(ctx: LoopContext, be, trigger: str) -> "dict | None":
             jobs += 1
             stages_run = stage
             srows, _swinner, sfail = parse_sweep_results(log)
-            floor_pct = next((r.get("floor_pct") for r in srows
-                              if r.get("floor_pct") is not None), None)
             for r in srows:
                 rows.append(r)
                 loc = vmap.get(r["name"])
@@ -13064,7 +13060,7 @@ def _floor_teacher_line(ctx: LoopContext) -> str:
     """The NCU ground-truth tail line (TEACHER side, never the student digest):
     ``floor=<x.xx ms> (bytes=<n> flops=<n|n/a>)`` beside the SOL header — the
     problem floor the measured SOL% reads against."""
-    if (floor := _analytic_floor_ms(ctx)) is None:
+    if (_floor := _analytic_floor_ms(ctx)) is None:
         return ""
     from rsi_kernel_tune.loop.analytic_floor import floor_line
     return floor_line(ctx.floor_info)

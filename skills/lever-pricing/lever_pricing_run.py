@@ -919,7 +919,7 @@ def _run_bench_inproc(variant, timeout):
             err_lines.append(ln)
         else:
             out_lines.append(ln)
-    out, err = "\n".join(out_lines), "\n".join(err_lines)
+    out, _err = "\n".join(out_lines), "\n".join(err_lines)
     m = re.search(r"=== JSON ===\s*(\{.*)", out, re.S)
     if not m:
         # a COMPLETED call without JSON reads as incompatibility, not as the

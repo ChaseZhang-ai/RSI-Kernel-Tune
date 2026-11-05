@@ -711,7 +711,6 @@ class DirectRunner:
                     # The marker prints only once the host lock is held: a whole
                     # deadline without it is a job that queued past its window and
                     # NEVER ran -- the machine was busy, not the kernel wrong.
-                    ran = _began(log_file, start, BEGIN_MARKER)
                     self._stop_remote(log_file)
                     _kill_group(proc, child_start)
                     if _began(log_file, start, BEGIN_MARKER):

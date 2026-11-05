@@ -358,7 +358,7 @@ def test_ncu_window_refuses_a_workload_with_no_input_groups(tmp_path, monkeypatc
     assert "INPUT_ERROR" in capsys.readouterr().out
 
 
-# --- ported from the R2 archive (audit-r2-2026-11-05/forgekernel-untracked-tests) -----
+# --- ported from the R2 fix-wave archive (2026-11-05) -------------------------------
 #
 # Ported and holding in the latest tree: the two import-scan tests above are the
 # archive's verbatim (BUG-SEED-08), the load_entry test above merges the archive's
@@ -371,7 +371,7 @@ def test_ncu_window_refuses_a_workload_with_no_input_groups(tmp_path, monkeypatc
 #
 # Dropped from the archive, with reasons:
 # * fib_judge / SUITE_TASK / FIB_DEFAULTS (non-finite reference, task stress rows):
-#   the leaderboard engine they tested is gone from the latest tree; the benchkit
+#   the task-bench engine they tested is gone from the latest tree; the benchkit
 #   successor documents gen_inputs' custom_inputs_fn as "accepted and ignored", i.e.
 #   the stress-rows-draw-make_inputs fix is not part of this tree and outside this
 #   cluster's fix list.

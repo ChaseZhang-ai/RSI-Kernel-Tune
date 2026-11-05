@@ -87,9 +87,9 @@ def _git(d: Path, *args: str) -> None:
 
 def _ssh_op(tmp_path: Path, clone: str = "clone") -> SubmitConfig:
     """An op delivered over ssh, under a clone directory named ``clone``: the op
-    tree sits at ``<tmp>/<clone>/ForgeKernel/operators/op`` (same-named clones
+    tree sits at ``<tmp>/<clone>/checkout/operators/op`` (same-named clones
     must not collide on the host — BUG-SEED-20)."""
-    d = tmp_path / clone / "ForgeKernel" / "operators" / "op"
+    d = tmp_path / clone / "checkout" / "operators" / "op"
     d.mkdir(parents=True)
     (d / "gpu_entry.sh").write_text("#!/bin/bash\n")
     (d / "submit.toml").write_text(
@@ -210,7 +210,7 @@ def test_the_runner_records_a_lost_verdict_that_nothing_charges(tmp_path, monkey
 # -- BUG-SEED-20: two same-named clones on one host get different remote trees --
 
 def test_two_same_named_clones_get_different_remote_trees(tmp_path):
-    """Two clones both called ForgeKernel on one host must not resolve to one
+    """Two clones (same middle segment) on one host must not resolve to one
     remote directory (the old basename-only run id made one run's rm -rf reach
     the other's tree). The clone's absolute path is hashed into the tree's
     name; it stays stable for the same clone.
@@ -224,6 +224,6 @@ def test_two_same_named_clones_get_different_remote_trees(tmp_path):
     assert Path(cfg_a.op_dir).parents[1].name == Path(cfg_b.op_dir).parents[1].name
     tree_a, tree_b = direct.remote_tree(cfg_a), direct.remote_tree(cfg_b)
     assert tree_a != tree_b
-    assert tree_a.startswith("/data/fk/ForgeKernel/")     # readable prefix kept
+    assert tree_a.startswith("/data/fk/checkout/")        # readable prefix kept
     assert re.search(r"/op-[0-9a-f]{8}$", tree_a)        # the clone-path hash
     assert direct.remote_tree(cfg_a) == tree_a            # stable across calls

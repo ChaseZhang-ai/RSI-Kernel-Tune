@@ -1310,8 +1310,14 @@ def resolvable_diff(records, gate_window: str = GATE_WINDOW_DEFAULT, *,
                  and getattr(r, "reading_of", None) is None]
     recent = _drift_clean(evaluated[-RESOLVABLE_SAMPLES:], RESOLVABLE_MIN_SAMPLES)
     ratios = [v for r in recent if (v := _gate_ratio(r, gate_window)) is not None]
+    # the injection seam reads the samples at the estimator's door too: a
+    # non-finite ratio (the JSON dialect can carry a NaN/Infinity literal) is a
+    # missing reading, never a sample — the records path applies SEED-22's rule
+    # in _gate_ratio, and an admitted +inf here silently grew the sample COUNT,
+    # flipping a data-poor run (the cap fallback) into a spurious estimate.
     extra = [float(v) for v in ((raw or {}).get("ratios") or ())
-             if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0.0]
+             if isinstance(v, (int, float)) and not isinstance(v, bool)
+             and math.isfinite(v) and v > 0.0]
     if len(ratios) + len(extra) < RESOLVABLE_MIN_SAMPLES:
         return cap
     # within-job: window deviations off the records' raw readings (+ injected pairs)

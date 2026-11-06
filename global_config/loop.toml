@@ -152,3 +152,28 @@ reference_hours = 8         # writing a reference when the task has none
 # eval/benchkit.py; attack fixtures under tests/redteam/ only — contract C16) need
 # no configuration: they are always on, and any env failure degrades to `unknown`
 # without convicting.
+# --- The baseline profile (the audit paper's spine arm) -----------------------
+# RKT_PROFILE=baseline (or the CARD layer's [profile.baseline] on = true — this
+# global file's table vocabulary is closed and cannot carry it) turns every
+# fork-added mechanism that can change a measurement verdict OFF through one
+# switch, so a run under the profile emulates upstream-era measurement behavior
+# (merge-base 5030503). The expansion is the driver's job
+# (loop/driver.py _apply_baseline_profile, run LAST in run_two_layer's resolver
+# chain so the pins stand over the card layer): driver-side it pins
+# merge_eval_ncu / sprt_early_stop / sprt_win_stop / judge_edge_recheck off,
+# resolvable_floor = resolvable_cap = 0.015 (the WP1 estimator degenerates to
+# the historical 1.5% constant), confirm_budget_per_iter = 0 (the suspicious-
+# winner band buys nothing), precision_contract = "off", probe_manifest and
+# background_lane off; job-side it pins RKT_FRESH_RECHECK=1 (+RKT_FRESH_SEED=0,
+# the recheck child marker without its draw-seed shift), RKT_REPLAY_PROBE=0,
+# RKT_SCREENING_INPROC=0, and strips the opt-in fork flags (RKT_SPRT_*,
+# RKT_BUILD_CACHE*, RKT_MEMO_LANE, RKT_CUDA_PRECHECK, RKT_SCREENING_CLOCK_GUARD)
+# from the environment local jobs inherit. Passive telemetry that never changes
+# a verdict stays ON (gpu_state sampling, the WP11 wall-clock buckets, WP20's
+# gate_degraded accounting and the report-only board-span rows): the profile
+# removes verdict power, not instrumentation. Unset, the profile is a no-op —
+# byte-identical to the defaults above. Known gap (no switch exists): the WP20
+# bench-side sentinels, always installed in eval/benchkit.py, still convict
+# through the fresh_recheck fail path. An ssh delivery must not declare the
+# pinned variables in submit.toml [env] — the env does not cross the wire, and
+# the profile cannot reach past cfg.env (the _wp15 WARN precedent).

@@ -1,0 +1,5 @@
+[
+  {"name": "small", "axes": {"n": 1048576}},
+  {"name": "medium", "axes": {"n": 16777216}},
+  {"name": "large", "axes": {"n": 67108864}}
+]

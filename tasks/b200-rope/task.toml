@@ -1,0 +1,20 @@
+# b200-rope -- audit set: rotary position embedding (RoPE) applied to the attention q and k
+# tensors as one CuTe DSL kernel on the B200 (sm100). The set's positional-encoding probe:
+# a transcendental (cos/sin) computed per position in fp32 by contract, applied to two
+# tensors at once -- one op, two outputs, bandwidth-bound with real numerics. Everything not
+# written here comes from global_config/.
+
+[task]
+language = "cutedsl"
+arch     = "sm100"                   # NVIDIA B200
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[precision]
+compute_dtype = "fp32"               # declared: the cos/sin evaluation in fp32 (docs/compute-dtype.md)
+
+[budget]
+hours    = 2
+max_meta = 1

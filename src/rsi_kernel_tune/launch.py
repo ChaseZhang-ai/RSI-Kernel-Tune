@@ -5,6 +5,7 @@
     rsi-kernel-tune run .artifacts/<op>_<id>     run it; on a run that has started, continue it
     rsi-kernel-tune status [.artifacts/<op>_<id>] where a run is (every run when omitted)
     rsi-kernel-tune harvest .artifacts/<op>_<id> the end-of-run knowledge-base write-up of a stopped run
+    rsi-kernel-tune audit .artifacts/<op>_<id>   the read-only per-verdict provenance report of a finished run
 
 `rsi-kernel-tune run` exits 0 when the run ends at its target, 2 on any other stop (the loop's stop
 reason is in run.json and report.md).
@@ -40,6 +41,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from rsi_kernel_tune import audit as audit_mod
 from rsi_kernel_tune import judge as judge_mod
 from rsi_kernel_tune import runs as runs_mod
 from rsi_kernel_tune import taskcard
@@ -912,4 +914,4 @@ def cmd_export(argv) -> int:
 
 
 COMMANDS = {"init": cmd_init, "new": cmd_new, "run": cmd_run, "status": cmd_status,
-            "harvest": cmd_harvest, "export": cmd_export}
+            "harvest": cmd_harvest, "export": cmd_export, "audit": audit_mod.cmd_audit}

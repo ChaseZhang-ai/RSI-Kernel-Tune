@@ -1,0 +1,21 @@
+# b200-gemm-fp16 -- audit set: a square-ish fp16 GEMM (tensor-core shape) as one CuTe DSL
+# kernel on the B200 (sm100). The set's compute-bound probe and its only non-fp32
+# declaration: compute_dtype = fp16 is the contract (inputs fp16, tensor-core fp16
+# arithmetic with fp32 accumulation, one rounding to fp16 at the end). 4096^3 and below --
+# small for a B200, well inside its HBM. Everything not written here comes from
+# global_config/.
+
+[task]
+language = "cutedsl"
+arch     = "sm100"                   # NVIDIA B200
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[precision]
+compute_dtype = "fp16"               # declared: THE dtype this task computes at (docs/compute-dtype.md)
+
+[budget]
+hours    = 4                         # compute-bound: the loop gets the global default's room
+max_meta = 2

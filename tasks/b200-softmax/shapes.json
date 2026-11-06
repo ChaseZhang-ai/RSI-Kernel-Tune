@@ -1,0 +1,5 @@
+[
+  {"name": "small_scores", "axes": {"m": 2048, "n": 1024}},
+  {"name": "attn_4k", "axes": {"m": 16384, "n": 4096}},
+  {"name": "attn_8k", "axes": {"m": 65536, "n": 8192}}
+]

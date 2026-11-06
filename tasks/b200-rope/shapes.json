@@ -1,0 +1,5 @@
+[
+  {"name": "decode", "axes": {"m": 32768, "d": 64}},
+  {"name": "prefill", "axes": {"m": 1048576, "d": 128}},
+  {"name": "long_context", "axes": {"m": 4194304, "d": 128}}
+]

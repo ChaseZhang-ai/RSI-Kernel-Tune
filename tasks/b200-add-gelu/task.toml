@@ -1,0 +1,20 @@
+# b200-add-gelu -- audit set: fused residual add + GELU (two PyTorch kernel launches) as one
+# CuTe DSL kernel on the B200 (sm100). fp32 end to end, so the audit pair
+# (b200-gelu, b200-add-gelu) isolates what fusing and the dtype regime each contribute:
+# two reads one write at 8 bytes/element moved. Everything not written here comes from
+# global_config/.
+
+[task]
+language = "cutedsl"
+arch     = "sm100"                   # NVIDIA B200
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[precision]
+compute_dtype = "fp32"               # declared: fp32 end to end (docs/compute-dtype.md)
+
+[budget]
+hours    = 2
+max_meta = 1

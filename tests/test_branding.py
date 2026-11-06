@@ -79,6 +79,8 @@ FORGEKERNEL_WHITELIST = {
     "docs/design/v1-launch.md": re.compile(r"."),  # historical design archive
     "scripts/smoke_wp19.sh": re.compile(r"venvs/forgekernel"),
     "tasks/wp21mini/run_smoke.sh": re.compile(r"venvs/forgekernel"),
+    "docs/paper/repro.md": re.compile(r"venvs/forgekernel"),  # the dev box's driver venv
+    "tasks/b200-set/README.md": re.compile(r"venvs/forgekernel"),  # same driver venv
 }
 
 FORGE_BRAND_WHITELIST = {
@@ -87,6 +89,8 @@ FORGE_BRAND_WHITELIST = {
     "README.md": re.compile(r"OpenBMB/ForgeKernel"),
     "CHANGELOG.md": re.compile(r"OpenBMB/ForgeKernel|upstream ForgeKernel"),
     "docs/paper/README.md": re.compile(r"ForgeKernel @5030503|Upstream ForgeKernel"),
+    "docs/paper/experiment-matrix.md": re.compile(
+        r"Upstream ForgeKernel"),  # the paper names the system it audits (attribution form)
     "kernels/README.md": re.compile(r"."),  # upstream artifact release, attribution preserved
     "meta_milestone.md": re.compile(r"."),
     "meta/recon_prompt.md": re.compile(r"."),  # frozen meta prompts (byte-identical text)

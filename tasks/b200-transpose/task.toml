@@ -1,0 +1,20 @@
+# b200-transpose -- audit set: a 2D matrix transpose (a materialized .t().contiguous()) as one
+# CuTe DSL kernel on the B200 (sm100). No arithmetic at all: pure data movement whose
+# performance is decided entirely by coalescing and the SMEM path -- the audit's cleanest
+# memory-access-pattern probe, far from any compute roofline. Everything not written here
+# comes from global_config/.
+
+[task]
+language = "cutedsl"
+arch     = "sm100"                   # NVIDIA B200
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[precision]
+compute_dtype = "fp32"               # declared: no arithmetic; fp32 storage (docs/compute-dtype.md)
+
+[budget]
+hours    = 2
+max_meta = 1

@@ -1379,6 +1379,132 @@ def _wp20_apply_cfg(ctx: LoopContext) -> None:
         ctx.board_span_guard = v if isinstance(v, bool) else True
 
 
+# --- the baseline profile (the audit paper's spine arm) -------------------------
+#
+# RKT_PROFILE=baseline — or the card layer's [profile.baseline] on = true — turns
+# EVERY fork-added mechanism that can change a measurement verdict OFF through
+# one switch, so a run under the profile emulates upstream-era measurement
+# behavior (the fork's merge-base 5030503). Passive telemetry that never
+# changes a verdict stays ON — gpu_state sampling, the WP11 wall-clock buckets,
+# the WP20 gate_degraded accounting, the board-span report-only rows, the
+# kbmenu / ledger bookkeeping: the profile removes verdict power, not
+# instrumentation. With the variable unset (and no card-layer table) the
+# expansion is a no-op and the loop's behavior is byte-identical to the current
+# defaults — the hard requirement tests/test_baseline_profile.py pins.
+#
+# The expansion follows the house composition rules: the job-side pins are
+# exported into THIS process's environment so locally delivered jobs inherit
+# them (the _wp11_apply_cfg RKT_SPRT_EARLY_STOP pattern), and the driver-side
+# pins are written onto the LoopContext fields the config resolvers read. It
+# runs LAST in run_two_layer's resolver chain — after every _wp*_apply_cfg — so
+# the pins stand over the card layer's loop.toml (the profile is the run's
+# declared intent; a card cannot quietly re-arm a defense the arm turned off).
+# What it cannot reach: an ssh delivery's submit.toml [env] (the env does not
+# cross the wire — the _wp15 WARN precedent; an ssh card must not declare the
+# pinned variables there), and the WP20 bench-side sentinels, which have no
+# switch at all (known gap, documented in the test file).
+
+RKT_PROFILE_ENV = "RKT_PROFILE"
+BASELINE_PROFILE_NAME = "baseline"
+
+# Job-side pins. A string value is exported; None REMOVES the variable (the
+# default-off fork opt-ins an inherited environment could arm). Every entry
+# names its fork package; tests/test_baseline_profile.py keeps this registry
+# against the live RKT_* surface.
+_BASELINE_PROFILE_ENV: dict[str, str | None] = {
+    # WP9 fresh_recheck OFF. RKT_FRESH_RECHECK is the recheck child's nesting
+    # marker — present in the JOB env it silences the parent's post-window
+    # recheck (card_template/eval/benchkit.py _fresh_recheck_block). The same
+    # marker shifts the timed input draws' seeds by RKT_FRESH_SEED (default
+    # 7919), so the profile pins the shift to 0: the draws stay the upstream
+    # seeds and only the recheck disappears.
+    "RKT_FRESH_RECHECK": "1",
+    "RKT_FRESH_SEED": "0",
+    # WP29 replay probe OFF (the documented switch: "0"/"off").
+    "RKT_REPLAY_PROBE": "0",
+    # WP17 in-process screening worker OFF: the per-call subprocess screening
+    # bench is the historical (upstream) transport; the fork default is the
+    # worker.
+    "RKT_SCREENING_INPROC": "0",
+    # --- fork-side opt-ins the profile strips from the environment (every one
+    # defaults off; the profile keeps an inherited export from re-arming it).
+    "RKT_SPRT_EARLY_STOP": None,         # WP15 early stop (local-delivery flip)
+    "RKT_SPRT_WIN_STOP": None,           # WP15/C14 win-direction stop
+    "RKT_SPRT_WIN_MARGIN": None,         # WP15/C14 companion margin
+    "RKT_BUILD_CACHE": None,             # WP11/WP19 build cache
+    "RKT_BUILD_CACHE_KEY_NARROW": None,  # WP11/WP19 narrow cache keying
+    "RKT_MEMO_LANE": None,               # M3 MEMO lane (task-declared, never inherited)
+    "RKT_CUDA_PRECHECK": None,           # WP19 B6 compile preflight
+    "RKT_SCREENING_CLOCK_GUARD": None,   # WP17 gpu_state screening clock guard
+}
+
+# Driver-side pins: ctx field -> the value the profile holds it at. The field
+# list IS the coverage contract; tests/test_baseline_profile.py extracts the
+# assignments from _apply_baseline_profile and reconciles them against this
+# table (a new pin without a registry line fails the test, and vice versa).
+_BASELINE_PROFILE_CTX: dict[str, object] = {
+    "merge_eval_ncu": False,        # WP11 merged eval+NCU job -> the two-job path
+    "sprt_early_stop": False,       # WP15 SPRT early stop (local default ON)
+    "sprt_win_stop": False,         # WP15/C14 win-direction early stop
+    "precision_contract": "off",    # WP22 declared-dtype precision gate
+    "judge_edge_recheck": False,    # WP20 the edge-band recheck job
+    "resolvable_floor": 0.015,      # WP1 resolution estimate -> the 1.5% constant
+    "resolvable_cap": 0.015,        # WP1 (floor == cap degenerates the clamp)
+    "confirm_budget_per_iter": 0,   # WP1/WP15 suspicious-winner confirm band
+    "probe_manifest": False,        # WP19 batched probe transport -> per-script
+    "background_lane": False,       # WP19/C15 idle-GPU background lane
+    "background_lane_obj": None,    # the lane object run_two_layer may have built
+}
+
+
+def _baseline_profile_requested(ctx: LoopContext) -> bool:
+    """Whether the baseline profile is armed: ``RKT_PROFILE=baseline`` in the
+    environment, or the card layer's free-form ``[profile.baseline]`` table with
+    ``on = true`` (the card layer is read free-form by _wp5_cfg_sections; the
+    repo's global loop.toml is closed-vocabulary and cannot carry the table)."""
+    if (os.environ.get(RKT_PROFILE_ENV) or "").strip() == BASELINE_PROFILE_NAME:
+        return True
+    try:
+        table = _wp5_cfg_sections(ctx).get("profile")
+    except Exception:  # noqa: BLE001 — a config read must never break arming
+        return False
+    return isinstance(table, dict) \
+        and isinstance(table.get(BASELINE_PROFILE_NAME), dict) \
+        and table[BASELINE_PROFILE_NAME].get("on") is True
+
+
+def _apply_baseline_profile(ctx: LoopContext) -> None:
+    """Expand the armed baseline profile onto the context and this process's
+    environment (see the block comment above). Idempotent; runs after every
+    config resolver so the pins stand over the card layer. The ctx pins are
+    spelled literally (not looped over the registry) so the expansion reads as
+    a table and greps like the rest of the file; the registry
+    _BASELINE_PROFILE_CTX is the coverage contract tests/test_baseline_profile.py
+    reconciles against these lines."""
+    for name, value in _BASELINE_PROFILE_ENV.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+    ctx.merge_eval_ncu = False
+    ctx.sprt_early_stop = False
+    ctx.sprt_win_stop = False
+    ctx.precision_contract = "off"
+    ctx.judge_edge_recheck = False
+    ctx.resolvable_floor = 0.015
+    ctx.resolvable_cap = 0.015
+    ctx.confirm_budget_per_iter = 0
+    ctx.probe_manifest = False
+    ctx.background_lane = False
+    ctx.background_lane_obj = None
+    _log(f"[{BASELINE_PROFILE_NAME} profile] armed ({RKT_PROFILE_ENV}={BASELINE_PROFILE_NAME}"
+         f" or [profile.{BASELINE_PROFILE_NAME}]): every fork-added verdict-affecting"
+         f" switch pinned off — merge_eval_ncu/sprt/precision_contract/judge_edge_recheck"
+         f" off, resolvable floor=cap=0.015 (the 1.5% constant), confirm_budget_per_iter=0,"
+         f" probe_manifest/background_lane off, job env pinned"
+         f" (fresh_recheck/replay_probe/screening-inproc/cache/sprt flags)")
+
+
 def _sass_precision(ctx: LoopContext, student: "dict | None", iter_no: int) -> dict:
     """The SASS cross-check of the precision gate (warning only): the census's MMA
     operand / accumulator types against the reference dossier's and the card's input
@@ -19328,6 +19454,11 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
             temperature_ok=lambda: _lane_temperature_check(ctx), log=_log)
     _wp18_apply_cfg(ctx)   # --- WP18: kb_cert_batch_size / kb_cert_every_meta
     _wp20_apply_cfg(ctx)   # --- WP20: gate_degraded_ratio / judge_edge_recheck / board_span_guard
+    if _baseline_profile_requested(ctx):
+        # --- the baseline profile: LAST, so its pins stand over every resolver
+        # above (the arm is the run's declared intent; see the block comment at
+        # _apply_baseline_profile)
+        _apply_baseline_profile(ctx)
     meta_steps = 0
     # --- WP5 (task 2): the meta cap breathes with the wall clock left. max_meta
     # stays the configured floor; a long remaining budget lifts the cap so a run

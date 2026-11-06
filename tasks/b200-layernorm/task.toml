@@ -1,0 +1,19 @@
+# b200-layernorm -- audit set: fuse a PyTorch LayerNorm (multiple kernel launches a call)
+# into one CuTe DSL kernel on the B200 (sm100). Sibling of b200-rmsnorm with a mean
+# subtraction, a biased variance, and a bias term; memory-bound at every size, the
+# statistics are fp32 by contract. Everything not written here comes from global_config/.
+
+[task]
+language = "cutedsl"
+arch     = "sm100"                   # NVIDIA B200
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[precision]
+compute_dtype = "fp32"               # declared: statistics in fp32 (docs/compute-dtype.md)
+
+[budget]
+hours    = 2
+max_meta = 1

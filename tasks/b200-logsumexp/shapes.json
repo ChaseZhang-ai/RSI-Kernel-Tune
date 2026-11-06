@@ -1,0 +1,5 @@
+[
+  {"name": "small", "axes": {"m": 4096, "n": 1024}},
+  {"name": "medium", "axes": {"m": 8192, "n": 8192}},
+  {"name": "large", "axes": {"m": 8192, "n": 65536}}
+]

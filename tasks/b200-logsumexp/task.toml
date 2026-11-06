@@ -1,0 +1,20 @@
+# b200-logsumexp -- audit set: a numerically safe row logsumexp (the reduction behind every
+# cross-entropy loss) as one CuTe DSL kernel on the B200 (sm100). The set's
+# precision-sensitive reduction probe: n reductions of up to 65536 elements, fp32
+# accumulation by contract, an fp32 output that must not be rounded through bf16.
+# Everything not written here comes from global_config/.
+
+[task]
+language = "cutedsl"
+arch     = "sm100"                   # NVIDIA B200
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[precision]
+compute_dtype = "fp32"               # declared: reduction arithmetic in fp32 (docs/compute-dtype.md)
+
+[budget]
+hours    = 2
+max_meta = 1

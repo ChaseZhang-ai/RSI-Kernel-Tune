@@ -1,0 +1,20 @@
+# b200-softmax -- audit set: a numerically safe row softmax (max-subtracted) as one CuTe DSL
+# kernel on the B200 (sm100), standing in for the attention-score normalization every
+# transformer runs. Memory-bound with a data-dependent numerics hazard: a naive exp without
+# the row max overflows for realistic attention logits. Everything not written here comes
+# from global_config/.
+
+[task]
+language = "cutedsl"
+arch     = "sm100"                   # NVIDIA B200
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[precision]
+compute_dtype = "fp32"               # declared: softmax arithmetic in fp32 (docs/compute-dtype.md)
+
+[budget]
+hours    = 2
+max_meta = 1

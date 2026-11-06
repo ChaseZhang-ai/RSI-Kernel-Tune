@@ -7,6 +7,7 @@
   rsi-kernel-tune status [.artifacts/<op>_<id>]  -> where a run is (every run when omitted)
   rsi-kernel-tune harvest .artifacts/<op>_<id>   -> the knowledge-base write-up of a stopped run
   rsi-kernel-tune export .artifacts/<op>_<id>    -> the best kernel's source
+  rsi-kernel-tune audit .artifacts/<op>_<id>     -> the read-only per-verdict provenance report
 
 `rsi-kernel-tune run` exits 0 when the final confirmation meets the target (and the correctness
 monitor raised no alarm on that kernel), and 2 otherwise.
@@ -55,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
 
         print(f"rsi_kernel_tune {__version__}")
         return 0
-    if argv and argv[0] in ("init", "new", "run", "status", "harvest", "export"):
+    if argv and argv[0] in ("init", "new", "run", "status", "harvest", "export", "audit"):
         from rsi_kernel_tune.launch import COMMANDS
 
         return COMMANDS[argv[0]](argv[1:])

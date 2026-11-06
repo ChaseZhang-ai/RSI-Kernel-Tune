@@ -1,0 +1,20 @@
+# b200-rmsnorm -- the audit set's adaptation of the formal tasks/rmsnorm card: fuse a PyTorch
+# RMSNorm (nine kernel launches a call) into one CuTe DSL kernel, retargeted to the B200
+# (sm100, ~180 GB HBM) with a third, long-context shape. Memory-bound at every size; the
+# arithmetic (mean of squares) is fp32 by contract. Everything not written here comes from
+# global_config/.
+
+[task]
+language = "cutedsl"
+arch     = "sm100"                   # NVIDIA B200
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[precision]
+compute_dtype = "fp32"               # declared: statistics in fp32 (docs/compute-dtype.md)
+
+[budget]
+hours    = 2
+max_meta = 1

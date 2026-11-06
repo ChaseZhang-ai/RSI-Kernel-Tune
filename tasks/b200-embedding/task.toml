@@ -1,0 +1,20 @@
+# b200-embedding -- audit set: an embedding-table lookup (torch F.embedding / table[ids]) as
+# one CuTe DSL kernel on the B200 (sm100). The set's gather probe: performance is decided by
+# random-access locality into a multi-GB table, not by any streaming roofline, and the
+# semantics are an exact copy (no arithmetic, no tolerance). Everything not written here
+# comes from global_config/.
+
+[task]
+language = "cutedsl"
+arch     = "sm100"                   # NVIDIA B200
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[precision]
+compute_dtype = "fp32"               # declared: no arithmetic; fp32 grid (docs/compute-dtype.md)
+
+[budget]
+hours    = 2
+max_meta = 1

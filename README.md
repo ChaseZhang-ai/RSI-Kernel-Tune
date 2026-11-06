@@ -24,12 +24,12 @@ config:
 flowchart TD
     R1["Reference kernel<br/>gen k"] --> J
 
-    subgraph RUN["One run · .artifacts/op_id/"]
+    subgraph RUN["One run (.artifacts/op_id/)"]
         direction TB
         J["judge + calibrate"] --> M0["teacher distills<br/>M0 architecture<br/>milestone"]
         M0 --> S["student implements<br/>one decision<br/>at a time"]
-        S --> G{"correct &<br/>faster?"}
-        G -->|"revert & retry"| S
+        S --> G{"correct AND<br/>faster?"}
+        G -->|"revert, retry"| S
         G -->|"yes"| B["best/kernel.py"]
     end
 
@@ -54,7 +54,7 @@ flowchart TD
     style RUN fill:#F8FAFC,stroke:#94A3B8,stroke-width:1px
 ```
 
-*Color key: blue = reference · gray = measurement harness · amber = teacher · green = student · purple = go/no-go gate · teal = knowledge base.*
+*Color key: blue = reference; gray = measurement harness; amber = teacher; green = student; purple = go/no-go gate; teal = knowledge base.*
 
 This repository is a fork of [OpenBMB/ForgeKernel](https://github.com/OpenBMB/ForgeKernel)
 (baseline commit `5030503`, Apache-2.0); the upstream obligations are preserved in
@@ -263,7 +263,7 @@ config:
 flowchart TD
     subgraph INNER["Inner loop — the student"]
         direction TB
-        S["implement one<br/>decision row<br/>of the milestone"] --> JOB["one GPU job:<br/>judge · time · profile"]
+        S["implement one<br/>decision row<br/>of the milestone"] --> JOB["one GPU job:<br/>judge, time,<br/>profile"]
         JOB -->|"correctness fail"| REV["revert"]
         REV --> S
         JOB -->|"faster (past noise floor)"| NB["confirm at the<br/>gate window"]

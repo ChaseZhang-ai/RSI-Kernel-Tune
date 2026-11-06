@@ -1,18 +1,18 @@
 # RSI-Kernel-Tune
 
-[![Quick Start](https://img.shields.io/badge/Docs-Quick%20Start-blue.svg)](#quick-start)
+[![Quick Start](https://img.shields.io/badge/Docs-Quick%20Start-blue.svg)](#1-quick-start)
+[![Your Operator](https://img.shields.io/badge/Docs-Your%20Operator-blue.svg)](#2-bring-your-own-operator)
 [![Options](https://img.shields.io/badge/Docs-Options-blue.svg)](docs/options.md)
-[![Configuration](https://img.shields.io/badge/Docs-Configuration-blue.svg)](#the-configuration-page-rsi-runtoml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org)
 
-RSI-Kernel-Tune is a **self-evolving GPU kernel-optimization framework**. You give it an
-operator (a description, a reference implementation, inputs, a correctness tolerance); a
-**teacher** agent distills the reference's architecture into a milestone curriculum, a
-**student** agent implements kernels against it, and every candidate is judged by paired
-measurement on real hardware. Every accepted kernel becomes the **next run's reference**, so
-optimization keeps going past the best known implementation, and hardware-certified findings
-accumulate in a **knowledge base shared across operators**.
+RSI-Kernel-Tune pushes a GPU kernel's speed to the limit. You give it one operator: a
+description, a correct reference implementation, and the input shapes you care about. A
+**teacher** agent reads the reference's architecture and writes a milestone curriculum; a
+**student** agent implements kernels against it; every candidate is judged by paired
+measurement on real hardware, and every accepted kernel becomes the next run's reference —
+so optimization keeps going past the best known implementation. Hardware-certified findings
+accumulate in a knowledge base shared across operators.
 
 ```mermaid
 ---
@@ -56,51 +56,22 @@ flowchart TD
 
 *Color key: blue = reference; gray = measurement harness; amber = teacher; green = student; purple = go/no-go gate; teal = knowledge base.*
 
-This repository is a fork of [OpenBMB/ForgeKernel](https://github.com/OpenBMB/ForgeKernel)
-(baseline commit `5030503`, Apache-2.0); the upstream obligations are preserved in
-[LICENSE](LICENSE) and [NOTICE](NOTICE). What the fork adds is listed
-[below](#what-this-fork-changes-over-upstream).
+## Contents
 
-## Highlights
+1. [Quick start](#1-quick-start)
+2. [Bring your own operator](#2-bring-your-own-operator) — the only part you write
+3. [Configure the run](#3-configure-the-run) — optional; one file, mostly defaults
+4. [Pick a lane](#4-pick-a-lane-optional) — optional; academic vs industrial
+5. [Run it and get the result](#5-run-it-and-get-the-result)
+6. [Command reference](#6-command-reference)
+7. [Parameter reference](#7-parameter-reference) — every knob, every default
+8. [How it works](#8-how-it-works)
+9. [Advanced task options](#9-advanced-task-options)
+10. [Repository layout and documentation](#10-repository-layout-and-documentation)
+11. [Limitations](#11-limitations)
+12. [License](#12-license)
 
-- 🔁 **Self-evolution.** Every accepted kernel becomes the next reference; the chain stops
-  only when gains fall below the measured noise floor.
-- 🗺️ **Architecture-first.** The expensive-to-change decisions (kernel split, tile shapes,
-  warp roles, persistence) are settled and hardware-probed in milestone M0 before any tuning.
-- 📏 **Honest measurement.** Mirror-ordered paired timing, an fp64 error-ratio precision
-  gate, fresh-input rechecks, and a replay probe that catches memoization cheats.
-- 🛡️ **Red-team tested anti-cheat.** A cheat-fixture suite (cache replay, seed probing,
-  stream injection, timer tampering) runs in CI and must be caught by the defenses.
-- 📚 **A knowledge base that outlives the run.** Only probe-certified mechanisms enter
-  `hw_kb/`; falsified levers are remembered too.
-
-## What this fork changes over upstream
-
-| Area | What was added | Where |
-|---|---|---|
-| Measurement statistics | Resolvable noise floor, mirror-ordered paired windows, gate/plateau window contracts | WP1/9/15 |
-| Priced search | Every lever carries a measured price; sweeps eliminate losers; runner-up pool + stagnation restarts; sub-noise levers compound separately | WP4/10/16 |
-| Declared precision | `compute_dtype` (fp32/tf32/bf16/fp16/fp8) is your declaration; the system never optimizes below it | WP22, [docs/compute-dtype.md](docs/compute-dtype.md) |
-| Two-lane contract | `STRICT` (default, memoization forbidden) vs opt-in `MEMO` industrial lane | M3, [docs/industrial-lane.md](docs/industrial-lane.md) |
-| Anti-cheat hardening | Replay probe (the G1 fix), red-team suite, measure-side sentinels | WP20/20R/29 |
-| Process speed | Eval+NCU merged into one job, SPRT early stop, content-keyed build cache, background measurement lane | WP11/19 |
-| Audit mode | `RKT_PROFILE=baseline` turns every fork-added verdict-changing mechanism off to emulate upstream-era measurement | [docs/design/v1-launch.md](docs/design/v1-launch.md) |
-
-Full history: [CHANGELOG.md](CHANGELOG.md).
-
-## 🤖 Set it up with a coding agent
-
-Clone this repository, then paste this into Claude Code (or any coding agent that can run
-shell commands) started in the clone:
-
-```text
-Read README.md in this directory and set up RSI-Kernel-Tune on this machine:
-install it in a virtual environment, write local.env for my GPU (this
-machine, or the ssh host I name) and run `rsi-kernel-tune new tasks/rmsnorm --dry-run`.
-Show me the plan it prints.
-```
-
-## Quick start
+## 1. Quick start
 
 **Requirements.** The machine you run `rsi-kernel-tune` on: Linux or macOS, Python ≥ 3.11,
 git, and the Claude Code CLI (logged in, or an `ANTHROPIC_API_KEY`). The GPU machine (the
@@ -117,141 +88,233 @@ pip install -e .
 rsi-kernel-tune --version            # rsi_kernel_tune 0.1.0
 ```
 
-**2. Say where the GPU is**
+**2. Say where the GPU is** — `cp local.env.example local.env`, then:
 
 ```bash
-cp local.env.example local.env
 # RKT_DELIVERY=local -> the GPU on this machine (RKT_GPU picks the device index)
 # RKT_DELIVERY=ssh   -> REMOTE_HOST (an ssh alias that logs in without a prompt)
 #                       and REMOTE_WORKDIR (a directory on it used only by runs)
 # Also put the agents' credentials here (ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN),
-# or a provider key such as GLM_API_KEY for provider = "glm".
+# or a provider key such as GLM_API_KEY for provider = "glm" (section 3).
 ```
 
-**3. Run the example task** — fuse a PyTorch RMSNorm into one kernel (the ready-made task is
-`tasks/rmsnorm/`; set `arch = "sm90"` in its `task.toml` for Hopper):
+**3. Run the built-in example** — fuse a PyTorch RMSNorm into one kernel (`tasks/rmsnorm/`;
+for your own operator, section 2 replaces this step):
 
 ```bash
 rsi-kernel-tune new tasks/rmsnorm --dry-run          # check the task, print the plan
 rsi-kernel-tune new tasks/rmsnorm                    # -> .artifacts/rmsnorm_<id>
-rsi-kernel-tune status                               # progress (every run)
-rsi-kernel-tune run .artifacts/rmsnorm_<id>          # run it / continue after an interruption
+rsi-kernel-tune run .artifacts/rmsnorm_<id>          # hours; safe to Ctrl-C and re-run
 ```
 
-A run takes hours. It finishes with `report.md` and the best kernel at
-`.artifacts/rmsnorm_<id>/best/kernel.py`; export it with
-`rsi-kernel-tune export .artifacts/rmsnorm_<id>`. `rsi-kernel-tune run` **exits 0** when the
-final confirmation meets the target (by default 1.2× the reference's device time) and **2**
-otherwise, so it composes with scripts and CI.
-
-## Academic research vs industrial production
-
-Pick your scenario; both use the same framework, and the difference is one declaration.
-
-| You are... | Set | What you get |
-|---|---|---|
-| **Academic** — capability numbers for a paper or benchmark | *Nothing. This is the default.* | The `STRICT` lane: memoization is forbidden, and the number measures the kernel's **honest compute**. These are the only numbers valid for paper claims. |
-| **Industrial** — inputs repeat (the same weights re-inferred, fixed datasets re-processed batch after batch) | `memo_lane = true` in the task's `task.toml`: <br>`[protocol]`<br>`memo_lane = true` | The `MEMO` lane: the kernel keeps a **content-keyed cache** — a judged input seen before *by value* returns the parked correct answer directly instead of recomputing (a hit is near-instant). Unseen inputs still compute honestly and must pass the same correctness gate — a miss computes, and being wrong on unseen inputs is disqualifying in any lane. The timed number means **serving latency on a repeating stream**, and the two lanes' numbers are never compared. |
-| **Industrial** — you want the best kernel **fastest**, and don't need a "from scratch" claim | `retrieval = "on"` in `rsi-run.toml`: <br>`[student]`<br>`retrieval = "on"` | The student agent may **survey public sources first** — SOTA write-ups, docs, public implementations it finds by search — and start tuning from that context instead of from scratch, which usually reaches a strong kernel in fewer iterations. It still never sees *your* reference's source, and code seen online must not be copied into the kernel. |
-| **Any** — you accept a lower precision for speed | `compute_dtype = "bf16"` (or `tf32` / `fp16` / `fp8`) in `rsi-run.toml [precision]` | The system optimizes at **exactly the declared precision, never below it**; the fp64-truth error gate still judges every candidate against the reference's own error at that precision. Default `fp32`. |
+**4. Get the result**
 
 ```bash
-# Industrial, repeating inputs: two lines total.
-rsi-kernel-tune config init
-#  1. in rsi-run.toml:   [student] retrieval = "on"
-#  2. in tasks/<op>/task.toml:  [protocol] memo_lane = true
-rsi-kernel-tune run --config rsi-run.toml
+rsi-kernel-tune export .artifacts/rmsnorm_<id>       # the confirmed best kernel's source
 ```
 
-Details: the two-lane contract in [docs/industrial-lane.md](docs/industrial-lane.md), the
-precision contract in [docs/compute-dtype.md](docs/compute-dtype.md).
+A finished run leaves `report.md` (what was tried, what won) and `best/kernel.py` under
+`.artifacts/rmsnorm_<id>/`. `run` **exits 0** when the final confirmation meets the target
+(1.2× the reference's device time by default) and **2** otherwise.
 
-## The configuration page: `rsi-run.toml`
+> 🤖 **Prefer an agent?** Paste this into Claude Code started in the clone, and it does
+> steps 1–3: `Read README.md in this directory and set up RSI-Kernel-Tune on this machine:
+> install it in a virtual environment, write local.env for my GPU (this machine, or the
+> ssh host I name) and run `rsi-kernel-tune new tasks/rmsnorm --dry-run`. Show me the plan
+> it prints.`
 
-One file fills in everything a run needs on top of the task itself. **To open it:**
+## 2. Bring your own operator
+
+This is **the only part you write**. The framework needs three things: what the operator
+computes, which input shapes to optimize for, and a correct implementation to start from.
+One command scaffolds exactly those:
+
+```bash
+rsi-kernel-tune init myop            # -> tasks/myop/ with three files to fill in
+```
+
+**a. `tasks/myop/description.md` — what the operator computes.** The correctness judge is
+written from this file alone, so be complete: signature, formula, every convention, what a
+legal input looks like. A filled example (RMSNorm):
+
+```markdown
+## Signature
+- inputs: `x` [m, n] bfloat16 (one row per token), `w` [n] bfloat16 (learned scale)
+- output: `y` [m, n] bfloat16
+
+## Semantics
+For every row i: y[i,:] = x[i,:] / sqrt(mean_j(x[i,j]^2) + 1e-6) * w.
+Mean and sqrt in float32; round to bfloat16 once at the end.
+
+## Legal inputs
+Any finite bfloat16 values; rows near zero must not produce NaN.
+```
+
+**b. `tasks/myop/shapes.json` — the shapes to optimize for.** Every entry is judged and
+timed:
+
+```json
+[
+  {"name": "small", "axes": {"m": 128,  "n": 4096}},
+  {"name": "large", "axes": {"m": 8192, "n": 4096}}
+]
+```
+
+**c. `tasks/myop/reference/run.py` — a correct implementation to beat.** Plain PyTorch is
+fine (slower reference = bigger visible speedup):
+
+```python
+import torch
+
+def run(x, w):
+    xf = x.float()
+    y = xf * torch.rsqrt(xf.pow(2).mean(dim=-1, keepdim=True) + 1e-6) * w.float()
+    return y.to(x.dtype)
+```
+
+**That is all.** For pure speed optimization, `task.toml` needs no edits: the defaults are
+beat-the-reference-by-1.2× on device time with a 4-hour loop budget. The only lines you may
+want to change:
+
+```toml
+[task]
+language = "cutedsl"   # or "cuda"
+arch     = "sm100"     # "sm90" for Hopper
+```
+
+## 3. Configure the run
+
+**One kernel, default provider: skip this section entirely.** Steps 1–2 of the quick start
+plus your task are enough — defaults assume the Claude Code CLI's own login and run one
+kernel.
+
+Write one `rsi-run.toml` only when you want any of these: a non-default API provider or
+model, several kernels optimized in parallel, a declared compute precision, or student
+retrieval (section 4).
 
 ```bash
 rsi-kernel-tune config init                  # writes a fully-commented rsi-run.toml
-rsi-kernel-tune config init --language cuda  # pre-fills the [language] section
 $EDITOR rsi-run.toml
 rsi-kernel-tune run --config rsi-run.toml    # validates it, then runs every [kernel] in parallel
 ```
 
-Validation happens when you `run --config`: every problem it finds names the one-line fix.
-The file names no secret (the key lives in `key_file`) and is safe to commit.
+**Must fill** (the generated template marks them):
 
-### `[api]` — where the agents' tokens come from
+| Field | What to put |
+|---|---|
+| `[api] models` | Which model each role uses: `models = { teacher = "...", student = "..." }` |
+| `[api] key_file` | The gitignored file holding the key, one `KEY=VALUE` per line (copy `local.env.example`). **Never the key itself in this file** — credential-looking keys are refused. |
+| `[kernel] task` | The task directory (or a list): `task = "tasks/myop"` |
 
-| Field | Meaning | Default |
-|---|---|---|
-| `provider` | `"native"` = the agent CLI's own login / credentials exported by `local.env`. Any other name is a table in `global_config/backends.toml` (`base_url` / `wire` / `key_env`) pointing at another endpoint — the shipped table has `[glm]` (Z.ai, key in `GLM_API_KEY`). | `native` |
-| `key_file` | The file that holds the key(s), one `KEY=VALUE` per line (copy `local.env.example`; gitignored). **Never put the key itself in this file** — a credential-looking key is refused outright. Relative paths resolve against the config file. | `local.env` |
-| `models` | Which model each role uses: `models = { teacher = "...", student = "..." }`. Overrides the task's `[agent]` for this run. | required |
-
-### `[kernel]` — what to optimize
+**Optional** (defaults shown):
 
 | Field | Meaning | Default |
 |---|---|---|
-| `task` | The task directory (or a list of them): `task = "tasks/myop"` or `task = ["tasks/a", "tasks/b"]`. Each entry becomes its own run. | required (or `from_kernels`) |
-| `from_kernels` | Optimize a published kernel's frozen contract from `kernels/<family>/<op>/<arch>/`. The task must already be scaffolded from it — `rsi-kernel-tune init <op> --from-kernels --arch b200 --axes '{"m": 4096, "n": 4096, "k": 4096}'` — and a dangling entry is refused at `run --config` with that exact command. | — |
+| `[api] provider` | `"native"` = the agent CLI's own login / credentials from `local.env`; or a table name from `global_config/backends.toml` (`base_url` / `wire` / `key_env`) — the shipped table has `[glm]` (key in `GLM_API_KEY`) | `native` |
+| `[kernel] from_kernels` | Optimize a published kernel from `kernels/` instead (section 9) | — |
+| `[precision] compute_dtype` | The dtype the kernel computes at: `fp32`/`tf32`/`bf16`/`fp16`/`fp8` (section 4) | `fp32` |
+| `[student] retrieval` | `"on"` = the student may survey public sources before tuning (section 4) | `off` |
+| `[run] parallel` | `"auto"` = one concurrent slot per kernel task; a number caps slots | `auto` |
+| `[language]` | For a NEW language only: `name`, `syntax_docs`, `toolchain_config` (section 9) | — |
 
-### `[precision]` — the compute precision YOU declare
+Priority when several places set the same thing:
+`process environment > [api].key_file > local.env > global_config/ defaults`. Validation
+happens at `run --config`: every problem names the one-line fix. The file names no secret
+and is safe to commit.
 
-| Field | Meaning | Default |
+## 4. Pick a lane (optional)
+
+Both lanes use the same framework; the difference is one declaration.
+
+| You are... | Set | What you get |
 |---|---|---|
-| `compute_dtype` | The dtype the optimized kernel **computes** at: `fp32` / `tf32` / `bf16` / `fp16` / `fp8`. The student implements at this dtype, the reference is evaluated at it, and arithmetic below it is a conviction (REVERT). No declaration = `fp32`. | `fp32` |
+| **Academic** — capability numbers for a paper or benchmark | *Nothing. This is the default.* | The `STRICT` lane: memoization is forbidden, and the number measures the kernel's **honest compute**. These are the only numbers valid for paper claims. |
+| **Industrial** — inputs repeat (same weights re-inferred, fixed datasets re-processed) | `memo_lane = true` in `tasks/<op>/task.toml`:<br>`[protocol]`<br>`memo_lane = true` | The `MEMO` lane: a judged input seen before *by value* returns the parked correct answer directly instead of recomputing (a hit is near-instant). Unseen inputs still compute honestly and pass the same correctness gate. The number means **serving latency on a repeating stream**; the two lanes' numbers are never compared. |
+| **Industrial** — you want the best kernel fastest, no "from scratch" requirement | `retrieval = "on"` in `rsi-run.toml [student]` | The student surveys public sources first — SOTA write-ups, public implementations — and starts tuning from that context, reaching a strong kernel in fewer iterations. It still never sees *your* reference's source, and code seen online must not be copied. |
+| **Any** — lower precision is acceptable | `compute_dtype = "bf16"` (or `tf32`/`fp16`/`fp8`) in `rsi-run.toml [precision]` | Optimizes at **exactly the declared precision, never below**; the fp64-truth error gate still judges every candidate. |
 
-### `[student]` — the retrieval permission
+Details: [docs/industrial-lane.md](docs/industrial-lane.md) (two-lane contract),
+[docs/compute-dtype.md](docs/compute-dtype.md) (precision contract).
 
-| Field | Meaning | Default |
-|---|---|---|
-| `retrieval` | `"off"` = the student optimizes **from scratch**, offline sandbox (the L0 anti-cheat contract). `"on"` = the student may survey public sources first (WebSearch/WebFetch), then tune on that basis; the reference's source stays denied either way. | `off` |
+## 5. Run it and get the result
 
-### `[run]` — the concurrency
-
-| Field | Meaning | Default |
-|---|---|---|
-| `parallel` | `"auto"` = one concurrent slot per kernel task in `[kernel]` (all of them in parallel). A number (`2`, `4`, …) caps the slots; the rest queue. Each slot is its own child process; GPU jobs serialize on a per-GPU lock, and with several GPUs slots round-robin over them. | `auto` |
-
-### `[language]` — optional, a NEW language only
-
-| Field | Meaning | Default |
-|---|---|---|
-| `name` | The new language's name (e.g. `cuda`). | — |
-| `syntax_docs` | Path to a syntax/style reference; injected at the top of **every** teacher and student brief ("read it first"). Must exist. | — |
-| `toolchain_config` | Path to the toolchain/compile config (e.g. extra `nvcc` flags); merged into the build under the same allow-list as the kernel's own flags. Must exist. | — |
-
-A new language also needs `meta/<lang>/` (prompt overlay) and `hw_kb/<lang>/<arch>/`
-(knowledge base) — see [docs/run-configuration.md](docs/run-configuration.md).
-
-### Who wins when several places set the same thing
-
-```
-process environment  >  [api].key_file values  >  local.env  >  global_config/ defaults
+```bash
+rsi-kernel-tune new tasks/myop --dry-run             # check the task, print the plan
+rsi-kernel-tune new tasks/myop                       # -> .artifacts/myop_<id>/
+rsi-kernel-tune run .artifacts/myop_<id>             # run it / continue where it stopped
+rsi-kernel-tune status                               # progress (every run)
+rsi-kernel-tune export .artifacts/myop_<id>          # the best kernel's source
 ```
 
-The **problem itself** (shapes, reference, target, budget, measurement clock, lane) never
-moves: it lives in `tasks/<op>/task.toml` and is merged onto `global_config/` (the bottom
-layer: `models.toml`, `loop.toml`, `backends.toml`).
+While it runs, `status` shows where the run is; `Ctrl-C` is safe and `run` continues from
+where it stopped. Afterwards:
 
-## Command reference
+- `report.md` — every iteration, verdict and price, in one readable file
+- `best/kernel.py` — the confirmed best kernel (`export` prints it, `--out file` writes it)
+- `rsi-kernel-tune audit .artifacts/myop_<id>` — read-only per-verdict provenance (what the
+  loop did and why)
+- `rsi-kernel-tune harvest .artifacts/myop_<id>` — knowledge-base write-up of a *stopped*
+  run (a normal run harvests automatically)
+
+To keep going past the default target, self-evolution promotes each best kernel to the next
+run's reference until the hardware gives no more:
+`python scripts/self_evolve.py tasks/myop [--step 1.05] [--max-gen N]`.
+
+## 6. Command reference
 
 | Command | What it does |
 |---|---|
-| `rsi-kernel-tune init <op>` | Scaffold `tasks/<op>/` from `tasks/_template/`: `description.md`, `shapes.json`, `task.toml` — fill them in. |
-| `rsi-kernel-tune init <op> --from-kernels --arch b200 --axes '<json>'` | Scaffold the task from a published kernel's frozen contract (`kernels/`); the kernel is sealed as a black-box reference. `--arch` picks `h100` or `b200`; `--axes` is required. |
-| `rsi-kernel-tune new tasks/<op> --dry-run` | Check the task and print the plan (judge, calibration, loop config). Nothing runs. |
+| `rsi-kernel-tune init <op>` | Scaffold `tasks/<op>/` — the three files of section 2. |
+| `rsi-kernel-tune init <op> --from-kernels --arch b200 --axes '<json>'` | Scaffold from a published kernel's frozen contract (`kernels/`), sealed as a black-box reference. `--arch` = `h100` or `b200`; `--axes` required. |
+| `rsi-kernel-tune new tasks/<op> --dry-run` | Check the task and print the plan. Nothing runs. |
 | `rsi-kernel-tune new tasks/<op>` | Create the run directory `.artifacts/<op>_<id>/`. |
-| `rsi-kernel-tune run .artifacts/<op>_<id>` | Run it, or continue where it stopped. Exit `0` = target met, `2` = not. |
-| `rsi-kernel-tune run --config rsi-run.toml` | Validate the run configuration, then run every `[kernel]` entry in parallel; exit `0` only if every kernel's confirmation met its target. |
-| `rsi-kernel-tune status [.artifacts/<op>_<id>]` | Where a run is (every run when the argument is omitted). |
-| `rsi-kernel-tune export .artifacts/<op>_<id> [--out file]` | Print (or write) the confirmed best kernel's source. |
-| `rsi-kernel-tune audit .artifacts/<op>_<id>` | Read-only per-verdict provenance report — what the loop did and why. |
-| `rsi-kernel-tune harvest .artifacts/<op>_<id>` | Knowledge-base write-up of a *stopped* run (a run that ends normally harvests automatically). |
-| `rsi-kernel-tune config init [--language <lang>] [--out <path>] [--force]` | Write the commented `rsi-run.toml` template (the configuration page above). |
-| `rsi-kernel-tune help internal` | List the lower-level commands the loop itself uses (`baseline`, `loop`, `window`, `monitor`, `submit`, …) — for debugging a run, not a second way to configure one. |
+| `rsi-kernel-tune run .artifacts/<op>_<id>` | Run it, or continue after an interruption. Exit `0` = target met; `2` = not. |
+| `rsi-kernel-tune run --config rsi-run.toml` | Validate the run configuration, then run every `[kernel]` in parallel; exit `0` only if all met their targets. |
+| `rsi-kernel-tune status [.artifacts/<op>_<id>]` | Where a run is (every run when omitted). |
+| `rsi-kernel-tune export .artifacts/<op>_<id> [--out file]` | Print (or write) the best kernel's source. |
+| `rsi-kernel-tune audit .artifacts/<op>_<id>` | Read-only per-verdict provenance report. |
+| `rsi-kernel-tune harvest .artifacts/<op>_<id>` | Knowledge-base write-up of a stopped run. |
+| `rsi-kernel-tune config init [--language <lang>] [--out <path>] [--force]` | Write the commented `rsi-run.toml` template (section 3). |
+| `rsi-kernel-tune help internal` | Lower-level loop commands (`baseline`, `loop`, `window`, `monitor`, `submit`, …) — for debugging, not a second way to configure. |
 
-## How it works
+## 7. Parameter reference
+
+Everything below is **optional with a working default**; an unset key falls through to
+`global_config/` (the bottom layer). Full details: [docs/options.md](docs/options.md).
+
+**Per task (`tasks/<op>/task.toml`)**
+
+| Knob | Meaning | Default |
+|---|---|---|
+| `[target] ratio` / `timing` | Stop when the kernel is this many × the reference (`ms =` sets an absolute target); time device or e2e | `1.2` / `device` |
+| `[budget] hours` / `max_meta` / `reference_hours` | Loop wall clock; teacher revision rounds; hours to write a reference when there is none | `4` / `3` / `8` |
+| `[task] language` / `arch` | Kernel language; target GPU | `cutedsl` / `sm100` |
+| `[protocol] memo_lane` | The industrial MEMO lane (section 4) | `false` |
+| `[protocol] sm_clock_mhz` / `mem_clock_mhz` | Declared measurement clock; the harness verifies the lock, refuses to time unlocked | unlocked |
+| `[agent] model` / `effort`; `[agent.teacher]` / `[agent.student]` | Override the models/effort per role for this task | from `global_config/models.toml` |
+| `[agent.teacher] prior_survey` / `prior_art` | Teacher surveys public SOTA and/or an offline dossier before distilling | `false` |
+| `[loop] stagnation_k` | Non-improving rounds before forcing an architecture change | `3` |
+| `[loop] floor_stop` / `floor_margin` | Stop once the analytic hardware floor is reached (within margin) | `false` (on for computable-floor tasks) |
+
+**Loop / process (loop config and env)**
+
+| Knob | Meaning | Default |
+|---|---|---|
+| `sprt_early_stop` | A clearly losing experiment ends early instead of sampling to the full window | on |
+| `merge_eval_ncu` | Evaluation and profiling in one GPU job | on |
+| `ncu_on_revert` | Whether reverted kernels are also profiled | on |
+| `RKT_BUILD_CACHE=1` | Content-keyed build cache (~40% of job wall clock); hashes re-verified per hit | off |
+| `RKT_BACKGROUND_LANE=1` | While the agent thinks, the GPU queues non-gate measurements | off |
+| `RKT_PROFILE=baseline` | Turn every post-baseline verdict-changing mechanism off at once (emulates the upstream-era measurement behavior, for audits) | unset |
+
+**Infrastructure (`local.env` + env)**
+
+| Knob | Meaning |
+|---|---|
+| `RKT_DELIVERY` / `RKT_GPU` | Where the GPU is (local / ssh host) and which device index |
+| `ANTHROPIC_API_KEY` / provider key env | The agents' credentials (from your key file / `local.env`) |
+
+## 8. How it works
 
 ```mermaid
 ---
@@ -301,73 +364,41 @@ the milestone at a time; one GPU job judges correctness, times the candidate aga
 reference in a mirror-ordered paired window, and profiles it; a correctness failure is
 reverted, and machine faults never count as verdicts. In the **outer loop** the teacher
 re-enters after iterations without a new best, at an exhausted decision graph or at a gate
-impasse: it prices levers, runs verdict probes, and revises the curriculum — including going
-back and revising M0 itself when only a new structure can lift the limit.
+impasse: it prices levers, runs verdict probes, and revises the curriculum — including
+revising M0 itself when only a new structure can lift the limit.
 
-Three artifacts carry the work, and their boundary is what keeps the reference's code out of
-the kernel: the per-operator **milestone** (decisions and contracts, never an implementation
-body), the **hardware knowledge base** `hw_kb/` (operator-agnostic mechanisms, the only
-artifact with code), and the **meta-milestone** (`meta_milestone.md`, the distillation
-policy).
+Three artifacts carry the work, and their boundary is what keeps the reference's code out
+of the kernel: the per-operator **milestone** (decisions and contracts, never an
+implementation body), the **hardware knowledge base** `hw_kb/` (operator-agnostic
+mechanisms, the only artifact with code), and the **meta-milestone**
+(`meta_milestone.md`, the distillation policy).
 
 | Concept | In this repository |
 |---|---|
-| teacher agent | `[agent.teacher]` in `task.toml` / `[api] models.teacher` in `rsi-run.toml` |
-| student agent | `[agent.student]` / `[api] models.student` |
+| teacher agent | `[agent.teacher]` in `task.toml` / `models.teacher` in `rsi-run.toml` |
+| student agent | `[agent.student]` / `models.student` |
 | a run ("campaign") | `.artifacts/<op>_<id>/` |
 | knowledge base | `hw_kb/cutedsl/`, `hw_kb/cuda/`, by GPU architecture |
 
-Two things are **not** knobs: the anti-cheat contract (the student never sees the reference's
-source or any optimized implementation — no switch exists; the MEMO lane's cache is a
-production feature with a correctness door, not a way to see answers) and the measurement
-math (paired windows, the error-ratio gate) — they are why a win here is trustworthy.
+Two things are **not** knobs: the anti-cheat contract (the student never sees the
+reference's source or any optimized implementation — no switch exists; the MEMO lane's
+cache is a production feature with a correctness door, not a way to see answers) and the
+measurement math (paired windows, the error-ratio gate) — they are why a win here is
+trustworthy.
 
-## Writing a task
+## 9. Advanced task options
 
-`rsi-kernel-tune init <op>` copies `tasks/_template/` to `tasks/<op>/` — three files to fill
-in:
+**Reference modes** — the `[reference]` table in `task.toml` decides what the teacher sees:
 
-- `description.md`: the operator, completely (signature, semantics, legal inputs). The
-  teacher writes the correctness judge from this file alone; the goal/prompts are yours to
-  edit.
-- `shapes.json`: the shapes to optimize for; every shape and input group is judged and timed.
-- `task.toml`: language (`cutedsl` | `cuda`), GPU architecture, the reference, the target,
-  the budget — write only what differs from `global_config/`.
-
-The reference decides the mode:
-
-| `[reference]` in `task.toml` | Mode | What the teacher sees |
+| `[reference]` | Mode | What the teacher sees |
 |---|---|---|
 | `run` + `source` | `source` | the reference's source and its hardware behavior |
 | `run` only, or `blackbox = true` | `blackbox` | hardware behavior only (the source is sealed) |
 | (no `[reference]` table) | generate | a `/goal` session writes a reference first |
 
-### Per-task knobs (`task.toml`) and their defaults
-
-| Knob | Where | Meaning | Default |
-|---|---|---|---|
-| `ratio` / `timing` | `[target]` | Stop when the kernel is this many × the reference (`ms =` sets an absolute target instead); time device or e2e. | `1.2` / `device` |
-| `hours` / `max_meta` / `reference_hours` | `[budget]` | The loop's wall clock; teacher revision rounds; hours for writing a reference when the task has none. | `4` / `3` / `8` |
-| `memo_lane` | `[protocol]` | The industrial MEMO lane (see the table above). | `false` |
-| `sm_clock_mhz` / `mem_clock_mhz` | `[protocol]` | Declared measurement clock; the harness verifies the lock and refuses to time unlocked. | unlocked |
-| `prior_survey` / `prior_art` | `[agent.teacher]` | Teacher-side prior supply: a public-SOTA survey and/or an offline dossier before distilling the curriculum. Re-priced by measurement in this run regardless. | `false` |
-| `stagnation_k` | `[loop]` | After N non-improving rounds, force an architecture change instead of parameter grinding (the teacher may override once). | `3` |
-| `floor_stop` / `floor_margin` | `[loop]` | Analytic-floor stop: when the kernel reaches the computed hardware floor (within margin), stop. | `false` (on for tasks with a computable floor; rollback: set `false`) |
-| `sprt_early_stop` | loop config | A clearly losing experiment ends early instead of sampling to the full window. | on |
-| `merge_eval_ncu` | loop config | Evaluation and profiling in one job. | on |
-| `ncu_on_revert` | loop config | Whether reverted kernels are also profiled (`off` saves time, `on` keeps the teaching value of failures). | on |
-| `RKT_BUILD_CACHE=1` | env | Content-keyed build cache: identical sources are never rebuilt (~40% of job wall clock); hashes re-verified on every hit. | off |
-| `RKT_BACKGROUND_LANE=1` | env | While the agent thinks, the GPU queues non-gate measurements instead of idling; gate readings are never served from the lane. | off |
-| `RKT_PROFILE=baseline` | env / card | Turn every fork-added verdict-changing mechanism off at once (upstream-era behavior, for audits). | unset |
-
-Every knob has a rollback switch and a default that is byte-identical to upstream behavior
-when unset. The full reference: [docs/options.md](docs/options.md).
-
-## The kernel corpus (`kernels/`)
-
-The upstream artifact release (25 kernels across H100 and B200, honest provenance records).
-They are prior/teaching material, and via `init --from-kernels` also the framework's own
-task corpus.
+**Published-kernel corpus** — `kernels/` releases 25 kernels across H100 and B200
+(upstream artifact release, honest provenance records). They are prior/teaching material,
+and via `init --from-kernels` also the framework's own task corpus:
 
 | Directory | Operators |
 |---|---|
@@ -379,7 +410,12 @@ task corpus.
 
 Each kernel's speedup and comparison target: [kernels/README.md](kernels/README.md).
 
-## Repository layout
+**A new language** needs more than the `[language]` section of the run config: a prompt
+overlay in `meta/<lang>/` and a knowledge-base tree `hw_kb/<lang>/<arch>/` — see
+[docs/run-configuration.md](docs/run-configuration.md). Language registration is a code
+change by design.
+
+## 10. Repository layout and documentation
 
 ```text
 src/rsi_kernel_tune/  the harness: CLI, tasks and runs, the loop, GPU jobs
@@ -398,21 +434,18 @@ tests/                pytest suite (CPU only)
 ```
 
 Tests run without installing: `python3 -m pytest tests/ -q` (`pyproject.toml` sets
-`pythonpath=["src"]`). Self-evolution across generations:
-`python scripts/self_evolve.py tasks/<op> [--step 1.05] [--max-gen N]`.
-
-## Documentation
+`pythonpath=["src"]`).
 
 - [docs/README.md](docs/README.md) — one-line-per-document index
-- [docs/options.md](docs/options.md) — every knob, all three layers, defaults and rollback switches
+- [docs/options.md](docs/options.md) — every knob, all three layers, rollback switches
 - [docs/run-configuration.md](docs/run-configuration.md) — the run configuration, field by field
-- [docs/industrial-lane.md](docs/industrial-lane.md) — the STRICT/MEMO two-lane contract
-- [docs/compute-dtype.md](docs/compute-dtype.md) — the declared precision contract
-- [docs/blackbox-mode.md](docs/blackbox-mode.md) — sealed references and the guard's failure modes
+- [docs/industrial-lane.md](docs/industrial-lane.md) / [docs/compute-dtype.md](docs/compute-dtype.md) — the two contracts of section 4
+- [docs/blackbox-mode.md](docs/blackbox-mode.md) — sealed references and the guard
 - [docs/kb-harvest.md](docs/kb-harvest.md) — how certified recipes enter the knowledge base
 - [CHANGELOG.md](CHANGELOG.md) — release history; [docs/backlog.md](docs/backlog.md) — frozen/deferred proposals
+- Paper: TBD — the experiment bundle lands under [docs/paper/](docs/paper/)
 
-## Limitations
+## 11. Limitations
 
 - **A reference helps most.** Given only a PyTorch implementation and a device-time number,
   the upstream ablation stalls; this framework surpasses an implementation that exists more
@@ -425,18 +458,10 @@ Tests run without installing: `python3 -m pytest tests/ -q` (`pyproject.toml` se
 - **Cost.** A run is hours of GPU time and frontier-model usage, and the agents run with
   permissions bypassed inside a policy the driver writes; run it on a machine meant for it.
 
-## License and acknowledgment
+## 12. License
 
-- This repository is a fork of [OpenBMB/ForgeKernel](https://github.com/OpenBMB/ForgeKernel)
-  (baseline commit `5030503`), licensed under the **Apache License 2.0**; this repository
-  follows the same license — [LICENSE](LICENSE) and the derivative-work mapping in
-  [NOTICE](NOTICE) are preserved.
-- `kernels/` is the upstream artifact release; its provenance records are kept as-is.
-
-## Paper
-
-Paper: TBD. The experiment bundle (result tables, matrices, reproduction notes) lands under
-[docs/paper/](docs/paper/).
+Apache-2.0 — see [LICENSE](LICENSE). This repository is a fork of
+[OpenBMB/ForgeKernel](https://github.com/OpenBMB/ForgeKernel); see [NOTICE](NOTICE).
 
 <!-- SPDX-FileCopyrightText: Copyright 2026 The RSI-Kernel-Tune Authors -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->

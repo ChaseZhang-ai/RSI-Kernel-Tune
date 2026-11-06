@@ -51,6 +51,39 @@ below and in [NOTICE](NOTICE).
 > in task.toml — the system optimizes at exactly the declared precision and never goes
 > below it. Default fp32.
 
+## Fastest path (pick your scenario)
+
+**Academic / capability measurement** (default): nothing to declare — the framework
+measures the kernel's honest compute under the STRICT contract.
+
+**Industrial production with repeating inputs**: turn on the memoization lane and
+the system keeps a content-keyed cache — judged inputs become cache hits (faster),
+unseen inputs still compute honestly and pass the correctness door:
+
+```toml
+# in the task's task.toml
+[protocol]
+memo_lane = true
+```
+
+See [docs/industrial-lane.md](docs/industrial-lane.md) for the two-lane contract.
+
+**Every other knob** (precision you declare, search governance, budgets, build
+cache, background lane): one config page generates and explains them —
+
+```bash
+rsi-kernel-tune config init        # writes a fully-commented rsi-run.toml
+rsi-kernel-tune config check       # validate before running
+rsi-kernel-tune run --config rsi-run.toml
+```
+
+Every field's meaning, default, and rollback switch: [docs/run-configuration.md](docs/run-configuration.md)
+and the full knob reference in [docs/options.md](docs/options.md).
+
+**The kernel's compute precision is YOUR decision** — declare it in the config
+(`compute_dtype`: fp32 / tf32 / bf16 / fp16 / fp8). The system optimizes at exactly
+the declared precision and never goes below it. Default fp32.
+
 ## Quick start
 
 Prefer one file that fills in everything a run needs (API provider/models + key-file

@@ -15,18 +15,46 @@ optimization keeps going past the best known implementation, and hardware-certif
 accumulate in a **knowledge base shared across operators**.
 
 ```mermaid
-flowchart LR
-    R1["Reference kernel (gen k)"] --> RUN
-    subgraph RUN["One run  (.artifacts/op_id/)"]
-        direction LR
-        J["judge + calibrate<br/>vs the reference"] --> M0["teacher distills M0<br/>architecture milestone"] --> S["student implements<br/>one decision at a time"] --> G{"paired GPU measurement:<br/>correct AND faster?"}
-        G -->|"no: revert, retry"| S
+---
+config:
+  flowchart:
+    nodeSpacing: 30
+    rankSpacing: 42
+---
+flowchart TD
+    R1["Reference kernel<br/>gen k"] --> J
+
+    subgraph RUN["One run · .artifacts/op_id/"]
+        direction TB
+        J["judge + calibrate"] --> M0["teacher distills<br/>M0 architecture<br/>milestone"]
+        M0 --> S["student implements<br/>one decision<br/>at a time"]
+        S --> G{"correct &<br/>faster?"}
+        G -->|"revert & retry"| S
         G -->|"yes"| B["best/kernel.py"]
     end
-    B -->|"gain above the noise floor:<br/>promote"| R2["Reference kernel (gen k+1)"]
+
+    B -->|"gain above noise floor → promote"| R2["Reference kernel<br/>gen k+1"]
     B -->|"probe-certified findings"| KB[("hw_kb/<br/>knowledge base")]
     KB -.->|"mechanisms prescribed<br/>to later runs"| M0
+
+    classDef ref fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:1.5px
+    classDef judge fill:#E2E8F0,stroke:#64748B,color:#334155,stroke-width:1.5px
+    classDef teacher fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:1.5px
+    classDef student fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:1.5px
+    classDef gate fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:1.5px
+    classDef best fill:#A7F3D0,stroke:#059669,color:#064E3B,stroke-width:2.5px
+    classDef kb fill:#CFFAFE,stroke:#0891B2,color:#164E63,stroke-width:1.5px
+    class R1,R2 ref
+    class J judge
+    class M0 teacher
+    class S student
+    class G gate
+    class B best
+    class KB kb
+    style RUN fill:#F8FAFC,stroke:#94A3B8,stroke-width:1px
 ```
+
+*Color key: blue = reference · gray = measurement harness · amber = teacher · green = student · purple = go/no-go gate · teal = knowledge base.*
 
 This repository is a fork of [OpenBMB/ForgeKernel](https://github.com/OpenBMB/ForgeKernel)
 (baseline commit `5030503`, Apache-2.0); the upstream obligations are preserved in
@@ -226,21 +254,46 @@ layer: `models.toml`, `loop.toml`, `backends.toml`).
 ## How it works
 
 ```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 30
+    rankSpacing: 42
+---
 flowchart TD
     subgraph INNER["Inner loop — the student"]
-        S["implement one decision row<br/>of the milestone"] --> JOB["one GPU job:<br/>judge correctness + paired timing + NCU profile"]
-        JOB -->|"correctness fail"| REV["revert"] --> S
-        JOB -->|"faster (past the noise floor)"| NB["confirm at the gate window"]
+        direction TB
+        S["implement one<br/>decision row<br/>of the milestone"] --> JOB["one GPU job:<br/>judge · time · profile"]
+        JOB -->|"correctness fail"| REV["revert"]
+        REV --> S
+        JOB -->|"faster (past noise floor)"| NB["confirm at the<br/>gate window"]
         NB -->|"confirmed"| BEST["new best kernel"]
         NB -->|"not confirmed"| S
     end
     subgraph OUTER["Outer loop — the teacher"]
-        T["re-enter on stagnation / exhausted decisions / gate impasse:<br/>price levers, run verdict probes,<br/>revise the milestone M0"]
+        T["price levers,<br/>run probes,<br/>revise M0"]
     end
-    BEST --> T
+    BEST -->|"stagnation / impasse"| T
     T -->|"revised curriculum"| S
     BEST -->|"run end"| KB[("hw_kb/<br/>knowledge base")]
     KB -.->|"KB-MENU hints<br/>for later runs"| S
+
+    classDef student fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:1.5px
+    classDef job fill:#E2E8F0,stroke:#64748B,color:#334155,stroke-width:1.5px
+    classDef revert fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D,stroke-width:1.5px
+    classDef gate fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:1.5px
+    classDef best fill:#A7F3D0,stroke:#059669,color:#064E3B,stroke-width:2.5px
+    classDef teacher fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:1.5px
+    classDef kb fill:#CFFAFE,stroke:#0891B2,color:#164E63,stroke-width:1.5px
+    class S student
+    class JOB job
+    class REV revert
+    class NB gate
+    class BEST best
+    class T teacher
+    class KB kb
+    style INNER fill:#F0FDF4,stroke:#86EFAC,stroke-width:1px
+    style OUTER fill:#FFFBEB,stroke:#FCD34D,stroke-width:1px
 ```
 
 A run has two nested loops. In the **inner loop** the student implements one decision row of

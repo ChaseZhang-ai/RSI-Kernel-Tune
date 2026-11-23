@@ -125,7 +125,9 @@ def test_an_arch_without_a_kb_for_the_language_is_refused(tmp_path):
 
 
 def test_every_problem_is_reported_at_once(tmp_path):
-    toml = ('[task]\nlanguage = "triton"\narch = "h100"\n'
+    # "tilelang" is not a task language (triton became one with task triton): every
+    # problem the task file has is still reported together, not one edit at a time.
+    toml = ('[task]\nlanguage = "tilelang"\narch = "h100"\n'
             '[target]\nratio = 1.5\nms = 0.2\ntiming = "wall"\n'
             '[budget]\nhours = 0\nmax_meta = -1\n'
             '[agent.student]\nbackend = "codex"\n'

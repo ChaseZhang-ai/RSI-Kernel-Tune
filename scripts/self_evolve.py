@@ -59,7 +59,7 @@ def next_generation(task, best: dict, dest: Path, step: float) -> Path:
     """tasks/<op>-g<k>/: the task with ``best`` as its reference and target ``step``x."""
     if dest.exists():
         raise FileExistsError(f"{dest} exists; remove it or start the chain elsewhere")
-    if task.language != "cutedsl":
+    if task.language not in ("cutedsl", "triton"):
         raise ValueError("self-evolution needs a Python kernel to seal as the next reference "
                          f"(this task's language is {task.language!r})")
     dest.mkdir(parents=True)

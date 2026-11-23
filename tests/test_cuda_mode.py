@@ -45,18 +45,26 @@ MARKED = STUDENT.replace(
 # ---------------------------------------------------------------- modes
 def test_a_language_belongs_to_one_mode_and_each_mode_reads_its_own_kb_and_provenance(tmp_path):
     assert lang_mode.mode_of("cuda-sol") == lang_mode.MODE_CUDA
-    for lang in ("cutedsl", "triton", "inline-ptx", None):
+    # triton has its own mode since task triton (loop/lang_mode.py MODE_TRITON); the
+    # CuTe DSL mode is what is left, exactly as before.
+    assert lang_mode.mode_of("triton") == lang_mode.MODE_TRITON
+    for lang in ("cutedsl", "inline-ptx", None):
         assert lang_mode.mode_of(lang) == lang_mode.MODE_CUTEDSL
     assert lang_mode.kb_root_name("cutedsl") == "hw_kb/cutedsl"
     assert lang_mode.kb_root_name("cuda-sol") == "hw_kb/cuda"
+    assert lang_mode.kb_root_name("triton") == "hw_kb/triton"
     assert lang_mode.kb_repo_root(tmp_path / "hw_kb" / "cuda") == tmp_path
     assert lang_mode.provenance_dir(tmp_path, "cutedsl") == tmp_path / "docs" / "kb-provenance"
     assert lang_mode.provenance_dir(tmp_path, "cuda-sol") == tmp_path / "docs" / "kb-provenance" / "cuda"
+    assert lang_mode.provenance_dir(tmp_path, "triton") == tmp_path / "docs" / "kb-provenance" / "triton"
     cu, dsl, gaps = ("docs/kb-provenance/cuda/x.md", "docs/kb-provenance/x.md",
                      "docs/kb-provenance/gaps/op.md")
+    tri = "docs/kb-provenance/triton/x.md"
     assert lang_mode.owns_provenance(cu, "cuda-sol") and not lang_mode.owns_provenance(dsl, "cuda-sol")
     assert lang_mode.owns_provenance(dsl, "cutedsl") and lang_mode.owns_provenance(gaps, "cutedsl")
     assert not lang_mode.owns_provenance(cu, "cutedsl")
+    assert lang_mode.owns_provenance(tri, "triton") and not lang_mode.owns_provenance(dsl, "triton")
+    assert not lang_mode.owns_provenance(tri, "cutedsl") and not lang_mode.owns_provenance(tri, "cuda-sol")
 
 
 def test_the_cuda_mode_reads_its_prompt_overlay_and_falls_back_to_the_shared_prompt(tmp_path):

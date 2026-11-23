@@ -138,6 +138,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--base-dir", default=None, help="main-repo root override (testing)")
     p.add_argument("--no-git", action="store_true", help="skip git init + initial commit")
+    # The loop language the card's suggested loop.toml names (the loop then reads that
+    # mode's prompts and hw_kb tree). Default: cuda-sol for a .cu kernel file, else
+    # cutedsl; a Triton card (--kernel-file kernel.py --language triton) says triton.
+    p.add_argument("--language", default=None, choices=("cutedsl", "triton", "cuda-sol"),
+                   help="the language the card's suggested loop.toml names")
     lb = p.add_argument_group(
         "leaderboard card (docs/leaderboards.md): the card IS one problem of a board, "
         "judged and timed the way the board does")
@@ -199,6 +204,14 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     if args.binary_ref and args.sealed_ref:
         p.error("--binary-ref and --sealed-ref are two kinds of one reference: choose one")
+    if args.language:
+        # The language and the kernel file pick the same mode (loop/lang_mode.py): a
+        # CUDA-mode language over a kernel.py (or any language over a .cu but cuda-sol)
+        # is a card whose student would be told to write the other language's code.
+        from forgekernel.loop import lang_mode
+        why = lang_mode.language_problem(args.language, args.kernel_file)
+        if why:
+            p.error(f"--language {args.language}: {why}")
 
     problem = None
     sol = module = None
@@ -239,7 +252,8 @@ def main(argv: list[str] | None = None) -> int:
         from forgekernel import leaderboard as lbmod
         created += lbmod.write_card(op_dir, problem, template_eval,
                                     dps=not args.value_returning,
-                                    kernel_file=args.kernel_file)
+                                    kernel_file=args.kernel_file,
+                                    language=args.language)
         for note in problem.notes:
             print(f"[new] NOTE {note}")
         if (nbytes := lbmod.blob_bytes(problem)) > lbmod.BLOB_WARN_BYTES:

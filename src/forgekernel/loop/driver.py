@@ -35,7 +35,7 @@ from typing import Callable, Protocol
 
 from forgekernel.inner.ncu import kernels_from_ncu, profiler_from_ncu
 from forgekernel.skills.sass_census import parse_census_line, parse_serial_line
-from forgekernel.loop.job_env import env_failure
+from forgekernel.loop.job_env import env_failure, import_check_flag
 from forgekernel.loop import harness_guard, precision_gate
 from forgekernel.loop.kb_lint import lint_kb_dir
 from forgekernel.loop import lang_mode
@@ -672,6 +672,26 @@ def _meta_prompt(ctx: LoopContext, name: str) -> Path:
 def _is_cuda(ctx: LoopContext) -> bool:
     """A CUDA-mode run: its student edits a .cu the card builds with nvcc."""
     return lang_mode.is_cuda(ctx.language) or lang_mode.is_cuda_kernel_file(ctx.kernel_file)
+
+
+def _is_triton(ctx: LoopContext) -> bool:
+    """A Triton-mode run: a Python kernel.py whose compute is @triton.jit kernels."""
+    return lang_mode.is_triton(ctx.language)
+
+
+def _tool_unavailable(ctx: LoopContext, tool: str) -> "str | None":
+    """Why ``tool`` cannot run in this run's language mode (loop/lang_mode.py), or None.
+
+    Logged once per run and tool, so a tool this mode has no channel for is said out
+    loud ("not available here, because ...") instead of buying a job that can only
+    fail -- or worse, returning a reading about something else."""
+    why = lang_mode.tool_unavailable(ctx.language, tool)
+    if why:
+        seen = ctx.__dict__.setdefault("_tools_unavailable_logged", set())
+        if tool not in seen:
+            seen.add(tool)
+            _log(f"tool {tool}: unavailable in {lang_mode.mode_of(ctx.language)} mode — {why}")
+    return why
 
 
 def _bindings(ctx: LoopContext) -> dict[str, str]:
@@ -1885,6 +1905,10 @@ def _ncu_mode(ctx: LoopContext) -> str:
         if _is_cuda(ctx):
             # no JIT dump for a .cu: the runner reads the build of this kernel file
             return f"{_ORCH_CENSUS_CMD} --kernel {ctx.kernel_file}"
+        if _tool_unavailable(ctx, "census"):
+            # no cubin of this kernel for the census to read: plain NCU still gives
+            # the digest (the kernel name is the @triton.jit function's)
+            return "ncu"
         return _ORCH_CENSUS_CMD
     return "ncu"
 
@@ -5399,6 +5423,11 @@ def _is_timeline_request(path: str) -> bool:
 
 
 def _timeline_on(ctx: LoopContext) -> bool:
+    # A mode with no marker channel for its kernel (loop/lang_mode.py
+    # TOOL_UNAVAILABLE: a Triton kernel has none) never has the probe on, whatever
+    # loop.toml says; _tool_unavailable writes the one-line reason to the run's log.
+    if _tool_unavailable(ctx, "timeline"):
+        return False
     mode = str(getattr(ctx, "timeline_probe", "off") or "off").lower()
     if mode == "on":
         return True
@@ -5868,6 +5897,13 @@ def _timeline_block(tl: dict, ref_lines: str = "") -> str:
 
 def _timeline_student_note(ctx: LoopContext) -> str:
     if not _timeline_on(ctx):
+        # An unavailable probe (Triton mode) is not the same as an operator who left it
+        # off: the student's prompt says why, so it does not spend a round asking for it.
+        why = lang_mode.tool_unavailable(ctx.language, "timeline")
+        if why:
+            return ("\n## Timeline probe (unavailable for this run)\n"
+                    f"- `PROBE_REQUEST: timeline` cannot be served: {why}. Diagnose from the "
+                    "NCU / pricing evidence instead; do not plan a round around a timeline.\n")
         return ""
     has_def, names = _timeline_markers(ctx)
     from forgekernel.skills.timeline_probe import NSITE
@@ -9718,23 +9754,29 @@ def _missing_recon_evidence(ctx: LoopContext, sass_ok: bool, sched_ok: bool,
                             live_ok: bool, stall_ok: bool = True,
                             struct_ok: bool = True,
                             near_miss: dict | None = None) -> list:
-    """Channel names whose evidence is neither delivered nor waived."""
+    """Channel names whose evidence is neither delivered nor waived.
+
+    A mode with no channel for them (loop/lang_mode.py TOOL_UNAVAILABLE: the
+    Triton mode has no SASS page for its kernel) is not held to them: the reason
+    goes to the run's log once, instead of the recon being refused for evidence
+    it could never produce. Everything the mode can deliver is held to as before."""
     near = near_miss or {}
     missing = []
-    if not _verdict_evidence(ctx, sass_ok, _SASS_WAIVED,
-                             _DELIVERED_MISMATCH["SASS"], "SASS" in near):
+    sass_channels = _tool_unavailable(ctx, "sass") is None
+    if sass_channels and not _verdict_evidence(
+            ctx, sass_ok, _SASS_WAIVED, _DELIVERED_MISMATCH["SASS"], "SASS" in near):
         missing.append("SASS")
-    if not _verdict_evidence(ctx, sched_ok, _SCHED_WAIVED,
-                             _DELIVERED_MISMATCH["SCHED"], "SCHED" in near):
+    if sass_channels and not _verdict_evidence(
+            ctx, sched_ok, _SCHED_WAIVED, _DELIVERED_MISMATCH["SCHED"], "SCHED" in near):
         missing.append("SCHED")
-    if not _verdict_evidence(ctx, live_ok, _LIVE_WAIVED,
-                             _DELIVERED_MISMATCH["LIVE"], "LIVE" in near):
+    if sass_channels and not _verdict_evidence(
+            ctx, live_ok, _LIVE_WAIVED, _DELIVERED_MISMATCH["LIVE"], "LIVE" in near):
         missing.append("LIVE")
     if ctx.stall_pricing and not _verdict_evidence(
             ctx, stall_ok or _ref_ledger_banked(ctx), _STALL_WAIVED,
             _DELIVERED_MISMATCH["STALL"], "STALL" in near):
         missing.append("STALL")
-    if _struct_recon(ctx) and not _verdict_evidence(
+    if sass_channels and _struct_recon(ctx) and not _verdict_evidence(
             ctx, struct_ok, _STRUCT_WAIVED,
             _DELIVERED_MISMATCH["STRUCT"], "STRUCT" in near):
         missing.append("STRUCT")
@@ -10557,8 +10599,10 @@ def job_env_preflight(ctx: LoopContext, policy: str = "refuse") -> str | None:
         _seed_ws_stall_tools(ctx)   # idempotent; the check script rides the pricing toolkit
         checks = []
         if (Path(ctx.workspace) / "notes" / _JOB_ENV_CHECK_NAME).is_file():
-            # a CUDA-mode card also needs the toolchain its kernel is built with
-            checks.append(("tools", f"{_JOB_ENV_CHECK_CMD} --cuda" if _is_cuda(ctx)
+            # a CUDA-mode card also needs the toolchain its kernel is built with; a
+            # triton one the triton package (loop/job_env.py import_check_flag)
+            flag = import_check_flag(lang_mode.mode_of(ctx.language))
+            checks.append(("tools", f"{_JOB_ENV_CHECK_CMD} {flag}" if flag
                            else _JOB_ENV_CHECK_CMD))
         checks.append(("ncu", _ncu_mode(ctx)))
         be.push_branch(branch)

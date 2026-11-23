@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,8 @@ SHAPES = [{"name": "small", "axes": {"m": 128, "n": 256}},
 
 def _kb(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
-    for kb in ("hw_kb/cutedsl/sm100", "hw_kb/cutedsl/sm90", "hw_kb/cuda/sm100"):
+    for kb in ("hw_kb/cutedsl/sm100", "hw_kb/cutedsl/sm90", "hw_kb/cuda/sm100",
+               "hw_kb/triton/sm100", "hw_kb/triton/sm90"):
         (root / kb).mkdir(parents=True, exist_ok=True)
     return root
 
@@ -116,6 +118,20 @@ def test_cuda_language_maps_to_the_loop_language(tmp_path):
     toml = '[task]\nlanguage = "cuda"\narch = "sm100"\n'
     t = load_task(_task(tmp_path, toml), kb_root=_kb(tmp_path))
     assert t.loop_language == "cuda-sol"
+
+
+def test_triton_language_maps_to_the_loop_language(tmp_path):
+    toml = '[task]\nlanguage = "triton"\narch = "sm100"\n'
+    t = load_task(_task(tmp_path, toml), kb_root=_kb(tmp_path))
+    assert t.language == "triton" and t.loop_language == "triton"
+
+
+def test_a_triton_arch_without_a_tree_is_refused(tmp_path):
+    toml = '[task]\nlanguage = "triton"\narch = "sm90"\n'
+    kb = _kb(tmp_path)
+    shutil.rmtree(kb / "hw_kb" / "triton" / "sm90")
+    with pytest.raises(TaskError, match="no hardware knowledge base for triton"):
+        load_task(_task(tmp_path, toml), kb_root=kb)
 
 
 def test_an_arch_without_a_kb_for_the_language_is_refused(tmp_path):

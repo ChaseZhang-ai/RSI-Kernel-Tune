@@ -1,0 +1,21 @@
+# triton_rmsnorm -- the example task written in Triton: fuse a PyTorch RMSNorm (nine kernel
+# launches a call) into one @triton.jit kernel. `forge new tasks/triton_rmsnorm`, then
+# `forge run` the run it creates. Everything not written here comes from global_config/.
+#
+# `arch` is the TARGET the readings are about (sm100 = B200). To smoke the whole call path on a
+# local card (an Ampere RTX 3060, 6 GB) change it to that card's architecture, e.g. sm86: that
+# tree is a DEVELOPMENT / SMOKE target (hw_kb/triton/README.md) -- it proves the kernel builds,
+# is correct and is timed, and says nothing about the target's speed. A Triton kernel must never
+# be compiled *for* the card it happens to run on: the source names no architecture.
+
+[task]
+language = "triton"
+arch     = "sm100"                   # sm90 for Hopper; sm86 / sm103 for a local smoke run
+
+[reference]
+run    = "reference/run.py:run"      # the callable timed beside the kernel
+source = "reference"                 # the teacher may read it (source mode)
+
+[budget]
+hours    = 2
+max_meta = 1

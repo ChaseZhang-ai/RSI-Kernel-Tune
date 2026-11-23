@@ -94,6 +94,21 @@ def problem_of(task, op_dir: Path | None = None) -> dict | None:
 # -- the reference library -------------------------------------------------------------
 
 
+def _as_mapping(entry) -> dict | None:
+    """A klib entry as a dict: the seedlib schema's dataclass or a plain mapping."""
+    if isinstance(entry, dict):
+        return entry
+    try:
+        import dataclasses
+        if dataclasses.is_dataclass(entry) and not isinstance(entry, type):
+            return dataclasses.asdict(entry)
+    except Exception:
+        pass
+    if hasattr(entry, "__dict__"):
+        return dict(vars(entry))
+    return None
+
+
 def klib_entries(index: Path | None = None) -> list[dict]:
     """The reference library's entries, or [] when the index (the seedlib task's
     deliverable) is not on this machine. Read-only and duck-typed: a dataclass or a dict."""
@@ -116,11 +131,21 @@ def klib_entries(index: Path | None = None) -> list[dict]:
             return []
     out = []
     for entry in data or []:
-        if isinstance(entry, dict):
-            out.append(entry)
-        elif hasattr(entry, "__dict__"):
-            out.append(dict(vars(entry)))
+        if (mapping := _as_mapping(entry)) is not None:
+            out.append(mapping)
     return out
+
+
+def klib_usable(entry: dict) -> bool:
+    """The seedlib schema's own verdict when it is importable, else the licence rule."""
+    try:
+        from forgekernel.klib.schema import submittable
+    except Exception:
+        return seed.licenses_allow_reuse(entry.get("license"))
+    try:
+        return bool(submittable(entry))
+    except Exception:
+        return seed.licenses_allow_reuse(entry.get("license"))
 
 
 def _names_for(task, problem: dict | None) -> set[str]:
@@ -147,13 +172,14 @@ def _family_of(name: str) -> str | None:
 
 
 def select_klib(entries: list[dict], task, problem: dict | None) -> list[dict]:
-    """Entries whose ``problem_keys`` name this problem, or whose family is its family."""
+    """Entries whose ``problem_keys`` name this problem or its family, or whose ``family`` is
+    its family (the seedlib schema: ``problem_keys`` holds board problem names and family keys)."""
     names = _names_for(task, problem)
     families = {_family_of(n) for n in names} - {None}
     out = []
     for e in entries:
         keys = {str(k) for k in (e.get("problem_keys") or [])}
-        hit = bool(keys & names)
+        hit = bool(keys & names) or bool(keys & families)
         if not hit and families and e.get("family"):
             hit = _family_of(str(e["family"])) in families or e.get("family") in families
         if hit:
@@ -162,31 +188,53 @@ def select_klib(entries: list[dict], task, problem: dict | None) -> list[dict]:
 
 
 def _entry_index_path(entry: dict) -> Path | None:
+    """The file a library entry names: ``path`` is relative to the library root
+    (``kernel_library/kernels/<id>/kernel.py`` in the seedlib schema), so an absolute path,
+    the repository-relative one and the library-relative one are all tried."""
     raw = entry.get("path")
     if not raw:
         return None
     p = Path(str(raw)).expanduser()
-    if not p.is_absolute():
-        p = _repo_root() / p
-    return p if p.is_file() else None
+    candidates = [p] if p.is_absolute() else [
+        _repo_root() / p, _repo_root() / KLIB_INDEX.parent / p]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _source_of(entry: dict) -> str:
+    """A library entry's provenance as one cell: ``repo:path@commit``, or the string as is."""
+    source = entry.get("source")
+    if isinstance(source, dict):
+        parts = [str(source.get(k) or "") for k in ("repo", "path", "commit")]
+        text = ":".join(parts[:2]) + (f"@{parts[2]}" if parts[2] else "")
+        return text.strip(":@") or "—"
+    return str(source or "—")
 
 
 def _score_of(entry: dict) -> str:
     reported = entry.get("reported")
     verified = entry.get("verified_local")
+    if verified is not None and not isinstance(verified, dict):
+        verified = _as_mapping(verified)
     parts = []
-    if reported:
-        parts.append("board: " + (json.dumps(reported, ensure_ascii=False)
-                                  if not isinstance(reported, str) else reported))
-    if verified:
-        parts.append("local: " + (json.dumps(verified, ensure_ascii=False)
-                                  if not isinstance(verified, str) else verified))
+    for label, value in (("board", reported), ("local", verified)):
+        if value:
+            if not isinstance(value, str):
+                try:
+                    value = json.dumps(value, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    value = str(value)
+            parts.append(f"{label}: {value}")
     return "; ".join(parts) or "—"
 
 
 def _local_reference_ms(entry: dict) -> float | None:
     """A measured reference time from the library's local verification, when it has one."""
     verified = entry.get("verified_local")
+    if verified is not None and not isinstance(verified, dict):
+        verified = _as_mapping(verified)
     if not isinstance(verified, dict):
         return None
     for key in ("t_ms", "median_ms", "ms", "device_median_ms"):
@@ -415,11 +463,13 @@ def manifest_text(task, *, op_dir: Path | None = None, problem: dict | None = No
         elif not selected:
             lines.append("The reference library has no entry for this problem or its family.")
         else:
-            lines += _table(["id", "family", "language", "license", "score", "source", "path"],
+            lines += _table(["id", "family", "language", "license", "usable", "score",
+                             "source", "path"],
                             [[str(e.get("id") or "—"), str(e.get("family") or "—"),
                               str(e.get("language") or "—"), str(e.get("license") or "unknown"),
-                              _score_of(e), str(e.get("source") or "—"),
-                              str(e.get("path") or "—")] for e in selected])
+                              "yes" if klib_usable(e) else "no",
+                              _score_of(e), _source_of(e), str(e.get("path") or "—")]
+                             for e in selected])
             lines += ["", "Only entries licensed Apache-2.0 / MIT / BSD may be incorporated."]
 
     # 6. local knowledge

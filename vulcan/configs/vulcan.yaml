@@ -1,0 +1,57 @@
+# VULCAN strategy configuration.
+# Consumed by the supervisor / plan / demo commands.  Values here are the defaults;
+# override on the command line for a one-off experiment.
+
+dataset: data/sol_execbench_b200_flashinfer.json
+board:
+  suite: sol-execbench
+  collection: flashinfer-bench
+  gpu: B200          # the leaderboard's GPU -- see docs/B300_RUNBOOK.md (dev vs submit)
+  evaluation_stack: v1.1
+
+# Whose published per-kernel score seeds the starting latency.
+from: forgekernel    # forgekernel | golden_bridge | best
+
+objective:
+  # The board's collection score is the UNWEIGHTED arithmetic MEAN of per-kernel
+  # SOL scores; kernel scores are geometric means over workloads.  Do not change
+  # unless the board changes (see docs/LEADERBOARD_ANALYSIS.md).
+  kernel_aggregation: geomean
+  collection_aggregation: mean
+  fast1_weight: 0.0            # >0 to bias hours toward Fast1 stragglers
+
+allocation:
+  method: auto                 # auto | dp (exact) | greedy
+  quantum_hours: 0.5
+  improvement_model:
+    rate_per_hour: 0.05        # fractional gap-to-SOL closed per GPU-hour (prior)
+    floor_frac: 0.45           # fraction of the gap one campaign cannot close
+
+portfolio:
+  # Architecturally distinct M0 hypotheses; successive halving picks the survivor.
+  eta: 2
+  budgets_hours: [1.0, 3.0, 7.0]
+  hypotheses:
+    - cta-per-tile
+    - persistent-cta
+    - warp-specialized
+    - split-k
+    - register-resident
+    - fused-epilogue
+
+promotion:
+  # A gain is promoted only if the lower end of the paired-ratio bootstrap CI
+  # exceeds 1 + margin.  margin is auto-set from the measured noise floor.
+  alpha: 0.05
+  min_margin: 0.0
+  auto_margin: true
+
+curriculum:
+  strategy: hybrid             # hybrid | value | curriculum
+  seed_families_first: true
+
+targets:
+  # Default per-kernel target: match the best public submission for that kernel.
+  # Matching every kernel's best-known score gives collection = 0.819011, which is
+  # above the current #1 (0.815321).
+  mode: best                   # best | golden_bridge | <numeric score>

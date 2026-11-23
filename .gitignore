@@ -1,0 +1,22 @@
+# .DS_Store / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Vendored upstream (reproduced by scripts/bootstrap.sh, pinned in vendor/UPSTREAM.lock)
+vulcan/vendor/ForgeKernel/
+
+# Run artifacts and submissions (never commit large/derived outputs)
+vulcan/runs/
+vulcan/submissions/
+*.plan.json
+plan.json

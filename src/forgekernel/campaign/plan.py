@@ -217,6 +217,7 @@ def build_plan(snap: targets.Snapshot, *, selection: str | None, dataset: str,
         warnings.append(f"dataset {ds} does not exist yet: `forge init` will fail until "
                         f"download_solexecbench.py has written data/benchmark/<subset>/")
     problems = []
+    auto = selection == "auto"
     for r in picked:
         op = op_name(snap, r)
         subset = solscore.TRACK_SUBSET[r.track]
@@ -226,6 +227,10 @@ def build_plan(snap: targets.Snapshot, *, selection: str | None, dataset: str,
             gap=r.gap, starter=r.starter, starter_detail=r.starter_detail,
             workloads=workloads, hours=hours)
         p.init_argv = init_argv(p, dataset=str(ds))
+        if auto:
+            # why this one: the gap, and the prior's factor when it moved the pick
+            p.notes.append(f"picked for gap {r.gap:+.4f} ({r.priority_why}; priority "
+                           f"{r.priority or 0:.4f})")
         if r.starter == targets.STARTER_UNKNOWN:
             p.notes.append("no reference library: the torch baselines are the first starts")
         if r.track == "quant":

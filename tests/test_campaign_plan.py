@@ -45,6 +45,9 @@ def test_pilot_auto_takes_the_priority_order(tmp_path):
     want = [r.name for r in T.ranked(rows, by="priority")[:2]]
     assert [p.name for p in plan.problems] == want
     assert any("gap x feasibility" in w for w in plan.warnings)
+    # every auto pick says why it is in the plan (the gap and the prior's factor)
+    for p in plan.problems:
+        assert any(n.startswith("picked for gap ") for n in p.notes), p.notes
 
 
 def test_a_bare_count_takes_the_gap_order(tmp_path):

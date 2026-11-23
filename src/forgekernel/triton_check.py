@@ -320,25 +320,28 @@ def check_file(path: str | Path, *, target: str | int = DEFAULT_TARGET,
                                  f"{str(e)[:400]})")
     jits = _jit_functions(module)
     kernels: list[KernelCheck] = []
+    supplied = signature is not None      # a launch signature from the caller, not derived
     chosen = None
-    if signature or constexprs:
+    if supplied:
         # A launch signature belongs to ONE kernel: the caller names it, or there is
         # only one to mean.
-        chosen = kernel or (getattr(jits[0], "__name__", None) if len(jits) == 1 else None)
+        chosen = kernel or (_fn_name(jits[0]) if len(jits) == 1 else None)
         if chosen is None:
             warnings.append("--signature was given without --kernel on a file with several "
                             "kernels: name the kernel the signature belongs to")
-    for fn in ([] if (signature or constexprs) and chosen is None else jits):
+    for fn in ([] if supplied and chosen is None else jits):
         name = _fn_name(fn)
         try:
-            if chosen is not None and name != chosen:
+            if supplied and name != chosen:
                 kernels.append(KernelCheck(
                     name, "skipped",
                     f"no launch signature given (--kernel {chosen} is the one checked)", True))
                 continue
-            if chosen is not None:
-                sig, consts, faithful = dict(signature or {}), dict(constexprs or {}), True
+            if supplied:
+                sig, consts, faithful = dict(signature), dict(constexprs or {}), True
             else:
+                # Derived types plus whatever constexpr values the caller pinned: a
+                # constexpr without a value skips the kernel instead of guessing one.
                 sig, consts, faithful = _signature_of(fn, dict(constexprs or {}))
         except KeyError as missing:
             kernels.append(KernelCheck(

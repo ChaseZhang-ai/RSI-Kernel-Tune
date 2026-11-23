@@ -285,6 +285,14 @@ def test_repeat_is_conservative_about_correctness():
     assert "max_diff=9.9" in result.error
 
 
+def test_no_job_log_at_all_is_not_a_pass():
+    result = reader.build_result([], problem=problem())
+    assert result.correct is False
+    assert "no eval job produced a log" in result.error
+    assert result.integrity["failure_kind"] == "no_verdict"
+    assert result.mean_s is None and result.fast1 == 0
+
+
 def test_repeat_noted_even_with_one_job():
     result = reader.build_result([log(correctness(), perf_single())], problem=problem())
     assert result.integrity["repeat"] == {"n": 1}

@@ -226,9 +226,14 @@ def build_result(logs: list[str], *, problem: dict, jobs: list[str] | None = Non
     integrity.update(cold_start_state(cold, probe_ran=cold_log is not None,
                                       error=cold_error))
 
-    correct = all(r.correct for r in job_readings)
+    correct = bool(job_readings) and all(r.correct for r in job_readings)
     error = ""
-    if not correct:
+    if not job_readings:
+        # No job log at all: nothing was judged. (The runner turns a failed submit into
+        # its own BenchResult; this guards a direct call with an empty list.)
+        error = "no eval job produced a log: nothing was judged"
+        integrity.setdefault("failure_kind", "no_verdict")
+    elif not correct:
         # The first job that failed speaks; its words are the card's.
         bad = next((r for r in job_readings if not r.correct), None)
         error = (bad.error if bad is not None else "") or "the bench reported no verdict"

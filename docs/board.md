@@ -98,6 +98,13 @@ forge board import .artifacts/campaign --since 7d
 5. 分页上限、`limit` 的默认值与上限（客户端固定每页 100 并翻页）。
 6. `/api/v1/...` 前缀下还有 profile/通知等端点，与提交无关，未使用。
 
+**真实公开接口核对（2026-11-24，只读、无需令牌）**：用本文的客户端直接调用成功——
+`GET /kernels` 返回 235 条，`069_rms_norm` 的 `id=69`、`tags=["normalization","L1",
+"model:Llama-3.3-Nemotron-70B-Select"]`、`gpu_types=["B200"]`；`GET /collections` 返回 4 条且
+`(id, name, title)` 与上表逐字一致；`GET /collections/1` 除 `kernels`（94 条）外还带
+`kernel_ids`、`kernel_count`、`submission_count`、`description`；`GET /queue/status` 返回
+`{queues, total_length}`。令牌相关的端点（`/me`、上传、`make-public`）没有令牌无法核对，见第 8 节。
+
 ---
 
 ## 3. 限速（客户端强制执行，不绕过）
@@ -187,9 +194,9 @@ blog_submission-guide.json`），以及 `GET /api/me` 的 `submission_access`。
   代码对缺失字段宽容（读不到就显示 `-`，不崩溃），但新的必填字段会导致上传被服务端拒绝——
   第一次联调时先跑 `whoami` 与一次 `--dry-run`，再交真实提交。
 * **未知字段**见第 2 节末尾；联调时最需要确认的是单题上传返回的 id 字段名与错误体结构。
-* **没有实机验证**：本任务只允许离线实现。所有命令的真实调用（`whoami`、单题提交、赛道上传、
-  `publish`）都需要用户提供 `SOL_EXECBENCH_TOKEN` 并在场做第一次调用；测试全部用注入的假
-  transport 覆盖到调用边界。
+* **没有实机验证（需要令牌的部分）**：公开只读接口已按第 2 节末尾用真实接口核对过；但
+  `whoami`、单题提交、赛道上传、`publish` 都需要用户提供 `SOL_EXECBENCH_TOKEN` 并在场做第一次调用。
+  测试全部用注入的假 transport 覆盖到调用边界。
 * **未实现**：`--from-saved`（离线导入网页另存的 JSON，归 campaign）；`/api/submissions/{id}/download`
   的 CLI 入口（客户端函数有，命令未暴露）；赛道提交的“子提交逐题回读”聚合展示（`result <collection id>`
   会打印 `kernel_submissions` 表，但不逐题下载）。

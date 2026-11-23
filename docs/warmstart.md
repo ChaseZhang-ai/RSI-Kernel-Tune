@@ -215,3 +215,13 @@ manifest is optional: without it `forge run` works as before, only without `prio
   operator's README") is not edited: `prior/` is inside `WORKSPACE`, which that list does not
   cover, and `meta/*.md` is owned elsewhere. The policy notice and the manifest state the
   permission explicitly.
+- **Not in the manifest**: how each workload's inputs are generated (the card's
+  `problem.json` names the input kinds; the manifest lists shapes and tolerances only), and
+  the card's own `window.toml` boundary (the card carries it).
+- **Not tracked**: nothing beyond the initial commit distinguishes `prior/` from a file the
+  student wrote -- there is no diff allowlist. That is deliberate (it is the mechanism that
+  makes it "not the student's change" in every consumer of the workspace), but a future tool
+  that counts *all* changes against the card's HEAD must expect `prior/` to match it.
+- **The `..` branch of the "writes outside the workspace" check** has no dedicated test in
+  this environment (the local security hook refuses `..` literals even in fixtures); it shares
+  its predicate with the absolute-path branch, which is tested.

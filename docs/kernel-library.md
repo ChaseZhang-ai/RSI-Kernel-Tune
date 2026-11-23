@@ -17,6 +17,10 @@ Command: `forge lib <build|find|show|score|baselines|cover|fetch|adapt>`
 git repository that `forge lib fetch` may clone at a pinned commit. Each source names its
 extractor, its license and where that license was read.
 
+`forge lib build` rewrites `kernels/**` and `index.json`; `--prune` also removes generated
+entries the build no longer produces (`adapt` results are never removed), `--strict-licenses`
+refuses to write anything whose license is not one of the allowed ones.
+
 | source | extractor | entries |
 |---|---|---|
 | `_reference/Hyra-results/AI4AI/sol_execbench` | `hyra` | 10 |

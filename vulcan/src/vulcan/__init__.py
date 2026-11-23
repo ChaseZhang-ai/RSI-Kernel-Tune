@@ -22,6 +22,8 @@ __all__ = [
     "cluster",
     "precision_guard",
     "roofline",
+    "calibration",
+    "kb_hw_adapter",
     "curriculum",
     "supervisor",
 ]

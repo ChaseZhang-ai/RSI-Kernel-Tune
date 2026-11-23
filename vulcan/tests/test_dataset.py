@@ -38,6 +38,21 @@ class TestDataset(unittest.TestCase):
             published = self.ds["kernels"][s.name]["scores"]["forgekernel"]
             self.assertAlmostEqual(s.current_score(), published, places=6)
 
+    def test_build_specs_honours_fast1_misses(self):
+        specs = dataset.build_specs(self.ds, current="forgekernel", honor_fast1=True)
+        fast = total = 0
+        for s in specs:
+            fast += sum(1 for w in s.state.workloads if w.is_fast_at(0.0))
+            total += len(s.state.workloads)
+        published = self.ds["meta"]["published"]["forgekernel"]
+        self.assertEqual(total, 660)
+        self.assertEqual(fast, 660 - 13)          # ForgeKernel's published Fast_1 count
+
+    def test_best_current_has_no_miss_data_so_is_clean(self):
+        specs = dataset.build_specs(self.ds, current="best", honor_fast1=True)
+        fast = sum(1 for s in specs for w in s.state.workloads if w.is_fast_at(0.0))
+        self.assertEqual(fast, 660)
+
     def test_headroom_sorted(self):
         rows = dataset.headroom_table(self.ds, "forgekernel")
         heads = [r["headroom"] for r in rows]

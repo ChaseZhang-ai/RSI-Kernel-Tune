@@ -68,6 +68,8 @@ paper-to-code map and the reproduction procedure.
 | `stats.py` | paired-ratio bootstrap CI and a promotion gate that refuses gains below the measured noise floor |
 | `cluster.py` | exact 1-D k-means (Jenks DP) shape clustering — the upstream roadmap's "shape clustering" item |
 | `roofline.py` | counters → bottleneck class → lever list; also produces the features `kb_graph` matches on |
+| `calibration.py` | cross-device transfer: fit `t_ref ≈ a·t_dev + b` (or a ratio) from paired samples, predict B200 scores from B300 measurements **and** emit B300 development targets for a B200 score goal |
+| `kb_hw_adapter.py` | render certified entries as upstream `hw_kb/<lang>/<arch>/*.md` (with the banned-token lint), so the agents actually read VULCAN's mechanisms |
 | `supervisor.py` | the closed loop gluing all of the above over a `CampaignBackend` |
 | `backends/mock.py` | deterministic synthetic GPU (CPU validation + falsifiable A/B) |
 | `backends/forge.py` | production adapter to the upstream `forge` CLI |
@@ -82,9 +84,10 @@ python3 -m vulcan selftest                   # fast internal consistency checks
 python3 -m vulcan stats                      # headroom ranking of the 26 kernels
 python3 -m vulcan plan --hours 200           # allocation + per-kernel latency targets
 python3 -m vulcan plan --hours 200 --json-out plan.json   # machine-readable plan
+python3 -m vulcan transfer --target best --ratio 1.8      # B300 dev targets / predicted scores
 python3 -m vulcan demo --hours 200 --seed 7  # mock A/B ablation
 
-python3 -m unittest discover -s tests        # 74 tests
+python3 -m unittest discover -s tests        # 94 tests
 bash scripts/local_validate.sh               # all of the above
 ```
 
@@ -92,17 +95,22 @@ No GPU, no torch, no third-party packages: Python ≥ 3.9 and the standard libra
 
 ## 5. Local validation status
 
-* **74 unit tests pass** (`tests/`): objective round-trips, aggregation identities, exact-DP ≥
+* **94 unit tests pass** (`tests/`): objective round-trips, aggregation identities, exact-DP ≥
   greedy ≥ uniform allocator on random instances, successive-halving best-arm recovery, knowledge
   predicate/negative/analog behaviour, precision-contract flags, exact 1-D k-means recovery,
-  dataset integrity (26 kernels / 660 workloads and the three published scores to 6 dp), and an
-  end-to-end mock campaign (budget respected, VULCAN beats uniform on average, determinism,
-  invalid-kernel revert).
+  dataset integrity (26 kernels / 660 workloads, the three published scores to 6 dp, and Fast₁
+  fidelity: the reconstruction reproduces ForgeKernel's 647/660), and an end-to-end mock campaign
+  (budget respected, VULCAN beats uniform on average, determinism, invalid-kernel revert).
+* **The production adapter is integration-tested**: `tests/fake_forge/` is a stub `forgekernel`
+  package that mimics the upstream CLI; `tests/test_forge_backend.py` runs `ForgeBackend` end-to-end
+  against it (init → new → run → parse `device_median_ms` → export), so the subprocess and JSON
+  parsing paths are exercised on CPU, not just dry-run.
+* **Cross-device transfer is unit-tested** (`tests/test_calibration.py`): affine and ratio fits
+  recover known maps, score round-trips through the calibration, and intervals behave.
 * **A/B ablation** (synthetic ground truth, `--seed` reproducible): portfolio contributes the
   large lift, allocation a smaller one; reported separately.
 * **Not locally verifiable** (needs GPU): actual kernel latency, the upstream loop under real
-  agents, and the board's clock-locked measurement. `backends/forge.py` is exercised in `--dry-run`
-  only; its JSON parsing must be confirmed on a real run.
+  agents, and the board's clock-locked measurement.
 
 ## 6. Layout
 
@@ -117,7 +125,7 @@ vulcan/
   data/                      board snapshot (per-workload T_b / T_SOL, published scores)
   configs/                   vulcan.yaml, forge_loop.toml.example
   src/vulcan/                the code (see table above)
-  tests/                     74 CPU tests
+  tests/                     94 CPU tests (incl. fake_forge/ integration stub)
   scripts/                   bootstrap.sh, local_validate.sh, fetch_board.py
   vendor/UPSTREAM.lock       upstream repo + pinned commit
 ```
@@ -128,6 +136,8 @@ vulcan/
 `forge init ... --leaderboard sol-execbench` → `forge new` → `forge run` →
 `forge export`. VULCAN decides the kernel order, the hour budget, the architecture hypotheses,
 the `[target] ms`, and whether to promote the result. The upstream loop is unchanged, so an
-upstream update only needs a re-pin, not a re-write. Bridging `kb_graph` entries into upstream's
-`hw_kb/<lang>/<arch>/` markdown is a small, not-yet-written adapter — noted in
-[`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md).
+upstream update only needs a re-pin, not a re-write.
+
+`kb_hw_adapter.py` closes the loop the other way: certified VULCAN mechanisms are rendered into
+upstream's `hw_kb/<lang>/<arch>/` markdown (matching its `TEMPLATE.md`, provenance routed out of
+the agent read set), so the upstream agents can cite them in milestone plans.

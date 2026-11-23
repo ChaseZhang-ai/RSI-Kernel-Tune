@@ -55,8 +55,10 @@ the kernels themselves run on the GPU.
 | statistical promotion gate (paired bootstrap CI) | `vulcan/stats.py` | ✅ |
 | shape clustering (exact 1-D k-means) | `vulcan/cluster.py` | ✅ |
 | roofline → bottleneck → lever diagnosis | `vulcan/roofline.py` | ✅ |
+| cross-device transfer (B300 dev → B200 score target) | `vulcan/calibration.py` | ✅ |
+| knowledge base → upstream `hw_kb` markdown | `vulcan/kb_hw_adapter.py` | ✅ |
 | closed-loop supervisor + mock GPU backend | `vulcan/supervisor.py`, `backends/` | ✅ |
-| production adapter to upstream `forge` CLI | `vulcan/backends/forge.py` | dry-run only |
+| production adapter to upstream `forge` CLI | `vulcan/backends/forge.py` | ✅ (fake-CLI integration test) |
 
 Ranked improvement designs and their evidence: [`vulcan/docs/IMPROVEMENTS.md`](vulcan/docs/IMPROVEMENTS.md).
 
@@ -70,8 +72,9 @@ export PYTHONPATH=src
 python3 -m vulcan selftest                 # internal consistency
 python3 -m vulcan stats                    # headroom table from the live board snapshot
 python3 -m vulcan plan --hours 200         # where the GPU-hours should go
+python3 -m vulcan transfer --target best --ratio 1.8   # B300 dev targets -> B200 scores
 python3 -m vulcan demo --hours 200 --seed 7  # mock A/B: uniform vs headroom vs VULCAN
-bash scripts/local_validate.sh             # everything above + 74 unit tests
+bash scripts/local_validate.sh             # everything above + 94 unit tests
 ```
 
 Local A/B result (synthetic ground truth, 200 GPU-hours, reproducible via `--seed`):
@@ -93,8 +96,10 @@ separately so the claim can be checked rather than believed.
 
 Read [`vulcan/docs/B300_RUNBOOK.md`](vulcan/docs/B300_RUNBOOK.md). Two facts up front:
 
-1. **The board scores on B200 at a locked clock.** B300 is for generation and iteration; the
-   final submission must be measured on the board's B200 clock to be comparable. Do not score
-   B300 timings against B200 `T_b`/`T_SOL`.
+1. **The board scores on B200 at a locked clock.** B300 is for generation and iteration —
+   that is the intended workflow here — but the final submission must be measured on the board's
+   B200 clock to be comparable. `vulcan.calibration` converts B300 measurements into predicted
+   B200 scores (and B300 development targets) from a small calibration fitted on paired data; the
+   recommended anchor is the board's own Scoring Baseline, whose B200 latency it publishes.
 2. **The reproduction vendors upstream at a fixed commit** (`vulcan/vendor/UPSTREAM.lock`,
    `b2c8ae8`, 2026-11-11). `scripts/bootstrap.sh` clones and installs it.

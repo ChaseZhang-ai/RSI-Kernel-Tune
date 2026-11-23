@@ -12,7 +12,7 @@ export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 PY="${PYTHON:-python3}"
 
 echo "== python =="; "$PY" --version
-echo; echo "== unit tests (74 cases) =="
+echo; echo "== unit tests =="
 "$PY" -m unittest discover -s "$ROOT/tests" -p 'test_*.py'
 
 echo; echo "== selftest =="
@@ -22,7 +22,10 @@ echo; echo "== dataset / headroom =="
 "$PY" -m vulcan stats
 
 echo; echo "== score-aware plan (200 GPU-hours) =="
-"$PY" -m vulcan plan --hours 200 | head -12
+"$PY" -m vulcan plan --hours 200 | head -14
+
+echo; echo "== cross-device transfer (assumed ratio) =="
+"$PY" -m vulcan transfer --target best --ratio 1.8 | head -8
 
 echo; echo "== mock A/B ablation =="
 "$PY" -m vulcan demo --hours 200 --seed 7 | tail -14

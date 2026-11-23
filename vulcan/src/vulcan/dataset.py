@@ -10,11 +10,19 @@ The current per-workload *candidate* latencies of a submission are not public, s
 at the latency that yields that kernel's **published** score.  This is exact for the
 quantity the planner uses (the per-kernel score) and keeps the model honest about what
 is known and what is assumed.
+
+Where the published **Fast_1 miss count** is known (ForgeKernel / Golden Bridge), the
+reconstruction is split so the count is honoured: ``m`` workloads are placed at a
+"straggler" score just below the baseline (``STRAGGLER_SCORE``) and the remaining
+``n - m`` at whatever score makes the kernel geometric mean equal the published one.
+The board does not say *which* workloads miss, so stragglers are assigned to the largest
+``T_b`` workloads; that choice is a documented assumption, not data.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence
@@ -22,6 +30,8 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 from . import objective, portfolio
 from .allocator import DEFAULT_RATE, KernelState, WorkloadState
 from .curriculum import TaskSpec
+
+STRAGGLER_SCORE = 0.45   # a workload that is not Fast_1 sits just below the baseline
 
 
 _DEFAULT_ARCH_BRIEFS = {
@@ -73,11 +83,14 @@ def build_specs(
     rate: float = DEFAULT_RATE,
     architectures: Optional[Sequence[str]] = None,
     family_rate_scale: Optional[Mapping[str, float]] = None,
+    honor_fast1: bool = True,
 ) -> List[TaskSpec]:
     """Turn the dataset into ``TaskSpec`` objects for planning/mock campaigns.
 
     ``current`` selects whose score seeds the starting latency: ``forgekernel``,
-    ``golden_bridge`` or ``best``.
+    ``golden_bridge`` or ``best``.  When ``honor_fast1`` and the published Fast_1 miss
+    count is available for ``current``, the reconstruction places that many workloads
+    just below the baseline so Fast_1 counts are faithful.
     """
     specs: List[TaskSpec] = []
     for name in kernel_names(ds):
@@ -85,15 +98,31 @@ def build_specs(
         s = _score_of(entry, current)
         if s is None or s <= 0.0:
             continue
+        raw = entry["workloads"]
+        n = len(raw)
+        # per-workload target score (uniform unless Fast_1 misses are honoured)
+        scores = [min(s, 1.0)] * n
+        miss = None
+        if honor_fast1:
+            miss = (entry.get("fast1", {}) or {}).get(f"{current}_missing")
+        if miss and 0 < int(miss) < n:
+            m = int(miss)
+            # order by descending T_b; assign the m largest-workload entries the straggler score
+            order = sorted(range(n), key=lambda i: raw[i]["t_b_ms"], reverse=True)
+            log_num = n * math.log(s) - m * math.log(STRAGGLER_SCORE)
+            sf = math.exp(log_num / (n - m))
+            sf = min(1.0, max(1e-6, sf))
+            for rank, i in enumerate(order):
+                scores[i] = STRAGGLER_SCORE if rank < m else sf
+
         workloads = []
-        for w in entry["workloads"]:
+        for w, sc in zip(raw, scores):
             t_b = float(w["t_b_ms"])
             t_sol = float(w["t_sol_ms"])
-            lat = objective.latency_for_score(min(s, 1.0), t_b, t_sol)
+            lat = objective.latency_for_score(sc, t_b, t_sol)
             workloads.append(WorkloadState(t_ms=lat, t_b_ms=t_b, t_sol_ms=t_sol, rate=rate))
         op_class = entry.get("op_class") or infer_op_class(name)
         if family_rate_scale:
-            fam = name
             for key, scale in family_rate_scale.items():
                 if key in name:
                     for w in workloads:

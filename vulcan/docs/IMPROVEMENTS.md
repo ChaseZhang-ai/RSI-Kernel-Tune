@@ -9,7 +9,8 @@ Status tags:
 * **[DESIGNED]** — specified here, not yet coded.
 
 The ranking is by expected leaderboard impact per unit of effort, given the analysis in
-[`LEADERBOARD_ANALYSIS.md`](LEADERBOARD_ANALYSIS.md).
+[`LEADERBOARD_ANALYSIS.md`](LEADERBOARD_ANALYSIS.md). One item added later — cross-device transfer
+(item 16) — is **ranked #2 by impact** but is listed last so the existing numbers stay stable.
 
 ---
 
@@ -118,8 +119,9 @@ an SM90 finding into a bounded SM100 hypothesis without pretending it is certifi
 **Evidence.** `tests/test_kb_graph.py` (matching, unknown-feature rejection, same-arch-only
 retrieval, negative separation, analog-is-candidate, JSONL round-trip).
 
-**Effort/risk.** Medium / needs a written adapter to upstream `hw_kb/<lang>/<arch>/` markdown
-(item 15) so the agents actually read these entries at run time.
+**Effort/risk.** Medium / needs the entries to be turned into the format upstream agents read —
+now implemented as `kb_hw_adapter.py` (item 16's companion), which renders certified entries as
+`hw_kb/<lang>/<arch>/*.md` and routes provenance out of the agent read set.
 
 ---
 
@@ -218,10 +220,40 @@ correctness checker.
 Submit one or two already-good kernels first to de-risk the submission path (clock lock, tolerance,
 anti-cheat, the B200-vs-B300 measurement question) before committing a full campaign.
 
-## 15. [DESIGNED] `kb_graph` → upstream `hw_kb` adapter
+## 15. [IMPLEMENTED] `kb_graph` → upstream `hw_kb` adapter
 
-Emit certified entries as `hw_kb/<lang>/<arch>/*.md` so the upstream agents read VULCAN's
-mechanisms during a run. Small but necessary for item 6 to pay off end-to-end.
+Renders certified entries as `hw_kb/<lang>/<arch>/*.md` in upstream's template format (Purpose /
+When needed (trigger) / Minimal runnable example / Gotchas / Sources), with provenance routed to a
+companion file because upstream's `kb_lint` bans `oracle` / `teacher` / `reference implementation`
+in the agent read set; `lint_text` reproduces that check. Refuted entries go to a separate
+`negatives.md`. Code: `kb_hw_adapter.py`; tests: `tests/test_kb_hw_adapter.py`.
+
+---
+
+## 16. [VALIDATED] Cross-device transfer (develop on B300, score on B200) — ranked #2 by impact
+
+**Mechanism.** Fit a calibration `t_ref ≈ a·t_dev + b` (or a through-origin ratio `c`) on paired
+`(device, board)` latencies, then (a) convert a B300 measurement into a **predicted board SOL
+score** with an interval, and (b) invert it to get the **B300 latency to develop against** for a
+given score goal. `vulcan transfer` exposes both.
+
+**Why it matters.** B300 is available, B200 is not, and the board scores on B200 at a locked clock.
+Without a map, every B300 number is uninterpretable against the board's `T_b`/`T_SOL`; with one, the
+dev loop targets the score directly, and submission is a decision with a confidence interval
+instead of a gamble.
+
+**How to get the pairs (no B200 needed).** The board publishes the per-workload latency of its
+*Scoring Baseline* (`T_b`). Run that same baseline solution on the B300 and pair each
+`(t_b300, T_b200)`; a handful of workloads gives a strong fit (`calibration.fit_from_baselines`).
+Add any kernel measured on both devices as extra pairs.
+
+**Evidence.** `tests/test_calibration.py` (affine/ratio fits recover known maps; score round-trips
+through the calibration; intervals behave; `expected_collection`/`should_submit` logic).
+`vulcan transfer` prints per-kernel dev targets and, from a `--measured-csv`, predicted board scores
+with a collection interval vs rank 1.
+
+**Effort/risk.** Low / the map is only as good as the pairs; with no pairs it degrades to an
+explicit *assumed* ratio with a wide interval (never silently treated as a measurement).
 
 ---
 
@@ -237,3 +269,6 @@ mechanisms during a run. Small but necessary for item 6 to pay off end-to-end.
 * **Copying vs generating.** Beating the board by re-submitting competitors' best structures is not
   a research result. The claim to hold is "generate then exceed", with best-known as the target —
   not the artifact.
+* **Fast₁ reconstruction is an assumption.** The board publishes *that* 13 workloads miss, not
+  *which*; the planner places them at `S≈0.45` on the largest-`T_b` workloads. Fast₁ *ordering* is
+  robust; the exact repair count is not. Use per-kernel `fast1_missing` for prioritisation.

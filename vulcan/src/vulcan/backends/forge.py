@@ -79,7 +79,10 @@ class ForgeBackend:
             print(f"[dry-run] (cd {cwd or self.cfg.root()}) {cmd}")
             return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
         env = dict(os.environ)
-        env.setdefault("PYTHONPATH", str(Path(self.cfg.forge_repo) / "src"))
+        src = str(Path(self.cfg.forge_repo) / "src")
+        # prepend the upstream src so `python -m forgekernel` resolves to it even when the
+        # caller already has a PYTHONPATH (e.g. vulcan's own src)
+        env["PYTHONPATH"] = src + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
         return subprocess.run(argv, cwd=str(cwd or self.cfg.root()), env=env,
                               capture_output=True, text=True, timeout=self.run_timeout_s)
 

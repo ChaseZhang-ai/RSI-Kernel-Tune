@@ -13,6 +13,7 @@ validation and on the B300 for planning.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import os
@@ -116,11 +117,11 @@ def cmd_plan(args: argparse.Namespace) -> int:
     missing = sum(e.get("fast1", {}).get(f"{args.from_}_missing") or 0
                   for e in ds["kernels"].values())
     if missing:
-        print(f"  NOTE: Fast1 projection is optimistic. Published {args.from_} misses "
-              f"{missing} workloads, but the\n        board does not publish which ones, so the "
-              f"reconstruction places every workload of a\n        kernel at one score. Use the "
-              f"per-kernel fast1_missing counts in the dataset for Fast1\n        planning, not "
-              f"this projection.")
+        print(f"  NOTE: Fast1 reconstruction places the published {missing} misses at "
+              f"S={dataset.STRAGGLER_SCORE:.2f} on the\n"
+              f"        largest-T_b workloads (the board does not publish *which* workloads "
+              f"miss); repair\n"
+              f"        targets are indicative -- use per-kernel fast1_missing for ordering.")
     unweighted_best = sum(targets.values()) / len(targets)
     print(f"  if every kernel merely matched its target, collection score = "
           f"{unweighted_best:.6f}")
@@ -242,6 +243,95 @@ def cmd_demo(args: argparse.Namespace) -> int:
 # selftest
 # --------------------------------------------------------------------------- #
 
+def _read_csv_pairs(path: str, kx: str, ky: str):
+    rows = []
+    with open(path, newline="", encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            rows.append((float(r[kx]), float(r[ky])))
+    return rows
+
+
+def _read_measured(path: str) -> Dict[str, float]:
+    out: Dict[str, float] = {}
+    with open(path, newline="", encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            out[str(r["kernel"]).strip()] = float(r["t_dev_ms"])
+    return out
+
+
+def cmd_transfer(args: argparse.Namespace) -> int:
+    """Map B300 development targets to B200 score targets (and back)."""
+    from . import calibration as cal
+
+    ds = dataset.load(args.dataset)
+    specs = dataset.build_specs(ds, current=args.from_)
+
+    if args.fit_csv:
+        samples = _read_csv_pairs(args.fit_csv, "t_dev_ms", "t_ref_ms")
+        calib = cal.AffineCalibration.fit(samples)
+        src = f"affine fit from {len(samples)} paired samples (a={calib.a:.4f}, b={calib.b:.5f}, r2={calib.r2:.4f})"
+    elif args.ratio is not None:
+        calib = cal.RatioCalibration(c=args.ratio)
+        src = f"ASSUMED ratio t_ref = {args.ratio:g} * t_dev"
+    else:
+        calib = cal.AffineCalibration.assumed(ratio=1.0, rel_uncertainty=args.assumed_uncertainty)
+        src = (f"ASSUMED ratio 1.0 with +-{args.assumed_uncertainty:g} relative interval "
+               f"(no paired data -- pass --fit-csv or --ratio)")
+    print(f"transfer: {src}\n")
+
+    targets = _target_scores(ds, args.target, args.from_)
+    rows = []
+    plan = {"meta": {"calibration": src, "target": args.target}, "kernels": {}}
+    for spec in sorted(specs, key=lambda s: s.name):
+        name = spec.name
+        tgt = targets.get(name, spec.current_score())
+        dev_targets = cal.device_targets_for_kernel(spec.state.workloads, min(tgt, 1.0), calib)
+        t_b_geo = math.exp(sum(math.log(w.t_b_ms) for w in spec.state.workloads)
+                           / len(spec.state.workloads))
+        t_sol_geo = math.exp(sum(math.log(max(w.t_sol_ms, 1e-12))
+                                 for w in spec.state.workloads) / len(spec.state.workloads))
+        dev_geo = math.exp(sum(math.log(max(t, 1e-12)) for t in dev_targets) / len(dev_targets))
+        rows.append([name[:44], _fmt(spec.current_score()), _fmt(tgt),
+                     f"{t_b_geo * 1000:.3f}", f"{t_sol_geo * 1000:.3f}", f"{dev_geo * 1000:.3f}"])
+        plan["kernels"][name] = {"target_score": round(tgt, 6),
+                                 "device_target_ms_geomean": dev_geo}
+    print(_table(rows, ["kernel", "cur_S", "tgt_S", "Tb_B200(us)", "Tsol_B200(us)",
+                        "DEV target(us)"]))
+    print("\nDEV target = the latency to develop against; hitting it is expected to hit "
+          "tgt_S on the board.")
+
+    if args.measured_csv:
+        measured = _read_measured(args.measured_csv)
+        preds = []
+        print()
+        rows2 = []
+        for spec in sorted(specs, key=lambda s: s.name):
+            if spec.name not in measured:
+                continue
+            cur = reference_latency(spec.state)
+            ratio = measured[spec.name] / cur if cur > 0 else 1.0
+            per = []
+            for w in spec.state.workloads:
+                t_dev = w.t_ms * ratio
+                per.append(cal.predicted_score(t_dev, objective.Workload(w.name, w.t_b_ms, w.t_sol_ms), calib))
+            mean = math.exp(sum(math.log(max(p[0], 1e-12)) for p in per) / len(per))
+            lo = math.exp(sum(math.log(max(p[1], 1e-12)) for p in per) / len(per))
+            hi = math.exp(sum(math.log(max(p[2], 1e-12)) for p in per) / len(per))
+            preds.append((mean, lo, hi))
+            rows2.append([spec.name[:44], _fmt(mean), _fmt(lo), _fmt(hi)])
+        if preds:
+            print(_table(rows2, ["kernel", "S_pred", "S_low", "S_high"]))
+            cm, cl, ch = cal.expected_collection(preds)
+            print(f"\npredicted collection: {cm:.6f}  (interval {cl:.6f} .. {ch:.6f})")
+            print(f"  vs rank 1 (0.815321): "
+                  f"{'CLEARS' if cl > 0.815321 else ('likely' if cm > 0.815321 else 'NO')}")
+    if args.json_out:
+        with open(args.json_out, "w", encoding="utf-8") as fh:
+            json.dump(plan, fh, indent=1)
+        print(f"\nwrote {args.json_out}")
+    return 0
+
+
 def cmd_selftest(args: argparse.Namespace) -> int:
     from . import cluster, kb_graph, portfolio, precision_guard, stats
 
@@ -332,6 +422,23 @@ def build_parser() -> argparse.ArgumentParser:
                     choices=["forgekernel", "golden_bridge", "best"])
     pd.add_argument("--json-out", default="")
     pd.set_defaults(func=cmd_demo)
+
+    ptr = sub.add_parser("transfer",
+                         help="map B300 development targets to B200 score targets (and back)")
+    ptr.add_argument("--dataset", default=ds_default)
+    ptr.add_argument("--from", dest="from_", default="forgekernel",
+                     choices=["forgekernel", "golden_bridge", "best"])
+    ptr.add_argument("--target", default="best",
+                     help="best | golden_bridge | a numeric per-kernel score")
+    ptr.add_argument("--fit-csv", default="",
+                     help="CSV with columns t_dev_ms,t_ref_ms (paired measurements)")
+    ptr.add_argument("--ratio", type=float, default=None,
+                     help="force a proportional map t_ref = ratio * t_dev")
+    ptr.add_argument("--assumed-uncertainty", type=float, default=0.5)
+    ptr.add_argument("--measured-csv", default="",
+                     help="CSV with columns kernel,t_dev_ms: report predicted board scores")
+    ptr.add_argument("--json-out", default="")
+    ptr.set_defaults(func=cmd_transfer)
 
     pt = sub.add_parser("selftest", help="run internal consistency checks")
     pt.set_defaults(func=cmd_selftest)

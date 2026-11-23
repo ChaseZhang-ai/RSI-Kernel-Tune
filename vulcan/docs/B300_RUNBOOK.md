@@ -10,9 +10,11 @@ checks pass (`scripts/local_validate.sh`). Read the two warnings first — they 
 1. **The leaderboard is measured on B200 at a locked clock.** SOL-ExecBench's FlashInfer-Bench
    collection scores on B200 (eval stack v1.1) and locks SM 1500 / memory 3996 MHz. **B300 is for
    generation and iteration** (faster, more memory, Blackwell-family); it does **not** produce
-   numbers comparable to the board's B200 `T_b`/`T_SOL`. Plan: **develop and iterate on B300,
-   then re-measure the finalists on a B200 at the board clock** and submit those. Do not score B300
-   timings against B200 targets — the score would be meaningless.
+   numbers comparable to the board's B200 `T_b`/`T_SOL`. Plan: **develop and iterate on B300, then
+   re-measure the finalists on a B200 at the board clock** and submit those. `vulcan.calibration`
+   (step 1b) turns B300 measurements into predicted B200 scores and into B300 *development targets*,
+   so the dev loop targets the board's score directly. Do not score raw B300 timings against B200
+   targets.
 2. **`T_b`/`T_SOL` are per-machine.** The board measured them on its B200. The residual between
    machines stays in the score. Keep the clock lock on and use the card's own SOL-score path.
 
@@ -53,6 +55,28 @@ collection **0.819011 > 0.815321** (rank 1).
 
 Validate B300 ≠ board: on B300, compare a kernel's B300 latency to its B200 `T_b` only as a rough
 gate, never as the score.
+
+## Step 1b — calibrate B300 against the board (no B200 needed)
+
+Fit the transfer map so B300 numbers become B200-comparable. The cheapest anchor is the board's own
+**Scoring Baseline**, whose B200 latency it publishes per workload:
+
+```bash
+# 1. run the board's scoring baseline on the B300 and record per-workload latencies
+#    (the card's `ref`/baseline path, or the dataset's baseline solution)
+#    -> a CSV with columns t_dev_ms,t_ref_ms where t_ref_ms is the published T_b
+# 2. fit and use it
+python3 -m vulcan transfer --target best --fit-csv baselines.csv --json-out transfer.json
+python3 -m vulcan transfer --target best --fit-csv baselines.csv \
+        --measured-csv b300_measured.csv      # -> predicted board scores + collection interval
+```
+
+* `transfer.json` gives, per kernel, the **B300 development target** (ms) for the best-known score.
+  Use these as local goals — hitting them is *expected* to hit the board score.
+* `b300_measured.csv` (columns `kernel,t_dev_ms`) turns your current best kernels into **predicted
+  board scores** with an interval, and reports whether the predicted collection **clears rank 1**
+  (0.815321). Submit only what clears.
+* With no pairs, `transfer --ratio R` uses an explicit assumption (never a silent measurement).
 
 ## Step 2 — smoke-test the pipeline on one kernel (canary)
 
@@ -102,6 +126,10 @@ For each kernel, spend the budget as a portfolio rather than one chain:
 Gate every acceptance with the VULCAN criteria: correctness **and** the precision contract
 (`precision_guard`) **and** a paired-ratio CI above the noise floor (`stats.accept_gain`). Reject
 "faster but lower internal precision" immediately — it fails the board and is not a real speedup.
+
+Certified mechanisms should be written back so later kernels reuse them:
+`kb_hw_adapter.write_hw_kb(graph, "vendor/ForgeKernel/hw_kb/cutedsl/sm100", arch="sm100")` renders
+entries in upstream's format (refuted ideas go to a separate `negatives.md`).
 
 Fast₁ repair for `009`: aim first to cross `T_b` on all 8 straggler workloads (small-shape GEMMs —
 launch overhead and tail effects usually dominate), then chase score.

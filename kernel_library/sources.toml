@@ -1,0 +1,187 @@
+# kernel_library/sources.toml — where the reference library's kernels come from.
+#
+# `forge lib build` reads this file, runs each enabled source's extractor and rewrites
+# `kernels/**` + `index.json`. Paths under `[[source]]` are relative to `library.reference_root`
+# (or $FK_REFERENCE_ROOT, or the nearest `_reference` directory at or above the repository).
+# A `kind = "git"` source is only cloned by `forge lib fetch <name>` — never by `build`.
+#
+# `license` here is what the source's repository states; the extractor records the file it read
+# it from in the entry's `source.license_file` / `meta.json.license_source`. For KernelWiki
+# artifacts the license is resolved per artifact from the capture's provenance or from the
+# file's own license header (an artifact whose license cannot be read becomes `unknown` and
+# `usable_in_submission: false`).
+
+version = 1
+
+[library]
+# "" = discover: $FK_REFERENCE_ROOT, then the nearest `_reference` at or above the repo root.
+reference_root = ""
+# Only an entry under one of these may be merged into a submission (schema gate).
+allowed_licenses = ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause"]
+
+# --- local reference trees (present on the development machine) ---------------------------
+
+[[source]]
+name = "hyra"
+kind = "local"
+extractor = "hyra"
+root = "reference"
+path = "Hyra-results/AI4AI/sol_execbench"
+repo = "Tencent/Hyra-results"
+license = "Apache-2.0"
+license_file = "Hyra-results/LICENSE"
+enabled = true
+notes = "10 public SOL-ExecBench submissions (9 Python, 1 cuda_cpp), sol_score 0.53-0.97."
+
+[[source]]
+name = "forgekernel"
+kind = "local"
+extractor = "forgekernel"
+root = "repo"
+path = "kernels"
+repo = "OpenBMB/ForgeKernel"
+license = "Apache-2.0"
+license_file = "LICENSE"
+enabled = true
+notes = "The repository's own released kernels; CuTe DSL (H100/B200) + one CUDA C++ kernel."
+
+[[source]]
+name = "ako4x"
+kind = "local"
+extractor = "ako4x"
+root = "reference"
+path = "AKO4X"
+repo = "TongmingLAIC/AKO4X"
+license = "MIT"
+license_file = "AKO4X/LICENSE"
+enabled = true
+notes = "Archived variants of the FlashInfer-Bench contest kernels (MIT), one per variant dir."
+
+[[source]]
+name = "kernelwiki"
+kind = "local"
+extractor = "kernelwiki"
+root = "reference"
+path = "KernelWiki"
+repo = "KernelWiki (per-artifact upstream licenses)"
+license = "MIT"
+license_file = "KernelWiki/LICENSE"
+enabled = true
+notes = "Upstream PR artifacts; reference material for `forge lib adapt` (not runnable as one file)."
+
+[[source]]
+name = "sol-example"
+kind = "local"
+extractor = "sol-example"
+root = "reference"
+path = "SOL-ExecBench"
+repo = "NVIDIA/SOL-ExecBench"
+license = "Apache-2.0"
+license_file = "SOL-ExecBench/LICENSE"
+enabled = true
+notes = "The official examples: one per supported language."
+
+[[source]]
+name = "auto-gpu-kernel"
+kind = "local"
+extractor = "auto-gpu-kernel"
+root = "reference"
+path = "auto-gpu-kernel"
+repo = "BBuf/auto-gpu-kernel"
+license = "Apache-2.0"
+license_file = "auto-gpu-kernel/LICENSE"
+enabled = true
+notes = "DSA sparse attention / indexer, GDN, MoE and GEMM kernels (Triton + Gluon archives)."
+
+[[source]]
+name = "ako4all"
+kind = "local"
+extractor = "ako4all"
+root = "reference"
+path = "AKO4ALL"
+repo = "TongmingLAIC/AKO4ALL"
+license = "MIT"
+license_file = "AKO4ALL/LICENSE"
+enabled = false
+notes = "Checked: the repository holds a skill/bench harness only (`bench/kernelbench/bench.py`); its README reports 1.12-1.50x expert on four operators but ships no kernel source. Nothing to ingest."
+
+# --- larger public kernel libraries (opt-in: `forge lib fetch <name>`) --------------------
+# `commit` is the upstream SHA a KernelWiki capture was taken at where one was recorded; ""
+# means unpinned — `fetch` refuses it unless given `--allow-unpinned`.
+
+[[source]]
+name = "flashinfer"
+kind = "git"
+extractor = ""
+url = "https://github.com/flashinfer-ai/flashinfer.git"
+commit = "9a05c92a"
+repo = "flashinfer-ai/flashinfer"
+license = "Apache-2.0"
+enabled = false
+notes = "Not cloned by default; extractor rules are per-library work for later."
+
+[[source]]
+name = "flash-attention"
+kind = "git"
+extractor = ""
+url = "https://github.com/Dao-AILab/flash-attention.git"
+commit = "a5a75274"
+repo = "Dao-AILab/flash-attention"
+license = "BSD-3-Clause"
+enabled = false
+notes = "Not cloned by default."
+
+[[source]]
+name = "flashmla"
+kind = "git"
+extractor = ""
+url = "https://github.com/deepseek-ai/FlashMLA.git"
+commit = ""
+repo = "deepseek-ai/FlashMLA"
+license = "MIT"
+enabled = false
+notes = "Not cloned by default; no pinned commit recorded locally (fetch needs --allow-unpinned)."
+
+[[source]]
+name = "deepgemm"
+kind = "git"
+extractor = ""
+url = "https://github.com/deepseek-ai/DeepGEMM.git"
+commit = "7f2a703e"
+repo = "deepseek-ai/DeepGEMM"
+license = "MIT"
+enabled = false
+notes = "Not cloned by default."
+
+[[source]]
+name = "flaggems"
+kind = "git"
+extractor = ""
+url = "https://github.com/FlagOpen/FlagGems.git"
+commit = ""
+repo = "FlagOpen/FlagGems"
+license = "Apache-2.0"
+enabled = false
+notes = "Not cloned by default; no pinned commit recorded locally (fetch needs --allow-unpinned)."
+
+[[source]]
+name = "vllm"
+kind = "git"
+extractor = ""
+url = "https://github.com/vllm-project/vllm.git"
+commit = "ed7a29d9"
+repo = "vllm-project/vllm"
+license = "Apache-2.0"
+enabled = false
+notes = "Not cloned by default."
+
+[[source]]
+name = "sglang"
+kind = "git"
+extractor = ""
+url = "https://github.com/sgl-project/sglang.git"
+commit = "5bdc07d9"
+repo = "sgl-project/sglang"
+license = "Apache-2.0"
+enabled = false
+notes = "Not cloned by default."

@@ -13,3 +13,6 @@ __pycache__/
 # This machine: GPU, ssh host, credentials. Never committed.
 local.env
 uv.lock
+# `forge lib fetch` clones external kernel libraries here; the index records what they are,
+# never the trees themselves.
+kernel_library/_sources/

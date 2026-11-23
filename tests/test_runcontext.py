@@ -169,7 +169,12 @@ def test_no_prompt_outside_the_list_names_the_run_context_files():
     tokens = re.compile(r"\{(TARGET_PROFILE|ROOFLINE|LESSONS|PRIOR)_PATH\}")
     named = {p.relative_to(META).as_posix() for p in META.rglob("*.md")
              if tokens.search(p.read_text(encoding="utf-8"))}
-    assert named == set(TEACHER_PROMPTS) | {"student_prompt.md"} | {f"cuda/{n}" for n in CUDA_OVERLAYS}
+    # The step-0 section went to the six teacher prompts and the student prompt, to their CUDA
+    # overlays where one exists, and to nothing else. The library's two generated-prompt entry
+    # points (seedlib) name the target profile too: their inputs are runtime files by design.
+    extra = {"seed_adapt_prompt.md", "baseline_rewrite_prompt.md"}
+    assert named == (set(TEACHER_PROMPTS) | {"student_prompt.md"}
+                     | {f"cuda/{n}" for n in CUDA_OVERLAYS} | extra)
     for outside in (REPO / "meta_milestone.md", REPO / "docs" / "milestones-template.md"):
         assert not tokens.search(outside.read_text(encoding="utf-8")), outside
 

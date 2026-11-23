@@ -52,15 +52,20 @@ def _with(name: str, text: str = HELLO) -> str:
     return text.replace("hello", name)
 
 
-# --- the package adds no command -----------------------------------------------------------
+# --- the package ships only the first wave's commands ---------------------------------------
+
+# Step 0 shipped none on purpose; each first-wave task adds its own module here (seedlib
+# added `lib`). Anything outside this list would be a command nobody registered.
+FIRST_WAVE = {"bench", "lib", "target", "prior", "campaign", "evolve", "board"}
 
 
-def test_the_package_adds_no_command_of_its_own():
-    assert ext.commands() == {}
-    assert ext.command_names() == frozenset()
-    assert ext.usage().endswith("Extension commands (src/forgekernel/ext/, one module each): none")
-    kept = [p for p in (REPO / "src" / "forgekernel" / "ext").iterdir() if p.suffix == ".py"]
-    assert [p.name for p in kept] == ["__init__.py"]
+def test_the_package_ships_only_first_wave_commands():
+    found = ext.commands()
+    shipped = {p.stem for p in (REPO / "src" / "forgekernel" / "ext").iterdir()
+               if p.suffix == ".py" and not p.name.startswith("_")}
+    assert set(found) == shipped          # discovery finds exactly the modules that are there
+    assert set(found) <= FIRST_WAVE
+    assert ext.command_names() == frozenset(shipped)
 
 
 # --- found ---------------------------------------------------------------------------------
@@ -69,14 +74,16 @@ def test_the_package_adds_no_command_of_its_own():
 def test_a_module_in_the_directory_is_a_command_before_anything_imports_it(tmp_path, monkeypatch):
     _plug(monkeypatch, tmp_path, hello=HELLO, zeta=_with("zeta"), _helper=_with("_helper"))
     found = ext.commands()
-    assert list(found) == ["hello", "zeta"]           # `_helper` is a helper, not a command
+    # `_helper` is a helper, not a command; the shipped modules stay listed too
+    assert [n for n in found if n in {"hello", "zeta", "_helper"}] == ["hello", "zeta"]
     assert found["hello"] == ext.Extension("hello", "forgekernel.ext.hello")
     assert found["hello"].module == found["hello"].load().__name__
     assert "forgekernel.ext._helper" not in sys.modules
-    assert ext.command_names() == frozenset({"hello", "zeta"})
+    assert ext.command_names() == frozenset(found)
     # listed again on each call: a module added later is a command the moment it is there
     _plug(monkeypatch, tmp_path, late=_with("late"))
-    assert list(ext.commands()) == ["hello", "late", "zeta"]
+    assert [n for n in ext.commands() if n in {"hello", "zeta", "late"}] == ["hello", "late",
+                                                                             "zeta"]
 
 
 def test_what_cannot_be_listed_is_no_command_and_breaks_nothing_that_asks(tmp_path, monkeypatch):
@@ -120,13 +127,14 @@ def test_the_usage_text_names_the_commands_without_importing_them(tmp_path, monk
     _plug(monkeypatch, tmp_path, zeta=_with("zeta"), hello=HELLO)
     assert forge_main.main(["--help"]) == 0
     out = capsys.readouterr().out
-    # the built-in usage as it was, then the extensions
+    # the built-in usage as it was, then one line per extension command, in name order
     assert "forge new tasks/<op>" in out and "forge run .artifacts/<op>_<id>" in out
-    listing = ("Extension commands (src/forgekernel/ext/, one module each):\n"
-               "  forge hello ...                (`forge hello --help`)\n"
-               "  forge zeta ...                (`forge zeta --help`)\n")
-    assert forge_main._usage() == forge_main.__doc__.strip() + "\n\n" + listing
-    assert out == forge_main._usage() + "\n"
+    assert "Extension commands (src/forgekernel/ext/, one module each):" in out
+    for name in ("hello", "zeta"):
+        assert f"  forge {name} ..." in out and f"(`forge {name} --help`)" in out
+    assert out.startswith(forge_main._usage())
+    positions = [out.index(f"  forge {n} ...") for n in ("hello", "zeta")]
+    assert positions == sorted(positions)
     assert "forgekernel.ext.hello" not in sys.modules and "forgekernel.ext.zeta" not in sys.modules
     for word in ([], ["help"], ["-h"], ["--help"]):
         assert forge_main.main(word) == 0

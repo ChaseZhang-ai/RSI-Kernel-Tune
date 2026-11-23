@@ -40,7 +40,8 @@ def _export(work: Path, op: str, name: str, body: str = SUBMISSION,
         "export": {"path": str(d / "submission.py"), "kind": "python",
                    "candidate": "run:it3", "mean_s": mean_s,
                    "cold_start": {"state": "ok", "why": "cold start 5.0s", "s": 5.0},
-                   "risk": [], "notes": ["from a fake run"]},
+                   "risk": [], "licence": {"checked": True, "license": "Apache-2.0"},
+                   "notes": ["from a fake run"]},
         "error": ""}), encoding="utf-8")
 
 
@@ -66,6 +67,7 @@ def test_a_complete_track_packs_into_the_documented_layout(tmp_path):
     assert "2 collection submissions per UTC day" in doc["reminder"]
     assert doc["suggested_utc"] == ["00:30", "12:30"]
     assert doc["problems"][0]["mean_s"] == 0.9
+    assert doc["problems"][0]["licence"]["license"] == "Apache-2.0"
     assert doc["mean_s_local"] == pytest.approx(0.9)
     assert res.zip_path.name.startswith("l1-") and res.zip_path.suffix == ".zip"
     events = [e["event"] for e in sync.Ledger(work / sync.LEDGER_FILE).entries()]

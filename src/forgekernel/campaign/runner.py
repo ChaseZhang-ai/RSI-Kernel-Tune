@@ -531,7 +531,8 @@ class ProblemRunner:
         st.export = {"path": str(res.path) if res.path else None, "kind": res.kind,
                      "candidate": res.candidate, "mean_s": res.mean_s,
                      "cold_start": res.cold_start, "error": res.error,
-                     "rejected": res.rejected, "risk": res.risk, "notes": res.notes}
+                     "rejected": res.rejected, "risk": res.risk, "notes": res.notes,
+                     "licence": res.licence}
         self.state.save(st)
         if not res.ok:
             raise RuntimeError(res.error or "compose produced no submission.py")

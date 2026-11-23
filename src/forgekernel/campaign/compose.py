@@ -560,19 +560,5 @@ def compose(task_dir: str | Path, candidates: list[Candidate], *, out: Path,
                                            for f in failures[:4]))
 
 
-def pack_manifest_entry(result: ComposeResult, **extra) -> dict:
-    """The manifest line for one exported problem."""
-    return {"file": result.path.name if result.path else None,
-            "kind": result.kind, "candidate": result.candidate,
-            "mean_s": result.mean_s, "cold_start": result.cold_start,
-            "licence": result.licence, "notes": result.notes, "risk": result.risk,
-            **extra}
-
-
 def now_stamp() -> str:
     return time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-
-
-def score_from_card_reading(problem: dict, latencies: dict) -> dict:
-    """The SOL block of a latency reading against this card's own T_b / T_SOL."""
-    return solscore.reading_s(latencies, card_board(problem))

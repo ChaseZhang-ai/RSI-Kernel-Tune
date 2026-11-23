@@ -137,6 +137,7 @@ def collect(track: str, snap: targets_mod.Snapshot, *, work_dir: str | Path,
             entry.mean_s = st.get("mean_s")
             entry.cold_start = st.get("cold_start") or {}
             entry.risk = list(st.get("risk") or [])
+            entry.licence = dict(st.get("licence") or {})
             entry.notes = list(st.get("notes") or [])
         elif cover is not None and (cover / name / "submission.py").is_file():
             entry.source, entry.kind = str(cover / name / "submission.py"), "cover"
@@ -327,7 +328,7 @@ def pack(track: str, snap: targets_mod.Snapshot, *, work_dir: str | Path,
            "problems": [{"kernel_id": p.kernel_id, "name": p.name, "source": p.source,
                          "kind": p.kind, "mean_s": p.mean_s, "fallback": p.fallback,
                          "cold_start": p.cold_start, "risk": p.risk,
-                         "notes": p.notes} for p in problems]}
+                         "licence": p.licence, "notes": p.notes} for p in problems]}
     manifest.write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n",
                         encoding="utf-8")
     res.zip_path, res.manifest = zip_path, manifest

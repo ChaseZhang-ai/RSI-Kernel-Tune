@@ -1098,7 +1098,9 @@ def rank(entries: Iterable[KernelEntry], query: str) -> list[tuple[int, KernelEn
         family = _norm(entry.family)
         if q in keys:
             where = 0
-        elif family == q or (q_family and family == q_family):
+        elif family == q:
+            where = 1
+        elif q_family and q_family != "other" and family == q_family:
             where = 1
         elif any(q in key for key in keys) or q in family:
             where = 2

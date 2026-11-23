@@ -461,3 +461,19 @@ write library headers as `#include <cute/...>` / `#include <cuda_runtime.h>`; to
 Candidates must be **genuinely different** (different tile, or different stage count, or different warp organization), and state the **point of divergence**:
 which observation separates them, and why the current observations are not enough to settle it. If you can in fact already settle it, say so plainly,
 and mark the second candidate "falsified by X, kept for comparison".
+
+## Run context files (optional; run-time input, never part of this prompt)
+
+When a path below is not "(none)", read it before deciding anything it covers.
+It is measured or mechanically extracted data for THIS run, not advice:
+
+- Target device: `{TARGET_PROFILE_PATH}` -- the GPU the result is graded on, its limits, and the rules a
+  submission must satisfy. The machine you develop on may differ: this file says how.
+- Roofline / SOL distance: `{ROOFLINE_PATH}` -- the GPU's measured peaks and, per workload, the time the
+  hardware allows and how far the reference and the current best are from it.
+- Class lessons: `{LESSONS_PATH}` -- what was measured before on other operators of the same class
+  (approaches, numbers, traps).
+- Existing implementations: `{PRIOR_PATH}` -- kernels already written for this operator or its family,
+  with their sources, licenses and measured scores. Reading, reusing and improving them is allowed.
+
+A path that does not exist is not an error: proceed exactly as without it.

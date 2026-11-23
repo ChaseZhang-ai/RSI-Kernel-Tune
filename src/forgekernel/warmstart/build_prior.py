@@ -136,6 +136,12 @@ def klib_entries(index: Path | None = None) -> list[dict]:
     return out
 
 
+def klib_root(index: Path | None = None) -> Path:
+    """The library directory a relative entry ``path`` is relative to: the index's own
+    directory when one is given, else ``<repo>/kernel_library``."""
+    return Path(index).parent if index is not None else _repo_root() / KLIB_INDEX.parent
+
+
 def klib_usable(entry: dict) -> bool:
     """The seedlib schema's own verdict when it is importable, else the licence rule."""
     try:
@@ -187,16 +193,16 @@ def select_klib(entries: list[dict], task, problem: dict | None) -> list[dict]:
     return out
 
 
-def _entry_index_path(entry: dict) -> Path | None:
-    """The file a library entry names: ``path`` is relative to the library root
-    (``kernel_library/kernels/<id>/kernel.py`` in the seedlib schema), so an absolute path,
-    the repository-relative one and the library-relative one are all tried."""
+def _entry_index_path(entry: dict, root: Path | None = None) -> Path | None:
+    """The file a library entry names: ``path`` is relative to the library root (the seedlib
+    schema: ``kernels/<id>/kernel.py``), so an absolute path, the library-relative one and the
+    repository-relative one are all tried."""
     raw = entry.get("path")
     if not raw:
         return None
     p = Path(str(raw)).expanduser()
     candidates = [p] if p.is_absolute() else [
-        _repo_root() / p, _repo_root() / KLIB_INDEX.parent / p]
+        (root if root is not None else klib_root()) / p, _repo_root() / p]
     for candidate in candidates:
         if candidate.is_file():
             return candidate
@@ -299,11 +305,12 @@ def prior_rows(task, op_dir: Path | None = None) -> list[dict]:
     return rows
 
 
-def _attach_scores(rows: list[dict], selected: list[dict]) -> None:
+def _attach_scores(rows: list[dict], selected: list[dict],
+                   root: Path | None = None) -> None:
     """A row whose content is a library entry gets that entry's score (match by content)."""
     by_hash: dict[str, dict] = {}
     for entry in selected:
-        path = _entry_index_path(entry)
+        path = _entry_index_path(entry, root)
         if path is not None:
             try:
                 by_hash.setdefault(seed.sha256(path), entry)
@@ -357,16 +364,17 @@ def _ms(v) -> str:
 
 
 def manifest_text(task, *, op_dir: Path | None = None, problem: dict | None = None,
-                  entries: list[dict] | None = None, include_klib: bool = False) -> str:
-    """The manifest. ``problem`` / ``entries`` are injected by tests; a normal build reads
-    them from the card and the index."""
+                  entries: list[dict] | None = None, include_klib: bool = False,
+                  library_root: Path | None = None) -> str:
+    """The manifest. ``problem`` / ``entries`` / ``library_root`` are injected by callers
+    (tests, ``build_prior``); a normal build reads them from the card and the index."""
     if problem is None:
         problem = problem_of(task, op_dir)
     candidates = entries if entries is not None else klib_entries()
     selected = select_klib(candidates, task, problem) if include_klib else []
     rows = prior_rows(task, op_dir)
     if include_klib:
-        _attach_scores(rows, selected)
+        _attach_scores(rows, selected, library_root)
 
     names = _names_for(task, problem)
     title = sorted(names)[0] if names else task.name
@@ -498,7 +506,8 @@ def build_prior(task_dir: str | Path, *, klib: bool = False, out: Path | None = 
     ``prior.md``)."""
     from forgekernel.task import load_task
     task = load_task(task_dir, kb_root=kb_root)
-    kwargs = {"entries": klib_entries(index), "include_klib": klib}
+    kwargs = {"entries": klib_entries(index), "include_klib": klib,
+              "library_root": klib_root(index)}
     text = manifest_text(task, **kwargs)
     path = Path(out) if out is not None else Path(task.dir) / MANIFEST_NAME
     path.parent.mkdir(parents=True, exist_ok=True)

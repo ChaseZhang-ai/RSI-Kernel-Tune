@@ -132,15 +132,21 @@ def test_without_an_index_the_klib_section_says_so(warm, tmp_path):
 def test_with_an_index_the_matching_entry_and_its_score_are_listed(warm, tmp_path):
     task_dir, dirs = warm
     by_license = {r["license"]: r["path"] for r in seed.read_sources(task_dir / "leaderboard" / "card")}
-    target = dirs["mit"] / "kernel.py"
-    index = tmp_path / "index.json"
-    index.write_text(json.dumps({"entries": [{
-        "id": "kw-1", "problem_keys": ["001_rms"], "family": "rmsnorm",
-        "path": str(target), "language": "triton", "license": "MIT",
-        "source": "KernelWiki#1", "reported": {"sol_score": 0.8},
+    # A library laid out as the seedlib schema has it: <root>/index.json +
+    # <root>/kernels/<id>/kernel.py, the entry naming that file relative to the root and
+    # carrying the schema's fields (the index is validated when that task has merged).
+    library = tmp_path / "library"
+    (library / "kernels" / "kw-1").mkdir(parents=True)
+    shutil.copy2(dirs["mit"] / "kernel.py", library / "kernels" / "kw-1" / "kernel.py")
+    index = library / "index.json"
+    index.write_text(json.dumps({"version": 1, "entries": [{
+        "id": "kw-1", "problem_keys": ["001_rms", "other"], "family": "other",
+        "path": "kernels/kw-1/kernel.py", "language": "pytorch", "entry": "run",
+        "source": {"repo": "KernelWiki", "commit": "abc1234", "path": "artifacts/1/kernel.py"},
+        "license": "MIT", "reported": {"score": 0.8, "board": "sol-execbench"},
         "verified_local": {"t_ms": 0.02}}]}))
     text = bp.build_prior(task_dir, klib=True, index=index).read_text()
-    assert "kw-1" in text and "KernelWiki#1" in text and "0.8" in text
+    assert "kw-1" in text and "KernelWiki" in text and "0.8" in text
     # the prior row whose content is that entry carries its score
     rows = [line for line in text.splitlines() if line.startswith("| `prior/")]
     assert any("board:" in row and by_license["MIT"] in row for row in rows)

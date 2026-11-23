@@ -8,6 +8,9 @@
   forge status [.artifacts/<op>_<id>]  -> where a run is (every run when omitted)
   forge harvest .artifacts/<op>_<id>   -> the knowledge-base write-up of a stopped run
   forge export .artifacts/<op>_<id>    -> the best kernel (a board task's as the board's solution)
+  forge bench <task> --candidate <kernel.py|solution.json>
+                                       -> one candidate's readings on a board card
+                                          (docs/benchx.md; `forge bench --help`)
 
 `forge run` exits 0 when the final confirmation meets the target (and the correctness
 monitor raised no alarm on that kernel), and 2 otherwise.
@@ -89,6 +92,19 @@ def main(argv: list[str] | None = None) -> int:
         from forgekernel.loop.cli import main as loop_main
 
         return loop_main([argv[0], *argv[2:]])
+
+    # Commands that live outside this CLI (`src/forgekernel/ext/`: each module defines
+    # COMMAND and main(argv); discovered on demand). Built-in names never reach here, and
+    # an unknown name still falls through to the submit CLI below.
+    from forgekernel import ext
+
+    try:
+        ext_rc = ext.command_main(argv)
+    except ImportError as e:      # a broken extension: say which, do not blame submit
+        sys.stderr.write(f"[forge] {argv[0]}: {e}\n")
+        return 2
+    if ext_rc is not None:
+        return ext_rc
 
     from forgekernel.submit.cli import main as submit_main
 

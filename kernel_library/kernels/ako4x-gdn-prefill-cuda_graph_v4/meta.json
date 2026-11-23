@@ -1,0 +1,54 @@
+{
+  "id": "ako4x-gdn-prefill-cuda_graph_v4",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-gdn-prefill-cuda_graph_v4",
+    "problem_keys": [
+      "ssm"
+    ],
+    "family": "ssm",
+    "path": "kernels/ako4x-gdn-prefill-cuda_graph_v4/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/gdn-prefill/variants/cuda_graph_v4/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 4.670153276806475,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/gdn-prefill/variants/cuda_graph_v4/result.json",
+      "label": "iter-11 PDL kkt_solve+state_rec+fwd_o chain",
+      "backend": "modal-b200",
+      "timestamp": "2026-04-25T02:15:39.283597"
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 4.670153276806475,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/gdn-prefill/variants/cuda_graph_v4/result.json",
+    "label": "iter-11 PDL kkt_solve+state_rec+fwd_o chain",
+    "backend": "modal-b200",
+    "timestamp": "2026-04-25T02:15:39.283597"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "trap: num_warps=8 correctness trap) and #11 (PDL borderline-wave"
+  ],
+  "extra": {}
+}

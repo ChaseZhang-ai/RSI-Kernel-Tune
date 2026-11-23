@@ -1,0 +1,53 @@
+{
+  "id": "ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter1-cute-mla-donor-discovery",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter1-cute-mla-donor-discovery",
+    "problem_keys": [
+      "attention",
+      "019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1"
+    ],
+    "family": "attention",
+    "path": "kernels/ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter1-cute-mla-donor-discovery/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter1-cute-mla-donor-discovery/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.4566835671090417,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter1-cute-mla-donor-discovery/result.json",
+      "label": "iter1-cute-mla-donor-discovery",
+      "backend": "modal-b200",
+      "timestamp": "2026-05-22T07:02:33.983905"
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.4566835671090417,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter1-cute-mla-donor-discovery/result.json",
+    "label": "iter1-cute-mla-donor-discovery",
+    "backend": "modal-b200",
+    "timestamp": "2026-05-22T07:02:33.983905"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

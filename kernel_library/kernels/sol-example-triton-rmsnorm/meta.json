@@ -1,0 +1,40 @@
+{
+  "id": "sol-example-triton-rmsnorm",
+  "origin": "sol-example",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "sol-example-triton-rmsnorm",
+    "problem_keys": [
+      "rmsnorm"
+    ],
+    "family": "rmsnorm",
+    "path": "kernels/sol-example-triton-rmsnorm/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "NVIDIA/SOL-ExecBench",
+      "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+      "path": "examples/triton/rmsnorm/solution_triton.json"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "rmsnorm_fwd",
+  "original_files": [
+    {
+      "path": "kernel.py",
+      "bytes": 1439
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "SOL-ExecBench/LICENSE",
+  "reported": null,
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

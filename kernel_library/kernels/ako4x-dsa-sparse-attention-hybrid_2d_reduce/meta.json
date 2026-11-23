@@ -1,0 +1,37 @@
+{
+  "id": "ako4x-dsa-sparse-attention-hybrid_2d_reduce",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-dsa-sparse-attention-hybrid_2d_reduce",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/ako4x-dsa-sparse-attention-hybrid_2d_reduce/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/dsa-sparse-attention/variants/hybrid_2d_reduce/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": null,
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "trap: if your toolchain shifted; do not treat blindly as forbidden."
+  ],
+  "extra": {}
+}

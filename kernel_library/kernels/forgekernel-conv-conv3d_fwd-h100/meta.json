@@ -1,0 +1,49 @@
+{
+  "id": "forgekernel-conv-conv3d_fwd-h100",
+  "origin": "forgekernel",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "forgekernel-conv-conv3d_fwd-h100",
+    "problem_keys": [
+      "conv"
+    ],
+    "family": "conv",
+    "path": "kernels/forgekernel-conv-conv3d_fwd-h100/kernel.py",
+    "language": "cutedsl",
+    "source": {
+      "repo": "OpenBMB/ForgeKernel",
+      "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+      "path": "kernels/conv/conv3d_fwd/h100/kernel.py"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "vs": "cuDNN",
+      "speedup": "+7.6%",
+      "source": "kernels/README.md (Figure 3)"
+    },
+    "usable_in_submission": true
+  },
+  "language": "cutedsl",
+  "entry_point": "run",
+  "original_entry": "conv3d_fwd",
+  "original_files": [
+    {
+      "path": "conv/conv3d_fwd/h100/kernel.py",
+      "bytes": 26849
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "kernels/README.md",
+  "reported": {
+    "vs": "cuDNN",
+    "speedup": "+7.6%",
+    "source": "kernels/README.md (Figure 3)"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

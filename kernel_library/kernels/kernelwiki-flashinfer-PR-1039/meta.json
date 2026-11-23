@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flashinfer-PR-1039",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flashinfer-PR-1039",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-flashinfer-PR-1039/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+      "commit": "9a05c92a",
+      "path": "artifacts/prs/flashinfer/PR-1039",
+      "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1039"
+    },
+    "license": "multiple (Apache-2.0, BSD-3-Clause)",
+    "entry": "run",
+    "usable_in_submission": false
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "multiple (Apache-2.0, BSD-3-Clause)",
+  "license_source": "headers: key-files/csrc/fmha_cutlass_sm100.cu, key-files/include/flashinfer/attention/blackwell/collective/fmha_common.hpp",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": false,
+  "notes": [
+    "license: multiple (Apache-2.0, BSD-3-Clause) (headers: key-files/csrc/fmha_cutlass_sm100.cu, key-files/include/flashinfer/attention/blackwell/collective/fmha_common.hpp)",
+    "files: __init__.py, fmha.hpp, fmha_common.hpp, fmha_cutlass_sm100.cu, fmha_cutlass_sm100.cuh, fmha_cutlass_sm100_pybind.cu, fmha_fusion.hpp, fmha_options.hpp, fmha_tile_scheduler.hpp, format_conversion.py, pow_2.hpp, sm100_fmha_fwd_epilogue_tma_warpspecialized.hpp, sm100_fmha_fwd_kernel_tma_warpspecialized.hpp, sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp, sm100_fmha_gen_epilogue_warpspecialized.hpp, sm100_fmha_gen_kernel_warpspecialized.hpp, sm100_fmha_gen_mainloop_warpspecialized.hpp, sm100_fmha_load_cpasync_warpspecialized.hpp, sm100_fmha_load_tma_warpspecialized.hpp, sm100_fmha_mla_reduction.hpp, sm100_fmha_mla_tma_warpspecialized.hpp, sm100_mla.hpp, sm100_mla_tile_scheduler.hpp"
+  ],
+  "extra": {}
+}

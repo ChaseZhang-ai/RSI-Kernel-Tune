@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-vllm-PR-34597",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-vllm-PR-34597",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-vllm-PR-34597/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "KernelWiki artifact (vllm-project/vllm)",
+      "commit": "a1257fd1",
+      "path": "artifacts/prs/vllm/PR-34597",
+      "upstream_url": "https://github.com/vllm-project/vllm/pull/34597"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "header: key-files/vllm/v1/attention/backends/mla/triton_mla.py",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: Apache-2.0 (header: key-files/vllm/v1/attention/backends/mla/triton_mla.py)",
+    "files: triton_decode_attention.py, triton_mla.py"
+  ],
+  "extra": {}
+}

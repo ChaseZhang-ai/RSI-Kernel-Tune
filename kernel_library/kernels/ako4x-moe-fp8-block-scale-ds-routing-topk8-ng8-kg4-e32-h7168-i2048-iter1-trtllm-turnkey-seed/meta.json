@@ -1,0 +1,55 @@
+{
+  "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter1-trtllm-turnkey-seed",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter1-trtllm-turnkey-seed",
+    "problem_keys": [
+      "moe",
+      "020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+    ],
+    "family": "moe",
+    "path": "kernels/ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter1-trtllm-turnkey-seed/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter1-trtllm-turnkey-seed/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.0277369065389859,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter1-trtllm-turnkey-seed/result.json",
+      "label": "iter-1-seed-trtllm",
+      "backend": "modal-b200",
+      "timestamp": "2026-05-23T12:38:19.321793"
+    },
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.0277369065389859,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter1-trtllm-turnkey-seed/result.json",
+    "label": "iter-1-seed-trtllm",
+    "backend": "modal-b200",
+    "timestamp": "2026-05-23T12:38:19.321793"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "trap: (`baseline.json` was a bootstrap shell). This iter seeds it with 19"
+  ],
+  "extra": {}
+}

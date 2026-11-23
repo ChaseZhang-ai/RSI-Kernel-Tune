@@ -1,0 +1,55 @@
+{
+  "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter4-autotune-tactic-sweep-gated",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter4-autotune-tactic-sweep-gated",
+    "problem_keys": [
+      "moe",
+      "020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+    ],
+    "family": "moe",
+    "path": "kernels/ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter4-autotune-tactic-sweep-gated/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter4-autotune-tactic-sweep-gated/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.3250124999901507,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter4-autotune-tactic-sweep-gated/result.json",
+      "label": "iter4-autotune-tactic-sweep-gated",
+      "backend": "modal-b200",
+      "timestamp": "2026-05-23T17:06:46.282005"
+    },
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.3250124999901507,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter4-autotune-tactic-sweep-gated/result.json",
+    "label": "iter4-autotune-tactic-sweep-gated",
+    "backend": "modal-b200",
+    "timestamp": "2026-05-23T17:06:46.282005"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "trap: Inherits iter3c's dead-ends + open question: graph capture at T=1"
+  ],
+  "extra": {}
+}

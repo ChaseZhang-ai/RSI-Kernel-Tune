@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flashinfer-PR-983",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flashinfer-PR-983",
+    "problem_keys": [
+      "norm"
+    ],
+    "family": "norm",
+    "path": "kernels/kernelwiki-flashinfer-PR-983/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+      "commit": "893172c1",
+      "path": "artifacts/prs/flashinfer/PR-983",
+      "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/983"
+    },
+    "license": "unknown",
+    "entry": "run",
+    "usable_in_submission": false
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "unknown",
+  "license_source": "PR-983/PROVENANCE.yaml (inherits-from-upstream)",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": false,
+  "notes": [
+    "license: unknown (PR-983/PROVENANCE.yaml (inherits-from-upstream))",
+    "files: norm.py, norm.py"
+  ],
+  "extra": {}
+}

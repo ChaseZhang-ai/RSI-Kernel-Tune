@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flashinfer-PR-1850",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flashinfer-PR-1850",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-flashinfer-PR-1850/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+      "commit": "f3ea938d",
+      "path": "artifacts/prs/flashinfer/PR-1850",
+      "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1850"
+    },
+    "license": "multiple (Apache-2.0, BSD-3-Clause)",
+    "entry": "run",
+    "usable_in_submission": false
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "multiple (Apache-2.0, BSD-3-Clause)",
+  "license_source": "headers: key-files/csrc/fmha_cutlass_sm100.cu, key-files/include/flashinfer/attention/blackwell/collective/sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": false,
+  "notes": [
+    "license: multiple (Apache-2.0, BSD-3-Clause) (headers: key-files/csrc/fmha_cutlass_sm100.cu, key-files/include/flashinfer/attention/blackwell/collective/sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp)",
+    "files: fmha_cutlass_sm100.cu, sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp, sm100_fmha_gen_mainloop_warpspecialized.hpp"
+  ],
+  "extra": {}
+}

@@ -1,0 +1,59 @@
+{
+  "id": "hyra-081_moe_sparse_expert_dispatch",
+  "origin": "hyra",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "hyra-081_moe_sparse_expert_dispatch",
+    "problem_keys": [
+      "moe",
+      "081_moe_sparse_expert_dispatch"
+    ],
+    "family": "moe",
+    "path": "kernels/hyra-081_moe_sparse_expert_dispatch/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "Tencent/Hyra-results",
+      "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+      "path": "Hyra-results/AI4AI/sol_execbench/k175__sid25683__moe_sparse_expert_dispatch__081_moe_sparse_expert_dispatch.json",
+      "license_file": "Hyra-results/LICENSE"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "score": 0.924206,
+      "metric": "sol_score",
+      "board": "SOL-ExecBench",
+      "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+      "latency_ms": 0.887775,
+      "submission_id": 25683,
+      "kernel_id": null
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [
+    {
+      "path": "kernel.py",
+      "bytes": 21123
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "Hyra-results/LICENSE",
+  "reported": {
+    "score": 0.924206,
+    "metric": "sol_score",
+    "board": "SOL-ExecBench",
+    "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+    "latency_ms": 0.887775,
+    "submission_id": 25683,
+    "kernel_id": null
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

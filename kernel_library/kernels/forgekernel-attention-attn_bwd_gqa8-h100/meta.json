@@ -1,0 +1,49 @@
+{
+  "id": "forgekernel-attention-attn_bwd_gqa8-h100",
+  "origin": "forgekernel",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "forgekernel-attention-attn_bwd_gqa8-h100",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/forgekernel-attention-attn_bwd_gqa8-h100/kernel.py",
+    "language": "cutedsl",
+    "source": {
+      "repo": "OpenBMB/ForgeKernel",
+      "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+      "path": "kernels/attention/attn_bwd_gqa8/h100/kernel.py"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "vs": "FlashAttention-4",
+      "speedup": "+2.7%",
+      "source": "kernels/README.md (Figure 3)"
+    },
+    "usable_in_submission": true
+  },
+  "language": "cutedsl",
+  "entry_point": "run",
+  "original_entry": "flash_attn_bwd",
+  "original_files": [
+    {
+      "path": "attention/attn_bwd_gqa8/h100/kernel.py",
+      "bytes": 198655
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "kernels/README.md",
+  "reported": {
+    "vs": "FlashAttention-4",
+    "speedup": "+2.7%",
+    "source": "kernels/README.md (Figure 3)"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

@@ -1,0 +1,49 @@
+{
+  "id": "forgekernel-attention-mla_paged_decode-h100",
+  "origin": "forgekernel",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "forgekernel-attention-mla_paged_decode-h100",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/forgekernel-attention-mla_paged_decode-h100/kernel.py",
+    "language": "cutedsl",
+    "source": {
+      "repo": "OpenBMB/ForgeKernel",
+      "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+      "path": "kernels/attention/mla_paged_decode/h100/kernel.py"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "vs": "K-Search",
+      "speedup": "+170.6%",
+      "source": "kernels/README.md (Figure 4)"
+    },
+    "usable_in_submission": true
+  },
+  "language": "cutedsl",
+  "entry_point": "run",
+  "original_entry": "mla_paged_decode",
+  "original_files": [
+    {
+      "path": "attention/mla_paged_decode/h100/kernel.py",
+      "bytes": 50654
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "kernels/README.md",
+  "reported": {
+    "vs": "K-Search",
+    "speedup": "+170.6%",
+    "source": "kernels/README.md (Figure 4)"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

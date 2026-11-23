@@ -1,0 +1,55 @@
+{
+  "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter2-direct-cpp-bypass",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter2-direct-cpp-bypass",
+    "problem_keys": [
+      "moe",
+      "020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+    ],
+    "family": "moe",
+    "path": "kernels/ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter2-direct-cpp-bypass/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter2-direct-cpp-bypass/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.2115918529773013,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter2-direct-cpp-bypass/result.json",
+      "label": "iter-2-direct-cpp-bypass",
+      "backend": "modal-b200",
+      "timestamp": "2026-05-23T14:03:21.513516"
+    },
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.2115918529773013,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter2-direct-cpp-bypass/result.json",
+    "label": "iter-2-direct-cpp-bypass",
+    "backend": "modal-b200",
+    "timestamp": "2026-05-23T14:03:21.513516"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "trap: None ruled out yet on this variant. (Inherits the parent's dead-end set:"
+  ],
+  "extra": {}
+}

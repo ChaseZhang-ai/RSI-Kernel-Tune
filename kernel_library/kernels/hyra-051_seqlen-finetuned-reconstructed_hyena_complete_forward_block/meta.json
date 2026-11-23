@@ -1,0 +1,59 @@
+{
+  "id": "hyra-051_seqlen-finetuned-reconstructed_hyena_complete_forward_block",
+  "origin": "hyra",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "hyra-051_seqlen-finetuned-reconstructed_hyena_complete_forward_block",
+    "problem_keys": [
+      "ssm",
+      "051_seqlen-finetuned-reconstructed_hyena_complete_forward_block"
+    ],
+    "family": "ssm",
+    "path": "kernels/hyra-051_seqlen-finetuned-reconstructed_hyena_complete_forward_block/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "Tencent/Hyra-results",
+      "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+      "path": "Hyra-results/AI4AI/sol_execbench/k145__sid25621__hyena_complete_forward_block__051_seqlen-finetuned-reconstructed_hyena_complete_forward_block.json",
+      "license_file": "Hyra-results/LICENSE"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "score": 0.965872,
+      "metric": "sol_score",
+      "board": "SOL-ExecBench",
+      "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+      "latency_ms": 0.021479,
+      "submission_id": 25621,
+      "kernel_id": null
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [
+    {
+      "path": "kernel.py",
+      "bytes": 16319
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "Hyra-results/LICENSE",
+  "reported": {
+    "score": 0.965872,
+    "metric": "sol_score",
+    "board": "SOL-ExecBench",
+    "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+    "latency_ms": 0.021479,
+    "submission_id": 25621,
+    "kernel_id": null
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

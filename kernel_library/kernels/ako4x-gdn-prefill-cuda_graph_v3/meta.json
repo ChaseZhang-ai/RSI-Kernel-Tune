@@ -1,0 +1,54 @@
+{
+  "id": "ako4x-gdn-prefill-cuda_graph_v3",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-gdn-prefill-cuda_graph_v3",
+    "problem_keys": [
+      "ssm"
+    ],
+    "family": "ssm",
+    "path": "kernels/ako4x-gdn-prefill-cuda_graph_v3/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/gdn-prefill/variants/cuda_graph_v3/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 4.583236884837246,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/gdn-prefill/variants/cuda_graph_v3/result.json",
+      "label": "iter-9 kkt_solve big-matmul phases 5/6",
+      "backend": "modal-b200",
+      "timestamp": "2026-04-24T14:39:12.383534"
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 4.583236884837246,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/gdn-prefill/variants/cuda_graph_v3/result.json",
+    "label": "iter-9 kkt_solve big-matmul phases 5/6",
+    "backend": "modal-b200",
+    "timestamp": "2026-04-24T14:39:12.383534"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "trap: Anti-pattern:  do NOT merge k-halves if the two halves come from"
+  ],
+  "extra": {}
+}

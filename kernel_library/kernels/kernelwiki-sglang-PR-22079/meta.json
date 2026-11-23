@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-sglang-PR-22079",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-sglang-PR-22079",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-sglang-PR-22079/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "KernelWiki artifact (sgl-project/sglang)",
+      "commit": "5638d40f",
+      "path": "artifacts/prs/sglang/PR-22079",
+      "upstream_url": "https://github.com/sgl-project/sglang/pull/22079"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "header: key-files/python/sglang/srt/layers/attention/triton_ops/extend_attention.py",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: Apache-2.0 (header: key-files/python/sglang/srt/layers/attention/triton_ops/extend_attention.py)",
+    "files: extend_attention.py"
+  ],
+  "extra": {}
+}

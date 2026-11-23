@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flashinfer-PR-982",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flashinfer-PR-982",
+    "problem_keys": [
+      "gemm"
+    ],
+    "family": "gemm",
+    "path": "kernels/kernelwiki-flashinfer-PR-982/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+      "commit": "5751fc68",
+      "path": "artifacts/prs/flashinfer/PR-982",
+      "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/982"
+    },
+    "license": "unknown",
+    "entry": "run",
+    "usable_in_submission": false
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "unknown",
+  "license_source": "PR-982/PROVENANCE.yaml (inherits-from-upstream)",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": false,
+  "notes": [
+    "license: unknown (PR-982/PROVENANCE.yaml (inherits-from-upstream))",
+    "files: __init__.py, sm_constraint_gemm.py, sm_constraint_gemm.py"
+  ],
+  "extra": {}
+}

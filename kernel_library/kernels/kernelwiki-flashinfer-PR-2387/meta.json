@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flashinfer-PR-2387",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flashinfer-PR-2387",
+    "problem_keys": [
+      "ssm"
+    ],
+    "family": "ssm",
+    "path": "kernels/kernelwiki-flashinfer-PR-2387/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+      "commit": "18804cd5",
+      "path": "artifacts/prs/flashinfer/PR-2387",
+      "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/2387"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "header: key-files/include/flashinfer/mamba/selective_state_update.cuh",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: Apache-2.0 (header: key-files/include/flashinfer/mamba/selective_state_update.cuh)",
+    "files: selective_state_update.cuh"
+  ],
+  "extra": {}
+}

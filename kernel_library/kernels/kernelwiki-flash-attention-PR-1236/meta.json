@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flash-attention-PR-1236",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flash-attention-PR-1236",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-flash-attention-PR-1236/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (Dao-AILab/flash-attention)",
+      "commit": "a5a75274",
+      "path": "artifacts/prs/flash-attention/PR-1236",
+      "upstream_url": "https://github.com/Dao-AILab/flash-attention/pull/1236"
+    },
+    "license": "unknown",
+    "entry": "run",
+    "usable_in_submission": false
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "unknown",
+  "license_source": "PR-1236/PROVENANCE.yaml (inherits-from-upstream)",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": false,
+  "notes": [
+    "license: unknown (PR-1236/PROVENANCE.yaml (inherits-from-upstream))",
+    "files: benchmark_flash_attention_fp8.py, block_info.h, combine.h, epilogue_fwd_sm90_tma.hpp, flash.h, flash_api.cpp, flash_fwd_hdim128_bf16_gqa16_sm90.cu, flash_fwd_hdim128_bf16_gqa2_sm90.cu, flash_fwd_hdim128_bf16_gqa32_sm90.cu, flash_fwd_hdim128_bf16_gqa4_sm90.cu, flash_fwd_hdim128_bf16_gqa8_sm90.cu, flash_fwd_hdim128_e4m3_gqa16_sm90.cu, flash_fwd_hdim128_e4m3_gqa2_sm90.cu, flash_fwd_hdim128_e4m3_gqa32_sm90.cu, flash_fwd_hdim128_e4m3_gqa4_sm90.cu, flash_fwd_hdim128_e4m3_gqa8_sm90.cu, flash_fwd_hdim128_fp16_gqa16_sm90.cu, flash_fwd_hdim128_fp16_gqa2_sm90.cu, flash_fwd_hdim128_fp16_gqa32_sm90.cu, flash_fwd_hdim128_fp16_gqa4_sm90.cu, flash_fwd_hdim128_fp16_gqa8_sm90.cu, flash_fwd_hdim256_bf16_gqa16_sm90.cu, flash_fwd_hdim256_bf16_gqa2_sm90.cu, flash_fwd_hdim256_bf16_gqa32_sm90.cu, flash_fwd_hdim256_bf16_gqa4_sm90.cu, flash_fwd_hdim256_bf16_gqa8_sm90.cu, flash_fwd_hdim256_e4m3_gqa16_sm90.cu, flash_fwd_hdim256_e4m3_gqa2_sm90.cu, flash_fwd_hdim256_e4m3_gqa32_sm90.cu, flash_fwd_hdim256_e4m3_gqa4_sm90.cu, flash_fwd_hdim256_e4m3_gqa8_sm90.cu, flash_fwd_hdim256_fp16_gqa16_sm90.cu, flash_fwd_hdim256_fp16_gqa2_sm90.cu, flash_fwd_hdim256_fp16_gqa32_sm90.cu, flash_fwd_hdim256_fp16_gqa4_sm90.cu, flash_fwd_hdim256_fp16_gqa8_sm90.cu, flash_fwd_hdim64_bf16_gqa16_sm90.cu, flash_fwd_hdim64_bf16_gqa2_sm90.cu, flash_fwd_hdim64_bf16_gqa32_sm90.cu, flash_fwd_hdim64_bf16_gqa4_sm90.cu, flash_fwd_hdim64_bf16_gqa8_sm90.cu, flash_fwd_hdim64_e4m3_gqa16_sm90.cu, flash_fwd_hdim64_e4m3_gqa2_sm90.cu, flash_fwd_hdim64_e4m3_gqa32_sm90.cu, flash_fwd_hdim64_e4m3_gqa4_sm90.cu, flash_fwd_hdim64_e4m3_gqa8_sm90.cu, flash_fwd_hdim64_fp16_gqa16_sm90.cu, flash_fwd_hdim64_fp16_gqa2_sm90.cu, flash_fwd_hdim64_fp16_gqa32_sm90.cu, flash_fwd_hdim64_fp16_gqa4_sm90.cu, flash_fwd_hdim64_fp16_gqa8_sm90.cu, flash_fwd_kernel.h, flash_fwd_launch_template.h, kernel_traits.h, mainloop_fwd_sm90_tma_gmma_ws.hpp, seq_len.h, static_switch.h, tile_scheduler.hpp, utils.h"
+  ],
+  "extra": {}
+}

@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-TensorRT-LLM-PR-13340",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-TensorRT-LLM-PR-13340",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-TensorRT-LLM-PR-13340/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (NVIDIA/TensorRT-LLM)",
+      "commit": "897c4bff",
+      "path": "artifacts/prs/tensorrt-llm/PR-13340",
+      "upstream_url": "https://github.com/NVIDIA/TensorRT-LLM/pull/13340"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "header: key-files/cpp/include/tensorrt_llm/batch_manager/kvCacheManager.h",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: Apache-2.0 (header: key-files/cpp/include/tensorrt_llm/batch_manager/kvCacheManager.h)",
+    "files: IndexerKCacheGatherOp.cpp, IndexerKCacheScatterOp.cpp, attention.py, cacheSplitConcat.cu, cacheTransceiver.cpp, cpp_custom_ops.py, dataTransceiverState.h, dsa.py, fusedCatFp4.cu, fusedCatFp4.h, fusedCatFp4Op.cpp, indexerKCacheGather.cu, indexerKCacheScatter.cu, kvCacheManager.cpp, kvCacheManager.cpp, kvCacheManager.h, serialization.cpp"
+  ],
+  "extra": {}
+}

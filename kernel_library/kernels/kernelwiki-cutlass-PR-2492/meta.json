@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-cutlass-PR-2492",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-cutlass-PR-2492",
+    "problem_keys": [
+      "other"
+    ],
+    "family": "other",
+    "path": "kernels/kernelwiki-cutlass-PR-2492/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+      "commit": "84a27b39",
+      "path": "artifacts/prs/cutlass/PR-2492",
+      "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2492"
+    },
+    "license": "BSD-3-Clause",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "BSD-3-Clause",
+  "license_source": "header: key-files/examples/cute/tutorial/blackwell/04_mma_tma_2sm_sm100.cu",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: BSD-3-Clause (header: key-files/examples/cute/tutorial/blackwell/04_mma_tma_2sm_sm100.cu)",
+    "files: 04_mma_tma_2sm_sm100.cu"
+  ],
+  "extra": {}
+}

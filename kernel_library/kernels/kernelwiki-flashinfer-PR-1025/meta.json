@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flashinfer-PR-1025",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flashinfer-PR-1025",
+    "problem_keys": [
+      "conv"
+    ],
+    "family": "conv",
+    "path": "kernels/kernelwiki-flashinfer-PR-1025/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+      "commit": "890df95b",
+      "path": "artifacts/prs/flashinfer/PR-1025",
+      "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1025"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "header: key-files/flashinfer/triton/format_conversion.py",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: Apache-2.0 (header: key-files/flashinfer/triton/format_conversion.py)",
+    "files: __init__.py, format_conversion.py"
+  ],
+  "extra": {}
+}

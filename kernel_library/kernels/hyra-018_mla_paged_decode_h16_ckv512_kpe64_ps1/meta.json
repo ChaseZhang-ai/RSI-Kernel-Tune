@@ -1,0 +1,73 @@
+{
+  "id": "hyra-018_mla_paged_decode_h16_ckv512_kpe64_ps1",
+  "origin": "hyra",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "hyra-018_mla_paged_decode_h16_ckv512_kpe64_ps1",
+    "problem_keys": [
+      "attention",
+      "018_mla_paged_decode_h16_ckv512_kpe64_ps1"
+    ],
+    "family": "attention",
+    "path": "kernels/hyra-018_mla_paged_decode_h16_ckv512_kpe64_ps1/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "Tencent/Hyra-results",
+      "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+      "path": "Hyra-results/AI4AI/sol_execbench/k227__sid25893__mla_paged_decode_h16_ckv512_kpe64_ps1__018_mla_paged_decode_h16_ckv512_kpe64_ps1.json",
+      "license_file": "Hyra-results/LICENSE"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "score": 0.956477,
+      "metric": "sol_score",
+      "board": "SOL-ExecBench",
+      "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+      "latency_ms": 0.018297,
+      "submission_id": 25893,
+      "kernel_id": null
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [
+    {
+      "path": "kernel.py",
+      "bytes": 37204
+    },
+    {
+      "path": "cuda_mla.py",
+      "bytes": 18177
+    },
+    {
+      "path": "cuda_mma.py",
+      "bytes": 11900
+    }
+  ],
+  "merged_from": [
+    "cuda_mla.py",
+    "cuda_mma.py",
+    "kernel.py"
+  ],
+  "license": "Apache-2.0",
+  "license_source": "Hyra-results/LICENSE",
+  "reported": {
+    "score": 0.956477,
+    "metric": "sol_score",
+    "board": "SOL-ExecBench",
+    "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+    "latency_ms": 0.018297,
+    "submission_id": 25893,
+    "kernel_id": null
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "kernel.py: loads a sibling file by path at run time; after the merge that call still reads from disk and the file may need adaptation"
+  ],
+  "extra": {}
+}

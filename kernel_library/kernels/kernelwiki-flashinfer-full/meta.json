@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flashinfer-full",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flashinfer-full",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-flashinfer-full/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+      "commit": "9a05c92a",
+      "path": "artifacts/kernels/warp-specialization/full",
+      "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1039"
+    },
+    "license": "BSD-3-Clause",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "BSD-3-Clause",
+  "license_source": "header: sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: BSD-3-Clause (header: sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp)",
+    "files: sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp"
+  ],
+  "extra": {}
+}

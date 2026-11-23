@@ -1,0 +1,71 @@
+{
+  "id": "hyra-009_nvfp4_vision_temporal_patch_merge_with_projection",
+  "origin": "hyra",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "hyra-009_nvfp4_vision_temporal_patch_merge_with_projection",
+    "problem_keys": [
+      "quant_gemm",
+      "009_nvfp4_vision_temporal_patch_merge_with_projection"
+    ],
+    "family": "quant_gemm",
+    "path": "kernels/hyra-009_nvfp4_vision_temporal_patch_merge_with_projection/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "Tencent/Hyra-results",
+      "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+      "path": "Hyra-results/AI4AI/sol_execbench/k185__sid25691__nvfp4_vision_temporal_patch_merge_with_projection__009_nvfp4_vision_temporal_patch_merge_with_projection.json",
+      "license_file": "Hyra-results/LICENSE"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "score": 0.948448,
+      "metric": "sol_score",
+      "board": "SOL-ExecBench",
+      "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+      "latency_ms": 0.038247,
+      "submission_id": 25691,
+      "kernel_id": null
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [
+    {
+      "path": "kernel.py",
+      "bytes": 16323
+    },
+    {
+      "path": "fp4gemm.py",
+      "bytes": 10642
+    },
+    {
+      "path": "cuda_graph_drv.py",
+      "bytes": 6343
+    }
+  ],
+  "merged_from": [
+    "fp4gemm.py",
+    "cuda_graph_drv.py",
+    "kernel.py"
+  ],
+  "license": "Apache-2.0",
+  "license_source": "Hyra-results/LICENSE",
+  "reported": {
+    "score": 0.948448,
+    "metric": "sol_score",
+    "board": "SOL-ExecBench",
+    "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+    "latency_ms": 0.038247,
+    "submission_id": 25691,
+    "kernel_id": null
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

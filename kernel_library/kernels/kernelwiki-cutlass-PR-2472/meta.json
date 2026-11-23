@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-cutlass-PR-2472",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-cutlass-PR-2472",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-cutlass-PR-2472/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+      "commit": "9baa06dd",
+      "path": "artifacts/prs/cutlass/PR-2472",
+      "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2472"
+    },
+    "license": "BSD-3-Clause",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "BSD-3-Clause",
+  "license_source": "header: key-files/examples/77_blackwell_fmha/77_blackwell_fmha.cu",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: BSD-3-Clause (header: key-files/examples/77_blackwell_fmha/77_blackwell_fmha.cu)",
+    "files: 77_blackwell_fmha.cu, 77_blackwell_mla_fwd.cu, fmha_causal_tile_scheduler.hpp, fmha_fusion.hpp, fmha_fwd_reference.hpp, pipeline_mla.hpp, sm100_fmha_bwd_kernel_tma_warpspecialized.hpp, sm100_fmha_fwd_epilogue_tma_warpspecialized.hpp, sm100_fmha_fwd_kernel_tma_warpspecialized.hpp, sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp, sm100_fmha_mla_fwd_mainloop_tma_warpspecialized.hpp, sm100_fmha_mla_load_tma_warpspecialized.hpp"
+  ],
+  "extra": {}
+}

@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flash-attention-PR-2441",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flash-attention-PR-2441",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-flash-attention-PR-2441/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "KernelWiki artifact (Dao-AILab/flash-attention)",
+      "commit": "f219c89c",
+      "path": "artifacts/prs/flash-attention/PR-2441",
+      "upstream_url": "https://github.com/Dao-AILab/flash-attention/pull/2441"
+    },
+    "license": "unknown",
+    "entry": "run",
+    "usable_in_submission": false
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "unknown",
+  "license_source": "PR-2441/PROVENANCE.yaml (inherits-from-upstream)",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": false,
+  "notes": [
+    "license: unknown (PR-2441/PROVENANCE.yaml (inherits-from-upstream))",
+    "files: cute_dsl_utils.py, flash_fwd_mla_sm100.py, interface.py, mask.py, named_barrier.py, softmax.py, testing.py, tile_scheduler.py, topk_gather_kv.py"
+  ],
+  "extra": {}
+}

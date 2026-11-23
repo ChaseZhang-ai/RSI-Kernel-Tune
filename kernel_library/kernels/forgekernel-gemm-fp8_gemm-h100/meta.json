@@ -1,0 +1,49 @@
+{
+  "id": "forgekernel-gemm-fp8_gemm-h100",
+  "origin": "forgekernel",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "forgekernel-gemm-fp8_gemm-h100",
+    "problem_keys": [
+      "gemm"
+    ],
+    "family": "gemm",
+    "path": "kernels/forgekernel-gemm-fp8_gemm-h100/kernel.py",
+    "language": "cutedsl",
+    "source": {
+      "repo": "OpenBMB/ForgeKernel",
+      "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+      "path": "kernels/gemm/fp8_gemm/h100/kernel.py"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "vs": "DeepGEMM",
+      "speedup": "+0.8%",
+      "source": "kernels/README.md (Figure 3)"
+    },
+    "usable_in_submission": true
+  },
+  "language": "cutedsl",
+  "entry_point": "run",
+  "original_entry": "fp8_gemm",
+  "original_files": [
+    {
+      "path": "gemm/fp8_gemm/h100/kernel.py",
+      "bytes": 59180
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "kernels/README.md",
+  "reported": {
+    "vs": "DeepGEMM",
+    "speedup": "+0.8%",
+    "source": "kernels/README.md (Figure 3)"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

@@ -1,0 +1,53 @@
+{
+  "id": "sol-example-cutlass-gemm",
+  "origin": "sol-example",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "sol-example-cutlass-gemm",
+    "problem_keys": [
+      "gemm"
+    ],
+    "family": "gemm",
+    "path": "kernels/sol-example-cutlass-gemm/kernel.py",
+    "language": "cuda-inline",
+    "source": {
+      "repo": "NVIDIA/SOL-ExecBench",
+      "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+      "path": "examples/cutlass/gemm/solution_cutlass.json"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "cuda-inline",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [
+    {
+      "path": "kernel.h",
+      "bytes": 163
+    },
+    {
+      "path": "kernel.cu",
+      "bytes": 1807
+    },
+    {
+      "path": "main.cpp",
+      "bytes": 868
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "SOL-ExecBench/LICENSE",
+  "reported": null,
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "inlined header: kernel.h",
+    "inlined header: kernel.h",
+    "nvcc flags: -O3 --use_fast_math -std=c++17",
+    "3 translation units merged; duplicate static symbols across them would collide"
+  ],
+  "extra": {}
+}

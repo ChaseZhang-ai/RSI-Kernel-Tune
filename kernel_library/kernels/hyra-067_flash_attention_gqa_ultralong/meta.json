@@ -1,0 +1,74 @@
+{
+  "id": "hyra-067_flash_attention_gqa_ultralong",
+  "origin": "hyra",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "hyra-067_flash_attention_gqa_ultralong",
+    "problem_keys": [
+      "attention",
+      "067_flash_attention_gqa_ultralong"
+    ],
+    "family": "attention",
+    "path": "kernels/hyra-067_flash_attention_gqa_ultralong/kernel.py",
+    "language": "cuda-inline",
+    "source": {
+      "repo": "Tencent/Hyra-results",
+      "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+      "path": "Hyra-results/AI4AI/sol_execbench/k067__sid24692__flash_attention_gqa_ultralong__067_flash_attention_gqa_ultralong.json",
+      "license_file": "Hyra-results/LICENSE"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "score": 0.69289,
+      "metric": "sol_score",
+      "board": "SOL-ExecBench",
+      "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+      "latency_ms": 0.177612,
+      "submission_id": 24692,
+      "kernel_id": null
+    },
+    "usable_in_submission": true
+  },
+  "language": "cuda-inline",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [
+    {
+      "path": "main.cpp",
+      "bytes": 13239
+    },
+    {
+      "path": "kernel.cu",
+      "bytes": 5014
+    },
+    {
+      "path": "cudnn_sdpa.cpp",
+      "bytes": 3578
+    },
+    {
+      "path": "flash_attn.cu",
+      "bytes": 5603
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "Hyra-results/LICENSE",
+  "reported": {
+    "score": 0.69289,
+    "metric": "sol_score",
+    "board": "SOL-ExecBench",
+    "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+    "latency_ms": 0.177612,
+    "submission_id": 24692,
+    "kernel_id": null
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "nvcc flags: -O3 --use_fast_math -O3 -std=c++17",
+    "4 translation units merged; duplicate static symbols across them would collide"
+  ],
+  "extra": {}
+}

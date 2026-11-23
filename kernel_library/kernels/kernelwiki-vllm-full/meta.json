@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-vllm-full",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-vllm-full",
+    "problem_keys": [
+      "quant_gemm"
+    ],
+    "family": "quant_gemm",
+    "path": "kernels/kernelwiki-vllm-full/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (vllm-project/vllm)",
+      "commit": "ed7a29d9",
+      "path": "artifacts/kernels/epilogue-fusion/full",
+      "upstream_url": "https://github.com/vllm-project/vllm/pull/16032"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "header: nvfp4_scaled_mm_kernels.cu",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: Apache-2.0 (header: nvfp4_scaled_mm_kernels.cu)",
+    "files: nvfp4_scaled_mm_kernels.cu"
+  ],
+  "extra": {}
+}

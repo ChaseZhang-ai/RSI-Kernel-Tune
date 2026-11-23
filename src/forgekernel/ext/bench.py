@@ -34,6 +34,20 @@ def _say(msg: str = "") -> None:
 # -- printing ---------------------------------------------------------------------------------
 
 
+def _ms(v) -> str:
+    return "n/a" if v is None else f"{v:.4f}"
+
+
+def _print_target_check(result: BenchResult) -> None:
+    check = result.integrity.get("target_compile") or {}
+    external = "attached" if check.get("external") != "unavailable" else "unavailable"
+    _say(f"target compile: {check.get('status')} "
+         f"(engine {check.get('engine')}, features "
+         f"{', '.join(check.get('features') or []) or 'none'}, external {external})")
+    if check.get("error"):
+        _say(f"  {check['error']}")
+
+
 def print_result(result: BenchResult, *, task_name: str = "", suite: str = "",
                  definition: str = "", mode: str = "dev") -> None:
     head = f"{task_name or 'card'}"
@@ -42,30 +56,21 @@ def print_result(result: BenchResult, *, task_name: str = "", suite: str = "",
     _say(f"bench {head}: mode {mode}, jobs {result.job or 'none'}, "
          f"{result.elapsed_s:.1f}s")
     if mode == "target":
-        check = result.integrity.get("target_compile") or {}
-        _say(f"target compile: {check.get('status')} "
-             f"(engine {check.get('engine')}, features "
-             f"{', '.join(check.get('features') or []) or 'none'}, external "
-             f"{'attached' if check.get('external') != 'unavailable' else 'unavailable'})")
-        if check.get("error"):
-            _say(f"  {check['error']}")
+        _print_target_check(result)
     else:
-        cold = ("n/a" if result.cold_start_s is None
-                else f"{result.cold_start_s:.1f}s")
+        cold = "n/a" if result.cold_start_s is None else f"{result.cold_start_s:.1f}s"
         _say(f"cold start: {cold} ({result.integrity.get('cold_start')})"
              + (f" -- {result.integrity.get('cold_start_note')}"
-                if result.integrity.get("cold_start") == "unmeasured" else ""))
+                if result.integrity.get("cold_start") not in (None, "ok") else ""))
         _say(f"correctness: {'PASSED' if result.correct else 'FAILED'}"
              + (f" -- {result.error}" if result.error else ""))
         _say()
         _say(f"{'workload':<28}{'t_ms':>12}{'T_b':>12}{'T_SOL':>12}{'S':>9}  fast")
         for w in result.workloads:
-            def f(v):
-                return "n/a" if v is None else f"{v:.4f}"
             fast = "yes" if (w.t_ms is not None and w.t_b is not None
                              and w.t_ms < w.t_b) else ("no" if w.t_ms is not None else "-")
-            _say(f"{w.name:<28}{f(w.t_ms):>12}{f(w.t_b):>12}{f(w.t_sol):>12}"
-                 f"{f(w.s):>9}  {fast}")
+            _say(f"{w.name:<28}{_ms(w.t_ms):>12}{_ms(w.t_b):>12}{_ms(w.t_sol):>12}"
+                 f"{_ms(w.s):>9}  {fast}")
             if w.error:
                 _say(f"    {w.error}")
         _say()
@@ -73,11 +78,7 @@ def print_result(result: BenchResult, *, task_name: str = "", suite: str = "",
         ratio = result.fast1_ratio()
         _say(f"mean S {ms}   fast1 {result.fast1}"
              + (f"/{len(result.timed())} ({ratio:.2f})" if ratio is not None else ""))
-        check = result.integrity.get("target_compile") or {}
-        _say(f"target compile: {check.get('status')} "
-             f"(engine {check.get('engine')}, features "
-             f"{', '.join(check.get('features') or []) or 'none'}, external "
-             f"{'attached' if check.get('external') != 'unavailable' else 'unavailable'})")
+        _print_target_check(result)
         if result.integrity.get("workload_subset"):
             sub = result.integrity["workload_subset"]
             _say(f"workload subset: {sub.get('requested')} of {sub.get('card_workloads')} "

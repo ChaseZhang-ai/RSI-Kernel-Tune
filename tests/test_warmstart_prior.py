@@ -20,10 +20,10 @@ from forgekernel.loop.driver import render_prompt
 from forgekernel.scaffold import main as scaffold_main
 from forgekernel.warmstart import seed
 
+from test_leaderboard import base, sol_root  # noqa: F401 -- fixtures
+
 # The manifest builder by module (the package re-exports its build_prior function too).
 bp = importlib.import_module("forgekernel.warmstart.build_prior")
-
-from test_leaderboard import base, sol_root  # noqa: F401 -- fixtures
 
 MIT = ("MIT License\n\nCopyright (c) 2026 A\n\nPermission is hereby granted, free of "
        "charge, to any person obtaining a copy of this software\n")

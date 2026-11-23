@@ -13,6 +13,10 @@
 monitor raised no alarm on that kernel), and 2 otherwise.
 
 `forge help internal` lists the lower-level commands the loop itself uses.
+
+Extensions (``src/forgekernel/ext/``: one module per command, ``COMMAND`` + ``main(argv)``)
+add commands without touching this file. The built-ins win over an extension of the same
+name; an extension that fails to import is skipped, never fatal.
 """
 
 from __future__ import annotations
@@ -42,8 +46,17 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:2] == ["help", "internal"]:
         print(INTERNAL_HELP.strip())
         return 0
+    if len(argv) >= 2 and argv[0] == "help":
+        from forgekernel import ext as extmod
+
+        if extmod.is_command(argv[1]):
+            return extmod.dispatch([argv[1], "--help"]) or 0
     if not argv or argv[0] in ("-h", "--help", "help"):
+        from forgekernel import ext as extmod
+
         print(__doc__.strip())
+        if lines := extmod.help_lines():
+            print("\nExtensions:\n" + "\n".join(lines))
         return 0
     if argv[0] in ("-V", "--version"):
         from forgekernel import __version__
@@ -54,6 +67,13 @@ def main(argv: list[str] | None = None) -> int:
         from forgekernel.launch import COMMANDS
 
         return COMMANDS[argv[0]](argv[1:])
+
+    # An extension command (`forge target ...`) before per-op subcommands: task names may
+    # not be extension names (task.load_task refuses them), so the two never collide.
+    from forgekernel import ext as extmod
+
+    if rc := extmod.dispatch(argv):
+        return rc
 
     if len(argv) >= 2 and argv[1] == "ncu-trace":
         from forgekernel.inner.ncu import main as ncu_main

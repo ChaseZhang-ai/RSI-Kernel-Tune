@@ -1,0 +1,110 @@
+{
+  "schema": "forgekernel.target-profile/1",
+  "name": "B200",
+  "summary": "Kernels are written on the development GPU and graded on an NVIDIA B200. Only bytes that compile and run on the graded machine count.",
+  "device": {
+    "name": "NVIDIA B200",
+    "compute_capability": [10, 0],
+    "cuda_arch": "sm_100a",
+    "family_target": "sm_100f",
+    "accel_arch_note": "sm_100a cubins do not run on sm_103 (B300) and sm_103a cubins do not run on sm_100 (B200): no forward or backward compatibility between the two. sm_100f is the family-conditional target that runs on both.",
+    "multi_processor_count": 148,
+    "tmem_kb_per_sm": 256,
+    "memory_gib": 192,
+    "memory_bandwidth_tb_s": 8.0,
+    "dense_fp8_pflops": 5.0,
+    "sparse_fp8_pflops": 10.0,
+    "dense_fp4_pflops": 10.0,
+    "sparse_fp4_pflops": 20.0,
+    "sfu_tera_exp_s": 5.0,
+    "clocks": {
+      "sm_mhz": 1500,
+      "mem_mhz": 3996,
+      "locked": true,
+      "note": "The board locks the clocks before timing (clock_lock preset) and verifies them; T_b and T_SOL were measured at these clocks."
+    },
+    "l2": "flushed before every timed call",
+    "source": [
+      "SOL-ExecBench board card (clock_lock preset, ForgeKernel's measured multi_processor_count for B200)",
+      "NVIDIA, Inside NVIDIA Blackwell Ultra (dense/sparse throughput, memory)",
+      "NVIDIA, Blackwell and CUDA 12.9 family-specific architecture features (sm_100f)"
+    ]
+  },
+  "development_gpu": {
+    "name": "NVIDIA B300",
+    "compute_capability": [10, 3],
+    "cuda_arch": "sm_103a",
+    "multi_processor_count": 160,
+    "memory_gib": 288,
+    "memory_bandwidth_tb_s": 8.0,
+    "dense_fp4_pflops": 15.0,
+    "sfu_tera_exp_s": 10.7,
+    "note": "Reference numbers for the machine this campaign develops on, kept here so parity can name the differences. The measured values of the machine actually in use come from target/dev.json (`forge target probe`), which is not committed.",
+    "source": [
+      "NVIDIA, Inside NVIDIA Blackwell Ultra (dense NVFP4 1.5x B200, SFU ~2x B200, 288 GB)",
+      "Background brief section 4 (SM count: official 'up to 160, model dependent' -- measured by the probe)"
+    ]
+  },
+  "software": {
+    "cuda": "13.1.1",
+    "python": "3.12",
+    "torch": "2.9.0",
+    "triton_distribution": "fbtriton",
+    "triton": "3.7.1",
+    "cutlass_dsl": "4.4.2",
+    "cupti_python": "13.0.1",
+    "cutlass_headers": "/usr/local/cutlass",
+    "driver_min": "580",
+    "note": "The board's evaluation image (SOL-ExecBench docker/Dockerfile). A local reading taken with other versions is a reading from another stack: useful, not equal.",
+    "source": ["SOL-ExecBench docker/Dockerfile"]
+  },
+  "evaluation": {
+    "warmup_calls": 10,
+    "timed_calls": 50,
+    "l2_flushed_per_call": true,
+    "inputs_cloned_per_call": true,
+    "timer": "span from the first to the last kernel of one call (CUPTI), host-side gaps between kernels included",
+    "outputs": "pre-allocated by the harness and passed after the inputs (DPS)",
+    "compile_timeout_s": 120,
+    "job_timeout_s": 600,
+    "each_solution_in": "a fresh subprocess, compiled from scratch",
+    "note": "Every evaluation recompiles: the cold start (imports plus all compilation) must stay well inside a minute.",
+    "source": ["SOL-ExecBench evaluation protocol", "ForgeKernel docs/leaderboards.md (v1.1 details)"]
+  },
+  "submission": {
+    "track_format": "one directory per kernel, each holding a single submission.py",
+    "entry": "top-level run(*args); the contract is argument order and count, names are not enforced; outputs arrive pre-allocated last",
+    "track_languages": ["python (pytorch / triton / cute dsl / cuda compiled at run time)"],
+    "single_problem_languages": ["pytorch", "torch.compile", "triton", "cute dsl", "cutile", "cudnn frontend", "cuda c++", "cutlass", "cublas", "cudnn"],
+    "embedded_source": "CUDA C++ is allowed when embedded in submission.py and built at run time (torch.utils.cpp_extension); no separate .cu in a track submission",
+    "allowed_libraries": ["PyTorch operators", "Triton", "CuTe DSL", "cuBLAS / cuDNN through torch", "CUTLASS headers"],
+    "embedded_only_libraries": ["FlashInfer", "FlashAttention", "FlashMLA", "DeepGEMM"],
+    "limits": {"upload_mb": 10, "archive_mb": 50, "extracted_mb": 100},
+    "prohibited": [
+      "patching the timing function",
+      "hidden CUDA streams outside the timed path",
+      "background threads during evaluation",
+      "returning a lazy proxy instead of a real tensor",
+      "degenerate output (NaN / inf / zeros) that the reference does not produce"
+    ]
+  },
+  "rules": [
+    {"id": 1, "text": "The kernel is graded on NVIDIA B200 (CC 10.0, sm_100a, 148 SMs, 8 TB/s, clocks locked at 1500 / 3996 MHz, cold L2 on every call)."},
+    {"id": 2, "text": "Do not use any feature that CC 10.0 lacks. Never name an architecture in the code: derive it from the device at run time."},
+    {"id": 3, "text": "Never hard-code the SM count: query it (FK_TARGET_SMS overrides it when set)."},
+    {"id": 4, "text": "Dense FP4 throughput and SFU throughput are higher on the development GPU: timings of kernels bound by them are optimistic here."},
+    {"id": 5, "text": "The submission is one submission.py with a top-level run(*args); arguments are positional (inputs, then pre-allocated outputs)."},
+    {"id": 6, "text": "Allowed libraries: PyTorch operators, Triton, CuTe DSL, cuBLAS / cuDNN through torch, CUTLASS headers; CUDA C++ only inline (compiled at run time through torch.utils.cpp_extension). Everything else must be embedded as source."},
+    {"id": 7, "text": "Compilation happens on every evaluation: keep it well inside a minute, cache nothing outside the process."},
+    {"id": 8, "text": "Leave global state as you found it (restore any torch.backends flag you change inside run)."},
+    {"id": 9, "text": "The L2 cache is flushed before every timed call, the inputs are cloned and land at a new address on every call: never rely on cache residency across calls or on pointer identity. Minimise the bytes you move; fuse what would otherwise be separate kernels."},
+    {"id": 10, "text": "The stopwatch is the span from the first to the last kernel of one call: host-side gaps between kernels count. Keep the Python between launches minimal, or launch everything from one kernel."},
+    {"id": 11, "text": "Outputs are pre-allocated: write into them directly, do not allocate a result and copy it over."},
+    {"id": 12, "text": "Every evaluation compiles from scratch. Keep the cold start (import + all compilation) far below two minutes; prefer a table of per-shape constants over run-time autotuning."}
+  ],
+  "codegen": {
+    "arch_env": "FK_CUDA_ARCH",
+    "sms_env": "FK_TARGET_SMS",
+    "note": "The card built by `forge run` compiles for the development machine (task.toml dev_arch, exported as CUTE_DSL_ARCH / FK_CUDA_ARCH). A submission does neither: it derives the gencode from torch.cuda.get_device_capability() and reads FK_TARGET_SMS only when it is set."
+  }
+}

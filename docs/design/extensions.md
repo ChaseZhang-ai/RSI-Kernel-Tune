@@ -304,10 +304,11 @@ distort someone's measurement, the full suite is run as one job under the machin
 ~/tools/bin/with-lock gpu 1800 -- /home/zcz/bestKernel/ForgeKernel/.venv/bin/python -m pytest -q
 ```
 
-A single file that does not reach the GPU needs no lock. The baseline of `b2c8ae8` -- the counts,
-the tests that fail for want of `numpy`, the one that is skipped for the same reason -- is in the
-project's `reports/baseline.md`, beside the repository; those are the only failures a task may
-leave standing.
+A single file that does not reach the GPU needs no lock. The baseline of `b2c8ae8` -- its
+counts, and anything in them the environment explains -- is in the project's
+`reports/baseline.md`, beside the repository. The environment matters for it: the recipe above
+brings no `numpy`, and without it three tests fail and one is skipped (that file says which).
+What it records as the baseline's own failures are the only failures a task may leave standing.
 
 The development machine is reached over ssh (`FK_DELIVERY=ssh` in `local.env`); its environment
 is the project's to align with the evaluation image (the prompt files say how).

@@ -737,6 +737,33 @@ def test_run_refuses_without_a_plan(tmp_path):
                   "--root", str(tmp_path)])
 
 
+def test_an_evolve_population_s_variants_are_collected(tmp_path):
+    rec = H.board_record("L1", H.L1_PROBLEM, 69)
+    root = tmp_path / "repo"
+    H.make_board_task(root, "069_rms_norm", H.DATASET, H.L1_DEFINITION, "0-2", rec)
+    pop = root / ".artifacts" / "evolve" / "069_rms_norm-pop_1"
+    for name, body, score in (("l0-g0", KERNEL_A, 0.5), ("l1-g0", KERNEL_B, 0.7)):
+        v = pop / "variants" / name
+        v.mkdir(parents=True)
+        (v / "kernel.py").write_text(body, encoding="utf-8")
+        (v / "result.json").write_text(json.dumps({"mean_s": score, "sha": name}))
+    st = runner.ProblemState(op="069_rms_norm", name=H.L1_PROBLEM, track="l1",
+                             kernel_id=69, stages={"board_record": "done", "task": "done"})
+    work = tmp_path / "work"
+    state = runner.StateStore(work)
+    state.save(st)
+    pr = runner.ProblemRunner(
+        tools_mod.Tools(root=root), {"op": "069_rms_norm", "name": H.L1_PROBLEM,
+                                     "track": "l1", "kernel_id": 69},
+        work_dir=work, state=state, ledger=sync.Ledger(work / "ledger.jsonl"),
+        dataset=str(H.DATASET))
+    pr.stage_versions(st)
+    runs = {c["name"]: c for c in st.candidates if c["origin"] == "run"}
+    assert set(runs) == {"069_rms_norm-pop_1:l0-g0", "069_rms_norm-pop_1:l1-g0"}
+    assert runs["069_rms_norm-pop_1:l1-g0"]["mean_s"] == 0.7
+    assert runs["069_rms_norm-pop_1:l1-g0"]["sha"] == "l1-g0"
+
+
 def test_versions_skip_reverts_and_wrong_answers(tmp_path):
     rec = H.board_record("L1", H.L1_PROBLEM, 69)
     root = tmp_path / "repo"

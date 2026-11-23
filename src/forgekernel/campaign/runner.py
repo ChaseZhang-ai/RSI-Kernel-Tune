@@ -639,7 +639,7 @@ def _versions_of_run(run_dir: Path, st: ProblemState, kernel_file: str, board) -
     version then carries ``language="cuda-cpp"`` so the export knows it needs
     `cuda_to_inline` (supplement 3) instead of trying to parse CUDA as Python."""
     language = "cuda-cpp" if str(kernel_file).endswith(".cu") else "python"
-    if (run_dir / "population.json").is_file():
+    if (run_dir / "population.json").is_file() or (run_dir / "variants").is_dir():
         return _versions_of_population(run_dir, st, kernel_file, board)
     op_dir = run_dir / "operators" / _task_name_of(run_dir)
     if not op_dir.is_dir():
@@ -694,19 +694,69 @@ def _versions_of_run(run_dir: Path, st: ProblemState, kernel_file: str, board) -
 
 def _versions_of_population(pop: Path, st: ProblemState, kernel_file: str,
                             board) -> list[compose.Candidate]:
-    out = []
-    for res in sorted(pop.rglob("result.json")):
-        try:
-            obj = json.loads(res.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+    """An evolve population's versions.
+
+    Evolve's own archive is the stable shape (its task file pins it): every kept variant
+    is ``variants/<lineage>-g<gen>/kernel.<ext>`` with a ``result.json`` beside it. The
+    alternate route -- a ``result.json`` that names the run directory it came from --
+    is followed too, with the key names it plausibly uses, and everything dedupes by
+    source so a population that offers both does not double-count."""
+    out, seen = [], set()
+    extension = Path(kernel_file).suffix or ".py"
+    for variant in sorted(pop.glob("variants/*")):
+        kernel = variant / f"kernel{extension}"
+        if not kernel.is_file():
             continue
-        run = Path(obj.get("run") or "")
-        if not run.is_dir():
+        src = kernel.read_text(encoding="utf-8")
+        if src in seen:
+            continue
+        seen.add(src)
+        meas = _result_json(variant / "result.json")
+        out.append(compose.Candidate(
+            name=f"{pop.name}:{variant.name}", source=src,
+            language="cuda-cpp" if extension == ".cu" else "python",
+            mean_s=_pick(meas, "mean_s", "sol_score", "score", "metric"),
+            geomean_ms=_pick(meas, "geomean_ms", "median_ms"),
+            correct=True, sha=str(_pick(meas, "sha") or ""), run=str(variant),
+            kernel_file=kernel_file,
+            meta={"source": f"forage evolve {pop.name}/{variant.name}",
+                  "license": "campaign"}, origin="run",
+            notes=[f"evolve variant {variant.name}"]))
+    for res in sorted(pop.rglob("result.json")):
+        obj = _result_json(res)
+        run = _first_dir(obj, "run", "run_dir", "run_path")
+        if run is None:
             continue
         for c in _versions_of_run(run, st, kernel_file, board):
+            if c.source in seen:
+                continue
+            seen.add(c.source)
             c.name = f"{pop.name}:{res.parent.name}:{c.name}"
             out.append(c)
     return out
+
+
+def _result_json(path: Path) -> dict:
+    try:
+        obj = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return obj if isinstance(obj, dict) else {}
+
+
+def _pick(obj: dict, *keys):
+    for k in keys:
+        if obj.get(k) is not None:
+            return obj[k]
+    return None
+
+
+def _first_dir(obj: dict, *keys) -> Path | None:
+    for k in keys:
+        val = obj.get(k)
+        if val and Path(val).is_dir():
+            return Path(val)
+    return None
 
 
 def _task_name_of(run_dir: Path) -> str:

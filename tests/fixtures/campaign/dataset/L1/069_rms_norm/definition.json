@@ -1,0 +1,18 @@
+{
+  "name": "069_rms_norm",
+  "hf_id": null,
+  "description": "RMSNorm over the last dimension (fixture: the board definition's shape, a self-contained reference).",
+  "axes": {
+    "B": {"type": "var", "description": "rows"},
+    "H": {"type": "const", "value": 8, "description": "hidden size"}
+  },
+  "custom_inputs_entrypoint": null,
+  "inputs": {
+    "input": {"shape": ["B", "H"], "dtype": "float32"},
+    "weight": {"shape": ["H"], "dtype": "float32"}
+  },
+  "outputs": {
+    "output": {"shape": ["B", "H"], "dtype": "float32"}
+  },
+  "reference": "import torch\n\n\ndef run(input, weight, eps=1e-5):\n    variance = input.to(torch.float32).pow(2).mean(-1, keepdim=True)\n    rstd = torch.rsqrt(variance + eps)\n    hidden_states = input * rstd\n    return (hidden_states * weight).to(weight.dtype)\n"
+}

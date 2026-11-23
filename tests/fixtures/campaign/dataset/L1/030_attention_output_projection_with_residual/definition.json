@@ -1,0 +1,20 @@
+{
+  "name": "030_attention_output_projection_with_residual",
+  "hf_id": null,
+  "description": "Attention-output projection plus a residual add (fixture: float32 math, the board's shape).",
+  "axes": {
+    "T": {"type": "var", "description": "tokens"},
+    "D": {"type": "const", "value": 8, "description": "model width"},
+    "H": {"type": "const", "value": 8, "description": "projection width"}
+  },
+  "custom_inputs_entrypoint": null,
+  "inputs": {
+    "attn_output": {"shape": ["T", "D"], "dtype": "float32"},
+    "weight": {"shape": ["H", "D"], "dtype": "float32"},
+    "residual": {"shape": ["T", "H"], "dtype": "float32"}
+  },
+  "outputs": {
+    "output": {"shape": ["T", "H"], "dtype": "float32"}
+  },
+  "reference": "import torch\n\n\ndef run(attn_output, weight, residual):\n    x = attn_output.to(torch.float32)\n    projected = torch.matmul(x, weight.t())\n    return (projected + residual).to(attn_output.dtype)\n"
+}

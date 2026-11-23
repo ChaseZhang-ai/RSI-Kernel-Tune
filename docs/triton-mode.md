@@ -277,19 +277,26 @@ Prerequisite: a `python3` with a CUDA build of torch **and** `triton`. On the de
 
    ```bash
    cd <card>
+   # a card whose reference is sealed (step 2's run has one) needs the key the delivery layer
+   # would export from submit.local.toml; gpu_entry moves it beside the payload and re-execs
+   export FK_REF_KEY="$(sed -n 's/^FK_REF_KEY = "\([^"]*\)"$/\1/p' submit.local.toml)"
    PATH=/home/zcz/bestKernel/ForgeKernel/.venv/bin:$PATH \
      ~/tools/bin/with-lock gpu 1800 -- bash gpu_entry.sh perf
    ```
    `perf` (alias `all`) runs `eval/bench.py --mode all`: every input group of every shape is judged
-   (correctness must pass) and timed on the card's clock; the summary line carries
-   `device_median_ms` and the per-workload readings. `bash gpu_entry.sh correctness` runs only the
-   judge; `bash gpu_entry.sh help` lists the other tasks.
+   (correctness must pass) and timed on the card's clock; the eval JSON carries
+   `correctness.pass`, the gate reading `performance.device_median_ms` (the geomean over input
+   groups, then shapes), per-workload readings and `vs_ref_device` against the sealed reference.
+   `bash gpu_entry.sh correctness` runs only the judge; `bash gpu_entry.sh help` lists the rest.
 5. What the smoke proves: the task loads on its Triton tree, the card was generated for a Triton
    kernel, the hand-written kernel is judged and timed by the card itself, and the compile check
    says it lowers for CC 10.0. What it does not prove: any number about the target (see below).
 
 The optional acceptance item in the task report is run exactly this way; its commands and output are
-in the report.
+in the report. One observed run (RTX 3060 Laptop, 6 GB, unlocked clocks; the clock is the dev
+card's, not the target's) read: `correctness.pass = true` on both shapes × three input groups,
+gate `device_median_ms = 0.1192` (geomean), `vs_ref_device = 7.34`; prefill 0.4586 ms (9.87× the
+reference), decode 0.0310 ms (5.46×).
 
 ## 9. Self-evolution
 

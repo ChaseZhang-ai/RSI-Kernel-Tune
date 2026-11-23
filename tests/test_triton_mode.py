@@ -24,7 +24,7 @@ from forgekernel.loop import job_env
 from forgekernel.loop import lang_mode
 from forgekernel.scaffold import main as scaffold_main
 from forgekernel.skills import job_env_check
-from forgekernel.task import TaskError, dump_task_toml, load_task, read_task_toml
+from forgekernel.task import TaskError, load_task
 from test_binref import base, sol_root, _no_network  # noqa: F401  (fixtures the card tests use)
 from test_launch import repo  # noqa: F401  (fixture: a scratch runs dir + local machine)
 from test_loop_driver import FakeBackend, _ctx

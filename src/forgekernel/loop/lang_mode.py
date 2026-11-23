@@ -77,17 +77,14 @@ TOOL_UNAVAILABLE = {
             "`FK_SEG` markers and reads a device clock through the CuTe DSL / "
             "CUDA C++ wrappers; there is no marker-stamping channel for an "
             "@triton.jit kernel, so no table can be read from it"),
-        "sass": (
-            "the SASS / SCHED / LIVE / STRUCT channels parse a cubin built from "
-            "the kernel source by the operator tree's own build; a Triton kernel "
-            "is lowered by the Triton compiler into its own cache, which is not "
-            "that build (and the tree's fence keeps the kernel from naming it)"),
         "census": (
             "the orchestration census reads the cubin the tree's build dumps "
             "(CUTE_DSL_KEEP_CUBIN / the CUDA build directory); a Triton kernel's "
-            "cubin is not that build, so every SASS-derived field of the census "
-            "would read SKIP — the run profiles with plain NCU instead (the "
-            "kernel name is the @triton.jit function name)"),
+            "cubin is emitted by the Triton compiler into its own cache, so every "
+            "SASS-derived field of the census would read SKIP — the run profiles "
+            "with plain NCU instead (the kernel name is the @triton.jit function "
+            "name), and the SASS text itself is still readable from NCU's source "
+            "page by a probe of the run's own (the sass_tools family)"),
     },
 }
 

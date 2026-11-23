@@ -9754,29 +9754,23 @@ def _missing_recon_evidence(ctx: LoopContext, sass_ok: bool, sched_ok: bool,
                             live_ok: bool, stall_ok: bool = True,
                             struct_ok: bool = True,
                             near_miss: dict | None = None) -> list:
-    """Channel names whose evidence is neither delivered nor waived.
-
-    A mode with no channel for them (loop/lang_mode.py TOOL_UNAVAILABLE: the
-    Triton mode has no SASS page for its kernel) is not held to them: the reason
-    goes to the run's log once, instead of the recon being refused for evidence
-    it could never produce. Everything the mode can deliver is held to as before."""
+    """Channel names whose evidence is neither delivered nor waived."""
     near = near_miss or {}
     missing = []
-    sass_channels = _tool_unavailable(ctx, "sass") is None
-    if sass_channels and not _verdict_evidence(
-            ctx, sass_ok, _SASS_WAIVED, _DELIVERED_MISMATCH["SASS"], "SASS" in near):
+    if not _verdict_evidence(ctx, sass_ok, _SASS_WAIVED,
+                             _DELIVERED_MISMATCH["SASS"], "SASS" in near):
         missing.append("SASS")
-    if sass_channels and not _verdict_evidence(
-            ctx, sched_ok, _SCHED_WAIVED, _DELIVERED_MISMATCH["SCHED"], "SCHED" in near):
+    if not _verdict_evidence(ctx, sched_ok, _SCHED_WAIVED,
+                             _DELIVERED_MISMATCH["SCHED"], "SCHED" in near):
         missing.append("SCHED")
-    if sass_channels and not _verdict_evidence(
-            ctx, live_ok, _LIVE_WAIVED, _DELIVERED_MISMATCH["LIVE"], "LIVE" in near):
+    if not _verdict_evidence(ctx, live_ok, _LIVE_WAIVED,
+                             _DELIVERED_MISMATCH["LIVE"], "LIVE" in near):
         missing.append("LIVE")
     if ctx.stall_pricing and not _verdict_evidence(
             ctx, stall_ok or _ref_ledger_banked(ctx), _STALL_WAIVED,
             _DELIVERED_MISMATCH["STALL"], "STALL" in near):
         missing.append("STALL")
-    if sass_channels and _struct_recon(ctx) and not _verdict_evidence(
+    if _struct_recon(ctx) and not _verdict_evidence(
             ctx, struct_ok, _STRUCT_WAIVED,
             _DELIVERED_MISMATCH["STRUCT"], "STRUCT" in near):
         missing.append("STRUCT")

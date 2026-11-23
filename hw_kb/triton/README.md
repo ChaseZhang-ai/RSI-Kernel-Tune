@@ -86,21 +86,25 @@ write an `index.md`; no code change.
 
 ## What Triton mode does not have
 
-Two harness tools need a channel a Triton kernel does not expose, and the loop says so instead of
-running them (`lang_mode.TOOL_UNAVAILABLE`, `docs/triton-mode.md`):
+Two harness tools have no channel into a Triton kernel, and the loop says so instead of running them
+(`lang_mode.TOOL_UNAVAILABLE`, `docs/triton-mode.md`):
 
 - the **timeline probe** (`_seg` / `FK_SEG` markers + a device clock) — no marker channel for
   `@triton.jit`;
-- the **SASS / SCHED / LIVE / STRUCT channels and the orchestration census** — they read the cubin
-  the operator tree's own build dumps; a Triton kernel's cubin is emitted by the Triton compiler
-  into its own cache.
+- the **automated orchestration census** (the per-iteration SASS digest that reads the cubin the
+  operator tree's own build dumps) — a Triton kernel's cubin is emitted by the Triton compiler into
+  its own cache, so the run profiles with plain NCU instead. Its consequence for a milestone: the
+  census's contract axes (`cache_ops`, `commit`, `supply`, the NamedBarrier verdicts) are not
+  re-read automatically, so a gate row must not be anchored on them.
 
-What remains: NCU profiling (the kernel name is the `@triton.jit` function's name), stall pricing
-(NCU PC sampling), lever pricing (source-text edits + the card's own bench) and every correctness /
-timing reading. The workaround for the missing SASS channels is the compiled artefact the student
-*can* read: `TRITON_ALWAYS_COMPILE=1` / a pinned `TRITON_CACHE_DIR` keeps `*.ptx` / `*.ttgir` /
-`*.cubin` next to the kernel, and `tl.dot`'s chosen primitive is visible in the PTX's `mma`/`wgmma`/
-`tcgen05` mnemonic.
+What *is* available, and worth knowing: NCU profiling (the kernel name is the `@triton.jit`
+function's name), stall pricing (NCU PC sampling), lever pricing (source-text edits + the card's own
+bench), and **the SASS text itself** — `ncu --import <rep> --page source --print-source sass` on the
+profiled kernel, which the `sass_tools` / `sched_live_tools` / `struct_tools` family parses exactly
+as it does for any other kernel. A Triton run that wants the SASS/SCHED/LIVE/STRUCT channels writes
+its own probe for them. The compiler's own artefacts (`*.ptx` / `*.ttgir` / `*.cubin` under a pinned
+`TRITON_CACHE_DIR`) are the other readable channel, and the one that answers "which MMA did it
+pick".
 
 ## Fill strategy
 

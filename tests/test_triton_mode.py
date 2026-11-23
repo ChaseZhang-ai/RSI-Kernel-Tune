@@ -95,6 +95,7 @@ def test_the_tools_a_triton_run_has_no_channel_for_are_said_out_loud(tmp_path):
         assert lang_mode.tool_unavailable(lang, "census") is None, lang
     ctx = _ctx(tmp_path, FakeBackend([], []))
     ctx.language, ctx.kernel_file = "triton", "kernel.py"
+    assert driver._is_triton(ctx) and not driver._is_cuda(ctx)
     ctx.timeline_probe = "on"                     # loop.toml asks for it: still no channel
     assert driver._timeline_on(ctx) is False
     assert ctx.__dict__["_tools_unavailable_logged"] == {"timeline"}   # logged once

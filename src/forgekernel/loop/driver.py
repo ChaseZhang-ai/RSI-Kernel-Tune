@@ -1905,7 +1905,7 @@ def _ncu_mode(ctx: LoopContext) -> str:
         if _is_cuda(ctx):
             # no JIT dump for a .cu: the runner reads the build of this kernel file
             return f"{_ORCH_CENSUS_CMD} --kernel {ctx.kernel_file}"
-        if _tool_unavailable(ctx, "census"):
+        if _is_triton(ctx) and _tool_unavailable(ctx, "census"):
             # no cubin of this kernel for the census to read: plain NCU still gives
             # the digest (the kernel name is the @triton.jit function's)
             return "ncu"

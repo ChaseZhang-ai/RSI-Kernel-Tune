@@ -101,13 +101,14 @@ LEADERBOARD_PROBLEM = "eval/leaderboard/problem.json"
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # `forge <name> ...` dispatches these as commands, so no task (operator tree) may be one.
 RESERVED_NAMES = frozenset({"init", "new", "run", "status", "harvest", "export"})
+_ARCH_RE = re.compile(r"^sm_?\d+[af]?$")
 _ENTRY_RE = re.compile(r"^(?P<file>[^:]+\.py):(?P<fn>[A-Za-z_][A-Za-z0-9_]*)$")
 # A deny_modules entry: an import name or a distribution name ("flash_attn", "flash-attn-4").
 _MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
 
 # Every key each table may hold; anything else is a mistake, not an extension point.
 _KEYS = {
-    "task": {"language", "arch"},
+    "task": {"language", "arch", "dev_arch"},
     "reference": {"run", "source", "blackbox", "deny", "deny_urls", "deny_modules"},
     "target": {"ratio", "ms", "timing"},
     "agent.role": {"backend", "provider", "model", "effort", "timeout_s"},
@@ -209,6 +210,15 @@ class Task:
     budget: Budget
     notes: tuple = field(default=())   # non-fatal remarks worth printing at launch
     leaderboard: Leaderboard | None = None
+    # The architecture the *card* compiles and runs on (the development GPU). `arch` is the
+    # graded one: it picks the hardware knowledge base and the profile the agents read.
+    # None = same as `arch` (before a card is generated for this task, nothing compiles).
+    dev_arch: str | None = None
+
+    @property
+    def compiled_arch(self) -> str:
+        """What the card compiles for: the development architecture when it is set."""
+        return self.dev_arch or self.arch
 
     @property
     def mode(self) -> str:
@@ -242,6 +252,9 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
                         f"(letters, digits, '_', '.', '-'; not starting with '_')")
     elif name in RESERVED_NAMES:
         problems.append(f"{name!r} is one of forge's own commands; name the task otherwise")
+    elif name in _extension_commands():
+        problems.append(f"{name!r} is one of forge's extension commands "
+                        f"(`forge {name}`); name the task otherwise")
 
     own = _read_toml(d / TASK_FILE, problems)
     _unknown_keys(own, problems)
@@ -252,7 +265,7 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
     if language not in LANGUAGES:
         problems.append(f"[task] language must be one of {list(LANGUAGES)}, got {language!r}")
     arch = t.get("arch")
-    if not isinstance(arch, str) or not re.match(r"^sm\d+[a-z]?$", arch or ""):
+    if not isinstance(arch, str) or not _ARCH_RE.match(arch or ""):
         problems.append(f"[task] arch must name a GPU architecture such as \"sm90\" or "
                         f"\"sm100\", got {arch!r}")
     elif language in LANGUAGES:
@@ -260,6 +273,13 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
         if not kb.is_dir():
             problems.append(f"[task] arch = {arch!r}: there is no hardware knowledge base for "
                             f"{language} on it ({kb} is missing)")
+    # dev_arch is where the kernels are written (`arch` is where they are graded). It needs
+    # no knowledge base: it may be an architecture this repository has never seen, as long as
+    # nvcc / the DSL on that machine knows it.
+    dev_arch = t.get("dev_arch")
+    if dev_arch is not None and (not isinstance(dev_arch, str) or not _ARCH_RE.match(dev_arch)):
+        problems.append(f"[task] dev_arch must name a GPU architecture such as \"sm103\", got "
+                        f"{dev_arch!r}")
 
     board = _read_leaderboard(d, cfg, problems) if "leaderboard" in cfg else None
     if board is None:
@@ -286,13 +306,17 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
     elif reference is None:
         notes.append("no [reference]: a /goal session writes one first "
                      f"(budget {budget.reference_hours:g} h)")
+    if dev_arch and dev_arch != arch:
+        notes.append(f"compiled for {dev_arch} (the development GPU), graded for {arch}: "
+                     f"exported submissions derive their own architecture")
     for s in shapes:
         if s.groups_to_add:
             notes.append(f"shape {s.name}: {len(s.inputs)} input group(s) given, the teacher "
                          f"adds {s.groups_to_add}")
     return Task(name=name, dir=d, language=language, arch=arch, description=description,
                 shapes=tuple(shapes), reference=reference, target=target, teacher=teacher,
-                student=student, budget=budget, notes=tuple(notes), leaderboard=board)
+                student=student, budget=budget, notes=tuple(notes), leaderboard=board,
+                dev_arch=dev_arch)
 
 
 BOARD_SUITES = ("flashinfer-bench", "sol-execbench")
@@ -458,6 +482,19 @@ def _kb_dir(kb_root: Path | None, language: str, arch: str) -> Path:
     from forgekernel.loop import lang_mode
     root = kb_root if kb_root is not None else repo_root()
     return Path(root) / lang_mode.kb_root_name(LOOP_LANGUAGE[language]) / arch
+
+
+def _extension_commands() -> frozenset:
+    """The commands registered by ``forgekernel.ext`` (a task may not be named like one).
+
+    Imported lazily: task loading is on every command's path, and an extension imports its
+    own dependencies (torch, the submit layer) only when it is actually dispatched.
+    """
+    try:
+        from forgekernel import ext
+        return frozenset(ext.commands())
+    except Exception:  # noqa: BLE001 -- a broken extension must not break every task
+        return frozenset()
 
 
 def _inside(d: Path, rel: object, what: str, problems: list[str]) -> Path | None:

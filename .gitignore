@@ -13,3 +13,7 @@ __pycache__/
 # This machine: GPU, ssh host, credentials. Never committed.
 local.env
 uv.lock
+# A probe describes one machine; a committed one would be read as if it described every
+# machine. target/B200.json is the target profile and *is* committed.
+target/dev.json
+target/B200.rendered.md

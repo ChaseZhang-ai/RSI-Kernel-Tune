@@ -52,6 +52,8 @@ CUDA_ARCH = {
 _ACCELERATED_CC = {(9, 0), (10, 0), (10, 3), (11, 0), (12, 0), (12, 1)}
 
 _ARCH_RE = re.compile(r"^(?:sm_?)?(\d+)([a-z]?)$")
+# The suffixes CUDA actually uses ("a" = architecture-accelerated, "f" = family-conditional).
+_ARCH_SUFFIXES = ("", "a", "f")
 
 
 class ArchError(ValueError):
@@ -61,7 +63,7 @@ class ArchError(ValueError):
 def cc_of_arch(arch: str) -> tuple[int, int]:
     """``"sm_103a"`` / ``"sm103"`` / ``"103"`` -> ``(10, 3)``."""
     m = _ARCH_RE.match(str(arch).strip().lower())
-    if not m:
+    if not m or m.group(2) not in _ARCH_SUFFIXES:
         raise ArchError(f"not an architecture: {arch!r} (expected e.g. \"sm100\", \"sm_103a\")")
     digits = m.group(1)
     if len(digits) < 2:

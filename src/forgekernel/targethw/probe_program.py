@@ -277,7 +277,9 @@ def smoke_cuda_inline() -> dict:
         return _verdict(error=f"device: {type(e).__name__}: {e}")
     detail = {"gencode": gencode, "torch": getattr(torch, "__version__", "?")}
     try:
-        module = load_inline(name="fk_smoke_mma", cpp_sources="",
+        module = load_inline(name="fk_smoke_mma",
+                             cpp_sources="torch::Tensor mma_smoke(torch::Tensor A, "
+                                         "torch::Tensor B);",
                              cuda_sources=_CUDA_SOURCE, functions=["mma_smoke"],
                              extra_cuda_cflags=[gencode, "-O3"], verbose=False)
     except Exception as e:  # noqa: BLE001

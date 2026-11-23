@@ -185,7 +185,8 @@ def check_submission(source: str, language: str | None = None) -> list[Finding]:
                             # guard's API, kept so callers need not know that
     findings: list[Finding] = []
     gencode_lines: dict[int, str] = {}
-    for lineno, raw, prose in code_lines(source):
+    lines = code_lines(source)
+    for index, (lineno, raw, prose) in enumerate(lines):
         if prose:
             continue
         text = _code_text(raw)
@@ -206,24 +207,31 @@ def check_submission(source: str, language: str | None = None) -> list[Finding]:
             findings.append(Finding(
                 HARDCODED_SMS, WARN, lineno, raw.strip(),
                 "query the SM count at run time (FK_TARGET_SMS overrides it when set)"))
-        if "FK_TARGET_SMS" in text and (bad := _target_sms_finding(lineno, raw)):
+        if "FK_TARGET_SMS" in text and (bad := _target_sms_finding(lineno, raw, lines, index)):
             findings.append(bad)
         if "-gencode" in text or re.search(r"-arch\b", text):
             gencode_lines[lineno] = text
     findings += _gencode_findings(gencode_lines)
-    findings += _fp4_findings(code_lines(source))
-    findings += _sfu_findings(code_lines(source))
+    findings += _fp4_findings(lines)
+    findings += _sfu_findings(lines)
     return sorted(findings, key=lambda f: (f.line, f.rule))
 
 
-def _target_sms_finding(lineno: int, text: str) -> Finding | None:
-    """``FK_TARGET_SMS`` must be read *defensively*: it does not exist on the board."""
-    fallback = bool(
-        re.search(r"\.get\(\s*[\"']FK_TARGET_SMS[\"']", text)
-        or re.search(r"getenv\(\s*[\"']FK_TARGET_SMS[\"'][^\n]*,[^\n]*\)", text)
-        or re.search(r"\bin\s+os\.environ\b", text)
-        or re.search(r"if\s+[\"']FK_TARGET_SMS[\"']\s+in\b", text)
-        or re.search(r"FK_TARGET_SMS[^\n]*\belse\b", text)
+def _target_sms_finding(lineno: int, text: str, lines, index: int) -> Finding | None:
+    """``FK_TARGET_SMS`` must be read *defensively*: it does not exist on the board.
+
+    The fallback may live on another line (``raw = os.environ.get(...)`` above, or an
+    ``except``/``else`` branch below), so a small window around the read counts.
+    """
+    window = [_code_text(t) for n, t, prose in lines[max(0, index - 6):index + 7] if not prose]
+    fallback = any(
+        re.search(r"\.get\(\s*[\"']FK_TARGET_SMS[\"']", line)
+        or re.search(r"getenv\(\s*[\"']FK_TARGET_SMS[\"']", line)
+        or re.search(r"[\"']FK_TARGET_SMS[\"']\s+in\s+os\.environ", line)
+        or re.search(r"if\s+[\"']FK_TARGET_SMS[\"']", line)
+        or re.search(r"FK_TARGET_SMS[^\n]*\belse\b", line)
+        or re.search(r"\bexcept\b", line)
+        for line in window
     )
     if fallback:
         return None
@@ -264,20 +272,21 @@ def _fp4_findings(lines: list[tuple[int, str, bool]]) -> list[Finding]:
     return out[:4]
 
 
-def _sfu_findings(lines: list[tuple[int, str, bool]], *, minimum: int = 2) -> list[Finding]:
+def _sfu_findings(lines: list[tuple[int, str, bool]]) -> list[Finding]:
     """``exp``/``ex2`` is about 2x cheaper on the development GPU.
 
-    One call is a softmax detail; several (or one inside a loop) is a kernel whose reading
-    here is optimistic, so the rule reports from the second occurrence on.
+    Reported when an ``exp``/``ex2`` sits inside a loop (once per iteration is the kernel's
+    arithmetic) or appears three or more times (a softmax chain): either way the reading here
+    is optimistic.
     """
     hits = [(n, t) for n, t, prose in lines if not prose and _EXP_RE.search(_code_text(t))]
-    if len(hits) < minimum:
+    if not hits:
         return []
     in_loop = any(_nearest_loop(lines, n) for n, _ in hits)
-    if len(hits) < 3 and not in_loop:
+    if not in_loop and len(hits) < 3:
         return []
     return [Finding(SFU_LOOP, INFO, hits[0][0], hits[0][1].strip(),
-                    f"{len(hits)} exp/ex2 sites: SFU-bound, optimistic on the development GPU")]
+                    f"{len(hits)} exp/ex2 site(s): SFU-bound, optimistic on the development GPU")]
 
 
 def _nearest_loop(lines: list[tuple[int, str, bool]], lineno: int) -> str:

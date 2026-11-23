@@ -201,12 +201,19 @@ def check_cuda_source(text: str, *, arch: str = TARGET_ARCH, timeout: int = 900,
     obj_path = tmp / "submission_kernel.o"
     src_path.write_text(text, encoding="utf-8")
     gencode_flag = f"-gencode=arch={compute_arch(arch)},code={cuda_arch(arch)}"
+    # The build runs the plain name ``nvcc``; the toolkit that was found is put in front of
+    # PATH, which is how a machine with nvcc outside PATH (a bare /usr/local/cuda) still
+    # compiles here.
+    import os
+
+    env = {**os.environ, "PATH": os.pathsep.join([str(nvcc.parent),
+                                                  os.environ.get("PATH", "")])}
     try:
         proc = subprocess.run(
             ["nvcc", "-c", str(src_path), "-o", str(obj_path), gencode_flag,
              "-O3", "--use_fast_math", "-std=c++20", *torch_cuda_defines(),
              *[f"-I{p}" for p in includes]],
-            capture_output=True, text=True, timeout=timeout)
+            capture_output=True, text=True, timeout=timeout, env=env)
     except FileNotFoundError:
         return Conclusion("cuda-inline", UNKNOWN,
                           "nvcc is not on PATH (set NVCC or CUDA_HOME)", line)

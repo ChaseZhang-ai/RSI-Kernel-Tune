@@ -36,7 +36,7 @@ from pathlib import Path
 
 from forgekernel import target_profile
 from forgekernel.targethw import arch_of_cc
-from forgekernel.targethw import dev_arch as resolved_dev_arch
+from forgekernel.targethw import cuda_arch as to_cuda_arch
 from forgekernel.targethw import parity, probe_program, rules, smoke_sources
 
 SCHEMA = "forgekernel.target-dev/1"
@@ -95,7 +95,7 @@ _ENTRY = """#!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")"
 export PYTHONUNBUFFERED=1
-case "${1:-probe}" in
+case "${{1:-probe}}" in
   probe) exec python3 {options}probe_program.py ;;
   *) echo "target probe: unknown task $1" >&2; exit 2 ;;
 esac
@@ -239,21 +239,23 @@ def parse_nvidia_smi_query(text: str) -> dict:
 def parse_nvidia_smi_q(text: str) -> dict:
     """``nvidia-smi -q`` -> {clocks, applications, max_clocks, throttle} (best effort).
 
-    The output is human-readable and versioned; only the sections this probe reasons about
-    are read, and a missing section is simply absent (not an error).
+    ``nvidia-smi -q`` indents a section header by four spaces and its fields by eight; a line
+    with a value is ``name : value``. Only the sections this probe reasons about are read, and
+    a missing section is simply absent (not an error).
     """
     sections: dict[str, dict] = {}
     current = None
     for raw in (text or "").splitlines():
-        line = raw.rstrip()
-        if not line.strip():
+        if not raw.strip():
             continue
-        if not line.startswith("    "):
-            current = sections.setdefault(line.strip().rstrip(":"), {})
+        indent = len(raw) - len(raw.lstrip())
+        line = raw.strip()
+        if indent <= 4 and (":" not in line or line.endswith(":")):
+            current = sections.setdefault(line.rstrip(":").strip(), {})
             continue
         if current is None or ":" not in line:
             continue
-        name, _, value = line.strip().partition(":")
+        name, _, value = line.partition(":")
         current[name.strip()] = value.strip()
     clocks = sections.get("Clocks", {})
     apps = sections.get("Applications Clocks", {})
@@ -295,7 +297,7 @@ def clocks_locked(clocks: dict) -> bool | None:
     None when the three numbers do not decide it (reported as unknown rather than guessed).
     """
     app = clocks.get("app_sm_mhz")
-    current = clocks.get("current_sm_mhz")
+    current = clocks.get("sm_mhz") or clocks.get("current_sm_mhz")
     maximum = clocks.get("max_sm_mhz")
     if not app or not current:
         return False if (maximum and current and current >= maximum) else None
@@ -355,7 +357,7 @@ def parse_report(payload: dict, *, mode: str = "local",
     if isinstance(cc, (list, tuple)) and len(cc) == 2:
         gpu["compute_capability"] = [int(cc[0]), int(cc[1])]
         gpu["arch"] = arch_of_cc(int(cc[0]), int(cc[1]))
-        gpu["cuda_arch"] = resolved_dev_arch({}, fallback=gpu["arch"])
+        gpu["cuda_arch"] = to_cuda_arch(gpu["arch"])
     if not gpu and torch_info.get("error"):
         gpu["error"] = torch_info["error"]
 
@@ -403,7 +405,8 @@ def parse_report(payload: dict, *, mode: str = "local",
         "tools": {"nvcc": str(nvcc_path) if nvcc_path else None,
                   "cutlass": str(cutlass) if cutlass else None},
         "env": payload.get("env") or {},
-        "probe": {"rc": payload.get("_rc"), "stderr_tail": payload.get("_stderr_tail", "")},
+        "probe": {"rc": payload.get("_rc"), "stderr_tail": payload.get("_stderr_tail", ""),
+                  "smokes": bool(payload.get("smokes"))},
     }
 
 
@@ -434,7 +437,12 @@ def probe(*, deliver=None, remote: bool = False, out: str | Path | None = None,
         if remote:
             from forgekernel.localenv import load_machine
 
-            deliver = RemoteProbe(load_machine(root))
+            machine = load_machine(root)
+            if not machine.remote_host or not machine.remote_workdir:
+                raise ProbeError(
+                    "--remote needs the ssh host of local.env: FK_DELIVERY=ssh, REMOTE_HOST "
+                    "and REMOTE_WORKDIR (a probe runs on that host as a GPU job does)")
+            deliver = RemoteProbe(machine)
         else:
             deliver = LocalProbe()
     try:

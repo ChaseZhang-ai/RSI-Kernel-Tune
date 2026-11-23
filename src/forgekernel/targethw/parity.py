@@ -100,11 +100,14 @@ def compare(dev: dict, profile: dict) -> list[Difference]:
         out.append(Difference(level, key, target_text, dev_text, advice))
 
     # -- the stack that has to work ------------------------------------------------
+    smokes_requested = (dev.get("probe") or {}).get("smokes", True)
     for name in ("triton", "cutedsl", "cuda_inline"):
         smoke = smokes.get(name)
-        if smoke is None:
-            add(INFO, f"smoke:{name}", "runs on the board", "not run by this probe",
-                "re-run `forge target probe` to cover this path")
+        if smoke is None or not smokes_requested:
+            add(INFO, f"smoke:{name}", "runs on the board",
+                "not run (the probe skipped the smokes)" if not smokes_requested
+                else "not run by this probe",
+                "re-run `forge target probe` without --no-smokes to cover this path")
             continue
         if not smoke.get("compile"):
             add(BLOCKER, f"smoke:{name}", "compiles on the board", "does not compile here",

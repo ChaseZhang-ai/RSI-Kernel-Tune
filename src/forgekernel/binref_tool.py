@@ -4,7 +4,7 @@ copied in as binref.py; see forgekernel.binref).
 
 The reference is a SOL-ExecBench / FlashInfer-Bench solution compiled into
 ref_bin/<module>.so the way SOL-ExecBench builds a cuda_cpp solution (torch
-cpp_extension; sm_100a unless the solution names an arch; CUTLASS headers; only the
+cpp_extension; this machine's gencode unless the solution names an arch; CUTLASS headers; only the
 solution's top-level C/C++/CUDA files are compiled, the rest are there to #include). Its
 sources live under src/ and never leave this tree: the card only gets the .so.
 
@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -28,7 +29,31 @@ META = json.loads((HERE / "binref.json").read_text())
 SO = HERE / "ref_bin" / f"{META['module']}.so"
 BUILD = Path(os.environ.get("BINREF_BUILD_DIR", "/workspace/binref_build")) / META["module"]
 CPP_SUFFIXES = (".cu", ".cpp", ".cc", ".cxx", ".c")
-BLACKWELL_GENCODE = "-gencode=arch=compute_100a,code=sm_100a"
+# The board's default gencode. The recon tree builds its reference *here*, on the development
+# machine, so the build follows this machine's architecture (gpu_entry.sh exports FK_CUDA_ARCH
+# from the task's dev_arch) and falls back to the board's default only when nothing says.
+BOARD_GENCODE = "-gencode=arch=compute_100a,code=sm_100a"
+CUDA_ARCH_ENV = "FK_CUDA_ARCH"
+CUDA_ARCH_FALLBACK_ENV = "CUTE_DSL_ARCH"
+_ARCH_TEXT_RE = re.compile(r"sm_?(\d{2,3})([a-z]?)")
+
+
+def gencode_of_arch(arch: str) -> str | None:
+    m = _ARCH_TEXT_RE.fullmatch(str(arch or "").strip())
+    if not m:
+        return None
+    cc = f"{m.group(1)}{m.group(2)}"
+    return f"-gencode=arch=compute_{cc},code=sm_{cc}"
+
+
+def device_gencode(environ=None) -> str:
+    """The gencode for the machine this build runs on (else the board's default)."""
+    env = os.environ if environ is None else environ
+    for var in (CUDA_ARCH_ENV, CUDA_ARCH_FALLBACK_ENV):
+        flag = gencode_of_arch(env.get(var, ""))
+        if flag:
+            return flag
+    return BOARD_GENCODE
 # SOL-ExecBench CompileOptions defaults (core/data/solution.py): a solution that gives
 # compile_options but leaves a key out gets these. -lcuda is what lets driver-API calls
 # (cuTensorMapEncodeTiled for TMA descriptors) resolve; without it the .so fails to import.
@@ -103,7 +128,7 @@ def _build() -> int:
         shutil.copy2(HERE / "src" / rel, dst)
     cuda, cflags, ldflags = compile_flags(META.get("compile_options"))
     if not any("-gencode" in f or "-arch" in f for f in cuda):
-        cuda = [BLACKWELL_GENCODE] + cuda
+        cuda = [device_gencode()] + cuda
     cutlass, missing = cutlass_dir()
     if missing:  # a source that includes CUTLASS / CuTe fails below on this node: say why up front
         print(f"[binref] WARNING {missing}: a source that includes cutlass/ or cute/ "

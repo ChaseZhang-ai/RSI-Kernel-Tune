@@ -72,8 +72,9 @@ def main(argv: list[str] | None = None) -> int:
     # not be extension names (task.load_task refuses them), so the two never collide.
     from forgekernel import ext as extmod
 
-    if rc := extmod.dispatch(argv):
-        return rc
+    extension_rc = extmod.dispatch(argv)
+    if extension_rc is not None:
+        return extension_rc
 
     if len(argv) >= 2 and argv[1] == "ncu-trace":
         from forgekernel.inner.ncu import main as ncu_main

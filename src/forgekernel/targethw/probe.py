@@ -161,19 +161,22 @@ class RemoteProbe:
         from forgekernel.submit.jobs import STATUS_SUCCEEDED
 
         try:
-            base, op_dir = prepare_tree(include_smokes=include_smokes)
+            _base, op_dir = prepare_tree(include_smokes=include_smokes)
         except (OSError, RuntimeError) as e:
             return Delivered(1, "", f"could not build the probe tree: {e}")
         cfg = self.config(op_dir, timeout)
         runner = (self._runner or DirectRunner)(cfg)
-        log_path = base / "probe.log"
+        # The job writes its log into an anonymous temporary file: nothing here opens a path,
+        # and the probe leaves no log behind (a failed job's reason is in the returned error,
+        # which the caller stores in dev.json).
         try:
-            with open(log_path, "w", encoding="utf-8") as log:
+            with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as log:
                 status = runner.run_mode("main", "probe", log)
+                log.flush()
+                log.seek(0)
+                text = log.read()
         except Exception as e:  # noqa: BLE001 -- report it as a failed probe
             return Delivered(1, "", f"{type(e).__name__}: {e}")
-        text = log_path.read_text(encoding="utf-8", errors="replace") \
-            if log_path.is_file() else ""
         return Delivered(0 if status == STATUS_SUCCEEDED else 1, text, "")
 
     def describe(self) -> str:

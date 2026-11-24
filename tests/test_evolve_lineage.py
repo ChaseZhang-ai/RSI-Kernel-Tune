@@ -393,7 +393,9 @@ def test_find_seeds_filters_licenses_and_missing_files(tmp_path, monkeypatch):
 
 
 def test_find_seeds_without_the_library_is_a_clean_fallback(monkeypatch):
-    monkeypatch.delitem(sys.modules, "forgekernel.klib", raising=False)
+    # None in sys.modules is the standard stand-in for a package that is not installed
+    # (deleting the module is not enough once forgekernel.klib exists on disk: base's stub).
+    monkeypatch.setitem(sys.modules, "forgekernel.klib", None)
     logs = []
     assert lineage.find_seeds("rmsnorm", 2, log=logs.append) == []
     assert logs and "not installed" in logs[0]

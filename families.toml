@@ -1,0 +1,155 @@
+# Operator families: which problems of a board are "the same kind of kernel" (forgekernel/family.py).
+#
+# A family is what lets one problem use what was measured on another: the lessons a teacher
+# reads (FK_LESSONS_PATH), the reference library's `problem_keys`, a campaign's lists.
+#
+# `[[family]]` declares a family. `[[rule]]` is the ORDERED rule table: the first rule that
+# matches a problem's name decides its family, and a name no rule matches is `other`.
+# Rules see the name in lower case, without the board's `NNN_` prefix and without a trailing
+# `backward` (a backward kernel is the same family as its forward; `is_backward` says which it
+# is). `match` is a regular expression searched in that name; `name` takes the whole name
+# instead, for the few names whose words mislead.
+#
+# The rules were induced from the 235 names of the 2026-11-24 board snapshot. tests/test_family.py
+# pins the family of every one of them, so a change here that moves a problem is a visible diff.
+# A rule that files a problem wrongly is a bug in THIS file: report it; do not work around it
+# in the code that reads families.
+
+# -- families --------------------------------------------------------------------------------
+
+[[family]]
+key = "rmsnorm"
+about = "RMSNorm in every form, fused with a residual add or with embeddings or not."
+
+[[family]]
+key = "transformer_block"
+about = "Whole transformer layers and residual chains: decoder and encoder layers, attention + FFN blocks."
+
+[[family]]
+key = "vision_block"
+about = "Whole blocks of image, video and diffusion models: VAE, SAM, ConvNeXt, UNet, ResNet, feature pyramids."
+
+[[family]]
+key = "quant_gemm"
+about = "Quantized (fp8, nvfp4, int8, int4) dense GEMMs and projections, whatever model part they feed."
+
+[[family]]
+key = "moe"
+about = "Mixture of experts: routing, dispatch, expert computation, combine, load balancing."
+
+[[family]]
+key = "ssm"
+about = "State-space and long-sequence mixers (Mamba, Mamba2, Hyena, gated delta rule): scans, segsum, discretization."
+
+[[family]]
+key = "conv"
+about = "Convolutions: conv1d / 2d / 3d, depthwise, strided, causal."
+
+[[family]]
+key = "activation"
+about = "Standalone activations and small gated or residual elementwise fusions."
+
+[[family]]
+key = "mlp"
+about = "Feed-forward blocks: gate-up projection with SwiGLU / GEGLU, GELU feedforward, gated MLP."
+
+[[family]]
+key = "gemm"
+about = "Dense GEMMs and linear projections at full precision: QKV, out and value projections, LM head, patch embedding."
+
+[[family]]
+key = "attention"
+about = "Attention cores and their pieces: score matmul, softmax, masks, P*V matmul, GQA repeat, KV cache writes, paged / ragged decode and prefill."
+
+[[family]]
+key = "rope"
+about = "Rotary position embeddings: frequencies, cos / sin, application."
+
+[[family]]
+key = "norm"
+about = "Other normalizations: LayerNorm, GroupNorm, adaptive and instance norm, AdaLN modulation, post-norm residual."
+
+# -- rules (first match wins) ---------------------------------------------------------------
+
+# Said by its name alone, whatever else the name carries.
+[[rule]]
+family = "rmsnorm"
+match = 'rms_?norm'
+
+# A whole layer stays a block even when its parts are named (a MoE layer is still a layer).
+[[rule]]
+family = "transformer_block"
+match = 'decoder_layer|decoder_complete_layer|encoder_layer|transformer_block|language_model_decoder|residual_rms_mlp'
+
+# Blocks of image / video / diffusion models. `vae_attention_block` is a block (a VAE's spatial
+# attention with its norm), not an attention core; `vae_conv3x3_...` is a convolution and falls
+# through to `conv`.
+[[rule]]
+family = "vision_block"
+match = 'vae_(?:encoder|decoder|attention)|sam_hq_mask_decoder|iou_hypernetwork|two_way_transformer|convnextv2|unet|resnet_block|feature_pyramid|final_layer_upsample'
+
+# A quantized projection is a quantized GEMM whoever eats its output: the kernel is scaled-matmul
+# and block-scale work that an expert, an attention head or an MLP shares with every other one.
+# (This is why it comes before `moe`.) Routing, attention cores, RoPE and SSM steps in the
+# Quantization track carry no GEMM word and fall through to their operator's family.
+[[rule]]
+family = "quant_gemm"
+match = '(?=.*(?:^|_)(?:nvfp4|fp8|fp4|int8|int4)(?:_|$))(?=.*(?:projection|linear|(?:^|_)proj(?:_|$)|(?:^|_)mlp(?:_|$)))'
+
+[[rule]]
+family = "moe"
+match = 'moe|expert|routing|router'
+
+# Names whose words mislead every rule below: "joint_attention" names the consumer of a
+# concatenation, not an attention kernel; AltUp's "magnitude normalization" is not a norm layer.
+[[rule]]
+family = "other"
+name = ["patch_embed_to_joint_attention_input", "altup_hidden_state_collapse_with_magnitude_normalization"]
+
+# Before `conv`: Mamba's and Hyena's convolutions are steps of a state-space mixer.
+[[rule]]
+family = "ssm"
+match = 'mamba|hyena|(?:^|_)ssm(?:_|$)|selective_scan|chunk_scan|segsum|discretization|gated_delta_rule'
+
+[[rule]]
+family = "conv"
+match = '(?:^|_)conv'
+
+# "gelu_activation" is an activation; "mlp_gelu" is an MLP and waits for the next rule.
+[[rule]]
+family = "activation"
+match = 'activation$|tanh_gated'
+
+[[rule]]
+family = "mlp"
+match = 'swiglu|geglu|gate_up|gated_mlp|feedforward|(?:^|_)ffn(?:_|$)|(?:^|_)mlp(?:_|$)|linear_gelu'
+
+# A projection of attention tensors is a GEMM, so this comes before `attention`.
+[[rule]]
+family = "gemm"
+match = 'projection|(?:^|_)proj(?:_|$)|linear|qkv|lm_head|(?:^|_)gemm(?:_|$)'
+
+# An attention core that leads or ends its name ("attention_with_qk_norm_and_rope",
+# "multimodal_rotary_embedding_attention").
+[[rule]]
+family = "attention"
+match = '^attention|(?:^|_)(?:attention|attn)(?:_core)?$'
+
+# ... or whose name names attention before it names a position embedding. The second rule
+# exists for "rotary_embedding_with_attention_scaling": a RoPE with the softmax scale folded
+# in, which is a RoPE.
+[[rule]]
+family = "attention"
+match = '^(?:(?!rotary|rope).)*(?:^|_)(?:attention|attn|gqa|mla|paged|ragged|softmax|repeat_kv|qk_matmul|score_value|multihead|flash_attn|kv_cache|mask_preparation|latent_kv|cu_seqlens|varlen|sdpa)'
+
+[[rule]]
+family = "rope"
+match = 'rotary|rope|cos_sin'
+
+[[rule]]
+family = "norm"
+match = 'norm'
+
+[[rule]]
+family = "activation"
+match = '(?:^|_)(?:gelu|silu|swish|sigmoid|erf|relu)(?:_|$)'

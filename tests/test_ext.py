@@ -56,7 +56,8 @@ def _with(name: str, text: str = HELLO) -> str:
 
 # the extension commands the first wave of tasks writes (00-背景与约定 §7; module name ==
 # command). Step 0 shipped none on purpose; each first-wave task adds its own module here.
-FIRST_WAVE = {"bench", "lib", "target", "prior", "campaign", "evolve", "board"}
+FIRST_WAVE = {"bench", "lib", "target", "prior", "campaign", "evolve", "board",
+              "shapes"}          # shapes (16-任务-shapes): the second wave's command
 
 
 def test_the_package_ships_only_first_wave_commands():

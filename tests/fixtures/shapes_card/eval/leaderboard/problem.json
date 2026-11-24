@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "suite": "sol-execbench",
+  "definition": {
+    "name": "fixture_shapes_gemm",
+    "description": "A square-ish GEMM whose row count is the only variable (fixture: the shape-clustering test's problem).",
+    "axes": {
+      "M": {"type": "var", "description": "rows of A / C"},
+      "N": {"type": "const", "value": 1024, "description": "columns of B / C"},
+      "K": {"type": "const", "value": 1024, "description": "columns of A / rows of B"},
+      "grid": {"type": "expr", "expression": "M * 1024", "description": "elements of C"}
+    },
+    "inputs": {
+      "A": {"shape": ["M", "K"], "dtype": "float16"},
+      "B": {"shape": ["K", "N"], "dtype": "float16"}
+    },
+    "outputs": {
+      "C": {"shape": ["M", "N"], "dtype": "float16"}
+    },
+    "reference": "import torch\n\n\ndef run(A, B):\n    return (A.to(torch.float32) @ B.to(torch.float32)).to(A.dtype)\n"
+  },
+  "workload": {
+    "uuid": "fixture-shapes-wl0",
+    "axes": {"M": 8},
+    "inputs": {"A": {"type": "random"}, "B": {"type": "random"}},
+    "tolerance": {"atol": 0.05, "rtol": 0.05}
+  },
+  "dps": true,
+  "kernel_file": "kernel.py",
+  "entry": "run",
+  "reference_impl": {"kind": "definition", "name": "definition reference (eager)"},
+  "time_reference": false,
+  "source": {
+    "dataset": "https://example.invalid/sol-execbench",
+    "dataset_root": "tests/fixtures/shapes_dataset",
+    "problem": "L1/fixture_shapes_gemm",
+    "upstream": "fixture",
+    "dataset_commit": "fixture"
+  },
+  "group": [
+    {
+      "index": 0,
+      "name": "wl0",
+      "workload": {"uuid": "fixture-shapes-wl0", "axes": {"M": 8}, "inputs": {"A": {"type": "random"}, "B": {"type": "random"}}},
+      "sol_board": {"kernel_id": 900, "workload_index": 0, "t_b_ms": 0.032, "t_sol_ms": 0.004, "source": "fixture", "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}
+    },
+    {
+      "index": 1,
+      "name": "wl1",
+      "workload": {"uuid": "fixture-shapes-wl1", "axes": {"M": 12}, "inputs": {"A": {"type": "random"}, "B": {"type": "random"}}},
+      "sol_board": {"kernel_id": 900, "workload_index": 1, "t_b_ms": 0.048, "t_sol_ms": 0.006, "source": "fixture", "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}
+    },
+    {
+      "index": 2,
+      "name": "wl2",
+      "workload": {"uuid": "fixture-shapes-wl2", "axes": {"M": 96}, "inputs": {"A": {"type": "random"}, "B": {"type": "random"}}},
+      "sol_board": {"kernel_id": 900, "workload_index": 2, "t_b_ms": 0.4, "t_sol_ms": 0.05, "source": "fixture", "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}
+    },
+    {
+      "index": 3,
+      "name": "wl3",
+      "workload": {"uuid": "fixture-shapes-wl3", "axes": {"M": 128}, "inputs": {"A": {"type": "random"}, "B": {"type": "random"}}},
+      "sol_board": {"kernel_id": 900, "workload_index": 3, "t_b_ms": 0.56, "t_sol_ms": 0.07, "source": "fixture", "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}
+    },
+    {
+      "index": 4,
+      "name": "wl4",
+      "workload": {"uuid": "fixture-shapes-wl4", "axes": {"M": 1024}, "inputs": {"A": {"type": "random"}, "B": {"type": "random"}}},
+      "sol_board": {"kernel_id": 900, "workload_index": 4, "t_b_ms": 4.8, "t_sol_ms": 0.6, "source": "fixture", "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}
+    },
+    {
+      "index": 5,
+      "name": "wl5",
+      "workload": {"uuid": "fixture-shapes-wl5", "axes": {"M": 1536}, "inputs": {"A": {"type": "random"}, "B": {"type": "random"}}},
+      "sol_board": {"kernel_id": 900, "workload_index": 5, "t_b_ms": 7.2, "t_sol_ms": 0.9, "source": "fixture", "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}
+    },
+    {
+      "index": 6,
+      "name": "wl6",
+      "workload": {"uuid": "fixture-shapes-wl6", "axes": {"M": 12288}, "inputs": {"A": {"type": "random"}, "B": {"type": "random"}}},
+      "sol_board": {"kernel_id": 900, "workload_index": 6, "t_b_ms": 64.0, "t_sol_ms": 8.0, "source": "fixture", "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}
+    },
+    {
+      "index": 7,
+      "name": "wl7",
+      "workload": {"uuid": "fixture-shapes-wl7", "axes": {"M": 16384}, "inputs": {"A": {"type": "random"}, "B": {"type": "random"}}},
+      "sol_board": {"kernel_id": 900, "workload_index": 7, "t_b_ms": 72.0, "t_sol_ms": 9.0, "source": "fixture", "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}
+    }
+  ],
+  "meta_workloads": ["wl0", "wl7", "wl3"],
+  "sol_board": {"kernel_id": 900, "workload_index": 0, "t_b_ms": 0.032, "t_sol_ms": 0.004, "source": "fixture", "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}
+}

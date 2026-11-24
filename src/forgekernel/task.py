@@ -83,6 +83,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from forgekernel import agentbackends
 from forgekernel import ext
 from forgekernel import provider as provider_mod
 from forgekernel.paths import global_config_dir, repo_root
@@ -96,7 +97,9 @@ LANGUAGES = ("cutedsl", "cuda", "triton")
 # The loop's own language name for each task language (forgekernel.loop.lang_mode).
 LOOP_LANGUAGE = {"cutedsl": "cutedsl", "cuda": "cuda-sol", "triton": "triton"}
 TIMINGS = ("device", "e2e")
-BACKENDS = ("claude",)
+# The agent CLIs a task may name: one module each under src/forgekernel/agentbackends/
+# (forgekernel.agentbackends). Listing only: nothing of theirs is imported here.
+BACKENDS = agentbackends.names() or ("claude",)
 ROLES = ("teacher", "student")
 MIN_INPUT_GROUPS = 3
 
@@ -321,8 +324,12 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
                             "(sealed into its card at `forge new`); leave the table out")
     reference = _read_reference(d, cfg, problems)
     target = _read_target(cfg, problems)
-    teacher = _read_agent(cfg.get("agent", {}), "teacher", problems)
-    student = _read_agent(cfg.get("agent", {}), "student", problems)
+    # A reference nothing but the agent policy stops an agent from reading: blackbox mode,
+    # or a leaderboard problem whose recon tree (the sealed reference) exists.
+    sealed = (reference is not None and (reference.blackbox or reference.source is None)) \
+        or (board is not None and board.ref is not None)
+    teacher = _read_agent(cfg.get("agent", {}), "teacher", problems, sealed=sealed)
+    student = _read_agent(cfg.get("agent", {}), "student", problems, sealed=sealed)
     budget = _read_budget(cfg, problems)
 
     if problems:
@@ -698,17 +705,34 @@ def _read_target(cfg: dict, problems: list[str]) -> Target:
                   ms=float(ms) if _positive(ms) else None, timing=timing)
 
 
-def _read_agent(agents: dict, role: str, problems: list[str]) -> AgentSpec:
+def _read_agent(agents: dict, role: str, problems: list[str], *,
+                sealed: bool = False) -> AgentSpec:
     """One agent's settings: [agent] with [agent.<role>] over it, already merged across the
-    layers (merge_config)."""
+    layers (merge_config). ``sealed``: the task has a reference that only the agent policy
+    keeps an agent out of, so a backend without policy hooks may not serve it."""
     agents = agents if isinstance(agents, dict) else {}
     own = agents.get(role, {})
     a = {**{k: v for k, v in agents.items() if not isinstance(v, dict)},
          **(own if isinstance(own, dict) else {})}
     where = f"[agent.{role}]"
     backend = a.get("backend")
+    adapter = None
     if backend not in BACKENDS:
         problems.append(f"{where} backend must be one of {list(BACKENDS)}, got {backend!r}")
+    else:
+        try:
+            adapter = agentbackends.load(backend)
+        except agentbackends.BackendError as e:      # listed but broken: say so here, too
+            problems.append(f"{where} backend {backend!r} does not load: {e}")
+    if adapter is not None and role not in adapter.roles:
+        problems.append(f"{where} backend {backend!r} cannot serve the {role} role "
+                        f"(it serves: {list(adapter.roles)})")
+    if adapter is not None and role in adapter.roles and sealed \
+            and adapter.policy_support == "none":
+        problems.append(
+            f"{where} backend {backend!r} cannot be used on a task with a sealed "
+            f"reference: it has no agent-policy hooks, so nothing would refuse it a read "
+            f"of the reference (use backend \"claude\", or make the reference readable)")
     provider = a.get("provider")
     known = provider_mod.names()
     if provider not in known:

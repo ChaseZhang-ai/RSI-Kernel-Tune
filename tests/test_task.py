@@ -88,11 +88,14 @@ def test_a_provider_must_be_declared_and_its_key_set(tmp_path, monkeypatch):
     with pytest.raises(provider.ProviderError, match="GW_KEY"):
         agents.agent_command(t.student, "student", env={})
     cmd = agents.agent_command(t.student, "student", env={"GW_KEY": "secret"})
-    assert cmd.startswith("env ANTHROPIC_BASE_URL=https://gw.example/anthropic "
+    assert cmd.startswith("env FK_AGENT_ROLE=student "
+                          "ANTHROPIC_BASE_URL=https://gw.example/anthropic "
                           "FK_PROVIDER_KEY_ENV=GW_KEY bash ")
     assert "secret" not in cmd and cmd.endswith(" 7200")
     native = load_task(_task(tmp_path, MINIMAL, name="nat"), kb_root=_kb(tmp_path))
-    assert agents.agent_command(native.teacher, "teacher").startswith("bash ")
+    native_cmd = agents.agent_command(native.teacher, "teacher")
+    assert native_cmd.startswith("env FK_AGENT_ROLE=teacher bash ")
+    assert "ANTHROPIC_BASE_URL" not in native_cmd      # provider = native declares nothing
 
 
 def test_reference_with_source_is_source_mode(tmp_path):
@@ -142,12 +145,13 @@ def test_an_arch_without_a_kb_for_the_language_is_refused(tmp_path):
 
 
 def test_every_problem_is_reported_at_once(tmp_path):
-    # "tilelang" is not a task language (triton became one with task triton): every
+    # "tilelang" is not a task language (triton became one with task triton), and
+    # "notabackend" is not an agent backend (codex became one with task backends): every
     # problem the task file has is still reported together, not one edit at a time.
     toml = ('[task]\nlanguage = "tilelang"\narch = "h100"\n'
             '[target]\nratio = 1.5\nms = 0.2\ntiming = "wall"\n'
             '[budget]\nhours = 0\nmax_meta = -1\n'
-            '[agent.student]\nbackend = "codex"\n'
+            '[agent.student]\nbackend = "notabackend"\n'
             '[extra]\nx = 1\n')
     with pytest.raises(TaskError) as e:
         load_task(_task(tmp_path, toml, shapes=False, description=None), kb_root=_kb(tmp_path))

@@ -89,3 +89,46 @@ BSD-3-Clause entries may be merged into a submission.
 No source file's license header was removed or rewritten; the library's normalizer only adds
 provenance comments and renames identifiers when merging files.
 
+--------------------------------------------------------------------------------
+The roofline tooling (src/forgekernel/roofline/, skills/roofline/) was written for this
+project after reading three projects whose measurement methods and classification
+thresholds it follows. Nothing was copied verbatim: the numbers, thresholds and the shape
+of the tables are what was carried over, and every one of them is re-derived in code that
+names its own unit and source.
+
+- RightNow AI, AutoKernel — https://github.com/RightNowAI/autokernel — MIT
+  (calibrate.py / bench.py: how device bandwidth, tensor throughput and attention peaks are
+  measured, the "a sane entry measures roughly 80-95% of the manual peak" reading, the
+  shape of the calibration JSON)
+- Meta Platforms, Inc., KernelAgent — Apache-2.0
+  (kernel_perf_agent/kernel_opt/roofline/ncu_roofline.py: the Speed-of-Light classification
+  — the higher of the compute / memory SOL percentages is the bottleneck, both under a
+  threshold is "underutilized" — and the tensor-pipe activity threshold)
+- hanlab, ncu-report-skill — MIT
+  (reference/05-analysis-dimensions.md and reference/06-diagnosis-playbook.md: the six
+  analysis dimensions and the signal → cause → action playbook distilled in
+  skills/roofline/roofline_tools.py's `SUGGESTIONS`; reference/08-metric-names.md's
+  old/new metric spellings)
+
+MIT License
+
+Copyright (c) 2026 RightNow AI (AutoKernel), hanlab (ncu-report-skill)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+and associated documentation files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+KernelAgent is licensed under the Apache License, Version 2.0 (the full text is in LICENSE);
+the adapted parts are the classification thresholds and their rationale.
+

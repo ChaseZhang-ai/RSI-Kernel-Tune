@@ -82,7 +82,21 @@ def test_what_is_not_a_problem_is_refused(spec):
 
 
 def test_an_existing_directory_that_is_not_a_task_is_refused(tmp_path):
-    with pytest.raises(query.QueryError, match="not a task directory"):
+    with pytest.raises(query.QueryError, match="neither a task directory"):
+        query.resolve_target(str(tmp_path))
+
+
+def test_a_run_directory_resolves_through_its_run_json():
+    fixture = Path(__file__).parent / "fixtures" / "opkb_run"
+    target = query.resolve_target(str(fixture))
+    assert (target.name, target.definition, target.suite) == \
+        ("069_rms_norm", "069_rms_norm", "sol-execbench")
+    assert target.family == "rmsnorm"
+
+
+def test_a_run_directory_without_a_task_name_is_not_a_problem(tmp_path):
+    (tmp_path / "run.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(query.QueryError, match="neither a task directory"):
         query.resolve_target(str(tmp_path))
 
 
@@ -179,6 +193,16 @@ def test_the_query_command_says_so_when_the_family_has_no_records(tmp_path, caps
     assert 'no records of the "rmsnorm" family' in captured.err + captured.out
 
 
+def test_the_query_command_accepts_a_run_directory(tmp_path, capsys):
+    from forgekernel.opkb import record
+
+    fixture = Path(__file__).parent / "fixtures" / "opkb_run"
+    root = tmp_path / "op_kb"
+    store.write_record(root, record.extract_run(fixture).record)
+    assert lessons_cli.main(["query", str(fixture), "--root", str(root)]) == 0
+    assert "069_rms_norm" in capsys.readouterr().out
+
+
 def test_the_query_command_rejects_a_non_problem(tmp_path, capsys):
     assert lessons_cli.main(["query", str(tmp_path)]) == 2
-    assert "not a task directory" in capsys.readouterr().err
+    assert "neither a task directory" in capsys.readouterr().err

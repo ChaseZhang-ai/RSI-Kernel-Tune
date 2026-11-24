@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from forgekernel.family import family_key
+from forgekernel.opkb.record import parse_time
 
 DEFINITION_FILE = "eval/leaderboard/problem.json"
 
@@ -61,44 +62,73 @@ def _norm(text) -> str:
     return str(text or "").strip().lower().rstrip("/").rsplit("/", 1)[-1]
 
 
+def _card_identity(problem_file: Path) -> tuple[str | None, str | None]:
+    """``(definition name, suite)`` from a card's ``problem.json``, or ``(None, None)``."""
+    try:
+        problem = json.loads(problem_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None, None
+    if not isinstance(problem, dict):
+        return None, None
+    definition = suite = None
+    defn = problem.get("definition")
+    if isinstance(defn, dict) and isinstance(defn.get("name"), str):
+        definition = defn["name"]
+    elif isinstance(defn, str) and defn:
+        definition = defn
+    if isinstance(problem.get("suite"), str):
+        suite = problem["suite"]
+    return definition, suite
+
+
 def _task_identity(task_dir: Path) -> tuple[str, str | None, str | None]:
     """``(task name, definition name, suite)`` of a task directory."""
     name = task_dir.name
-    definition = suite = None
     try:
         cfg = tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
         cfg = {}
     board = cfg.get("leaderboard") if isinstance(cfg.get("leaderboard"), dict) else {}
     card = board.get("card")
+    definition = suite = None
     if isinstance(card, str) and card:
         problem_file = Path(card) / DEFINITION_FILE
         if not problem_file.is_absolute():
             problem_file = task_dir / problem_file
-        try:
-            problem = json.loads(problem_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            problem = None
-        if isinstance(problem, dict):
-            defn = problem.get("definition")
-            if isinstance(defn, dict) and isinstance(defn.get("name"), str):
-                definition = defn["name"]
-            elif isinstance(defn, str):
-                definition = defn
-            if isinstance(problem.get("suite"), str):
-                suite = problem["suite"]
+        definition, suite = _card_identity(problem_file)
     return name, definition, suite
 
 
+def _run_identity(run_dir: Path) -> tuple[str, str | None, str | None] | None:
+    """``(task name, definition name, suite)`` of a run directory, or None when it is not one."""
+    try:
+        run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    task = str(run.get("task") or "").strip() if isinstance(run, dict) else ""
+    if not task:
+        return None
+    definition, suite = _card_identity(run_dir / "operators" / task / DEFINITION_FILE)
+    return task, definition, suite
+
+
 def resolve_target(spec: str) -> Target:
-    """The problem ``spec`` names: a task directory (``tasks/<op>``) or a problem name."""
+    """The problem ``spec`` names: a task directory (``tasks/<op>``), a run directory
+    (``.artifacts/<op>_<id>``, read through its ``run.json``), or a problem name."""
     text = str(spec or "").strip()
     if not text:
-        raise QueryError("give a problem name or a task directory (tasks/<op>)")
+        raise QueryError("give a problem name, a task directory (tasks/<op>) or a run "
+                         "directory (.artifacts/<op>_<id>)")
     candidate = Path(text).expanduser()
     looks_like_path = "/" in text or "\\" in text or candidate.exists()
-    if candidate.is_dir() and (candidate / "task.toml").is_file():
-        name, definition, suite = _task_identity(candidate)
+    identity = None
+    if candidate.is_dir():
+        if (candidate / "task.toml").is_file():
+            identity = _task_identity(candidate)
+        elif (candidate / "run.json").is_file():
+            identity = _run_identity(candidate)
+    if identity is not None:
+        name, definition, suite = identity
         label = definition or name
         keys = {_norm(name)}
         if definition:
@@ -106,7 +136,8 @@ def resolve_target(spec: str) -> Target:
         return Target(spec=text, family=family_key(label), keys=tuple(sorted(keys)),
                       name=name, definition=definition, suite=suite)
     if looks_like_path:
-        raise QueryError(f"{text}: not a task directory (no task.toml)")
+        raise QueryError(f"{text}: neither a task directory (no task.toml) nor a run "
+                         f"directory (no run.json)")
     keys = {_norm(text)}
     return Target(spec=text, family=family_key(text), keys=tuple(sorted(keys)), name=text)
 
@@ -120,8 +151,6 @@ def _value(record: dict) -> float | None:
 
 
 def _created_stamp(record: dict) -> float:
-    from forgekernel.opkb.record import parse_time
-
     dt = parse_time(record.get("created"))
     if dt is None:
         return 0.0

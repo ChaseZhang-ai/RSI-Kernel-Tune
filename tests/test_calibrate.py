@@ -225,9 +225,12 @@ def test_the_summary_names_every_reading_and_warns_about_unpinned_clocks():
 
 def test_the_entry_script_carries_the_budget_and_runs_the_driver():
     text = calibrate.entry_script(seconds=7.5, only=("hbm", "launch"), timeout=120.0)
-    assert "python3 run_all.py --seconds 7.5 --only hbm,launch" in text
+    assert 'run_all.py --seconds 7.5 --only hbm,launch' in text
     assert "--timeout 120.0" in text
     assert "calibrate)" in text
+    # python3 by default, FK_CALIBRATE_PYTHON when the job's interpreter must be named
+    assert 'PY="${FK_CALIBRATE_PYTHON:-python3}"' in text
+    assert 'exec "$PY" run_all.py' in text
 
 
 def test_prepare_tree_ships_the_probes_as_a_committed_tree(tmp_path):
@@ -274,6 +277,7 @@ def test_the_local_path_runs_the_entry_under_the_gpu_lock(monkeypatch):
         if argv and argv[0] == "bash":
             calls["argv"] = argv
             calls["cwd"] = kw.get("cwd")
+            calls["env"] = kw.get("env") or {}
             return Completed(0, payload_line(document()) + "\n")
         return real(argv, **kw)
 
@@ -282,6 +286,8 @@ def test_the_local_path_runs_the_entry_under_the_gpu_lock(monkeypatch):
     assert delivered.rc == 0
     assert calls["argv"][0] == "bash" and calls["argv"][1].endswith("gpu_entry.sh")
     assert calls["argv"][2] == "calibrate"
+    # this machine's python3 need not be the interpreter holding torch
+    assert calls["env"][calibrate.PYTHON_ENV] == sys.executable
     assert calibrate.parse_payload(delivered.stdout)["machine"]["gpu"] == "NVIDIA B300"
 
 
@@ -323,6 +329,28 @@ def test_the_remote_path_is_the_same_delivery_a_gpu_job_uses():
     assert cfg.exec_workdir == "/work/fk" and cfg.entry_script == "gpu_entry.sh"
     assert calibrate.parse_payload(delivered.stdout)["probes"]["hbm"]
     assert run.describe() == "ssh devbox"
+
+
+def test_the_remote_job_carries_a_named_interpreter_when_one_is_set(monkeypatch):
+    from forgekernel.localenv import Machine
+
+    machine = Machine(delivery="ssh", gpu="0", remote_host="devbox",
+                      remote_workdir="/work/fk")
+    made = {}
+
+    def factory(cfg):
+        made["runner"] = FakeRunner(cfg, log="")
+        return made["runner"]
+
+    monkeypatch.setenv(calibrate.PYTHON_ENV, "/opt/venv/bin/python")
+    calibrate.RemoteRun(machine, runner=factory).run(seconds=1.0, only=("hbm",),
+                                                     timeout=10.0)
+    assert made["runner"].cfg.env[calibrate.PYTHON_ENV] == "/opt/venv/bin/python"
+    assert made["runner"].cfg.env["PYTHONUNBUFFERED"] == "1"
+    monkeypatch.delenv(calibrate.PYTHON_ENV)
+    calibrate.RemoteRun(machine, runner=factory).run(seconds=1.0, only=("hbm",),
+                                                     timeout=10.0)
+    assert calibrate.PYTHON_ENV not in made["runner"].cfg.env
 
 
 def test_the_remote_path_reports_a_failed_job():

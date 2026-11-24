@@ -27,6 +27,7 @@ at whatever the machine happened to run at, which the file says.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,6 +47,9 @@ DEFAULT_SECONDS = 10.0
 DEFAULT_TIMEOUT_S = 900
 CALIBRATE_RUN = "_calibrate"
 CALIBRATE_OP = "calibrate"
+# The interpreter the job's entry runs: ``python3`` unless this names another one (a
+# workstation whose python3 has no torch; on an ssh host it rides SubmitConfig.env).
+PYTHON_ENV = "FK_CALIBRATE_PYTHON"
 # A probe entry that takes far longer than the whole job's budget is not a reading.
 MIN_PER_PROBE_TIMEOUT_S = 60.0
 
@@ -245,14 +249,21 @@ class Delivered:
 
 
 def entry_script(*, seconds: float, only: tuple[str, ...], timeout: float) -> str:
-    """The job's ``gpu_entry.sh``: one task, the driver, with the budget written in."""
+    """The job's ``gpu_entry.sh``: one task, the driver, with the budget written in.
+
+    The interpreter: ``python3`` on the job's machine (what the host provides, exactly as
+    the card's own entry script uses), overridable with ``FK_CALIBRATE_PYTHON`` -- a
+    workstation whose ``python3`` is not the interpreter holding torch needs that, and the
+    local delivery sets it to the harness's own interpreter.
+    """
     return f"""#!/bin/bash
 # The calibration's GPU job entry: one task, the probe driver, in this directory.
 set -euo pipefail
 cd "$(dirname "$0")"
 export PYTHONUNBUFFERED=1
+PY="${{FK_CALIBRATE_PYTHON:-python3}}"
 case "${{1:-calibrate}}" in
-  calibrate) exec python3 run_all.py --seconds {seconds!r} --only {','.join(only)} \\
+  calibrate) exec "$PY" run_all.py --seconds {seconds!r} --only {','.join(only)} \\
       --timeout {timeout!r} ;;
   *) echo "calibrate: unknown task $1" >&2; exit 2 ;;
 esac
@@ -305,11 +316,14 @@ class LocalRun:
             except Exception:  # noqa: BLE001 -- no local.env: the default device
                 gpu = "0"
         _base, op_dir = prepare_tree(seconds=seconds, only=only, timeout=timeout)
+        # This machine's ``python3`` need not be the interpreter holding torch (the
+        # harness often runs from a venv): the entry follows FK_CALIBRATE_PYTHON.
+        env = dict(os.environ, FK_CALIBRATE_PYTHON=sys.executable)
         try:
             with gpu_lock(gpu):
                 proc = subprocess.run(["bash", str(op_dir / "gpu_entry.sh"), "calibrate"],
                                       capture_output=True, text=True, cwd=str(op_dir),
-                                      timeout=timeout + 300)
+                                      env=env, timeout=timeout + 300)
         except subprocess.TimeoutExpired:
             return Delivered(124, "", f"the calibration exceeded {timeout + 300:.0f}s")
         except OSError as e:
@@ -335,10 +349,15 @@ class RemoteRun:
     def config(self, op_dir: Path, timeout: float):
         from forgekernel.submit.config import SubmitConfig
 
+        env = {"PYTHONUNBUFFERED": "1"}
+        # A host whose ``python3`` is not the torch interpreter is the caller's to name
+        # (local.env, or the environment this command runs in).
+        if os.environ.get(PYTHON_ENV):
+            env[PYTHON_ENV] = os.environ[PYTHON_ENV]
         return SubmitConfig(
             branch="main",
             entry_script="gpu_entry.sh",
-            env={"PYTHONUNBUFFERED": "1"},
+            env=env,
             timeout=int(timeout),
             delivery="ssh",
             op_dir=str(op_dir),

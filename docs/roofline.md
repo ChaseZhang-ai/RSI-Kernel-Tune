@@ -57,6 +57,12 @@ machine the same way, so a failed delivery is reported the way every run reports
 `run_all.py` runs each probe as its own subprocess: a probe that dies costs that probe and
 not the calibration.
 
+The job's entry runs `python3` on the machine that receives it (what the card's own entry
+scripts assume). When that is not the interpreter holding torch — a workstation run from a
+venv, a host with several Pythons — set `FK_CALIBRATE_PYTHON` to the one to use: `--local`
+sets it to the harness's own interpreter automatically, and for an ssh host it can live in
+`local.env` (it rides the job's environment).
+
 **The document** (`calibration/<gpu>-<date>.json`, not committed):
 
 ```json

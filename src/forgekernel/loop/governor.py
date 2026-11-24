@@ -146,12 +146,16 @@ def detect_phase(prompt: str) -> str:
 
 def resolve_role(role: str | None, phase: str) -> str:
     """The turn's role: explicit when the driver says so (``_TeacherView`` passes
-    ``role="teacher"``), otherwise inferred from the phase — a student prompt is a
-    student turn, anything else is treated as a teacher turn (the conservative side:
-    teacher turns are the ones the rules govern)."""
+    ``role="teacher"``), otherwise inferred from the phase.
+
+    An unrecognised title (``other``) resolves to **student**: the hard guarantee is
+    that a student turn is never stopped, so a turn this module cannot identify is left
+    alone rather than refused. Every teacher turn the driver issues carries the explicit
+    role, so this costs the rules nothing.
+    """
     if role in (AGENT_ROLE_STUDENT, AGENT_ROLE_TEACHER):
         return role
-    return AGENT_ROLE_STUDENT if phase == "student" else AGENT_ROLE_TEACHER
+    return AGENT_ROLE_TEACHER if phase not in ("student", "other") else AGENT_ROLE_STUDENT
 
 
 # -- the policy -----------------------------------------------------------------------------

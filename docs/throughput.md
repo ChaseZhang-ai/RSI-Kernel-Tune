@@ -171,6 +171,12 @@ Phases (`detect_phase`, from the prompt's first non-empty line): `judge`, `recon
 baseline-rewrite, and appended fragments like the verdict-probe brief). The title table
 is tested against every file under `meta/`, language variants included.
 
+A turn's role is the explicit `role=` when the driver passes one (`_TeacherView` does
+for every teacher turn); otherwise it comes from the phase. An `other` title resolves to
+student: a turn this module cannot identify is left alone rather than refused — the hard
+guarantee that a student turn is never stopped wins over a hypothetical unlabelled
+teacher turn.
+
 ## Reading it
 
 `forge status <run>` adds two lines when a ledger exists:

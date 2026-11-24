@@ -142,6 +142,7 @@ def test_resolve_role_prefers_the_explicit_role():
     assert gov.resolve_role("student", "diagnose") == "student"
     assert gov.resolve_role(None, "student") == "student"
     assert gov.resolve_role(None, "diagnose") == "teacher"
+    assert gov.resolve_role(None, "other") == "student"   # never stop what we cannot name
     assert gov.resolve_role("nonsense", "patch") == "teacher"
 
 

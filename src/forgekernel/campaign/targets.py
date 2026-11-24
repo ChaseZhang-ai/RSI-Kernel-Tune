@@ -312,12 +312,33 @@ def family_of(name: str) -> str:
 
 
 def load_klib_index(root: str | Path) -> dict:
-    """`kernel_library/index.json` (seedlib) as ``{id: entry}``; {} when absent."""
+    """`kernel_library/index.json` (seedlib) as ``{id: entry}``; {} when absent.
+
+    The shipped index is ``forgekernel.klib.schema``'s shape (``{"version", "entries"}``),
+    so it is read through that loader when it is installed; a hand-written fixture (a list,
+    or ``{"kernels": [...]}``) is read tolerantly either way."""
     path = Path(root) / "kernel_library" / "index.json"
     if not path.is_file():
         return {}
+    entries = None
+    try:
+        from forgekernel.klib import schema as klib_schema  # type: ignore
+    except ImportError:
+        klib_schema = None
+    if klib_schema is not None:
+        try:
+            loaded = klib_schema.load_index(path)
+        except Exception:      # noqa: BLE001 -- a fixture, or another klib version's shape
+            loaded = None
+        if loaded is not None:
+            entries = [e.to_dict() for e in loaded]
+    if entries is not None:
+        return {str(e.get("id")): e for e in entries if e.get("id")}
     obj = json.loads(path.read_text(encoding="utf-8"))
-    entries = obj.get("kernels", obj) if isinstance(obj, dict) else obj
+    if isinstance(obj, dict):
+        entries = obj.get("entries", obj.get("kernels", obj))
+    else:
+        entries = obj
     out = {}
     if isinstance(entries, list):
         for e in entries:
@@ -340,6 +361,8 @@ def starter_situation(snap: Snapshot, root: str | Path) -> dict[str, tuple[str, 
     by_problem: dict[str, list[dict]] = {}
     by_family: dict[str, list[dict]] = {}
     for e in index.values():
+        if e.get("usable_in_submission") is False:      # in the library, not a start
+            continue
         for key in (e.get("problem_keys") or []):
             by_problem.setdefault(str(key), []).append(e)
         if e.get("family"):

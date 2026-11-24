@@ -129,6 +129,27 @@ forge run .artifacts/rmsnorm_<id>                       # 中断后续跑
 
 > 启动面完整说明 → [docs/design/v1-launch.md](docs/design/v1-launch.md)
 
+## 榜单命令：SOL-ExecBench 战役链路
+
+第一波的扩展命令把回路变成一场榜单战役。每个命令是下面链路的一步；`forge <命令> --help`
+是参考手册，这张表是地图。"需要"一列说明这一步离不开什么。
+
+| # | 步骤 | 命令 | 做什么 | 需要 |
+|---|---|---|---|---|
+| 1 | 认识目标 | `forge target probe [--remote]`、`forge target check`、`forge target show`、`forge target compile-check <submission.py>` | 测开发机（GPU、锁频、软件栈、三个冒烟），与 `target/B200.json` 对照，渲染 agent 读的目标画像，并把一份候选编译到目标 GPU | `probe` 要 GPU，`compile-check` 要 `nvcc` |
+| 2 | 找起点 | `forge lib build`、`find <题>`、`show <id>`、`score <题> --card …`、`baselines <题>`、`cover`、`adapt <题> --seed …`、`fetch` | 构建并查询参考库（`kernel_library/`，134 条，来源许可证均允许），用 `forge bench` 给条目打分，生成 torch 基线，把参考改写成该题的 `submission.py` | `score`/`adapt` 要 `forge bench` |
+| 3 | 从现成 kernel 起步 | `forge init <op> --leaderboard … --init-kernel <文件> --prior <路径>`、`forge prior build <op>` | 用一份能工作的实现逐字节写入卡片 kernel 文件，把参考复制进卡片 `prior/`，写出运行经 `{PRIOR_PATH}` 读的 `prior.md` 清单 | — |
+| 4 | 量一份候选 | `forge bench <task> --candidate <kernel.py\|solution.json>`（`compare`、`best-of` 合并读数） | 让候选走回路自己的 GPU 作业：卡片自己的秒表、自己的判据、逐 workload 的 S、冷启动；`--mode target` 只做编译检查 | `--mode dev` 要 GPU |
+| 5 | 优化 | `forge run`、`forge evolve <task> --lineages N --generations G` | 两层回路；`evolve` 同时养 N 个种群，把最好的迁移给停滞者、留一个避难所，并归档每个通过正确性的版本 | 模型、GPU |
+| 6 | 调度整场战役 | `forge campaign targets`、`plan --pilot …`、`run`、`status`、`report`、`export <题>`、`pack --track <赛道>`、`sync`、`tools` | 从榜单快照算差距榜，逐题可续跑地驱动 `forge run`/`forge evolve`，本地/榜单比值台账，单赛道上传压缩包 | `run` 要模型/GPU，`plan --dataset` 要数据集 |
+| 7 | 提交与回读 | `forge board whoami`、`submit <题> <submission.py>`、`status`、`result <id>`、`publish <id>`、`submit-collection <赛道> <zip>`、`import <campaign>` | 榜单客户端：单题提交（每天前五次即时出分）、赛道压缩包（每天 2 次、约 6 小时）、回读结果并导入 campaign 台账 | 令牌只在环境变量 `SOL_EXECBENCH_TOKEN` 里 |
+
+语言：`task.toml` 接受 `cutedsl`、`cuda-sol`、`triton`；Triton 卡片用 `forge init … --language triton`
+生成，`python -m forgekernel.triton_check <kernel.py>` 是 Triton kernel 的独立目标编译检查。
+
+四个运行上下文文件（`{TARGET_PROFILE_PATH}`、`{ROOFLINE_PATH}`、`{LESSONS_PATH}`、`{PRIOR_PATH}`）
+把测得的数据带进每一条提示词；`forge target show --out FILE` 与 `forge prior build` 是写它们的地方。
+
 ## 工作原理
 
 <div align="center">

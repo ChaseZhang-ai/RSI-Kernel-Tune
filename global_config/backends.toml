@@ -1,11 +1,21 @@
 # Where a run's tokens go. One table per provider; `native` is not listed because it
 # declares nothing -- it means the agent CLI's own login state and environment decide
-# (`claude` logged in, or ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN in local.env).
-# `wire` is the protocol the provider's endpoint speaks and must match the agent CLI's
-# (`anthropic` for claude). `key_env` names the variable the key is read from (local.env or
-# the environment); the key itself never goes in a file under version control.
+# (`claude` logged in, or ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN in local.env; `codex`
+# logged in, or OPENAI_API_KEY / CODEX_API_KEY).
+# `wire` is the protocol the provider's endpoint speaks and must match the agent CLI's:
+# `anthropic` for claude, `openai` for codex. A table whose wire does not match the backend
+# is refused (`forge new` checks it before a run exists). `key_env` names the variable the
+# key is read from (local.env or the environment); the key itself never goes in a file under
+# version control, and it is handed to the CLI through FK_PROVIDER_KEY_ENV rather than on a
+# command line. The endpoint variable is the backend's own: ANTHROPIC_BASE_URL for claude,
+# OPENAI_BASE_URL for codex.
 #
 # [my-gateway]
 # base_url = "https://gateway.example.com/anthropic"
 # wire     = "anthropic"
 # key_env  = "MY_GATEWAY_API_KEY"
+#
+# [my-openai-gateway]
+# base_url = "https://gateway.example.com/openai"
+# wire     = "openai"
+# key_env  = "MY_OPENAI_KEY"

@@ -2,6 +2,24 @@
 # where the tokens go (`provider`: `native`, or a name from backends.toml) and how long one
 # turn may run. task.toml writes only the keys it changes; [agent.teacher] / [agent.student]
 # override one agent, at either layer. Absent `effort` leaves the choice to the CLI.
+#
+# `backend` names an agent CLI: one module each under src/forgekernel/agentbackends/
+# (docs/agent-backends.md). The two that ship:
+#
+#   claude   both roles. The agent policy (offline student, no ssh, no reference reads) is
+#            enforced through Claude Code's own settings and hooks.
+#   codex    the teacher only, and only on a task whose reference is readable -- Codex has no
+#            such hooks, so forge refuses `backend = "codex"` for the student and for a task
+#            with a sealed reference. Codex is not installed on this machine: the backend is
+#            written and documented but not exercised (scripts/agent-codex.sh).
+#
+# [agent.teacher]
+# backend = "codex"
+# model   = "gpt-5.5-codex"
+# effort  = "high"            # -> -c model_reasoning_effort="high"
+#
+# /goal sessions (a task with no reference, FK_AGENT_DRIVER=goal) are Claude Code only: a
+# codex agent on such a task is refused, not silently replaced.
 [agent]
 backend   = "claude"
 provider  = "native"

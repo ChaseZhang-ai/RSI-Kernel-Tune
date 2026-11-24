@@ -1,0 +1,185 @@
+{
+  "profile": "forgekernel-target-profile",
+  "version": 1,
+  "status": "draft written at step 0 from facts that were checked against the board's guide, its data and the ForgeKernel documentation; task targethw completes it (the development machine's measured values, the final wording).",
+  "gpu": "NVIDIA B200",
+  "role": "The GPU every submission is graded on. Nothing measured anywhere else is the score: when a reading taken on another machine disagrees with this file, this file is right.",
+  "compute_capability": "10.0",
+  "arch": "sm_100a",
+  "arch_notes": {
+    "cubin_portability": "An sm_100a cubin does not run on a CC 10.3 device, nor does an sm_103a cubin run here: there is no forward compatibility between the two.",
+    "family_conditional": "sm_100f is the only target whose cubin runs on both CC 10.0 and CC 10.3."
+  },
+  "sm_count": 148,
+  "sm_count_basis": "measured (ForgeKernel documentation)",
+  "memory": {
+    "capacity_gb": 192,
+    "type": "HBM3e",
+    "bandwidth_tb_s": 8.0
+  },
+  "clocks_locked": {
+    "sm_mhz": 1500,
+    "memory_mhz": 3996,
+    "locked_by": "the board, for every evaluation"
+  },
+  "tensor_throughput": {
+    "fp8_dense_pflops": 5,
+    "fp8_sparse_pflops": 10,
+    "nvfp4_dense_pflops": 10,
+    "sfu_teraexp_s": 5,
+    "tmem_kb_per_sm": 256,
+    "sfu_note": "special-function units, the instructions attention relies on (EX2 and the like)",
+    "development_machine": {
+      "gpu": "NVIDIA B300",
+      "fp8_dense_pflops": 5,
+      "fp8_sparse_pflops": 10,
+      "nvfp4_dense_pflops": 15,
+      "sfu_teraexp_s": 10.7,
+      "tmem_kb_per_sm": 256
+    }
+  },
+  "software": {
+    "basis": "the board's open-source evaluation image. The board's live image may differ; a difference, once known, is recorded here.",
+    "image": "nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04",
+    "cuda": "13.1.1",
+    "python": "3.12",
+    "torch": "2.9.0",
+    "triton": "fbtriton 3.7.1",
+    "cutlass_dsl": "nvidia-cutlass-dsl 4.4.2",
+    "cupti_python": ">= 13.0.1",
+    "driver": ">= 580",
+    "cutlass_headers": "/usr/local/cutlass"
+  },
+  "evaluation": {
+    "protocol": {
+      "warm_up_calls": 10,
+      "timed_calls": 50,
+      "l2": "flushed before every call (cold L2)",
+      "address": "a new address for the tensors on every call (random offset, a multiple of 256 B)",
+      "stopwatch": "the CUPTI kernel span of one call: from the start of its first kernel to the end of its last. Host gaps between kernels count.",
+      "reading": "the median of the timed calls",
+      "input_group": "one group is drawn for the last round and only that group is timed"
+    },
+    "correctness": [
+      "the output must be a torch.Tensor with the reference's shape and dtype",
+      "inf or NaN in the solution is wrong (only allow_negative_inf lets a -inf at the reference's position through)",
+      "an all-zero solution where the reference is non-zero is wrong",
+      "elementwise |solution - reference| <= atol + rtol * |reference|, with the tolerance the workload names"
+    ],
+    "scoring": {
+      "workload": "S = 1 / (1 + (T_k - T_SOL) / (T_b - T_SOL))",
+      "at_baseline": "T_k = T_b scores 0.5; at T_SOL it scores 1.0",
+      "failed_or_rejected": 0,
+      "problem": "the arithmetic mean of its workloads' S",
+      "t_b": "the board's own optimized PyTorch baseline for the workload: a latency it measured once and froze, not something measured during an evaluation",
+      "t_sol": "the board's speed-of-light time for the workload, computed by its SOLAR analysis ahead of time"
+    },
+    "process": "each solution is evaluated in a subprocess of its own under a hard time limit, and everything in it is compiled again: inline CUDA through torch.utils.cpp_extension, Triton and CuTe DSL just in time, torch.compile.",
+    "time_limits": {
+      "compile_s": 120,
+      "evaluation_s": 600,
+      "basis": "the defaults of the open-source evaluator; the board's live limits are not published"
+    },
+    "review": "the board checks for cheating with a validator and an LLM code review, and marks a submission it disqualifies."
+  },
+  "submission": {
+    "form": "one file, submission.py, with a top-level run(*args)",
+    "arguments": "positional only, in the order the problem defines: the inputs, then the pre-allocated outputs (destination-passing style). Argument names are not enforced; the order and the count are.",
+    "outputs": "pre-allocated by the evaluator: write the result into them",
+    "languages": [
+      "Triton",
+      "CuTe DSL",
+      "PyTorch operators (cuBLAS, cuDNN, SDPA, torch._scaled_mm, torch.compile)",
+      "CUDA C++ inline in the .py, compiled at run time through torch.utils.cpp_extension"
+    ],
+    "allowed_dependencies": [
+      "CUTLASS",
+      "CuTe DSL",
+      "Triton",
+      "cuBLAS",
+      "cuDNN",
+      "PyTorch"
+    ],
+    "not_importable": [
+      "FlashInfer",
+      "FlashAttention",
+      "FlashMLA",
+      "DeepGEMM"
+    ],
+    "not_importable_note": "to use their code, embed the source in the submission and keep its license",
+    "compile_target": "CUDA C++ is compiled for sm_100a unless the submission names its own -gencode / -arch; Triton and CuTe DSL compile for the device that runs them",
+    "collection": "a track submission is one archive with a directory per kernel, named exactly as the kernel, each holding its submission.py; only .py is accepted there, and a kernel that is missing scores 0",
+    "prohibited": [
+      "patching the timing functions",
+      "launching hidden CUDA streams outside the measured path",
+      "starting background threads during the evaluation",
+      "returning a lazy proxy instead of a concrete tensor",
+      "producing degenerate output (NaN, inf, all zeros) that does not match the reference"
+    ],
+    "prohibited_consequence": "a workload that fails correctness or is rejected scores 0; a submission caught cheating is disqualified and the score is lost"
+  },
+  "dev_machine_may_differ": [
+    {
+      "difference": "Compute capability. The target is CC 10.0 (sm_100a); the development machine is a B300, CC 10.3 (sm_103a).",
+      "effect": "A cubin built for one does not run on the other, in either direction; only sm_100f runs on both.",
+      "what_to_do": "Never name an architecture in the code: build the compile options from the device's compute capability at run time. Before a submission is exported, check that it compiles for the target without running it (Triton cross-compiled to sm_100a, inline CUDA compiled with -gencode arch=compute_100a,code=sm_100a).",
+      "status": "verified"
+    },
+    {
+      "difference": "SM count. The target has 148; the development machine has up to 160, depending on the model (not yet measured).",
+      "effect": "A persistent kernel, a grid size or a wave count tuned on the development machine may not be the best on the target.",
+      "what_to_do": "Never hard-code the SM count: query it at run time. While developing, the environment variable FK_TARGET_SMS may say 148 so that a kernel lays its grid out for the target; on the board the variable does not exist and the kernel must fall back to the query.",
+      "status": "the target's count is measured; the development machine's is to be measured"
+    },
+    {
+      "difference": "Memory. 192 GB HBM3e on the target, 288 GB on the development machine; the bandwidth is the same 8 TB/s.",
+      "effect": "A kernel that fits a working set only on the development machine does not fit on the target.",
+      "what_to_do": "Size buffers for 192 GB, never for what the development machine happens to have.",
+      "status": "verified"
+    },
+    {
+      "difference": "Dense NVFP4 throughput. 10 PFLOPS on the target, 15 on the development machine (1.5x).",
+      "effect": "A kernel bound by dense FP4 throughput looks faster on the development machine than it will score: the local estimate is optimistic.",
+      "what_to_do": "Treat the local score of such a kernel as an upper bound and let the board's result decide; record the ratio of local estimate to board result per problem.",
+      "status": "verified"
+    },
+    {
+      "difference": "SFU throughput. 5 TeraExp/s on the target, 10.7 on the development machine (about 2x).",
+      "effect": "A kernel heavy in softmax or other transcendental work looks faster on the development machine: the local estimate is optimistic.",
+      "what_to_do": "Treat the local score of such a kernel as an upper bound and let the board's result decide; record the ratio of local estimate to board result per problem.",
+      "status": "verified"
+    },
+    {
+      "difference": "Clocks. The target is locked at 1500 MHz (SM) and 3996 MHz (memory). The development machine should be locked the same way; whether it can be is not yet measured.",
+      "effect": "Different clocks change the balance between compute and bandwidth, so the best tile for one may not be the best for the other.",
+      "what_to_do": "Lock the development machine to the target's clocks before measuring; when they cannot be locked, record the clocks that held with every reading.",
+      "status": "the target's clocks are verified; the development machine's lock is to be measured"
+    },
+    {
+      "difference": "Software. The evaluation image is CUDA 13.1.1, Python 3.12, torch 2.9.0, fbtriton 3.7.1, nvidia-cutlass-dsl 4.4.2. Whether that stack compiles and runs on CC 10.3 is not yet measured, and the board's live image may differ from the open-source one.",
+      "effect": "If the board's Triton does not support sm_103, kernels can only be developed with another Triton, and what that Triton compiles is not what the board runs.",
+      "what_to_do": "Measure it on the development machine first; keep the development environment as close to the evaluation image as it can be; record every difference here.",
+      "status": "the image's versions are verified; their behaviour on CC 10.3 and the board's live image are unknown"
+    },
+    {
+      "difference": "Readings. Every reading taken on the development machine is a development reading (dev-only); the board's is the score.",
+      "effect": "The two can differ by more than the FP4 and SFU effects above.",
+      "what_to_do": "Compare a development reading with the board's result for the same submission where possible, and record the ratio per problem.",
+      "status": "verified"
+    }
+  ],
+  "rules": [
+    "The kernel is graded on an NVIDIA B200 (CC 10.0, sm_100a, 148 SMs, 8 TB/s) with its clocks locked at 1500 / 3996 MHz and the L2 cache cold on every call. That GPU, not the one you run on, is what you optimize for.",
+    "Do not use any feature that CC 10.0 lacks. Never name an architecture in the code: derive it from the device at run time.",
+    "Never hard-code the SM count: query it. FK_TARGET_SMS overrides it when it is set, and it is not set on the board.",
+    "Dense FP4 throughput and SFU throughput are higher on the development GPU: the timings of kernels bound by them are optimistic there.",
+    "The submission is one submission.py with a top-level run(*args); the arguments are positional (inputs, then pre-allocated outputs).",
+    "Allowed libraries: PyTorch operators, Triton, CuTe DSL, cuBLAS / cuDNN through torch, CUTLASS headers; CUDA C++ only inline, compiled at run time through torch.utils.cpp_extension. Everything else must be embedded as source.",
+    "Leave global state as you found it: restore any torch.backends flag you change inside run() before it returns.",
+    "The L2 cache is flushed before every timed call, and the inputs are cloned and land at a new address on every call. Never rely on cache residency across calls or on pointer identity. Minimise the bytes you move; fuse what would otherwise be separate kernels.",
+    "The stopwatch is the span from the first to the last kernel of one call: host-side gaps between kernels count. Keep the Python between launches minimal, or launch everything from one kernel.",
+    "Outputs are pre-allocated: write into them directly; do not allocate a result and copy it over.",
+    "The kernel must compute the problem's function for every legal input within the tolerance. Nothing may depend on particular input values or on how the evaluator behaves.",
+    "Every evaluation compiles from scratch: keep the cold start (import and all compilation) well inside a minute. A candidate whose cold start exceeds 100 seconds is not exported. Prefer a table of per-shape constants over run-time autotuning, and cache nothing outside the process."
+  ]
+}

@@ -98,7 +98,7 @@ class CudaForgeBackend:
         runner = self.repo_dir / "argus_runner.py"
         if not runner.exists():
             raise BackendError(
-                f"live mode needs {runner}; run scripts/bootstrap.sh then see docs/B300_RUNBOOK.md"
+                f"live mode needs {runner}; run scripts/bootstrap.sh then see docs/experiments.md"
             )
         proc = subprocess.run(
             [self._python, str(runner), "--server_type", self.server_type,

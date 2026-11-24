@@ -1,6 +1,7 @@
-# Leaderboard analysis: the objective, the live snapshot, and what it implies
+# The objective we study: the metric, its anchors, and what they imply
 
-Everything here is either (a) the public scoring algebra, or (b) a fact pulled by
+This note fixes the metric that every experiment in this repository reports against.
+Everything here is either (a) the published scoring algebra, or (b) a fact pulled by
 `scripts/fetch_board.py` from the public board API. Numbers I could not re-verify this
 session are labelled **[external]**.
 

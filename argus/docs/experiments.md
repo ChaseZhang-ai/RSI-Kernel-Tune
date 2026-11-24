@@ -1,25 +1,30 @@
-# B300 runbook: candidate plans, canary protocol, checklists
+# Experimental protocol: planned GPU studies
 
-The board scores on **B200 at a locked SM clock (1500 MHz)**. **B300 is for generation and
-iteration; the numbers that count must be measured under the board's own protocol on B200**
-(via the SOL-ExecBench harness, or the board's submission path). Do not compare B300 absolute
-timings against B200 `T_b`/`T_SOL`.
+The local experiments in [`../experiments/`](../experiments) falsify the two structural claims
+on a synthetic landscape, where they are necessarily claims about *logic*. This note turns each
+one into a measurement on hardware, states what would refute it, and orders the studies so that
+one allocation of GPU time answers every question the local work raises. Nothing here has been
+run yet; the studies are written down first, deliberately.
 
-Everything below is planned so that **one resource request covers every scheme** — the plans
-are nested (A ⊂ B ⊂ C ⊂ D), so you can stop at any tier and still have a coherent result, and
-the ordering to spend hours in is explicit at the end.
+Two constraints fix the design. The metric is measured on **B200 at a locked SM clock
+(1500 MHz)**, so **B300 is used for generation and iteration while the reported numbers come
+from the B200 protocol** (the SOL-ExecBench harness, or the submission path). And an evaluation
+is the scarce resource, so every study is costed in evaluations rather than in wall-clock hours.
+
+The studies are nested (A ⊂ B ⊂ C ⊂ D), so stopping at any tier still yields a coherent result;
+the order to spend time in is at the end.
 
 ---
 
 ## 0. Ground rules
 
-1. **Refresh first.** `python3 scripts/fetch_board.py` (snapshot rotates); re-derive anchors
-   from the vendored dataset (`<collection>/<kernel>/workload.jsonl`) — the API does not expose
-   `T_SOL`/`T_b`.
+1. **Refresh first.** `python3 scripts/fetch_board.py` (the snapshot rotates); re-derive anchors
+   from the vendored dataset (`<collection>/<kernel>/workload.jsonl`) — the public API does not
+   expose `T_SOL`/`T_b`.
 2. **Pick one collection to start.** FlashInfer-Bench (id 4, 26 kernels) is the smallest and
    the one with published baselines; L1 (94) is larger and more varied.
 3. **Verify before you score.** Every candidate goes through `verifier.verify_kernel`; a
-   candidate that does not verify is worth 0 and must never be promoted or submitted.
+   candidate that does not verify contributes nothing and is never promoted or submitted.
 4. **Log the counters.** Every evaluation must record the counter dict the fingerprint audit
    needs (`dram__bytes_*`, `sm__inst_executed.sum`, tensor pipe, stalls).
 5. **Never fit the tuned shape.** All workloads of a definition are evaluated, always.
@@ -59,12 +64,12 @@ timing (board protocol: 10 warmup + 50 iterations, L2 flushed, mean of 3 trials)
 So a 40-eval campaign on one kernel ≈ **40–90 min**; the whole FlashInfer collection at 40
 evals/kernel ≈ **25–40 GPU-hours**. Plans are costed in evals, not "$".
 
-## 3. The plans
+## 3. The studies
 
 All plans reuse the same two agents; they differ only in the boxed component. `E` = evals per
-kernel. The **kill criterion** is what must be true to abandon the tier.
+kernel. The **falsification criterion** is what must be true to abandon the tier.
 
-### Plan A — ARGUS-Verify only (safest, cheapest). **Run this first.**
+### Study A — verification alone. **Run this first.**
 * **Change vs CudaForge:** verification (C1) + the board objective. The loop stays the naive
   greedy chain otherwise. This is the minimal, highest-confidence intervention.
 * **Hypothesis:** most of the gap to a *scored* submission is that hacks and shape-specialised
@@ -73,31 +78,34 @@ kernel. The **kill criterion** is what must be true to abandon the tier.
 * **Local prediction:** `argus.cli hacklab` (0/4 hacks pass) and `argus.cli ab` claim (i)
   (0.00 → 0.65 effective).
 * **Deliverable:** a verified kernel per trial kernel + the hack families ARGUS blocks in
-  practice. **Kill if** ARGUS blocks a kernel that the real harness *accepts* (a false
+  practice. **Falsified if** ARGUS blocks a kernel that the real harness *accepts* (a false
   positive) — then tighten the contract before scaling.
 
-### Plan B — A + population search (C3)
+### Study B — A + population search (C3), and the prerequisite probe
 * **Change:** replace the chain with `search.PopulationSearch` (UCB, prereq-filtered arms,
   multi-fidelity, regression-proof parent).
-* **Hypothesis:** the chain locks itself out of the ceiling; a population of architecture bets
-  with prerequisite-aware ordering reaches it.
+* **Hypothesis (H2):** the chain locks itself out of the ceiling; a population of architecture
+  bets with prerequisite-aware ordering reaches it. The *prerequisite probe* is the part that
+  would refute the table: for each declared prerequisite, apply the mechanism out of order and
+  measure whether the ceiling actually drops irreversibly.
 * **Budget:** E=40 on the same kernels ≈ **4–8 GPU-hours**.
 * **Local prediction:** `argus.cli ab` claim (ii) — 0.7942 vs 0.9412 at equal budget.
-* **Deliverable:** per-kernel curve (verified best vs evals) for chain vs population.
-  **Kill if** the chain is never meaningfully worse on real kernels (i.e., real mechanisms are
+* **Deliverable:** per-kernel curve (verified best vs evals) for chain vs population, and a
+  measured verdict per declared prerequisite (irreversible / recoverable / commutative).
+  **Falsified if** the chain is never meaningfully worse on real kernels (i.e., real mechanisms are
   commutative and the prereq table is over-modelled) — then drop the arm filter and keep UCB.
 
-### Plan C — B + causal attribution Judge (C2)
+### Study C — B + causal attribution for the judge (C2)
 * **Change:** the Judge reads `attribution.build_judge_block` (bottleneck + delta attribution +
   bounded levers) instead of the raw counter dump; pre-screening refuses doomed mechanisms.
 * **Hypothesis:** a causal, ceiling-bounded lever list yields better proposals **per eval**, so
   fewer evals for the same score.
 * **Budget:** E=40 with profiles on the same kernels ≈ **6–10 GPU-hours**.
 * **Local prediction:** `argus.cli attrib` (attribution 3/3; 2/7 mechanisms pre-screened out).
-* **Deliverable:** evals-to-target with causal vs raw Judge context. **Kill if** the causal
+* **Deliverable:** evals-to-target with causal vs raw Judge context. **Falsified if** the causal
   block does not beat the dump on evals-to-target.
 
-### Plan D — C + full-collection campaign (the #1 attempt)
+### Study D — C at corpus scale
 * **Change:** run the whole chosen collection with ARGUS end-to-end, using
   `schedule.plan_eval_budget` and `memory.MechanismMemory` (cross-kernel priors), submitting
   per kernel.
@@ -106,16 +114,18 @@ kernel. The **kill criterion** is what must be true to abandon the tier.
 * **Budget:** FlashInfer (26 kernels) × E=40 ≈ **25–40 GPU-hours**; L1 (94) ≈ **90–140**.
 * **Deliverable:** a per-kernel verified solution set + the projected collection score from the
   anchors + the actual board result after submission.
-* **Kill if** projected collection score does not exceed the current leaderboard snapshot.
+* **Falsified if** the projected collection score does not exceed the published reference
+  score for the same collection-and-stack, or the per-kernel measurements disagree with the
+  local projection beyond the stated noise floor.
 
-### Plan E — stretch: fusion-decision search
+### Study E — stretch: fusion-decision search
 * **Change:** search over fusion decisions (which neighbouring ops to absorb), with a
-  fusion-correctness checker (`docs/IMPROVEMENTS.md` #8).
+  fusion-correctness checker (`docs/design/findings.md` #8).
 * **Hypothesis:** the real ceiling beyond mechanism tuning is structural.
 * **Budget:** open-ended; only start if D is close and hours remain.
 * **Deliverable:** a fusion-decision search prototype + correctness checker.
 
-## 4. Canary protocol (do before any full campaign)
+## 4. Calibration submission (do before Study D)
 
 1. Take one kernel that is **already strong** (high published score).
 2. Generate one ARGUS solution, verify it, and **submit it** to the board as a canary.
@@ -140,7 +150,7 @@ kernel. The **kill criterion** is what must be true to abandon the tier.
 Per kernel: the verified solution, its measured latency per workload, the projected per-kernel
 `S_k`, the `Fast1` count, the mechanism lineage (which mechanisms were accepted), the
 fingerprint flags, and the evals spent. Per campaign: the projected vs actual collection score
-and the leaderboard rank after submission.
+and the collection score after submission.
 
 ## 7. Risk register
 
@@ -149,6 +159,6 @@ and the leaderboard rank after submission.
 | B300 timing not comparable to B200 anchors | measure the final set under the board protocol; never score B300 vs B200 anchors |
 | NCU counters need elevated privileges | checklist step 4; fall back to latency-only (loses fingerprint) if unavailable |
 | the live agent runner is unwritten | write `argus_runner.py` from the dry-run prompt contracts first |
-| verification false positive blocks a good kernel | Plan A kill criterion; contract is per-operator and reviewed |
-| prereq table wrong for sm100 | Plan B kill criterion; drop the arm filter if real mechanisms are commutative |
+| verification false positive blocks a good kernel | Plan A falsification criterion; contract is per-operator and reviewed |
+| prereq table wrong for sm100 | Plan B falsification criterion; drop the arm filter if real mechanisms are commutative |
 | collection score moves | refresh snapshot; compare against the live board at submission time |

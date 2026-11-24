@@ -1,10 +1,10 @@
-# Architecture: CudaForge reproduction + ARGUS
+# Design: the reproduced loop and the three additions
 
 **Base system:** CudaForge — `https://github.com/OptimAI-Lab/CudaForge`, pin
 `eaba693fa01bdafc9848334cada2d789e240ce3f` (MIT, © 2025 Zijian Zhang).
 **Paper:** *CudaForge: An Agent Framework with Hardware Feedback for CUDA Kernel
 Optimization*, arXiv:2511.01884.
-**Vendored at:** `argus/vendor/CudaForge/` (gitignored; created by `scripts/bootstrap.sh`).
+**Vendored at:** `vendor/CudaForge/` (gitignored; created by `scripts/bootstrap.sh`).
 
 ARGUS does **not** fork CudaForge. It reproduces its loop faithfully behind a driver seam,
 so the same reasoning stack can run against a deterministic CPU mock (local validation) or
@@ -57,7 +57,7 @@ python3 -m argus.cli dryrun                 # exercises the adapter's prompts/pa
 ```
 
 The GPU parts (conda env, `ncu` running with elevated counters, one real task) are in
-`docs/B300_RUNBOOK.md`.
+`docs/experiments.md`.
 
 ---
 
@@ -149,6 +149,6 @@ src/argus/
   measured under the board's protocol.
 * `flops` and peak constants are priors; replace with measured peaks (`GpuPeak.from_file`).
 * The production adapter's live paths (agent call, `compare_and_bench`, NCU) are written but
-  only dry-run-validated; `docs/B300_RUNBOOK.md` carries the verification checklist.
+  only dry-run-validated; `docs/experiments.md` carries the verification checklist.
 * The board scores on **B200 at a locked clock**; B300 is for generation/iteration. Do not
   score B300 timings against B200 `T_b`/`T_SOL`.

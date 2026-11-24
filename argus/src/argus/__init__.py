@@ -13,7 +13,7 @@ three capabilities that CudaForge lacks:
 
 Everything in this package is pure Python (+ numpy where numerics are involved) so the
 whole reasoning stack can be validated on a CPU; only the real kernel evaluations need a
-GPU.  See ``README.md`` and ``ARCHITECTURE.md``.
+GPU.  See ``README.md`` and ``docs/design/architecture.md``.
 """
 
 from __future__ import annotations

@@ -8,7 +8,7 @@ just as importantly, "+tensor_core was refuted under a memory ceiling".
 
 This is deliberately lighter than the sibling track's knowledge-graph work: ARGUS stores
 *statistics keyed by executable conditions* and feeds them to the UCB selector, it does not
-attempt a certified knowledge base.  Honest scope note in ``docs/IMPROVEMENTS.md``.
+attempt a certified knowledge base.  Honest scope note in ``docs/design/findings.md``.
 """
 
 from __future__ import annotations

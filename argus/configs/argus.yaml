@@ -1,5 +1,5 @@
 # Example ARGUS campaign configuration.  These are the knobs a run reads; the code paths
-# that consume them are documented in ARCHITECTURE.md.  Nothing here needs a GPU to parse.
+# that consume them are documented in docs/design/architecture.md.  Nothing here needs a GPU to parse.
 
 run:
   collection: flashinfer-bench     # L1 | L2 | Quant | flashinfer-bench

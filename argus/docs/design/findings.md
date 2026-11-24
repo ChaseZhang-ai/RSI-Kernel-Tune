@@ -1,13 +1,14 @@
-# Improvement designs over CudaForge, ranked
+# Findings and design decisions
 
 Status tags: **[VALIDATED]** implemented and checked locally (tests + experiment);
 **[IMPLEMENTED, GPU-PENDING]** implemented and unit-tested, real effect needs a GPU;
 **[DESIGNED]** specified, not coded.
 
-Ranking is by expected leaderboard impact per unit of effort, given
-[`LEADERBOARD_ANALYSIS.md`](LEADERBOARD_ANALYSIS.md). The guiding fact: on the board a kernel
-that fails verification scores **0**, so a generator that optimises raw speedup is optimising a
-proxy that the board does not pay for.
+Ordered by evidential value per unit of effort, given the metric in
+[`../metric.md`](../metric.md). The organising fact: a kernel that fails verification
+contributes nothing to the metric, so a generator that optimises raw speedup is optimising a
+proxy the metric does not reward. Each item names the experiment that would refute it; the GPU
+counterparts are in [`../experiments.md`](../experiments.md).
 
 ---
 
@@ -63,7 +64,7 @@ absolute bound is not. Fit peaks per device.
 
 ---
 
-## 4. [IMPLEMENTED, GPU-PENDING] Board objective as the promotion signal
+## 4. [IMPLEMENTED, GPU-PENDING] The studied metric as the promotion signal
 
 **Mechanism.** Score candidates by the SOL score (from the anchors), not `ref/test`.
 **_Why._** It is the graded metric; raw speedup is not.
@@ -95,10 +96,10 @@ pair), so the pre-screen bounds become trustworthy and transfer across B200/B300
 The real ceiling beyond mechanism tuning: search over *which neighbouring ops to absorb*, with a
 fusion-correctness checker. Highest ceiling, highest risk; needs the graph IR.
 
-## 9. [DESIGNED] Canary submission protocol
+## 9. [DESIGNED] Calibration submission
 
 Submit one already-strong kernel first to de-risk the path (clock lock, tolerance, screening,
-B200-vs-B300), before committing a campaign. In [`B300_RUNBOOK.md`](B300_RUNBOOK.md).
+B200-vs-B300), before committing a campaign. In [`../experiments.md`](../experiments.md).
 
 ---
 
@@ -112,5 +113,5 @@ B200-vs-B300), before committing a campaign. In [`B300_RUNBOOK.md`](B300_RUNBOOK
   from SOL's own flagged classes and the ForgeKernel ablation, but a new hack class would need
   a new check.
 * **Board numbers move.** Refresh the snapshot; re-derive anchors from the dataset.
-* **Copying vs generating.** The claim to hold is "generate then verify then exceed", not
-  re-submitting a competitor's kernel.
+* **Copying vs generating.** The claim to hold is "generate, verify, then compare", not re-submitting another
+  entrant's kernel.

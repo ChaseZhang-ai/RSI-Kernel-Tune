@@ -5,7 +5,7 @@ Upstream: ``OptimAI-Lab/CudaForge`` (MIT), pinned at
 system: a *Coder* writes CUDA C++ for a KernelBench-style task and a *Judge* reads the
 Nsight-Compute counters and prescribes the single highest-impact optimisation; the two
 iterate.  This module reproduces that loop exactly enough to be a control, and adds the
-ARGUS loop on the same seam (see ``ARCHITECTURE.md`` for the paper<->code map).
+ARGUS loop on the same seam (see ``docs/design/architecture.md`` for the paper<->code map).
 
 Reproduced, faithfully
 ----------------------

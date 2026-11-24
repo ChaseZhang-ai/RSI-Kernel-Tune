@@ -108,10 +108,12 @@ prose, the milestone and a probe script never appears in a record.
 ## 3. Reading a problem: same family, self marked, ordered
 
 `query` / `render` resolve the problem from a task directory (`tasks/<op>`, which yields the
-task name, the board definition name and the suite from the frozen card) or from a bare
-problem name. A record matches the problem when `problem.name` **or** `problem.definition`
-agrees, so a run of `tasks/sol-069_rms_norm` and one of `tasks/069_rms_norm` are the same
-problem when both resolve to definition `069_rms_norm`.
+task name, the board definition name and the suite from the frozen card), from a run
+directory (`.artifacts/<op>_<id>`, read through its `run.json` and the card under
+`operators/`), or from a bare problem name. A record matches the problem when
+`problem.name` **or** `problem.definition` agrees, so a run of `tasks/sol-069_rms_norm` and
+one of `tasks/069_rms_norm` are the same problem when both resolve to definition
+`069_rms_norm`.
 
 - Only records of the **same family** are returned. A different family's numbers describe a
   different kernel. No records of the family -> an empty list, and `render` writes a minimal
@@ -185,6 +187,15 @@ name>` (plus `<stem>.reason.txt`), and rebuilds `index.json`. Nothing is deleted
 `harvest` lints the record it just extracted before filing it; one that fails is written
 straight to `_quarantine` (with its reasons) and harvest exits 2. So the lesson base never
 contains a record a reader would reject.
+
+A root that does not exist is a finding, not a clean pass (`kb_lint`'s fail-closed rule): a
+mispointed `--root` must not certify a tree nobody scanned. `lint` does not create it; the
+first `harvest` does.
+
+The path rule is deliberately strict: a real run's compile-error text often carries a
+container path (`/tmp/...`, `/root/.triton/...`), and such a record is quarantined rather
+than laundered -- the fact it carries is useful, so a human deletes the machine-specific
+part and moves the file back. That is the price of never rewriting a verbatim field.
 
 ## 6. Deliberately not collected
 

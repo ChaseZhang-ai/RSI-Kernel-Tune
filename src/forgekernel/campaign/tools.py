@@ -236,13 +236,27 @@ class Tools:
         return dict(env_for(items)) if env_for is not None else local
 
     def target_profile(self) -> Path | None:
-        """The target picture every run must carry (background §4): `target/B200.json`
-        under the repo, or `FK_TARGET_PROFILE_PATH` when the environment names one."""
+        """The target picture every run must carry (background §4): the rendered
+        ``target/B200.rendered.md`` when task targethw's renderer is installed (the file
+        the prompts describe), else ``target/B200.json`` under the repo, or
+        ``FK_TARGET_PROFILE_PATH`` when the environment names one."""
         env = os.environ.get("FK_TARGET_PROFILE_PATH", "").strip()
         if env and Path(env).is_file():
             return Path(env)
         p = Path(self.root) / TARGET_PROFILE_REL
-        return p if p.is_file() else None
+        if not p.is_file():
+            return None
+        try:
+            from forgekernel import target_profile as tp  # type: ignore
+        except ImportError:
+            return p
+        materialize = getattr(tp, "materialize", None)
+        if callable(materialize):
+            try:
+                return Path(materialize(self.root))
+            except Exception:      # noqa: BLE001 -- the JSON itself is still a profile
+                pass
+        return p
 
     def available(self) -> dict[str, bool]:
         return {k: getattr(self, k) is not None for k in

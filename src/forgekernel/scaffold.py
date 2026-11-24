@@ -78,11 +78,21 @@ def new_operator(
     kernel_file: str = "kernel.py",
     base_dir: str | Path | None = None,
     templates_root: str | Path | None = None,
+    *,
+    init_kernel: tuple[bytes, Path] | None = None,
+    priors: tuple[tuple[bytes, Path], ...] = (),
 ) -> list[Path]:
     """Create ``operators/<op>/`` from the templates. Raise if it already exists.
 
     ``templates_root``: where ``src/forgekernel/card_template`` and ``meta/`` are read from when that
-    is not ``base_dir`` (a run directory holds trees, not templates)."""
+    is not ``base_dir`` (a run directory holds trees, not templates).
+
+    ``init_kernel``: ``(bytes, origin)`` the kernel file starts with instead of nothing (a
+    warmstart: the student's first iteration improves a working implementation).
+    ``priors``: other ready-made implementations, ``(content, origin)`` pairs, copied into
+    ``prior/`` with their provenance -- inside the workspace, part of the initial commit, so
+    they are readable and never counted as the student's changes
+    (forgekernel.warmstart.seed)."""
     base = Path(base_dir) if base_dir is not None else _repo_root()
     op_dir = base / "operators" / op
     if op_dir.exists():
@@ -103,6 +113,14 @@ def new_operator(
                 {_KERNEL_TOKEN: kernel_file},
             )
         )
+    if init_kernel is not None:
+        path = op_dir / kernel_file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(init_kernel[0])
+        created.append(path)
+    if init_kernel is not None or priors:
+        from forgekernel.warmstart import seed
+        created += seed.seed_prior(op_dir, init_kernel=init_kernel, priors=list(priors))
     return created
 
 
@@ -133,11 +151,21 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("op", help="operator name (becomes operators/<op>/)")
     p.add_argument(
         "--kernel-file",
-        default="kernel.py",
-        help="path the student edits inside its workspace (fills {KERNEL_FILE})",
+        default=None,
+        help="path the student edits inside its workspace (fills {KERNEL_FILE}; default "
+             "kernel.py, or kernel.cu when --init-kernel is a .cu file)",
     )
     p.add_argument("--base-dir", default=None, help="main-repo root override (testing)")
     p.add_argument("--no-git", action="store_true", help="skip git init + initial commit")
+    p.add_argument("--init-kernel", default=None, metavar="KERNEL",
+                   help="a warmstart: this file's bytes become the card's kernel file (the "
+                        "student's first iteration improves a working implementation "
+                        "instead of an empty stub), and a copy lands in the card's prior/ "
+                        "where both agents may read it")
+    p.add_argument("--prior", action="append", default=[], metavar="PATH",
+                   help="another ready-made implementation (a file or a directory) copied "
+                        "into the card's prior/ with its provenance; --init-kernel's file "
+                        "is already one")
     lb = p.add_argument_group(
         "leaderboard card (docs/leaderboards.md): the card IS one problem of a board, "
         "judged and timed the way the board does")
@@ -231,15 +259,32 @@ def main(argv: list[str] | None = None) -> int:
     elif args.binary_ref or args.sealed_ref:
         p.error("--binary-ref / --sealed-ref need --leaderboard")
 
-    created = new_operator(args.op, kernel_file=args.kernel_file, base_dir=args.base_dir,
-                           templates_root=troot)
+    kernel_file = args.kernel_file or (
+        "kernel.cu" if args.init_kernel and _is_cuda_name(args.init_kernel) else "kernel.py")
+    init_bytes: bytes | None = None
+    init_entry = None
+    if args.init_kernel:
+        definition = problem.definition if problem is not None else None
+        init_bytes, init_entry = _check_init_kernel(
+            args, definition, dps=not args.value_returning, kernel_file=kernel_file)
+        for note in init_entry.notes:
+            print(f"[new] NOTE init kernel: {note}")
+        print(f"[new] init kernel: {init_entry.report()}")
+    if problem is not None and args.sealed_ref and (args.init_kernel or args.prior):
+        _warn_if_reference_is_readable(args)
+
+    created = new_operator(args.op, kernel_file=kernel_file, base_dir=args.base_dir,
+                           templates_root=troot,
+                           init_kernel=((init_bytes, Path(args.init_kernel))
+                                        if init_bytes is not None else None),
+                           priors=_read_priors(args.prior))
     base = Path(args.base_dir) if args.base_dir else _repo_root()
     op_dir = base / "operators" / args.op
     if problem is not None:
         from forgekernel import leaderboard as lbmod
         created += lbmod.write_card(op_dir, problem, template_eval,
                                     dps=not args.value_returning,
-                                    kernel_file=args.kernel_file)
+                                    kernel_file=kernel_file, init_kernel=init_bytes)
         for note in problem.notes:
             print(f"[new] NOTE {note}")
         if (nbytes := lbmod.blob_bytes(problem)) > lbmod.BLOB_WARN_BYTES:
@@ -250,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
         from forgekernel import binref, sealref
         ref_dir = base / "operators" / f"_{args.op}ref"
         made, _ = sealref.write_trees(op_dir, ref_dir, sol, module, template_eval,
-                                       kernel_file=args.kernel_file)
+                                       kernel_file=kernel_file)
         created += made
         binref.fill_ref_source_paths(
             op_dir, list(dict.fromkeys([str(Path(args.sealed_ref).resolve().parent)]
@@ -269,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         ref_dir = base / "operators" / f"_{args.op}ref"
         created += binref.write_ref_tree(ref_dir, op_dir, sol, module)
         entry = op_dir / "gpu_entry.sh"
-        entry.write_text(binref.guard_card_gpu_entry(entry.read_text(), module, args.kernel_file))
+        entry.write_text(binref.guard_card_gpu_entry(entry.read_text(), module, kernel_file))
         binref.fill_ref_source_paths(
             op_dir, list(dict.fromkeys([str(ref_dir / "src"), str(Path(args.binary_ref).resolve().parent)]
                                        + args.ref_source_path)))
@@ -305,6 +350,85 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[new] correctness-only workloads (judged on every run, never timed): "
                   f"{', '.join(g['name'] for g in problem.check_only)}")
     return 0
+
+
+def _is_cuda_name(name: str | Path) -> bool:
+    return Path(name).suffix in (".cu", ".cuh")
+
+
+def _read_priors(paths: list[str]) -> tuple[tuple[bytes, Path], ...]:
+    """``--prior`` as ``(content, origin)`` pairs. A directory carries no content: the
+    seeder copies the tree itself. A missing path is a refusal, not a silent skip."""
+    out = []
+    for raw in paths:
+        path = Path(raw).expanduser()
+        if not path.exists():
+            raise SystemExit(f"forge new: --prior {raw}: no such file or directory")
+        out.append((b"" if path.is_dir() else path.read_bytes(), path))
+    return tuple(out)
+
+
+def _check_init_kernel(args, definition: dict | None, *, dps: bool, kernel_file: str):
+    """Read and check ``--init-kernel``: the card's language (inferred from the source when
+    the task fixes none) plus the static entry check against the card's definition.
+
+    Returns ``(bytes, EntryCheck)``; every problem is listed at once and refuses the
+    scaffold -- a kernel that cannot be the card's kernel must fail here, not in the run."""
+    from forgekernel.warmstart import validate
+    path = Path(args.init_kernel).expanduser()
+    try:
+        raw = path.read_bytes()
+    except OSError as e:
+        raise SystemExit(f"forge new: --init-kernel {path}: cannot be read "
+                         f"({e.strerror or e})") from None
+    try:
+        source = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise SystemExit(f"forge new: --init-kernel {path}: not UTF-8 text ({e.reason})") from None
+    entry = validate.check_source(source, filename=path.name, definition=definition, dps=dps)
+    is_cuda = path.suffix in validate.CUDA_SUFFIXES
+    problems = list(entry.problems)
+    if is_cuda != kernel_file.endswith((".cu", ".cuh")):
+        want = "kernel.cu" if is_cuda else "kernel.py"
+        problems.append(f"a {path.suffix} file must be the card's {want}: a CUDA translation "
+                        f"unit and a Python kernel file are built differently, but "
+                        f"--kernel-file = {kernel_file!r}")
+    if problems:
+        raise SystemExit(f"forge new: --init-kernel {path} cannot be the card's kernel:\n"
+                         + "\n".join(f"  - {p}" for p in problems))
+    return raw, entry
+
+
+def _warn_if_reference_is_readable(args) -> None:
+    """``--sealed-ref`` seals the reference so no agent can read it; ``--init-kernel`` /
+    ``--prior`` put copies of implementations INSIDE the student's workspace. Sealing the
+    same content makes the reference readable (the timing pairing still holds, the
+    "cannot read it" premise does not), so say so."""
+    import hashlib
+    import json
+    try:
+        sealed = json.loads(Path(args.sealed_ref).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    sealed_hashes = {hashlib.sha256(str(s.get("content", "")).encode("utf-8")).hexdigest()
+                     for s in sealed.get("sources") or []}
+    if not sealed_hashes:
+        return
+    candidates = [Path(p).expanduser() for p in ([args.init_kernel] if args.init_kernel else [])]
+    candidates += [Path(p).expanduser() for p in args.prior]
+    for path in candidates:
+        files = [path] if path.is_file() else sorted(
+            p for p in path.rglob("*") if p.is_file() and "__pycache__" not in p.parts)
+        for f in files:
+            try:
+                if hashlib.sha256(f.read_bytes()).hexdigest() in sealed_hashes:
+                    print(f"[new] WARNING {f} is the same content as --sealed-ref: the copy "
+                          f"in prior/ is readable by the student, so the reference is no "
+                          f"longer sealed (the card still times it; a blackbox premise "
+                          f"does not hold)")
+                    return
+            except OSError:
+                continue
 
 
 def _leaderboard_problem(args):

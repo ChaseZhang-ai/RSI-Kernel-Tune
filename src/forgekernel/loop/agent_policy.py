@@ -3,12 +3,20 @@ reference implementation's source.
 
 The rules this module enforces:
 
-- the **student** never goes online (no WebFetch / WebSearch, no outbound traffic from
-  its shell) and never reads the reference source or a teacher-only tree;
+- the **student** goes online only when the run says so (``student_online``: task.toml
+  ``[agent] online``, default true for this project -- existing kernels may be looked up
+  and reused). Online, the network group of shell denials is lifted; the GPU-machine CLIs
+  (ssh, ``python -m forgekernel.submit``) stay denied either way. Offline, it also never
+  reads the reference source or a teacher-only tree;
 - the **teacher** may go online, but in a closed-source (blackbox) run it may read the
-  reference source neither on this machine nor on the web.
+  reference source neither on this machine nor on the web;
+- **existing implementations** (the card's ``prior/``) are inside the student's workspace,
+  so both roles read them: a warmstart starts from a working kernel on purpose
+  (forgekernel.warmstart). The manifest ``prior.md`` and the local knowledge trees are
+  named to the agents so a turn does not rediscover them; a deny entry that would shadow
+  a knowledge tree is reported.
 
-Until this existed both rules were prompt text only. Agents run as ``claude -p
+Until this existed the rules were prompt text only. Agents run as ``claude -p
 --dangerously-skip-permissions`` on the host, so nothing stopped them: an audit of earlier
 runs' agent transcripts found students fetching public implementations of the very
 operator they were building and adapting them into kernel.py, which is exactly the
@@ -87,6 +95,16 @@ KEY_DSL_SOURCE_DIRS = "dsl_source_dirs"
 # configs declared them.
 KEY_CUDA_SOURCE_DIRS = "cuda_source_dirs"
 KEY_EXTRA_ALLOW_WRITE = "agent_allow_write"
+# The warmstart context a run carries into its agents (taskcard.context_lines writes it
+# from the task): whether the student may use the network, the card's prior/ where the
+# existing implementations live, the manifest that lists them (forge prior build), and
+# the local knowledge trees this machine has. None of these is a deny list: prior/ is
+# inside the workspace, so it is readable by construction; the other two are named here
+# so the notice can point at them and so a deny entry that would shadow one is reported.
+KEY_STUDENT_ONLINE = "student_online"
+KEY_PRIOR_DIR = "prior_dir"
+KEY_PRIOR_MANIFEST = "prior_manifest"
+KEY_LOCAL_KNOWLEDGE_DIRS = "local_knowledge_dirs"
 # A source run whose ref_source_paths / ref_source_urls name OTHER implementations (earlier
 # runs on the operator, sister libraries) rather than the oracle itself: true denies them
 # to the teacher as well, the way a blackbox teacher is denied them. The oracle stays
@@ -157,6 +175,14 @@ class AgentPolicy:
     # ref_from_goal session's ledger, state and candidates (goal_ref.session_read_only_paths)
     # — the records its deliverable check and its acceptance trust.
     deny_write: tuple[Path, ...] = ()
+    # The warmstart context: where the existing implementations for this operator live in
+    # the workspace (prior/), the manifest that lists them with licences and scores, and
+    # the local knowledge trees this machine has. Reads are allowed unless denied, so these
+    # need no rule; they are carried for the notice, and a deny entry that would shadow one
+    # is reported rather than silently enforced (see _deny_paths).
+    prior_dir: Path | None = None
+    prior_manifest: Path | None = None
+    read_dirs: tuple[Path, ...] = ()
     hook_python: str = field(default_factory=lambda: sys.executable)
 
     def _teacher_denied(self) -> bool:
@@ -228,6 +254,18 @@ class AgentPolicy:
                     f"the agent's working directory {ws}\n")
                 continue
             out.append(p)
+        # A knowledge tree the run means to be readable (the manifest's "Local knowledge
+        # you may read") must not be shadowed by a deny entry: say so, loudly -- the
+        # declaration is contradictory and the agent would read a manifest naming paths
+        # it is refused.
+        for d in self.read_dirs:
+            for p in out:
+                if d == p or p in d.parents:
+                    sys.stderr.write(
+                        f"[agent-policy] warning: {d} is under the denied path {p}: the "
+                        f"knowledge tree this run lists is refused to the {role} "
+                        f"(fix [loop] ref_source_paths / local_knowledge_dirs)\n")
+                    break
         return out
 
     def _deny_write_paths(self, workspace: Path) -> list[Path]:
@@ -302,6 +340,21 @@ class AgentPolicy:
             "deny_paths": [str(p) for p in self.deny_read(role)],
         }
 
+    def _prior_notice(self) -> str:
+        """Where the existing implementations are. This is a warmstart run: both agents may
+        read them, reuse them, and the student starts from the best one -- so say where they
+        are instead of letting a turn rediscover them."""
+        parts = []
+        if self.prior_dir is not None:
+            parts.append(f"`{self.prior_dir}` holds ready-made implementations of this "
+                         f"operator (inside the workspace; they are the starting point, not "
+                         f"your own changes)")
+        if self.prior_manifest is not None:
+            parts.append(f"`{self.prior_manifest}` lists them with their sources, licences "
+                         f"and measured scores, and the rules the kernel must satisfy")
+        return ("- **Existing implementations**: " + "; ".join(parts) + ". Read, reuse and "
+                "improve them; when you take code from one, its licence must permit it.")
+
     def notice(self, role: str) -> str:
         lines = ["## Runtime environment constraints (enforced by the harness, not advice)"]
         cuda = lang_mode.is_cuda(self.language)
@@ -326,10 +379,11 @@ class AgentPolicy:
                     f"`{p}`" for p in self.dsl_source_dirs))
         elif role == ROLE_STUDENT:
             lines.append(
-                "- You may go online for public material (docs, forums, issues, papers), but "
-                "**code you see online must not be copied** into your kernel: write the implementation "
-                "yourself. Do not ssh to a GPU machine or submit jobs yourself; the GPU is reached only "
-                "through the eval commands in your brief.")
+                "- You may go online: the network denials are lifted for this turn (docs, "
+                "forums, issues, papers and public kernel sources are all reachable). Code "
+                "you reuse must be under a licence that permits it and must end up inside "
+                "your single submission file. Do not ssh to a GPU machine or submit jobs "
+                "yourself; the GPU is reached only through the eval commands in your brief.")
             lines.append(
                 "- **You may write only your own working directory**: the rest of the repo "
                 "(prompts, KB, other operator trees) is read-only to you.")
@@ -339,6 +393,11 @@ class AgentPolicy:
                 "**code you see online must not be copied** into the milestone, the KB or a probe: "
                 "describe mechanisms in your own words and certify them on the GPU per the KB rules.")
         denied = self.deny_read(role)
+        if self.prior_dir is not None or self.prior_manifest is not None:
+            lines.append(self._prior_notice())
+        if self.read_dirs:
+            lines.append("- Readable local knowledge (read-only, outside the workspace): "
+                         + ", ".join(f"`{d}`" for d in self.read_dirs))
         if denied:
             what = ("the reference implementation's source, teacher-only trees and the sealed "
                     "reference's key files" if role == ROLE_STUDENT
@@ -517,10 +576,16 @@ def declaration_problems(cfg: dict, oracle_mode: str) -> list[str]:
     lc = cfg.get("loop", {})
     problems = []
     for key in (KEY_REF_SOURCE_PATHS, KEY_REF_SOURCE_URLS, KEY_DSL_SOURCE_DIRS,
-                KEY_EXTRA_ALLOW_WRITE):
+                KEY_EXTRA_ALLOW_WRITE, KEY_LOCAL_KNOWLEDGE_DIRS):
         if key in lc and not (isinstance(lc[key], list)
                               and all(isinstance(x, str) for x in lc[key])):
             problems.append(f"[loop] {key} must be a list of strings, got {lc[key]!r}")
+    for key in (KEY_PRIOR_DIR, KEY_PRIOR_MANIFEST):
+        if key in lc and not (isinstance(lc[key], str) and lc[key].strip()):
+            problems.append(f"[loop] {key} must be a path, got {lc[key]!r}")
+    if KEY_STUDENT_ONLINE in lc and not isinstance(lc[KEY_STUDENT_ONLINE], bool):
+        problems.append(f"[loop] {KEY_STUDENT_ONLINE} must be true or false, "
+                        f"got {lc[KEY_STUDENT_ONLINE]!r}")
     if oracle_mode == ORACLE_BLACKBOX:
         for key, example in ((KEY_REF_SOURCE_PATHS, '["~/refs/vendor/DeepGEMM"]'),
                              (KEY_REF_SOURCE_URLS, '["github.com/deepseek-ai/DeepGEMM"]')):
@@ -610,4 +675,10 @@ def from_config(cfg: dict, *, oracle_mode: str, repo_root: Path,
         secret_files=secret_files_for(repo_root, op, teacher_trees),
         language=language,
         source_teacher_denies=bool(lc.get(KEY_SOURCE_TEACHER_DENIES, False)),
+        # the student's network (task.toml [agent] online -> [loop] student_online, written
+        # by taskcard); absent means offline, the pre-warmstart behaviour
+        student_online=bool(lc.get(KEY_STUDENT_ONLINE, False)),
+        prior_dir=_abs(lc[KEY_PRIOR_DIR]) if lc.get(KEY_PRIOR_DIR) else None,
+        prior_manifest=(_abs(lc[KEY_PRIOR_MANIFEST]) if lc.get(KEY_PRIOR_MANIFEST) else None),
+        read_dirs=tuple(dict.fromkeys(_abs(p) for p in lc.get(KEY_LOCAL_KNOWLEDGE_DIRS, []))),
     )

@@ -131,12 +131,34 @@ def new_board_task(argv) -> int:
             shutil.copytree(ref, d / taskcard.BOARD_DIR / "ref")
     problem = json.loads((d / taskcard.BOARD_DIR / "card" / taskcard.PROBLEM).read_text())
     language = "cuda" if str(problem.get("kernel_file", "")).endswith(".cu") else "cutedsl"
+    if "--init-kernel" in argv or any(a.startswith("--init-kernel=") for a in argv):
+        language = _warmstart_language(d, problem)
     ref_line = '\nref   = "leaderboard/ref"' if (d / taskcard.BOARD_DIR / "ref").is_dir() else ""
     (d / "task.toml").write_text(BOARD_TASK_TOML.format(
         op=op, suite=problem["suite"], language=language, ref_line=ref_line), encoding="utf-8")
     _say(f"wrote {d}/ ({problem['suite']} {problem['definition']['name']}): adjust task.toml, "
          f"then `forge new {TASKS_DIR}/{op}`")
     return 0
+
+
+def _warmstart_language(d: Path, problem: dict) -> str:
+    """The card's language for a ``--init-kernel`` card: inferred from the kernel that is
+    now in the card, and only if this build's [task] languages accept it.
+
+    The card is written before the task is, so the kernel file is already the warmstart
+    source here (scaffold refused to write it otherwise)."""
+    from forgekernel.task import LANGUAGES
+    from forgekernel.warmstart import validate
+    kf = str(problem.get("kernel_file") or "kernel.py")
+    path = d / taskcard.BOARD_DIR / "card" / kf
+    try:
+        language, _method = validate.infer_language(path.read_text(encoding="utf-8"),
+                                                    filename=kf)
+    except (OSError, UnicodeDecodeError, validate.LanguageError) as e:
+        raise SystemExit(f"forge init: --init-kernel: cannot tell the kernel's language: {e}") from None
+    if problems := validate.check_language(language, languages=LANGUAGES):
+        raise SystemExit("forge init: --init-kernel: " + "; ".join(problems))
+    return language
 
 
 # -- new / run -----------------------------------------------------------------------------
@@ -160,13 +182,18 @@ def describe(task, machine) -> str:
               else f"{task.target.ratio}x the reference")
     lines += [f"  target: {target}, {task.target.timing} timing",
               f"  agents: teacher {_agent_line(task.teacher)}, student "
-              f"{_agent_line(task.student)}",
+              f"{_agent_line(task.student)} [{_online_line(task.student)}]",
               f"  budget: {task.budget.hours:g} h, {task.budget.max_meta} teacher round(s)"
               + (f", {task.budget.reference_hours:g} h to write the reference"
                  if task.mode == MODE_GENERATE else ""),
               f"  GPU: {machine.describe()}"]
     lines += [f"  note: {n}" for n in task.notes]
     return "\n".join(lines)
+
+
+def _online_line(spec) -> str:
+    """Whether the student may use the network (task.toml [agent] online, default true)."""
+    return "online" if getattr(spec, "online", True) else "offline"
 
 
 def _agent_line(spec) -> str:

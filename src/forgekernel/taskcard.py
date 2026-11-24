@@ -56,6 +56,58 @@ def _cute_arch(arch: str) -> str:
     return to_cuda_arch(arch)
 
 
+# -- the warmstart context (loop/agent_policy.py reads these from [loop]) -----------------
+#
+# What a run can read beyond its own workspace: the card's prior/ (the existing
+# implementations the student starts from and both agents may read), the manifest
+# `forge prior build` writes, and the local knowledge trees. Paths are derived from the
+# repository's own position -- `_reference/` sits beside the base repository -- so a
+# checkout without them simply declares none of them.
+LOCAL_KNOWLEDGE = ("KernelWiki", "ncu-report-skill")
+
+
+def reference_root() -> Path:
+    """``_reference/``: it sits beside the checkout that is running the loop. Searched
+    upward a few levels, because a git worktree's parent is the worktrees directory rather
+    than the container ``_reference/`` lives in; the conventional place is returned when
+    nothing is found, and every caller filters on existence."""
+    root = repo_root()
+    for base in (root, *list(root.parents)[:3]):
+        candidate = base.parent / "_reference"
+        if candidate.is_dir():
+            return candidate
+    return root.parent / "_reference"
+
+
+def local_knowledge_dirs() -> list[Path]:
+    root = reference_root()
+    return [root / name for name in LOCAL_KNOWLEDGE if (root / name).is_dir()]
+
+
+def prior_dir(op_dir: str | Path) -> Path | None:
+    """The card's ``prior/`` (existing implementations), when the card has one."""
+    path = Path(op_dir) / "prior"
+    return path if path.is_dir() else None
+
+
+def prior_manifest_path(task) -> Path | None:
+    """``prior.md`` in the task directory, when `forge prior build` wrote one."""
+    path = Path(task.dir) / "prior.md"
+    return path if path.is_file() else None
+
+
+def context_lines(op_dir: str | Path, task) -> list[str]:
+    """The ``[loop]`` keys that carry the warmstart context to the agent policy."""
+    lines = [f"student_online = {'true' if getattr(task.student, 'online', True) else 'false'}"]
+    if (p := prior_dir(op_dir)) is not None:
+        lines.append(f"prior_dir = {json.dumps(str(p))}")
+    if (m := prior_manifest_path(task)) is not None:
+        lines.append(f"prior_manifest = {json.dumps(str(m))}")
+    if dirs := local_knowledge_dirs():
+        lines.append('local_knowledge_dirs = ' + json.dumps([str(d) for d in dirs]))
+    return lines
+
+
 def card_problem(task, check, *, reference_impl: dict | None = None,
                  tolerance: dict | None = None) -> dict:
     """problem.json for ``task`` judged by ``check`` (forgekernel.judge.Check)."""
@@ -257,6 +309,15 @@ def write_board_loop_toml(run, task, op_dir: Path, *, deny: list[str], ncu: bool
         [str(p) for p in lc.get("ref_source_paths", [])] + list(deny)))
     lc.setdefault("ref_source_urls", [])
     lc.setdefault("ref_from_goal", "off")
+    # the warmstart context: the student's network, the card's prior/, the manifest, the
+    # local knowledge trees (taskcard.context_lines)
+    lc["student_online"] = bool(getattr(task.student, "online", True))
+    if (p := prior_dir(op_dir)) is not None:
+        lc["prior_dir"] = str(p)
+    if (m := prior_manifest_path(task)) is not None:
+        lc["prior_manifest"] = str(m)
+    if dirs := local_knowledge_dirs():
+        lc["local_knowledge_dirs"] = [str(d) for d in dirs]
     if not ncu:
         lc.update(ncu_available=False, job_env_preflight="warn", timeline_probe="off",
                   stall_pricing=False, orch_census=False)
@@ -319,6 +380,7 @@ def write_loop_toml(run, task, op_dir: Path, *, deny: list[str], ncu: bool = Tru
         f"ref_from_goal_hours = {task.budget.reference_hours!r}",
         f"ref_source_paths = {json.dumps(sorted(dict.fromkeys(deny)))}",
         f"ref_source_urls  = {json.dumps(list(task.reference.deny_urls) if task.reference else [])}",
+        *context_lines(op_dir, task),
     ]
     shapes = ", ".join(f"{s.name} {json.dumps(s.axes)}" for s in task.shapes)
     if task.mode == MODE_GENERATE:

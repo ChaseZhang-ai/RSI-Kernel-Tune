@@ -34,6 +34,7 @@
     model     = "claude-opus-5-5"
     effort    = "high"
     timeout_s = 7200                # one turn's wall clock
+    online    = true                # the student may use the network (see below)
 
     [budget]
     hours           = 4             # inner-loop wall clock
@@ -46,6 +47,13 @@ and [budget] key) -> ``task.toml``. A deeper layer overrides single keys; for on
 order is global [agent], global [agent.<role>], task [agent], task [agent.<role>]. A task
 that sets [target] ratio or ms replaces both of the global layer's. Validation runs on the
 merged result.
+
+``[agent] online`` decides whether the **student** may use the network
+(``global_config/models.toml`` defaults it to true for this project): online, the shell
+denials for the network group (curl, pip install, git clone, …) are lifted; the GPU-machine
+CLIs (ssh, ``python -m forgekernel.submit``) are denied either way, and the teacher is
+online as it always was. The loop carries the value into ``loop.toml``
+(``[loop] student_online``), which is what the agent policy reads.
 
 ``shapes.json``::
 
@@ -114,7 +122,7 @@ _KEYS = {
     "task": {"language", "arch", "dev_arch"},
     "reference": {"run", "source", "blackbox", "deny", "deny_urls", "deny_modules"},
     "target": {"ratio", "ms", "timing"},
-    "agent.role": {"backend", "provider", "model", "effort", "timeout_s"},
+    "agent.role": {"backend", "provider", "model", "effort", "timeout_s", "online"},
     "budget": {"hours", "max_meta", "reference_hours"},
     "leaderboard": {"suite", "card", "ref"},
 }
@@ -182,6 +190,9 @@ class AgentSpec:
     effort: str | None
     provider: str = provider_mod.NATIVE
     timeout_s: int = 7200
+    # Whether the STUDENT may use the network (task.toml [agent] online). The teacher is
+    # online regardless; see loop/agent_policy.py for what the value lifts.
+    online: bool = True
 
 
 @dataclass(frozen=True)
@@ -703,9 +714,13 @@ def _read_agent(agents: dict, role: str, problems: list[str]) -> AgentSpec:
         problems.append(f"{where} timeout_s must be a positive number of seconds, "
                         f"got {timeout_s!r}")
         timeout_s = 1
+    online = a.get("online", True)
+    if not isinstance(online, bool):
+        problems.append(f"{where} online must be true or false, got {online!r}")
+        online = True
     return AgentSpec(backend=backend, model=model.strip(), effort=effort,
                      provider=provider if provider in known else provider_mod.NATIVE,
-                     timeout_s=int(timeout_s))
+                     timeout_s=int(timeout_s), online=online)
 
 
 def _read_budget(cfg: dict, problems: list[str]) -> Budget:

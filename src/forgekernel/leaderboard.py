@@ -1356,11 +1356,16 @@ def render_readme_section(problem: Problem, kernel_file: str = "kernel.py") -> s
 
 def write_card(op_dir: Path, problem: Problem, template_eval: Path, *,
                dps: bool = True, kernel_file: str = "kernel.py",
-               dev_arch: str | None = None) -> list[Path]:
+               dev_arch: str | None = None,
+               init_kernel: bytes | None = None) -> list[Path]:
     """Write the leaderboard files into a freshly scaffolded card.
 
     ``dev_arch`` (the task's ``[task] dev_arch``) is the architecture the card compiles and
     runs for; None keeps the board's (a card scaffolded straight from a board problem).
+    ``init_kernel``: bytes the kernel file starts with, instead of the generated stub --
+    a warmstart (`--init-kernel`): the student's first iteration improves a working
+    implementation. The bytes are written unchanged, so the card's kernel file is
+    byte-identical to the file that was passed in.
     """
     op_dir = Path(op_dir)
     lb_dir = op_dir / LEADERBOARD_DIR
@@ -1399,8 +1404,14 @@ def write_card(op_dir: Path, problem: Problem, template_eval: Path, *,
     put("eval/ncu_run.py", NCU_TEMPLATE.format(**fmt))
     put("gpu_entry.sh", render_gpu_entry(problem, dev_arch=dev_arch))
     (op_dir / "gpu_entry.sh").chmod(0o755)
-    put(kernel_file, render_kernel_stub_cuda(problem, dps=dps) if is_cuda_kernel_file(kernel_file)
-        else render_kernel_stub(problem, dps=dps))
+    if init_kernel is not None:
+        path = op_dir / kernel_file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(init_kernel)
+        created.append(path)
+    else:
+        put(kernel_file, render_kernel_stub_cuda(problem, dps=dps) if is_cuda_kernel_file(kernel_file)
+            else render_kernel_stub(problem, dps=dps))
     put("window.toml", render_window_toml(problem))
     put("loop.toml.example", render_loop_toml_example(problem, op_dir.name, kernel_file))
     readme = op_dir / "README.md"

@@ -180,3 +180,14 @@ files_touched:      <should be only {KERNEL_FILE}>
 - Use `git` on the current branch only (status/diff/log of this branch); never cross branches.
 - One iteration = one commit; how many decisions it carries is your choice; the commit message names every decision_id
   (several joined with `+`), and a bundle states the shared budget/knobs (ledger discipline).
+
+## Target device and existing implementations (run-time input; read before writing code)
+
+- Target device: `{TARGET_PROFILE_PATH}` -- the GPU your kernel is graded on and the rules the submission
+  must satisfy (file form, calling convention, allowed libraries, features that must not be used).
+  When the machine you run on differs from the target, this file is what you optimize for.
+- Existing implementations: `{PRIOR_PATH}` -- kernels already written for this operator, with sources,
+  licenses and measured scores. You may read, reuse and improve them; start from the best one unless
+  the milestone says otherwise.
+
+A path that does not exist is not an error.

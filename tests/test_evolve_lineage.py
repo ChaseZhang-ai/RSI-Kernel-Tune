@@ -375,6 +375,10 @@ def _fake_klib(tmp_path, monkeypatch, entries):
     mod = type(sys)("forgekernel.klib")
     mod.find = lambda problem, k: entries[:k]
     monkeypatch.setitem(sys.modules, "forgekernel.klib", mod)
+    # `import forgekernel.klib as klib` reaches the parent package's attribute when one is
+    # already set; patch it too, so the fake is what a test sees whatever ran before it.
+    import forgekernel
+    monkeypatch.setattr(forgekernel, "klib", mod, raising=False)
 
 
 def test_find_seeds_filters_licenses_and_missing_files(tmp_path, monkeypatch):

@@ -232,6 +232,14 @@ tests cover the orchestration with `FakeBench`.
   card it was created with — re-create it (or copy the new card in and accept a harness
   drift) to get the checks. `loop/harness_guard.py` treats the card as harness: a student
   cannot edit it away.
+* **Kernels that set global state at import time are refused.** Some published kernels
+  (two entries in `kernel_library/` — Hyra's reconstructed solutions) write
+  `torch.backends.cuda.matmul.allow_tf32 = True`, `torch.set_float32_matmul_precision` and
+  `os.environ.setdefault("TORCHINDUCTOR_COMPILE_THREADS", …)` at module level. Those are
+  exactly what checks B and E exist for: imported into the card's process they change what
+  the reference computes. A candidate derived from such a kernel must have those lines
+  removed (or moved into a `run()` try/finally that restores them) before export —
+  `forge export` names the lines.
 * **Abusing a loose tolerance** (a definition whose tolerance is so wide that an
   approximation passes) and **semantic cheating** that is statistically correct (a
   different algorithm that passes every draw) are not detectable by any of this; the

@@ -2758,18 +2758,20 @@ class _integrity_rng:
     """Seed the RNGs for one redraw and put them back afterwards, so the suite's own
     seed-200 sequence (and anything after it) never moves."""
 
-    def __init__(self, seed: int):
+    def __init__(self, seed: int, device="cpu"):
         self.seed = seed
+        self.device = device
 
     def __enter__(self):
         self.state = None
         try:
             self.state = (random.getstate(), torch.random.get_rng_state())
-            if torch.cuda.is_available():
+            self.cuda_device = torch.device(self.device).type == "cuda"
+            if self.cuda_device and torch.cuda.is_available():
                 self.cuda = torch.cuda.get_rng_state_all()
             random.seed(self.seed)
             torch.manual_seed(self.seed)
-            if torch.cuda.is_available():
+            if self.cuda_device and torch.cuda.is_available():
                 torch.cuda.manual_seed_all(self.seed)
         except Exception:  # noqa: BLE001
             self.state = None
@@ -2780,7 +2782,8 @@ class _integrity_rng:
             if self.state is not None:
                 random.setstate(self.state[0])
                 torch.random.set_rng_state(self.state[1])
-            if torch.cuda.is_available() and getattr(self, "cuda", None) is not None:
+            if getattr(self, "cuda_device", False) and torch.cuda.is_available() \
+                    and getattr(self, "cuda", None) is not None:
                 torch.cuda.set_rng_state_all(self.cuda)
         except Exception:  # noqa: BLE001
             pass
@@ -2812,7 +2815,7 @@ def _fresh_reason(problem: dict) -> str | None:
 
 def _fresh_input_set(problem: dict, seed: int, device) -> list:
     """One input set of the same workload, drawn the card's way with a different seed."""
-    with _integrity_rng(seed):
+    with _integrity_rng(seed, device):
         if problem["suite"] == SUITE_TASK:
             group = dict(task_groups(problem)[-1])
             group["seed"] = int(group.get("seed", 0)) + seed
@@ -2966,7 +2969,7 @@ def _timer_consistency(problem: dict, impl, dps: bool, device, inp: list) -> dic
     A warning by default (the suites' own timer is the gate); FK_INTEGRITY_STRICT=1 makes
     it a failure.  It runs after the timed window on the same input set.
     """
-    if not (torch.cuda.is_available() and torch.device(device).type == "cuda"):
+    if torch.device(device).type != "cuda" or not torch.cuda.is_available():
         return {"status": "unavailable", "events_ms": None, "span_ms": None,
                 "wall_ms": None, "reason": "no CUDA device"}
     outs = allocate_outputs(problem, device) if dps else []

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import shutil
+import tomllib
 from pathlib import Path
 
 import pytest
 
 from forgekernel import task as task_mod
-from forgekernel.task import TaskError, load_task
+from forgekernel.task import TaskError, dump_task_toml, load_task, read_task_toml
 
 SHAPES = [{"name": "small", "axes": {"m": 128, "n": 256}},
           {"name": "large", "axes": {"m": 4096, "n": 256}}]
@@ -244,3 +245,62 @@ def test_bad_deny_urls_and_modules_are_refused(tmp_path, line, msg):
     toml = WITH_REF + line + "\n"
     with pytest.raises(TaskError, match=msg):
         load_task(_task(tmp_path, toml, files=REF_FILES), kb_root=_kb(tmp_path))
+
+
+# -- the throughput governor's [budget] keys ------------------------------------------------
+
+def test_budget_throughput_keys_take_their_defaults(tmp_path):
+    t = load_task(_task(tmp_path, MINIMAL), kb_root=_kb(tmp_path))
+    assert (t.budget.teacher_share, t.budget.min_student_iters,
+            t.budget.max_teacher_turns_per_phase) == (0.5, 5, 12)
+
+
+def test_budget_throughput_keys_are_read(tmp_path):
+    toml = (MINIMAL + "[budget]\nteacher_share = 0.25\nmin_student_iters = 2\n"
+            "max_teacher_turns_per_phase = 4\n")
+    t = load_task(_task(tmp_path, toml), kb_root=_kb(tmp_path))
+    assert (t.budget.teacher_share, t.budget.min_student_iters,
+            t.budget.max_teacher_turns_per_phase) == (0.25, 2, 4)
+
+
+def test_budget_throughput_keys_round_trip_through_dump_task_toml(tmp_path):
+    toml = (MINIMAL + "[budget]\nteacher_share = 0.25\nmin_student_iters = 2\n"
+            "max_teacher_turns_per_phase = 4\n")
+    d = _task(tmp_path, toml)
+    cfg = read_task_toml(d)
+    dumped = dump_task_toml(cfg)
+    again = tomllib.loads(dumped)
+    assert again == cfg
+    assert again["budget"]["teacher_share"] == 0.25
+    d2 = tmp_path / "tasks" / "again"
+    d2.mkdir(parents=True)
+    (d2 / "task.toml").write_text(dumped)
+    (d2 / "description.md").write_text("out = x\n")
+    (d2 / "shapes.json").write_text(json.dumps(SHAPES))
+    t = load_task(d2, kb_root=_kb(tmp_path))
+    assert (t.budget.teacher_share, t.budget.min_student_iters,
+            t.budget.max_teacher_turns_per_phase) == (0.25, 2, 4)
+
+
+@pytest.mark.parametrize("line, msg", [
+    ("teacher_share = 0", "teacher_share must be a number in"),
+    ("teacher_share = 1.5", "teacher_share must be a number in"),
+    ('teacher_share = "half"', "teacher_share must be a number in"),
+    ("min_student_iters = -1", "min_student_iters must be a non-negative integer"),
+    ("min_student_iters = 1.5", "min_student_iters must be a non-negative integer"),
+    ("min_student_iters = true", "min_student_iters must be a non-negative integer"),
+    ("max_teacher_turns_per_phase = 0", "max_teacher_turns_per_phase must be a positive"),
+    ("max_teacher_turns_per_phase = false", "max_teacher_turns_per_phase must be a positive"),
+])
+def test_bad_budget_throughput_values_are_refused(tmp_path, line, msg):
+    with pytest.raises(TaskError, match=msg):
+        load_task(_task(tmp_path, MINIMAL + "[budget]\n" + line + "\n"),
+                  kb_root=_kb(tmp_path))
+
+
+def test_there_is_no_budget_token_key(tmp_path):
+    """The user's constraint is explicit: tokens are not a limit. A token key in
+    [budget] is a mistake, not an extension point."""
+    with pytest.raises(TaskError, match="unknown key 'max_tokens'"):
+        load_task(_task(tmp_path, MINIMAL + "[budget]\nmax_tokens = 1000000\n"),
+                  kb_root=_kb(tmp_path))

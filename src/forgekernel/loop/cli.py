@@ -45,6 +45,7 @@ from forgekernel.loop.agentctx import inspect_agent_cmd
 from forgekernel.loop import agent_policy as agent_policy_mod
 from forgekernel.loop import dsl_source as dsl_source_mod
 from forgekernel.loop import goal_ref as goal_ref_mod
+from forgekernel.loop import governor as governor_mod
 from forgekernel.loop import harness_guard, precision_gate
 from forgekernel.loop.agent_policy import AgentPolicy
 from forgekernel.loop.agentctx import window_findings as context_window_findings
@@ -2170,6 +2171,17 @@ def _resolve_ref_pricing(cfg: dict, root, recon_dir, recon_backend, make_backend
     return ref_price_dir, make_backend(ref_price_op, ref_price_dir), ref_price_app
 
 
+def _govern_backend(backend, *, policy, status_path):
+    """Wrap a loop backend in the throughput governor (loop/governor.py).
+
+    ``policy`` is None when FK_GOVERNOR=off; the backend is then returned untouched.
+    One ledger per run, next to the student's status.jsonl, shared by the loop and the
+    reconnaissance backend so the teacher's wall clock is counted across both.
+    """
+    return governor_mod.govern(backend, policy,
+                               governor_mod.ledger_path(status_path))
+
+
 def _main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="forge <op> loop",
@@ -2673,9 +2685,19 @@ def _main(argv: list[str] | None = None) -> int:
             _student_denied_oracle(oracle_mode, args.oracle, cfg, declared_oracle)),
         dsl_source_dirs_default=dsl_source.dirs if dsl_source.defaulted else (),
         language=language)
+    # The throughput governor's policy: [budget] keys from launch.run_loop as JSON
+    # (FK_BUDGET_POLICY) over the CLI's own defaults; None under FK_GOVERNOR=off.
+    try:
+        gov_policy = governor_mod.policy_from_env(
+            hours=args.hours, target_ms=target_ms, gate_window=gate_window,
+            status_path=status_path)
+    except ValueError as e:
+        sys.stderr.write(f"[loop] error: {e}\n")
+        return 2
     backend = RealBackend(args.op, workspace, args.agent_cmd, args.git_name, args.git_email,
                           teacher_agent_cmd=args.teacher_agent_cmd, agent_policy=policy,
                           agent_heartbeat_s=args.agent_heartbeat_s)
+    backend = _govern_backend(backend, policy=gov_policy, status_path=status_path)
     try:
         backend.job_env_files = resolve_job_env_files(cfg, op_dir,
                                                       kernel_file=args.kernel_file)
@@ -2735,6 +2757,10 @@ def _main(argv: list[str] | None = None) -> int:
                                         teacher_agent_cmd=args.teacher_agent_cmd,
                                         agent_policy=policy,
                                         agent_heartbeat_s=args.agent_heartbeat_s)
+            # The same policy and the same ledger as the loop backend: reconnaissance
+            # is teacher time and can be most of it (issue #8).
+            recon_backend = _govern_backend(recon_backend, policy=gov_policy,
+                                            status_path=status_path)
             recon_path = recon_dir / "report.md"
         elif oracle_mode == ORACLE_BLACKBOX:
             sys.stderr.write(

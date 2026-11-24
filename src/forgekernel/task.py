@@ -40,6 +40,10 @@
     hours           = 4             # inner-loop wall clock
     max_meta        = 3             # outer (teacher patch) rounds
     reference_hours = 8             # generating a reference when there is none
+    # the throughput governor (loop/governor.py); no token key exists on purpose
+    teacher_share   = 0.5           # teacher wall clock cap while the student is short
+    min_student_iters = 5           # ...of this many iterations
+    max_teacher_turns_per_phase = 12  # consecutive teacher turns before a soft brake
 
 Configuration is read at two layers and merged in order, as ForgeTrain does:
 ``global_config/`` (models.toml gives every [agent] key a value, loop.toml every [target]
@@ -123,7 +127,8 @@ _KEYS = {
     "reference": {"run", "source", "blackbox", "deny", "deny_urls", "deny_modules"},
     "target": {"ratio", "ms", "timing"},
     "agent.role": {"backend", "provider", "model", "effort", "timeout_s", "online"},
-    "budget": {"hours", "max_meta", "reference_hours"},
+    "budget": {"hours", "max_meta", "reference_hours", "teacher_share",
+               "min_student_iters", "max_teacher_turns_per_phase"},
     "leaderboard": {"suite", "card", "ref"},
 }
 _KEYS["agent"] = _KEYS["agent.role"] | set(ROLES)
@@ -200,6 +205,14 @@ class Budget:
     hours: float
     max_meta: int
     reference_hours: float
+    # The throughput governor (loop/governor.py): while the student has fewer than
+    # min_student_iters iterations, teacher turns get a soft brake at
+    # hours x teacher_share and are refused at 1.25x that; a phase may run
+    # max_teacher_turns_per_phase consecutive teacher turns before the soft brake and
+    # four more before the refusal. No token key exists — tokens are not the constraint.
+    teacher_share: float = 0.5
+    min_student_iters: int = 5
+    max_teacher_turns_per_phase: int = 12
 
 
 @dataclass(frozen=True)
@@ -734,6 +747,24 @@ def _read_budget(cfg: dict, problems: list[str]) -> Budget:
     if not isinstance(max_meta, int) or isinstance(max_meta, bool) or max_meta < 0:
         problems.append(f"[budget] max_meta must be a non-negative integer, got {max_meta!r}")
         max_meta = 0
+    share = b.get("teacher_share", 0.5)
+    if (not isinstance(share, (int, float)) or isinstance(share, bool)
+            or not (0.0 < float(share) <= 1.0)):
+        problems.append(f"[budget] teacher_share must be a number in (0, 1], got {share!r}")
+        share = 0.5
+    min_iters = b.get("min_student_iters", 5)
+    if not isinstance(min_iters, int) or isinstance(min_iters, bool) or min_iters < 0:
+        problems.append(f"[budget] min_student_iters must be a non-negative integer, "
+                        f"got {min_iters!r}")
+        min_iters = 5
+    max_turns = b.get("max_teacher_turns_per_phase", 12)
+    if not isinstance(max_turns, int) or isinstance(max_turns, bool) or max_turns < 1:
+        problems.append(f"[budget] max_teacher_turns_per_phase must be a positive integer, "
+                        f"got {max_turns!r}")
+        max_turns = 12
     return Budget(hours=float(hours) if _positive(hours) else 0.0,
                   max_meta=int(max_meta),
-                  reference_hours=float(ref_hours) if _positive(ref_hours) else 0.0)
+                  reference_hours=float(ref_hours) if _positive(ref_hours) else 0.0,
+                  teacher_share=float(share),
+                  min_student_iters=int(min_iters),
+                  max_teacher_turns_per_phase=int(max_turns))

@@ -45,7 +45,6 @@ from __future__ import annotations
 import ast
 import json
 import re
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -317,15 +316,23 @@ def workload_shape_key(definition: dict,
 
 _FILE_DOC = '''"""{name} -- per-workload dispatch (forge shapes compose, ForgeKernel).
 
-One file, top-level ``run(*args)``: the board's contract is argument order and count, and
-the outputs arrive pre-allocated after every input (DPS). The routing key is the shape
-tuple of the input tensors, looked up exactly; a shape the table does not name runs the
-fallback, and any exception runs the definition's own eager reference -- so a shape a
-specialised kernel mishandles costs that workload's score, never the whole problem's.
+One file, top-level ``run(*args)``: the board's contract is argument order and count.
+{contract}
+
+The routing key is the shape tuple of the input tensors, looked up exactly; a shape the
+table does not name runs the fallback, and any exception runs the definition's own eager
+reference -- so a shape a specialised kernel mishandles costs that workload's score, never
+the whole problem's.
 
 {definition}: {n_workloads} timed workload(s), routed to
 {routing}
 """'''
+
+
+_CONTRACT_DPS = ("The outputs arrive pre-allocated after every input (DPS) and are written "
+                 "in place.")
+_CONTRACT_VALUE = ("The outputs are returned, allocated the way the reference allocates "
+                   "them.")
 
 
 _REFERENCE_BLOCK = '''
@@ -342,39 +349,42 @@ _REFERENCE_BLOCK = '''
 def _fill_block(problem: dict) -> str:
     outputs = list((problem.get("definition") or {}).get("outputs") or {})
     dps = bool(problem.get("dps", True))
-    lines = [f"{OUTPUTS_NAME} = {outputs!r}", f"{DPS_NAME} = {dps!r}"]
-    if dps:
-        lines += [
-            "",
-            "",
-            "def _fk_write(outs, values):",
-            '    """The reference\'s return value into the pre-allocated outputs."""',
-            "    import torch",
-            "    if isinstance(values, dict):",
-            f"        values = [values[n] for n in {OUTPUTS_NAME}]",
-            "    elif not isinstance(values, (tuple, list)):",
-            "        values = [values]",
-            "    if len(values) != len(outs):",
-            '        raise RuntimeError("the reference returned %d value(s) for %d '
-            'output(s)"',
-            "                           % (len(values), len(outs)))",
-            "    for dst, value in zip(outs, values):",
-            '        if not (hasattr(dst, "copy_") and hasattr(dst, "dtype")):',
-            '            raise RuntimeError("a pre-allocated output is not a tensor")',
-            "        dst.copy_(value if isinstance(value, torch.Tensor)",
-            "                  else torch.as_tensor(value))",
-            "",
-            "",
-            f"def {EAGER_RUN}(*args):",
-            f"    n = len({OUTPUTS_NAME})",
-            "    outs = list(args[-n:]) if n else []",
-            "    ins = list(args[:len(args) - n]) if n else list(args)",
-            f"    _fk_write(outs, {REFERENCE_RUN}(*ins))",
-            "    return None",
-        ]
-    else:
+    if not dps:
+        # No outputs ride the arguments: every argument is an input, and the entry
+        # returns the results. The constants stay (they document the card's convention).
+        lines = [f"{OUTPUTS_NAME} = []", f"{DPS_NAME} = False"]
         lines += ["", "", f"def {EAGER_RUN}(*args):",
                   f"    return {REFERENCE_RUN}(*args)"]
+        return "\n".join(lines) + "\n"
+    lines = [f"{OUTPUTS_NAME} = {outputs!r}", f"{DPS_NAME} = True"]
+    lines += [
+        "",
+        "",
+        "def _fk_write(outs, values):",
+        '    """The reference\'s return value into the pre-allocated outputs."""',
+        "    import torch",
+        "    if isinstance(values, dict):",
+        f"        values = [values[n] for n in {OUTPUTS_NAME}]",
+        "    elif not isinstance(values, (tuple, list)):",
+        "        values = [values]",
+        "    if len(values) != len(outs):",
+        '        raise RuntimeError("the reference returned %d value(s) for %d '
+        'output(s)"',
+        "                           % (len(values), len(outs)))",
+        "    for dst, value in zip(outs, values):",
+        '        if not (hasattr(dst, "copy_") and hasattr(dst, "dtype")):',
+        '            raise RuntimeError("a pre-allocated output is not a tensor")',
+        "        dst.copy_(value if isinstance(value, torch.Tensor)",
+        "                  else torch.as_tensor(value))",
+        "",
+        "",
+        f"def {EAGER_RUN}(*args):",
+        f"    n = len({OUTPUTS_NAME})",
+        "    outs = list(args[-n:]) if n else []",
+        "    ins = list(args[:len(args) - n]) if n else list(args)",
+        f"    _fk_write(outs, {REFERENCE_RUN}(*ins))",
+        "    return None",
+    ]
     return "\n".join(lines) + "\n"
 
 
@@ -521,6 +531,8 @@ def dispatcher_source(problem: dict, plan: dict, routes: Routes, *,
     parts = [_FILE_DOC.format(name=str(definition.get("name") or "submission"),
                               definition=str(definition.get("name") or "?"),
                               n_workloads=len(plan.get("workloads") or []),
+                              contract=(_CONTRACT_DPS if problem.get("dps", True)
+                                        else _CONTRACT_VALUE),
                               routing="\n".join(routing_lines) or "  (nothing)")]
     for label, kind in used.items():
         if label == eager_label:
@@ -1103,7 +1115,3 @@ def _f(v) -> str:
         return f"{float(v):.6g}"
     except (TypeError, ValueError):
         return "-"
-
-
-def now_stamp() -> str:
-    return time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())

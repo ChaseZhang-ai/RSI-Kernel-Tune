@@ -210,7 +210,7 @@ def cmd_compose(argv: list[str]) -> int:
     p.add_argument("--json", default=None, help="also write the routing table here")
     args = p.parse_args(argv)
     try:
-        doc = _load_plan(args.plan)
+        doc = _load_plan(args.plan, allow_auto=True)
     except (ShapesError, FileNotFoundError, ValueError) as e:
         return _fail(str(e))
     opts = compose_mod.ComposeOptions(
@@ -253,11 +253,13 @@ def cmd_compose(argv: list[str]) -> int:
 
 # --- shared -------------------------------------------------------------------------------
 
-def _load_plan(path: str) -> dict:
+def _load_plan(path: str, *, allow_auto: bool = False) -> dict:
+    """The plan to act on: a plan.json, a task directory's plan, or (compose only) a plan
+    built on the fly from the defaults -- which is how campaign calls it."""
     p = Path(path).expanduser()
     if p.is_dir():
         doc, used = plan_mod.plan_for(p)
-        if used is None:
+        if used is None and not allow_auto:
             raise ShapesError(f"{p}: no plan.json under {p / PRODUCT_DIR} (run "
                               f"`forge shapes plan {path}` first)")
         return doc

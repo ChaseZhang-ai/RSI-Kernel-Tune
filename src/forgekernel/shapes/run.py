@@ -36,7 +36,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from forgekernel.shapes import SCHEMA, ShapesError
+from forgekernel.shapes import SCHEMA
 from forgekernel.shapes import cluster as cluster_mod
 from forgekernel.shapes import plan as plan_mod
 
@@ -48,7 +48,6 @@ STATUSES = (STATUS_PLANNED, STATUS_RUNNING, STATUS_SOLVED, STATUS_FAILED)
 
 RUNS_FILE = "runs.json"
 EXIT_OK = 0
-EXIT_FAILED = 1
 EXIT_USAGE = 2
 EXIT_UNFINISHED = 3          # a cluster failed, or the budget ran out: resumable
 
@@ -408,21 +407,6 @@ def _step(spawn, argv: list[str], *, root: Path, env: dict | None) -> tuple[int,
 def _tail(output: str, limit: int = 400) -> str:
     text = (output or "").strip()
     return text[-limit:] if len(text) > limit else text
-
-
-def _plan_hours(plan: dict, root: Path, name: str) -> float:
-    """The cluster task's configured loop hours (its task.toml, else the global default)."""
-    import tomllib
-
-    for path in (root / "tasks" / name / "task.toml", root / "global_config" / "loop.toml"):
-        try:
-            cfg = tomllib.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        hours = (cfg.get("budget") or {}).get("hours")
-        if isinstance(hours, (int, float)) and hours > 0:
-            return float(hours)
-    return 4.0
 
 
 def format_runs(runs: Runs, plan: dict | None = None) -> str:

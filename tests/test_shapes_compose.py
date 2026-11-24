@@ -380,6 +380,39 @@ def test_compose_without_any_candidate_says_what_to_do(tmp_path):
     assert res.routes.routes[0].winner == "eager"
 
 
+def test_a_value_returning_card_gets_a_value_returning_dispatcher(tmp_path):
+    task = _small_task(tmp_path)
+    path = task / "eval/leaderboard/problem.json"
+    card = json.loads(path.read_text(encoding="utf-8"))
+    card["dps"] = False
+    path.write_text(json.dumps(card, indent=1), encoding="utf-8")
+    doc = P.build_plan(task).as_json()
+    product = Path(doc["product_dir"])
+    value_kernel = "def run(A, B):\n    return A * 0.0 + 2.0\n"
+    _solution(product / "clusters" / "small-c0" / "solution.json", value_kernel,
+              "small-c0")
+    _solution(product / "clusters" / "small-c1" / "solution.json", value_kernel,
+              "small-c1")
+
+    def script(call):
+        stem = Path(call.candidate).stem
+        if stem == "small-c0":
+            return _reading({"wl0": 0.1, "wl1": 0.1, "wl2": 0.1, "wl3": 0.1})
+        return _reading({"wl0": 1.0, "wl1": 1.0, "wl2": 1.0, "wl3": 1.0})
+
+    res = CC.compose_task(task, plan_doc=doc, opts=CC.ComposeOptions(
+        bench=FakeBench(script=script), with_lib=False, with_versions=False))
+    assert res.ok, res.error
+    mod = _import(res.submission)
+    A = torch.randn(2, 4)
+    B = torch.randn(4, 4)
+    out = mod.run(A, B)                          # no outputs in the arguments: returned
+    assert torch.all(out == 2.0)                 # routed to small-c0
+    A7 = torch.randn(7, 4)
+    assert torch.allclose(mod.run(A7, B), A7 @ B)   # unknown shape: the reference
+    assert "_FK_OUTPUTS = []" in res.submission.read_text(encoding="utf-8")
+
+
 # --- the validators ----------------------------------------------------------------------
 
 def test_validate_submission_findings(tmp_path):

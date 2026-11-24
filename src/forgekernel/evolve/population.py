@@ -122,11 +122,25 @@ def context_env(mapping: dict) -> dict[str, str]:
 
 
 def default_target_profile(repo: Path) -> Path | None:
+    """The target profile a lineage's runs carry: the rendered profile when task targethw's
+    renderer is installed (the file the prompts describe), else ``target/B200.json``."""
     env = os.environ.get("FK_TARGET_PROFILE_PATH", "").strip()
     if env and Path(env).is_file():
         return Path(env).expanduser().resolve()
     p = Path(repo) / "target" / "B200.json"
-    return p.resolve() if p.is_file() else None
+    if not p.is_file():
+        return None
+    try:
+        from forgekernel import target_profile as tp  # type: ignore
+    except ImportError:
+        return p.resolve()
+    materialize = getattr(tp, "materialize", None)
+    if callable(materialize):
+        try:
+            return Path(materialize(repo)).resolve()
+        except Exception:          # noqa: BLE001 -- the JSON itself is still a profile
+            pass
+    return p.resolve()
 
 
 # -- default process plumbing ------------------------------------------------------------

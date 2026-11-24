@@ -101,15 +101,50 @@ def record_results(rows: list[dict], ledger_path: str | Path) -> int:
         if not name:
             continue
         score = row.get("mean_s", row.get("sol_score", row.get("score")))
-        led.append({"event": "board", "problem": str(name), "track": row.get("track") or "",
-                    "kernel_id": row.get("kernel_id"),
-                    "source": BOARD, "candidate": row.get("candidate") or "",
-                    "sha": row.get("sha") or "", "mean_s": _f(score),
-                    "fast1": row.get("fast1"), "correct": row.get("correct", True),
-                    "confidence": list(row.get("confidence") or ["board"]),
-                    "note": row.get("note") or "", "url": row.get("url") or ""})
+        entry = {"event": "board", "problem": str(name), "track": row.get("track") or "",
+                 "kernel_id": row.get("kernel_id"),
+                 "source": BOARD, "candidate": row.get("candidate") or "",
+                 "sha": row.get("sha") or "", "mean_s": _f(score),
+                 "fast1": row.get("fast1"), "correct": row.get("correct", True),
+                 "confidence": list(row.get("confidence") or ["board"]),
+                 "note": row.get("note") or "", "url": row.get("url") or ""}
+        if row.get("submission_id") is not None:      # the board's own id, when there is one
+            entry["submission_id"] = row.get("submission_id")
+        led.append(entry)
         n += 1
     return n
+
+
+def record_board_readback(campaign_dir: str | Path, records: list[dict]) -> None:
+    """What ``forge board import`` calls when campaign is installed (its soft dependency,
+    ``forgekernel/board/importer.py``): each board read-back record becomes one ``board``
+    event of this campaign's ledger, so one ledger carries the local readings and the
+    board's own, and ``ratios`` can pair them per problem.
+
+    ``records`` are ``board.importer.build_record``'s dicts (``problem``, ``sol_score``,
+    ``kernel_id``, ``submission_id``, ``fast_1_count`` ...)."""
+    rows = []
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        row = {
+            "problem": rec.get("problem") or rec.get("kernel_name") or "",
+            "mean_s": rec.get("sol_score", rec.get("mean_s")),
+            "track": rec.get("track") or "",
+            "kernel_id": rec.get("kernel_id"),
+            "submission_id": rec.get("submission_id"),
+            "fast1": rec.get("fast_1_count", rec.get("fast1")),
+            "correct": rec.get("is_correct", True),
+            "confidence": ["board"],
+            "note": rec.get("note") or "",
+            "url": rec.get("url") or "",
+        }
+        if rec.get("candidate"):
+            row["candidate"] = rec["candidate"]
+        if rec.get("sha"):
+            row["sha"] = rec["sha"]
+        rows.append(row)
+    record_results(rows, Path(campaign_dir) / LEDGER_FILE)
 
 
 def _f(v):

@@ -183,3 +183,28 @@ def test_a_track_and_problem_helper():
     snap = sync.targets.load_snapshot(H.SNAPSHOT)
     assert sync.track_of_problem(snap, H.L1_PROBLEM) == "l1"
     assert sync.track_of_problem(snap, "not-a-problem") is None
+
+
+def test_the_board_readback_hook_writes_one_board_event_per_record(tmp_path):
+    """`forge board import` calls this when campaign is installed (board/importer.py):
+    the board's read-back records land in the same ledger as the local readings."""
+    campaign = tmp_path / "camp"
+    campaign.mkdir()
+    sync.record_board_readback(campaign, [
+        {"problem": H.L1_PROBLEM, "sol_score": 0.83, "kernel_id": 69,
+         "submission_id": 4242, "fast_1_count": 16, "is_correct": True},
+        {"problem": "", "sol_score": 0.1},                    # no problem: skipped
+    ])
+    entries = sync.Ledger(campaign / sync.LEDGER_FILE).entries()
+    assert [e["event"] for e in entries] == ["board"]
+    e = entries[0]
+    assert (e["problem"], e["mean_s"], e["kernel_id"], e["submission_id"], e["fast1"]) == \
+        (H.L1_PROBLEM, 0.83, 69, 4242, 16)
+    assert e["source"] == sync.BOARD and e["correct"] is True
+    # the pair a campaign report needs: one dev reading and this board reading
+    sync.Ledger(campaign / sync.LEDGER_FILE).append(
+        {"event": "bench", "problem": H.L1_PROBLEM, "mean_s": 0.8, "source": sync.DEV,
+         "confidence": ["dev-only"]})
+    doc = sync.ratios(sync.Ledger(campaign / sync.LEDGER_FILE).entries())
+    assert doc["problems"][H.L1_PROBLEM]["ratio"] == pytest.approx(0.83 / 0.8)
+    assert doc["n_pairs"] == 1

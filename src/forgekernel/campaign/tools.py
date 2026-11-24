@@ -43,7 +43,10 @@ from forgekernel.paths import repo_root
 CONTEXT_ENV = {"target": "FK_TARGET_PROFILE_PATH", "roofline": "FK_ROOFLINE_PATH",
                "lessons": "FK_LESSONS_PATH", "prior": "FK_PRIOR_PATH"}
 TARGET_PROFILE_REL = Path("target") / "B200.json"
-COLD_START_LIMIT_S = 100.0
+try:                                       # the cold-start budget has one home (task benchx)
+    from forgekernel.benchx.api import COLD_START_BUDGET_S as COLD_START_LIMIT_S
+except ImportError:                        # benchx not installed: the documented default
+    COLD_START_LIMIT_S = 100.0
 
 
 @dataclass
@@ -157,6 +160,7 @@ class Tools:
     license_check: Callable[..., dict] | None = None
     notices_banner: Callable[..., str] | None = None
     export_check: Callable[..., dict] | None = None
+    integrity_multiseed: Callable[..., dict] | None = None
     board_submit: Callable[..., dict] | None = None
     collection_validate: Callable[..., dict] | None = None
     notes: list[str] = field(default_factory=list)
@@ -263,7 +267,7 @@ class Tools:
                 ("bench", "init_task", "new_run", "run_loop", "evolve", "lib_find",
                  "lib_baselines", "lib_adapt", "lib_cover", "shapes_compose",
                  "cuda_to_inline", "license_check", "notices_banner", "export_check",
-                 "board_submit", "collection_validate")}
+                 "integrity_multiseed", "board_submit", "collection_validate")}
 
 
 class ToolError(RuntimeError):
@@ -305,6 +309,7 @@ def resolve(root: str | Path | None = None, *, run_log: Path | None = None) -> T
     t.cuda_to_inline = _resolve_cuda_to_inline(t)
     t.license_check, t.notices_banner = _resolve_licence(t)
     t.export_check = _resolve_export_check(t)
+    t.integrity_multiseed = _resolve_multiseed(t)
     t.board_submit = _resolve_board(t)
     t.collection_validate = _resolve_collection_validate(t)
     return t
@@ -554,6 +559,26 @@ def _resolve_export_check(t: Tools) -> Callable | None:
             return fn
     t.notes.append("export_check: forgekernel.integrity has no export_check")
     return None
+
+
+def _resolve_multiseed(t: Tools) -> Callable | None:
+    """`forgekernel.integrity.multiseed.check` (guard): N fresh-input draws before export.
+
+    ``check(card_dir, candidate)`` runs the card once per seed and answers
+    ``{"status": "pass" | "fail" | "unavailable", ...}``; without a GPU it is
+    ``unavailable`` and the export is not blocked."""
+    try:
+        mod = importlib.import_module("forgekernel.integrity.multiseed")
+    except ImportError:
+        t.notes.append("integrity_multiseed: unavailable (no forgekernel.integrity.multiseed; "
+                       "the guard task has not landed)")
+        return None
+    fn = getattr(mod, "check", None)
+    if fn is None:
+        t.notes.append("integrity_multiseed: forgekernel.integrity.multiseed has no check")
+        return None
+    t.notes.append("integrity_multiseed: via forgekernel.integrity.multiseed.check")
+    return fn
 
 
 def _resolve_board(t: Tools) -> Callable | None:

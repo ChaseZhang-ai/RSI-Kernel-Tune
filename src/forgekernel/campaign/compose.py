@@ -501,11 +501,48 @@ def export(problem: dict, candidate: Candidate, *, out: Path, tools: tools_mod.T
     else:
         verdict = {"unavailable": True}
     notes.append(f"export check: {verdict}")
+    if verdict.get("ok") is False:      # a block-level finding: nothing is exported
+        try:
+            out.unlink()
+        except OSError:
+            pass
+        return ComposeResult(path=None, kind="none", candidate=candidate.name,
+                             licence=licence, notes=notes, risk=risk,
+                             error="the export check refused the file: "
+                                   + str(verdict.get("summary") or verdict))
     return ComposeResult(path=out, kind=kind, candidate=candidate.name,
                          mean_s=candidate.mean_s,
                          cold_start={"state": state, "why": why,
                                      "s": candidate.cold_start_s},
                          licence=licence, notes=notes, risk=risk)
+
+
+def _multiseed_gate(task_dir, res: ComposeResult, tools: tools_mod.Tools) -> str | None:
+    """Fresh-input draws on the card before an export is accepted (guard's multiseed).
+
+    ``None``: accepted -- the check passed, or it is not installed, or it cannot run here
+    (without a GPU it answers ``unavailable``). A string: the reason the export is refused;
+    the file is removed and the caller may try the next candidate."""
+    fn = getattr(tools, "integrity_multiseed", None)
+    if fn is None or not res.path:
+        return None
+    try:
+        verdict = dict(fn(card_dir(task_dir).parent, Path(res.path)))
+    except Exception as e:                                      # noqa: BLE001
+        res.notes.append(f"multiseed check raised {type(e).__name__}: {e}")
+        return None                                             # a broken checker must not block
+    status = verdict.get("status")
+    extra = (f" (unverified seeds: {verdict['unverified']})"
+             if status == "pass" and verdict.get("unverified") else "")
+    res.notes.append(f"multiseed: {status}{extra}")
+    if status == "fail":
+        try:
+            Path(res.path).unlink()
+        except OSError:
+            pass
+        return ("multiple fresh-input seeds refused the candidate: "
+                + str(verdict.get("why") or "")[:300])
+    return None
 
 
 def compose(task_dir: str | Path, candidates: list[Candidate], *, out: Path,
@@ -531,7 +568,11 @@ def compose(task_dir: str | Path, candidates: list[Candidate], *, out: Path,
                 res = export(problem, cand, out=out, tools=tools,
                              allow_slow_cold_start=allow_slow_cold_start)
                 res.notes.insert(0, "composed by forge shapes (per-workload winners)")
-                return res
+                if res.ok and _multiseed_gate(task_dir, res, tools) is not None:
+                    notes.append("shapes compose's file was refused by the multiseed check; "
+                                 "fell back to the single best version")
+                else:
+                    return res
             notes.append("shapes compose produced no submission.py; fell back to the "
                          "single best version")
         except Exception as e:                                  # noqa: BLE001
@@ -551,7 +592,11 @@ def compose(task_dir: str | Path, candidates: list[Candidate], *, out: Path,
         res.rejected = rejected + failures
         res.notes = notes + why + res.notes
         if res.ok:
-            return res
+            refused = _multiseed_gate(task_dir, res, tools)
+            if refused is None:
+                return res
+            failures.append({"candidate": cand.name, "reason": refused})
+            continue
         failures.append({"candidate": cand.name, "reason": res.error or "export failed"})
     return ComposeResult(path=None, kind="none", candidate=best_list[0].name,
                          rejected=rejected + failures, notes=notes + why,

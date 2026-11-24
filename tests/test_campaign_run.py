@@ -515,6 +515,45 @@ def test_the_exported_tail_falls_back_to_the_reference(tmp_path):
     assert compose.REFERENCE_RUN in called
 
 
+def test_an_export_check_that_blocks_removes_the_file(tmp_path):
+    """Guard's export_check is a gate now: a block-level finding exports nothing."""
+    task = _card_problem(tmp_path)
+    tools = tools_mod.Tools(root=tmp_path)
+    tools.export_check = lambda path, **_: {"ok": False, "blocks": 1,
+                                            "summary": "1 block: environment write at line 3"}
+    cand = compose.Candidate(name="v1", source=KERNEL_B, mean_s=0.9, cold_start_s=3.0)
+    out = tmp_path / "out" / "submission.py"
+    res = compose.compose(task, [cand], out=out, tools=tools)
+    assert not res.ok
+    assert "export check refused the file" in (res.error or "")
+    assert "environment write" in (res.error or "")
+    assert not out.exists()
+
+
+def test_a_multiseed_failure_refuses_the_export_and_the_next_candidate_wins(tmp_path):
+    """Guard's multiseed draws fresh inputs: a candidate that only passes once goes."""
+    task = _card_problem(tmp_path)
+    calls = {"n": 0}
+
+    def multiseed(card, candidate, **_):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return {"status": "fail", "why": "seed 3: fresh-input recheck mismatch"}
+        return {"status": "pass", "seeds": [1, 2, 3, 4, 5], "unverified": []}
+
+    tools = tools_mod.Tools(root=tmp_path)
+    tools.integrity_multiseed = multiseed
+    first = compose.Candidate(name="v1", source=KERNEL_B, mean_s=0.9, cold_start_s=3.0)
+    second = compose.Candidate(name="v2", source=KERNEL_B, mean_s=0.8, cold_start_s=3.0)
+    out = tmp_path / "out" / "submission.py"
+    res = compose.compose(task, [first, second], out=out, tools=tools)
+    assert res.ok and calls["n"] == 2
+    assert any("multiseed: pass" in n for n in res.notes)
+    assert any(r.get("candidate") == "v1" and "multiple fresh-input seeds" in r["reason"]
+               for r in res.rejected)
+    assert out.is_file()
+
+
 def test_the_reference_helpers_get_their_own_names():
     """A reference helper keeps its identity: prefixed, so it cannot collide with the
     candidate's helper of the same name."""

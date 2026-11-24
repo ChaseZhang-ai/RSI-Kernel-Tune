@@ -114,6 +114,33 @@ def test_the_machine_block_parses_an_smi_line():
     assert driver.parse_smi("") == {}
 
 
+def test_the_driver_collects_a_probe_and_reports_the_ones_that_fail(tmp_path):
+    """The aggregation half of run_all.py, with stand-in probes (no GPU, no torch): one
+    good probe, one that is missing, one that dies, one that prints no document."""
+    driver = load_by_path("fk_calibrate_run_all_collect", PROBES_DIR / "run_all.py")
+    here = tmp_path
+    (here / "good.py").write_text(
+        "import json, sys\n"
+        "print('PROBE_JSON ' + json.dumps({'probe': 'good', 'entries': {\n"
+        "    'one': {'value': 1.5, 'unit': 'GB/s', 'method': 'm', 'repeats': 3,\n"
+        "            'cv': 0.0}}}))\n"
+        "sys.exit(0)\n", encoding="utf-8")
+    (here / "dies.py").write_text("import sys\nsys.exit(3)\n", encoding="utf-8")
+    (here / "silent.py").write_text("print('no document here')\n", encoding="utf-8")
+
+    document = driver.run(seconds=0.1, only=("good", "missing", "dies", "silent"),
+                          timeout=120.0, here=here)
+    assert set(document["probes"]) == {"good"}
+    assert document["probes"]["good"]["entries"]["one"]["value"] == 1.5
+    assert "is missing" in document["errors"]["missing"]["error"]
+    assert document["errors"]["dies"]["rc"] == 3
+    assert document["errors"]["silent"]["rc"] == 0
+    # the machine block is real (it reads this machine), and the payload survives
+    assert document["machine"]["python"]
+    built = calibrate.build(document, delivery="test")
+    assert built["probes"]["good"]["entries"]["one"]["unit"] == "GB/s"
+
+
 # -- the document -------------------------------------------------------------------------
 
 

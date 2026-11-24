@@ -19,32 +19,36 @@ Compute feedback — and reports what happens when the two assumptions that loop
 removed: that a single `allclose` on a single shape certifies a kernel, and that an
 optimisation step never makes the next step worse.
 
-We call the resulting system **ARGUS**. It is a reference implementation of three claims,
-each checked on a CPU so the reasoning can be falsified without a GPU:
+We call the resulting system **ARGUS**. It is a reference implementation of three claims. All
+three are checked *in simulation* on a CPU — emulated kernels on a synthetic landscape — so the
+reasoning can be falsified without a GPU, and every number below is from that simulator, not
+from hardware:
 
-- **A generator's objective is only as good as its gate.** Every one of four realistic
-  reward-hack families passes CudaForge's gate and none passes ARGUS's; held at equal
-  budget, the effective score of the same loop moves from **0.00 to 0.65** once the gate is
-  the board's rather than `allclose`.
-- **A single chain cannot recover from an unrecoverable mistake.** When mechanisms must be
-  applied in an order (a layout before a tensor-core op), an unordered chain destroys its own
-  ceiling permanently; a prerequisite-aware population reaches the landscape optimum on every
-  seed (**0.94** vs **0.79** for the chain).
+- **A generator's objective is only as good as its gate.** In the simulator, each of four
+  reward-hack families (precision narrowing, shape specialisation, memoisation, faked timing)
+  passes a re-implementation of CudaForge's single-shape `allclose` gate, and none passes the
+  six-layer gate; held at equal evaluation budget, the simulator's effective score for the same
+  loop moves from **0.00 to 0.65** once the gate is the studied metric's rather than `allclose`.
+- **A single chain cannot recover from an unrecoverable mistake.** On a synthetic landscape
+  where mechanisms must be applied in an order (a layout before a tensor-core op), an unordered
+  chain settles at a permanently reduced ceiling, while a prerequisite-aware population reaches
+  the landscape optimum on every seed (**0.94** vs **0.79** for the chain).
 - **Profiler feedback should be causal, not a dump.** The raw counter block carries no
-  statement of what changed or what it is worth; attribution the counters into a bottleneck,
-  a delta with an unexplained-speedup flag, and a bounded lever list — and refuses mechanisms
-  the model says cannot pay off before a GPU evaluation is spent on them.
+  statement of what changed or what it is worth; attribution turns the counters into a
+  bottleneck, a delta with an unexplained-speedup flag, and a bounded lever list — and refuses
+  mechanisms the model says cannot pay off before a GPU evaluation is spent on them.
 
-None of this is a new kernel; it is a study of the surrounding machinery, with the kernel
-generation itself left to the agents. The GPU experiments that would turn these local
-predictions into measurements are specified, ordered, and deliberately **not** run yet:
-see [`docs/experiments.md`](docs/experiments.md).
+None of this is a new kernel, and none of it is a hardware result yet. It is a study of the
+surrounding machinery, carried as far as a simulator allows. The GPU experiments that would
+turn these simulator predictions into measurements are specified, ordered, and deliberately
+**not** run: see [`docs/experiments.md`](docs/experiments.md). What the simulation does and
+does not establish is stated in [*What this simulator does and does not show*](#what-this-simulator-does-and-does-not-show).
 
 ## Status
 
-- **2026-11** — repository created; the reproduction of CudaForge, the verification stack,
-  the attribution model and the population search are implemented and validated on CPU
-  (53 tests, three runnable experiments).
+- **2026-11** — repository created. CudaForge's loop (state machine, prompt contracts,
+  parsers), the six-layer verifier, the attribution model and the population search are
+  implemented and checked on CPU (53 tests, three runnable experiments). No hardware run yet.
 - **2026-11** — local ablation reported in [`docs/design/findings.md`](docs/design/findings.md):
   gate choice and search structure each move the studied metric substantially, and they are
   separable.
@@ -67,28 +71,54 @@ evaluation than presenting the raw counter block?
 
 ## Findings
 
-**F1 — the gate, not the generator, decides whether a fast kernel counts.** We catalogue four
-hack families a kernel model plausibly emits and that the board's own screening is known to
-flag — precision narrowing, shape specialisation, memoisation, and a faked measurement. All
-four pass a single-shape `allclose` at `1e-3`; none passes the six-layer gate
-(`docs/assets/figure2-verification.png`, `python -m argus.cli hacklab`). The honest kernel
-passes both, so the gate is not merely strict.
+All three are simulator results. They establish that the mechanisms *can* be separated and that
+the checks catch what they claim to catch on the constructed cases; they do not establish any
+magnitude on real kernels.
 
-**F2 — a chain's ceiling loss is structural, not statistical.** On a landscape where
-prerequisite-ordered mechanisms lock if applied out of order, a round-robin chain converges to
-a stable but permanently reduced ceiling; adding a population, a UCB over mechanisms and a
-prerequisite filter recovers the optimum on every seed at the same budget
-(`docs/assets/figure3-ablation.png`, `python -m argus.cli ab`).
+**F1 — the gate, not the generator, decides whether a fast kernel counts.** We implement four
+hack families as emulated kernels — precision narrowing, shape specialisation, memoisation, and
+a faked measurement — chosen because the benchmark's own screening is known to flag them. In the
+simulator, all four pass a re-implementation of CudaForge's single-shape `allclose` at `1e-3`,
+and none passes the six-layer gate (`docs/assets/figure2-verification.png`,
+`python -m argus.cli hacklab`). The honest emulated kernel passes both, so the gate is not
+merely strict. This is the premise of the GPU study, not a substitute for it.
 
-**F3 — counters under-determine their own explanation.** A latency change that no counter
-movement can account for is detectable, and is the cheapest available signal that a candidate
-was measured rather than improved. The attribution layer separates explainable from
-unexplainable deltas and the pre-screen refuses mechanisms whose model bound is below the
-noise floor; both are unit-tested, and both are cheap.
+**F2 — a chain's ceiling loss is structural, not statistical.** On a synthetic landscape where
+prerequisite-ordered mechanisms lock if applied out of order, a round-robin chain converges to a
+stable but permanently reduced ceiling; adding a population, a UCB over mechanisms and a
+prerequisite filter recovers the landscape optimum on every seed at the same evaluation budget
+(`docs/assets/figure3-ablation.png`, `python -m argus.cli ab`). The landscape encodes the
+interaction by assumption, so this result is conditional on the assumption being physically
+real — which is what Study B in the protocol is designed to test.
 
-Each finding is falsifiable in the sense that its local experiment has a stated outcome that
-would refute it; the GPU studies in [`docs/experiments.md`](docs/experiments.md) carry the
-corresponding falsification criteria for the real-hardware claims.
+**F3 — counters under-determine their own explanation.** In the model, a latency change that no
+counter movement can account for is detectable, and is the cheapest available signal that a
+candidate was measured rather than improved. The attribution layer separates explainable from
+unexplainable deltas and the pre-screen refuses mechanisms whose model bound is below the noise
+floor; both are unit-tested, and both are cheap. Whether real counter traces contain the same
+signal is untested.
+
+Each finding's simulator experiment has a stated outcome that would refute it; the GPU studies
+in [`docs/experiments.md`](docs/experiments.md) carry the corresponding falsification criteria
+for the hardware claims.
+
+## What this simulator does and does not show
+
+The local experiments run the real verification, attribution and search code, but on inputs
+that are not CUDA kernels:
+
+| what is simulated | what is real |
+|---|---|
+| the candidate kernels: numpy functions that emulate a correct kernel and four hack families | the six verification layers and their decision logic |
+| the device time and the counter snapshots: generated by a landscape model | the attribution arithmetic, the flags, the pre-screen bounds |
+| CudaForge's `allclose` gate: re-implemented from its documented rule (`atol = rtol = 1e-3`, one shape), not executed from upstream | the search loop, the UCB, the lineage bookkeeping, the promotion rule |
+| the optimisation landscape and its prerequisite structure | the budget accounting and the A/B design |
+
+So the simulator can show that a check fires, that a search structure changes where evaluations
+go, and that a loop's score depends on its gate. It cannot show that tf32 accumulation is
+actually emitted by a model, that a real kernel's ceiling is irreversibly lost by an out-of-order
+mechanism, or that any speedup is achievable. Those are the GPU studies, and their numbers will
+be reported only from paired measurements under the benchmark's protocol.
 
 ## How it works
 
@@ -118,13 +148,16 @@ concepts map onto the code as follows.
 
 ## What is validated where
 
-| | CPU-validated here | Needs a GPU |
+| | checked here (simulator / unit tests) | needs hardware |
 |---|---|---|
-| verification against real hacked kernels | ✅ | — |
-| attribution and pre-screening consistency | ✅ | counter fidelity on real traces |
-| search A/B (chain vs population) | ✅ synthetic landscape | real mechanism interactions |
-| the Coder/Judge loop under real agents | loop logic | agent quality, real kernels |
-| board-protocol measurement and score | algebra and inversion | the measurement itself |
+| the six verification layers, on emulated hacked kernels | ✅ decisions fire as specified | whether models emit these hacks in practice |
+| attribution arithmetic and pre-screening bounds | ✅ against constructed counter cases | whether real traces carry the same signal |
+| search A/B (chain vs population) | ✅ synthetic landscape | whether real mechanism interactions are irreversible |
+| the Coder/Judge loop logic (state machine, parsers, budgets) | ✅ mock backend | agent quality and real kernels |
+| the metric algebra and its inversion | ✅ | the measurement itself |
+
+Nothing in the left column is a hardware measurement. The right column is
+[`docs/experiments.md`](docs/experiments.md).
 
 The synthetic landscape is honest about its own limits: it validates the *logic* of F2, not a
 hardware magnitude. The GPU protocol is written down rather than assumed.

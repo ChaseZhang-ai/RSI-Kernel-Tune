@@ -75,7 +75,7 @@ kernel. The **falsification criterion** is what must be true to abandon the tier
 * **Hypothesis:** most of the gap to a *scored* submission is that hacks and shape-specialised
   kernels get zeroed; gating them converts a worthless submission into a scored one.
 * **Budget:** E=20–30 on 3–5 representative kernels ≈ **2–4 GPU-hours**.
-* **Local prediction:** `argus.cli hacklab` (0/4 hacks pass) and `argus.cli ab` claim (i)
+* **Simulated result:** `argus.cli hacklab` (0/4 hacks pass) and `argus.cli ab` claim (i)
   (0.00 → 0.65 effective).
 * **Deliverable:** a verified kernel per trial kernel + the hack families ARGUS blocks in
   practice. **Falsified if** ARGUS blocks a kernel that the real harness *accepts* (a false
@@ -89,7 +89,7 @@ kernel. The **falsification criterion** is what must be true to abandon the tier
   would refute the table: for each declared prerequisite, apply the mechanism out of order and
   measure whether the ceiling actually drops irreversibly.
 * **Budget:** E=40 on the same kernels ≈ **4–8 GPU-hours**.
-* **Local prediction:** `argus.cli ab` claim (ii) — 0.7942 vs 0.9412 at equal budget.
+* **Simulated result:** `argus.cli ab` claim (ii) — 0.7942 vs 0.9412 at equal budget.
 * **Deliverable:** per-kernel curve (verified best vs evals) for chain vs population, and a
   measured verdict per declared prerequisite (irreversible / recoverable / commutative).
   **Falsified if** the chain is never meaningfully worse on real kernels (i.e., real mechanisms are
@@ -101,7 +101,7 @@ kernel. The **falsification criterion** is what must be true to abandon the tier
 * **Hypothesis:** a causal, ceiling-bounded lever list yields better proposals **per eval**, so
   fewer evals for the same score.
 * **Budget:** E=40 with profiles on the same kernels ≈ **6–10 GPU-hours**.
-* **Local prediction:** `argus.cli attrib` (attribution 3/3; 2/7 mechanisms pre-screened out).
+* **Simulated result:** `argus.cli attrib` (attribution 3/3; 2/7 mechanisms pre-screened out).
 * **Deliverable:** evals-to-target with causal vs raw Judge context. **Falsified if** the causal
   block does not beat the dump on evals-to-target.
 

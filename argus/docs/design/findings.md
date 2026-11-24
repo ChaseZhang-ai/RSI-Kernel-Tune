@@ -20,10 +20,11 @@ identity, degenerate variance, determinism), a float64 precision contract, metam
 and a counter fingerprint.
 
 **Why it matters.** CudaForge's objective is raw speedup and its gate is blind to the four
-hack families most likely to zero a submission. Local evidence (`argus.cli hacklab`): all 4
-hacks pass CudaForge's gate, 0 pass ARGUS; the honest kernel passes both. Folding the gate
-into the loop at equal budget (`argus.cli ab`): effective board score **0.0000 → 0.6472**
-(mean over 6 seeds).
+hack families most likely to zero a submission. Simulator evidence (`argus.cli hacklab`, on
+emulated kernels): all 4 hacks pass a re-implementation of CudaForge's gate, 0 pass ARGUS; the
+honest emulated kernel passes both. Folding the gate into the simulated loop at equal budget
+(`argus.cli ab`): effective score **0.0000 → 0.6472** (mean over 6 seeds, synthetic landscape).
+These are simulator numbers; the hardware claim is Study A.
 
 **Effort / risk.** Medium / low. The static scan is heuristic (advisory); the destructive parts
 (tolerance, probes, precision) are numeric and deterministic.
@@ -39,8 +40,9 @@ regression-proof parent (the lineage *head*).
 
 **Why it matters.** Two independent failures of the chain: it derails (a bad step becomes the
 parent) and it can permanently destroy ceiling by applying a mechanism before its prerequisite.
-Local A/B on a rugged landscape, equal budget, verification on for both, mean over 6 seeds:
-greedy **0.7942** vs ARGUS **0.9412** (= the landscape optimum, every seed).
+Simulator A/B on a rugged synthetic landscape, equal budget, verification on for both, mean
+over 6 seeds: greedy **0.7942** vs ARGUS **0.9412** (= the landscape optimum, every seed). The
+landscape encodes the irreversibility by assumption; Study B tests whether it holds.
 
 **Effort / risk.** Medium / needs the mock's prerequisite structure to be a faithful analogue
 of real ISA/layout ordering (it is declared, not fitted). On real hardware the prereq table must

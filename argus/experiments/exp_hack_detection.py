@@ -2,7 +2,8 @@
 
 Runs a catalogue of realistic hacks through *two* gates on identical kernels:
 
-* ``cudaforge`` -- the upstream gate: one ``torch.allclose`` on one shape at 1e-3;
+* ``cudaforge`` -- a re-implementation of the upstream gate: one ``allclose`` on one
+                  shape at 1e-3 (the rule is upstream's; the emulated kernels are ours);
 * ``argus``     -- the full ARGUS stack (static scan + board tolerance over *all* workloads +
                   differential probes + precision oracle + metamorphic probes).
 

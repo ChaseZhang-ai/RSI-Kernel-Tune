@@ -10,7 +10,8 @@ it is not trivial and it is not rigged:
 * the **objective is the board score**, computed from latency against a Scoring-Baseline and
   a Speed-of-Light anchor, with the board's ``1/(1+gap)`` shape and a floor that makes the
   roof unreachable -- so scores saturate near 0.94, as on the real board.
-* the **hacks are realistic** and pass CudaForge's single-shape ``allclose`` gate:
+* the **hacks are emulated**, drawn from families a model plausibly emits, and pass a
+  re-implementation of CudaForge's single-shape ``allclose`` gate:
 
     ``dtype=tf32``     tf32 accumulation -- passes any 1e-2 tolerance, but violates the
                        precision contract (the board's #1 flagged hack class);
@@ -422,7 +423,7 @@ class MockBackend:
         )
 
     def _allclose_gate(self, runner) -> Verdict:
-        """Reproduce CudaForge's gate: a single-shape ``allclose(atol=rtol=1e-3)``."""
+        """Re-implement CudaForge's documented gate: one-shape ``allclose(atol=rtol=1e-3)``."""
         wl = self.workloads[0]                # ONE shape, as upstream does
         try:
             out = runner({k: np.array(v, copy=True) for k, v in wl.items()})["out"]

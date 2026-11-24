@@ -37,7 +37,7 @@ round i, runnable  NCU profile -> Judge(one optimisation, JSON) -> Coder(apply) 
 | two-agent loop, per-round state machine | `main.py::_run_single_task` | `src/argus/cudaforge.py::run_cudaforge_loop` (+ `search.greedy_chain`) |
 | **single greedy chain** (parent = the *latest* candidate) | `main.py` (`current_kernel = ind`) | `search.greedy_chain` — deliberately un-improved, used as the control |
 | objective = raw speedup `ref/test` | `main.py` (`metrics["score"] = speedup`) | `EvalResult.score` in CudaForge mode |
-| **one-shape `allclose`** correctness | `utils/compile_and_run.py` (`torch.allclose(ref,test,atol=tol,rtol=tol)`, default `tol=1e-3`) | `backends/mock.py::_allclose_gate` (reproduces it exactly for the A/B) |
+| **one-shape `allclose`** correctness | `utils/compile_and_run.py` (`torch.allclose(ref,test,atol=tol,rtol=tol)`, default `tol=1e-3`) | `backends/mock.py::_allclose_gate` (re-implements the documented rule for the A/B) |
 | 24 Nsight-Compute metrics | `run_ncu.py::METRICS` | `cudaforge.CUDAFORGE_METRICS` (byte-for-byte list) |
 | counters → prompt (raw JSON dump) | `run_ncu.py::metrics_to_prompt` + `prompts/judger_optimization.py` | CudaForge mode builds the raw dump; ARGUS mode builds the causal block (`attribution.build_judge_block`) |
 | Judge returns one optimisation as JSON | `prompts/judger_optimization.py` | `cudaforge.JUDGE_SYSTEM` (contract preserved) |

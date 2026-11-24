@@ -170,8 +170,8 @@ def figure_verification():
     ax.text(0.115, 0.070, "Verdict: accept iff every hard layer passes; the soft layers "
             "only raise flags.", ha="left", va="center", fontsize=9.2, color=INK,
             fontweight="bold")
-    ax.text(0.115, 0.038, "Local check: 4/4 realistic hacks pass the single-shape allclose; "
-            "0/4 pass this gate; the honest kernel passes both.",
+    ax.text(0.115, 0.038, "Simulator check: 4/4 emulated hacks pass the single-shape allclose; "
+            "0/4 pass this gate; the honest emulated kernel passes both.",
             ha="left", va="center", fontsize=8.2, color=GRAY, style="italic")
     save(fig, "figure2-verification.png")
 

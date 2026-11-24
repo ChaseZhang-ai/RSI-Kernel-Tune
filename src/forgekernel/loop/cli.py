@@ -509,7 +509,8 @@ class RealBackend:
                                if TRANSPORT_ERROR_MARKER in ln), TRANSPORT_ERROR_MARKER)
                 raise JobTransportError(
                     f"the job could not be delivered to {self.last_cluster or 'the GPU machine'}"
-                    f" — check the ssh alias and the host: {detail[:600]}")
+                    f" — check the ssh alias and the host, or (local delivery) the GPU lock's"
+                    f" result: {detail[:600]}")
             return log
 
     def _op_dir(self) -> Path | None:

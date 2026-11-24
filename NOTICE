@@ -33,6 +33,24 @@ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FO
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+The Codex agent backend (scripts/agent-codex.sh, src/forgekernel/agentbackends/codex.py,
+scripts/agent_trailer.py) follows the design of the following project, licensed under the
+Apache License, Version 2.0. What was carried over is the shape of the non-interactive
+invocation (`codex exec --json --color never --dangerously-bypass-approvals-and-sandbox -c
+model_reasoning_effort=... -m <model>`), the tolerant reading of the JSON event stream, and
+the normalization of its usage counters (`input_tokens` / `cached_input_tokens` /
+`output_tokens` and their alternate spellings). The code was written for this repository
+against the Codex CLI's own definitions; no file was copied.
+
+--------------------------------------------------------------------------------
+Atrex Kernel Agent (AKA)
+https://github.com/alibaba/atrex-kernel-agent
+Adapted from: src/aka/agent/backends/codex.py, src/aka/agent/backends/base.py
+(`token_usage_from_mapping`), src/aka/agent/backends/claude.py
+
+  Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
 The leaderboard evaluator (src/forgekernel/card_template/eval/leaderboard.py) contains
 code adapted from the following projects, both licensed under the Apache License,
 Version 2.0. The adapted parts are the input generators and the reproduction of each

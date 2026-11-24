@@ -3,6 +3,10 @@
 ``native`` inherits the environment untouched: the agent CLI's own login, or the credentials
 local.env puts in the environment. Any other name is a table of backends.toml that points
 the CLI at another endpoint, with the key read from the variable the table names.
+
+Which protocol a backend's CLI speaks, and which variable carries its endpoint, comes from
+the backend's adapter (``forgekernel.agentbackends``): ``wire`` is checked against the
+table, and the environment handed back names the key variable rather than the key.
 """
 
 from __future__ import annotations
@@ -11,15 +15,16 @@ import os
 import tomllib
 from pathlib import Path
 
+from forgekernel.agentbackends import BackendError, load as load_backend
 from forgekernel.paths import global_config_dir
 
 BACKENDS_FILE = "backends.toml"
 NATIVE = "native"
-# The wire protocol each agent CLI speaks.
-_BACKEND_WIRE = {"claude": "anthropic"}
-# What the turn's launcher reads (scripts/agent-claude.sh): the endpoint, and the name of
-# the variable holding its key -- the key itself never appears on a command line.
-BASE_URL_ENV = "ANTHROPIC_BASE_URL"
+# The endpoint variable of each wire protocol: what the turn's launcher reads
+# (scripts/agent-claude.sh, scripts/agent-codex.sh). The name of the variable holding the
+# key rides separately, and the key itself never appears on a command line.
+BASE_URL_ENV = "ANTHROPIC_BASE_URL"      # the anthropic one, as it always was
+BASE_URL_ENV_BY_WIRE = {"anthropic": BASE_URL_ENV, "openai": "OPENAI_BASE_URL"}
 KEY_ENV_ENV = "FK_PROVIDER_KEY_ENV"
 
 
@@ -38,17 +43,15 @@ def names(root: Path | None = None) -> tuple[str, ...]:
     return (NATIVE, *_table(root))
 
 
-def grant(backend: str, name: str, env: dict | None = None,
-          root: Path | None = None) -> dict[str, str]:
-    """The environment additions that point ``backend`` at provider ``name``; ProviderError
-    when the provider does not fit the backend or its key is not set."""
+def grant_for_wire(wire: str | None, backend: str, name: str, env: dict | None = None,
+                   root: Path | None = None) -> dict[str, str]:
+    """``grant`` for a backend whose CLI speaks ``wire`` (None: no provider channel)."""
     if name == NATIVE:
         return {}
     table = _table(root)
     if name not in table:
         raise ProviderError(f"provider {name!r} is not in global_config/{BACKENDS_FILE}")
     p = table[name]
-    wire = _BACKEND_WIRE.get(backend)
     if wire is None:
         raise ProviderError(f"the {backend} CLI has no provider channel; use provider = "
                             f"{NATIVE!r}")
@@ -62,4 +65,28 @@ def grant(backend: str, name: str, env: dict | None = None,
     if not env.get(p["key_env"]):
         raise ProviderError(f"provider {name!r} needs {p['key_env']}; set it in local.env or "
                             f"the environment")
-    return {BASE_URL_ENV: p["base_url"], KEY_ENV_ENV: p["key_env"]}
+    base_url_env = BASE_URL_ENV_BY_WIRE.get(wire)
+    if base_url_env is None:
+        raise ProviderError(f"the {backend} CLI speaks {wire}, which has no endpoint "
+                            f"variable; use provider = {NATIVE!r}")
+    return {base_url_env: p["base_url"], KEY_ENV_ENV: p["key_env"]}
+
+
+def grant(backend: str, name: str, env: dict | None = None,
+          root: Path | None = None) -> dict[str, str]:
+    """The environment additions that point ``backend`` at provider ``name``; ProviderError
+    when the provider does not fit the backend or its key is not set."""
+    if name == NATIVE:
+        return {}
+    try:
+        adapter = load_backend(backend)
+    except BackendError:
+        raise ProviderError(
+            f"the {backend} CLI has no provider channel (registered backends: "
+            f"{', '.join(_registered()) or 'none'}); use provider = {NATIVE!r}") from None
+    return adapter.grant(name, env, root=root)
+
+
+def _registered() -> tuple[str, ...]:
+    from forgekernel.agentbackends import names as backend_names
+    return backend_names()

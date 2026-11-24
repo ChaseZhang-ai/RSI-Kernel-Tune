@@ -86,6 +86,14 @@ the same run writes the same bytes.
 A field whose source is absent is **omitted**, never defaulted: "no reading" and "a reading
 of zero" are different facts. `harvest` prints one note per artifact it could not read.
 
+`outcome.value` with `metric_kind=sol` is the board's arithmetic (the card's frozen `T_b` /
+`T_SOL` and the per-workload device medians of `best_confirmation.json`) applied to the
+**run's own** readings: it is the run machine's estimate of the board score, not the board's
+score -- a B300 reading is optimistic on FP4-bound and SFU-bound kernels, and no clock lock is
+involved. The records are ordered and compared against each other, not against the board.
+`speedup` is the confirmation's `median_ratio` as the loop recorded it (same-job when the
+reference rode the jobs, median-vs-median otherwise).
+
 ### The reconnaissance block
 
 The user allowed the reference's measured structure into the lesson base (the reference is

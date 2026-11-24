@@ -1,7 +1,7 @@
 # RSI-Kernel-Tune
 
-The `vulcan/` study previously in this repository has moved to
-[**zixinzenith/agentic-kernel-studies**](https://github.com/zixinzenith/agentic-kernel-studies) (see `vulcan/` there, alongside the
-`argus/` study).
+The VULCAN track that was previously in this repository is now the **budget plane** of
+[**zixinzenith/agentic-kernel-studies**](https://github.com/zixinzenith/agentic-kernel-studies),
+alongside the ARGUS trust plane.
 
 This repository retains its original [`LICENSE`](LICENSE) only.

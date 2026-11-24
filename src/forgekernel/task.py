@@ -79,6 +79,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from forgekernel import ext
 from forgekernel import provider as provider_mod
 from forgekernel.paths import global_config_dir, repo_root
 
@@ -108,6 +109,8 @@ LEADERBOARD_PROBLEM = "eval/leaderboard/problem.json"
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # `forge <name> ...` dispatches these as commands, so no task (operator tree) may be one.
+# The same goes for the extension commands (forgekernel.ext: src/forgekernel/ext/<name>.py),
+# which are read where this check is made.
 RESERVED_NAMES = frozenset({"init", "new", "run", "status", "harvest", "export"})
 _ENTRY_RE = re.compile(r"^(?P<file>[^:]+\.py):(?P<fn>[A-Za-z_][A-Za-z0-9_]*)$")
 # A deny_modules entry: an import name or a distribution name ("flash_attn", "flash-attn-4").
@@ -253,6 +256,9 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
                         f"(letters, digits, '_', '.', '-'; not starting with '_')")
     elif name in RESERVED_NAMES:
         problems.append(f"{name!r} is one of forge's own commands; name the task otherwise")
+    elif name in ext.command_names():
+        problems.append(f"{name!r} is a forge extension command (src/forgekernel/ext/{name}.py); "
+                        f"name the task otherwise")
 
     own = _read_toml(d / TASK_FILE, problems)
     _unknown_keys(own, problems)

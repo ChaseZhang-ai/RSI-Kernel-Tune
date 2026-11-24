@@ -76,6 +76,7 @@ from forgekernel.baseline import RefBaseline, workloads_mismatch
 from forgekernel.resume import Decision, compute_reopen, compute_resume
 # a group card's meta readings, one workload per job
 from forgekernel.loop import meta_shapes
+from forgekernel import runcontext
 
 
 class DriverBackend(Protocol):
@@ -718,6 +719,12 @@ def _bindings(ctx: LoopContext) -> dict[str, str]:
         # 1.0x reading (a self-evolution run asks for >1)
         "{EQUIVALENCE_RATIO}": f"{ctx.equivalence_ratio:g}",
         "{TARGET_MS}": (f"{ctx.target_ms:.4f}" if ctx.target_ms else "(pending measurement)"),
+        # Run context files (forgekernel.runcontext): set per run through the environment, read
+        # by the agent at run time. Unset binds "(none)", which the prompts say to go on past.
+        "{TARGET_PROFILE_PATH}": runcontext.binding("target"),
+        "{ROOFLINE_PATH}": runcontext.binding("roofline"),
+        "{LESSONS_PATH}": runcontext.binding("lessons"),
+        "{PRIOR_PATH}": runcontext.binding("prior"),
     }
 
 

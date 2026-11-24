@@ -15,6 +15,11 @@ One run:
    deliver it (no begin marker) -> retried, then Failed with TRANSPORT_ERROR_MARKER, which
    the loop reports as a transport problem rather than charging the kernel.
 
+Local delivery can put a lock shared with other work on the machine in front of the entry
+(``FK_JOB_LOCK_CMD``, job_lock_prefix): the job then runs ``<lock command> -- <entry>``. The
+entry's begin marker is printed from inside the lock, so a job that never got the lock is told
+from one whose entry failed, and the first is "not delivered" too: never the kernel's.
+
 Nothing here kills processes it did not start: on a user's machine a GPU held by someone
 else is theirs. The lock is what keeps forgekernel's own runs apart.
 """
@@ -31,6 +36,7 @@ import signal
 import subprocess
 import tarfile
 import time
+from collections.abc import Mapping
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -53,6 +59,29 @@ TRANSPORT_ATTEMPTS = 3
 TRANSPORT_RETRY_S = 10.0
 SSH_OPTS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=20",
             "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=6")
+
+# local only: a command that holds a GPU lock shared with other work on this machine in front
+# of the entry. Its value is split like a shell would and ends in ``--``: with-lock's
+# ``with-lock gpu 1800 --``, after which the entry command is put.
+JOB_LOCK_ENV = "FK_JOB_LOCK_CMD"
+# How often the runner looks for the entry's begin line while the lock command waits.
+LOCK_POLL_S = 2.0
+# The entry as started under a lock: this shell prints the begin marker, then becomes the
+# entry. Printed here and not by the runner, so the marker says "the lock was acquired and the
+# entry is starting" -- a job still waiting for the lock has printed none.
+_BEGIN_SCRIPT = f'echo {BEGIN_MARKER} && exec "$@"'
+
+
+class LockNotAcquired(Exception):
+    """The lock command did not start the entry within the job's own time limit."""
+
+
+def job_lock_prefix(env: Mapping | None = None) -> list[str]:
+    """The words of ``FK_JOB_LOCK_CMD`` (``env``, the process environment by default): the
+    command put in front of a local entry; ``[]`` when the run sets none. ``shlex.split`` raises
+    ValueError on a value that does not split (an unbalanced quote)."""
+    env = os.environ if env is None else env
+    return shlex.split(str(env.get(JOB_LOCK_ENV) or "").strip())
 
 
 def lock_dir() -> Path:
@@ -110,6 +139,20 @@ def _entry_argv(cfg: SubmitConfig, mode: str) -> list[str]:
     return ["bash", cfg.entry_script, mode]
 
 
+def _locked_entry_argv(entry: list[str]) -> list[str]:
+    """The entry under a lock command: a shell that prints the begin marker, then becomes the
+    entry (``"$@"`` carries it word for word, so nothing is quoted a second time)."""
+    return ["bash", "-c", _BEGIN_SCRIPT, "bash", *entry]
+
+
+def _not_delivered(log_file, why: str) -> str:
+    """Record that the job never reached its entry. The same line the ssh transport writes,
+    so the loop makes the same thing of it: a transport problem, not the kernel's."""
+    log_file.write(f"{TRANSPORT_ERROR_MARKER} {why}\n")
+    log_file.flush()
+    return STATUS_FAILED
+
+
 def _job_env(cfg: SubmitConfig) -> dict:
     return {**cfg.env, "TASK_TIMEOUT": str(cfg.timeout), "CUDA_VISIBLE_DEVICES": cfg.exec_gpu}
 
@@ -146,13 +189,38 @@ class DirectRunner:
         log_file.write(f"[direct] local GPU {self.cfg.exec_gpu} branch={branch} mode={mode}\n")
         log_file.flush()
         with gpu_lock(self.cfg.exec_gpu, log_file):
-            log_file.write(f"{BEGIN_MARKER}\n")
-            log_file.flush()
-            proc = self._popen(_entry_argv(self.cfg, mode), cwd=tree, env=env,
-                               stdout=log_file, stderr=subprocess.STDOUT,
-                               stdin=subprocess.DEVNULL, start_new_session=True)
             try:
-                rc = proc.wait(timeout=self.deadline_s)
+                lock = job_lock_prefix(env)
+            except ValueError as e:
+                return _not_delivered(log_file, f"{JOB_LOCK_ENV} does not split into a command "
+                                                f"({e}); the entry never ran")
+            # Without a lock the entry starts now and the runner says so, as it always did.
+            # Under one, the begin marker is the entry's own first line: the job may wait for
+            # the lock first, and what it prints until then is not the entry's.
+            start = None
+            if lock:
+                start = log_file.tell() if hasattr(log_file, "tell") else None
+            else:
+                log_file.write(f"{BEGIN_MARKER}\n")
+                log_file.flush()
+            entry = _entry_argv(self.cfg, mode)
+            try:
+                proc = self._popen([*lock, *_locked_entry_argv(entry)] if lock else entry,
+                                   cwd=tree, env=env, stdout=log_file,
+                                   stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                   start_new_session=True)
+            except OSError as e:
+                if not lock:
+                    raise
+                return _not_delivered(log_file, f"the GPU lock command could not be started "
+                                                f"({e!r}); the entry never ran")
+            try:
+                rc = self._wait_local(proc, log_file, start)
+            except LockNotAcquired:
+                _kill_session(proc)
+                return _not_delivered(log_file, f"the GPU lock command {' '.join(lock)} did not "
+                                                f"start the entry within {self.deadline_s:.0f}s "
+                                                f"-- killed; the entry never ran")
             except subprocess.TimeoutExpired:
                 _kill_session(proc)
                 log_file.write(f"[direct] gpu_entry {mode} exceeded {self.deadline_s:.0f}s "
@@ -162,11 +230,44 @@ class DirectRunner:
             except BaseException:   # stopped (SIGTERM -> SystemExit) or interrupted
                 _kill_session(proc)
                 raise
+        if lock and start is not None and not _began(log_file, start, BEGIN_MARKER):
+            # The lock command ended without ever starting the entry -- it gave up waiting
+            # (with-lock exits 3), was not found, or is not a lock command at all. Nothing of
+            # the tree ran. (An entry that exits 3 itself, a card's clock-lock refusal, has
+            # printed the begin marker and is not mistaken for this.) Said without the
+            # "[direct] gpu_entry ... exited rc=N" the loop reads as an entry that ran.
+            return _not_delivered(
+                log_file, f"the GPU lock command {' '.join(lock)} ended with status {rc} before "
+                          f"the entry began"
+                          f"{' (it gave up waiting for the lock)' if rc == 3 else ''}; "
+                          f"the entry never ran")
         if rc == 0:
             return STATUS_SUCCEEDED
         log_file.write(f"[direct] gpu_entry {mode} exited rc={rc}\n")
         log_file.flush()
         return STATUS_FAILED
+
+    def _wait_local(self, proc, log_file, start: int | None) -> int:
+        """The local entry's exit status. Raises ``subprocess.TimeoutExpired`` when the entry
+        passed its deadline, ``LockNotAcquired`` when a lock command in front of it did not
+        start it within that same time.
+
+        ``start`` is None without a lock command: one wait, as there always was. With one, the
+        time spent waiting for the lock is not the entry's: the entry's deadline begins at its
+        begin marker, so a job that waited long for the lock still gets its whole time limit.
+        """
+        if start is None:
+            return proc.wait(timeout=self.deadline_s)
+        limit = time.monotonic() + self.deadline_s
+        while not _began(log_file, start, BEGIN_MARKER):
+            left = limit - time.monotonic()
+            if left <= 0:
+                raise LockNotAcquired() from None
+            try:
+                return proc.wait(timeout=min(LOCK_POLL_S, left))   # it may end while waiting
+            except subprocess.TimeoutExpired:
+                continue            # look for the begin marker again before giving up
+        return proc.wait(timeout=self.deadline_s)
 
     # -- ssh ------------------------------------------------------------------------------
 

@@ -1,0 +1,19 @@
+{
+  "name": "001_fp8_attention_output_projection",
+  "hf_id": null,
+  "description": "Attention-output projection in fp8 (fixture: float32 math with the board's shape, so the fixture runs anywhere).",
+  "axes": {
+    "T": {"type": "var", "description": "tokens"},
+    "D": {"type": "const", "value": 8, "description": "model width"},
+    "H": {"type": "const", "value": 16, "description": "output width"}
+  },
+  "custom_inputs_entrypoint": null,
+  "inputs": {
+    "attn_output": {"shape": ["T", "D"], "dtype": "float32"},
+    "weight": {"shape": ["H", "D"], "dtype": "float32"}
+  },
+  "outputs": {
+    "projection": {"shape": ["T", "H"], "dtype": "float32"}
+  },
+  "reference": "import torch\n\n\ndef run(attn_output, weight):\n    x = attn_output.to(torch.float32)\n    projected = torch.matmul(x, weight.t())\n    return projected.to(attn_output.dtype)\n"
+}

@@ -1,0 +1,27 @@
+{
+ "data": {
+  "kernel_leaderboards": [
+   {
+    "type": "kernel",
+    "name": "030_attention_output_projection_with_residual",
+    "kernel_id": 30,
+    "gpu_type": "B200",
+    "display_name": "030_attention_output_projection_with_residual"
+   },
+   {
+    "type": "kernel",
+    "name": "069_rms_norm",
+    "kernel_id": 69,
+    "gpu_type": "B200",
+    "display_name": "069_rms_norm"
+   },
+   {
+    "type": "kernel",
+    "name": "001_fp8_attention_output_projection",
+    "kernel_id": 177,
+    "gpu_type": "B200",
+    "display_name": "001_fp8_attention_output_projection"
+   }
+  ]
+ }
+}

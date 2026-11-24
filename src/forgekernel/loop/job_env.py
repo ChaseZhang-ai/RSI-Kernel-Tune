@@ -18,6 +18,12 @@ said the run was blind.
 The detector is applied only where the same tree has already passed its own eval
 (the NCU job of a passing kernel, the base bench of a green tree), so an import
 failure there is the job's environment by construction.
+
+A triton-mode job is read the same way: its kernel (and its reference) import
+``triton``, which the image's job interpreter must have. ``ModuleNotFoundError:
+No module named 'triton'`` is therefore the image's failure, never a reading
+about the tree -- ``import_check_flag`` is the preflight's own check of the same
+import.
 """
 from __future__ import annotations
 
@@ -30,6 +36,24 @@ _OTHER_ENV_RES = (
     re.compile(r"ImportError: [^\n]*cannot open shared object file[^\n]*"),
     re.compile(r"(?m)^[^\n]*\b(?:python3?|ncu|nvcc|nvidia-smi): command not found"),
 )
+
+# What each language mode's job must additionally be able to import on its own
+# bare ``python3``, by the flag ``skills/job-env-check/job_env_check.py`` takes.
+# The tool is seeded into the tree's notes/ and runs on the node, so it cannot
+# import this module: the flag strings are kept in step here and there
+# (``tests/test_triton_mode.py`` reads both files).
+MODE_IMPORT_CHECK = {"cuda": "--cuda", "triton": "--triton"}
+# The module a triton-mode job's python3 must import: the student's kernel imports
+# it, and so does the reference. Missing, every job of the run reads as a failing
+# tree when it is the image — ``env_failure`` classifies it as the image's.
+TRITON_MODULE = "triton"
+
+
+def import_check_flag(mode: str) -> str | None:
+    """The preflight tool's extra-import flag for a language mode (``--cuda`` for the
+    CUDA mode's nvcc/CUTLASS toolchain, ``--triton`` for the Triton mode's package),
+    or None for the CuTe DSL mode, whose job needs nothing beyond torch."""
+    return MODE_IMPORT_CHECK.get(str(mode))
 
 
 def env_failure(log: str | None) -> str | None:

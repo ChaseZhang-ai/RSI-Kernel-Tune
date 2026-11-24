@@ -102,16 +102,19 @@ def test_a_prior_directory_is_copied_with_its_licence(tmp_path, base, sol_root, 
     assert records["refimpl"]["license"] == "MIT" and records["refimpl"]["kind"] == "tree"
 
 
-def test_the_language_is_inferred_and_a_non_matching_file_is_refused(tmp_path, base, sol_root,
-                                                                     board_file):
+def test_the_language_is_inferred_and_an_unsupported_import_is_refused(tmp_path, base, sol_root,
+                                                                      board_file):
     triton = tmp_path / "triton_kernel.py"
     triton.write_text("import triton\nimport triton.language as tl\n\n"
                       "def run(*args):\n    pass\n")
-    with pytest.raises(SystemExit, match="triton"):
-        scaffold_main(["op", "--leaderboard", "sol-execbench", "--dataset", str(sol_root),
-                       "--definition", "L1/001_rms", "--workload", "0",
-                       "--base-dir", str(tmp_path / "repo2"), "--init-kernel", str(triton)])
-    assert not (tmp_path / "repo2" / "operators" / "op").exists()
+    rc = scaffold_main(["op", "--leaderboard", "sol-execbench", "--dataset", str(sol_root),
+                        "--definition", "L1/001_rms", "--workload", "0",
+                        "--sol-board", str(board_file), "--base-dir", str(tmp_path / "repo2"),
+                        "--init-kernel", str(triton)])
+    assert rc == 0                       # a Triton init kernel is a task kernel now (task triton)
+    card = tmp_path / "repo2" / "operators" / "op"
+    assert (card / "kernel.py").read_bytes() == triton.read_bytes()
+    assert (card / "prior" / "triton_kernel.py").is_file()
 
     cupy = tmp_path / "cupy_kernel.py"
     cupy.write_text("import cupy\n\ndef run(*args):\n    pass\n")

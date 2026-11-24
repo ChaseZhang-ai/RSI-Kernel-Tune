@@ -1117,14 +1117,17 @@ outputs = {outs}
 """
 
 
-def render_loop_toml_example(problem: Problem, op: str, kernel_file: str = "kernel.py") -> str:
+def render_loop_toml_example(problem: Problem, op: str, kernel_file: str = "kernel.py",
+                             language: str | None = None) -> str:
     """The suggested loop.toml. What it must get right is the stop: the loop derives
     target_ms from the reference declared here (the architecture one when present)
     divided by --equivalence-ratio, and stops once a KEEP reads under it. So the
     reference must be the number the board ranks against — never the definition's
     eager PyTorch run, which any fused kernel beats on its first KEEP. The language
-    follows the kernel file: a CUDA C++ card runs the loop's CUDA mode (cuda-sol: its
-    own prompts and hw_kb/cuda/), any other the CuTe DSL mode."""
+    follows the kernel file — a CUDA C++ card runs the loop's CUDA mode (cuda-sol: its
+    own prompts and hw_kb/cuda/), any other the CuTe DSL mode — unless the caller names
+    it: a Triton card (kernel.py whose compute is @triton.jit) says triton, so the loop
+    reads meta/triton/ and hw_kb/triton/ instead of the DSL's."""
     ref = problem.reference_impl
     ref_name = ref.get("name") or "definition reference"
     shape = ", ".join(f"{k}={v}" for k, v in (problem.workload.get("axes") or {}).items())
@@ -1133,7 +1136,7 @@ def render_loop_toml_example(problem: Problem, op: str, kernel_file: str = "kern
         ref_shape = (f"{problem.name} group of {len(problem.group)} workloads "
                      f"({', '.join(g['name'] for g in problem.group)}; geomean)")
     head = "# Suggested loop.toml for this leaderboard card — copy to loop.toml and review.\n"
-    language = "cuda-sol" if is_cuda_kernel_file(kernel_file) else "cutedsl"
+    language = language or ("cuda-sol" if is_cuda_kernel_file(kernel_file) else "cutedsl")
     common = f"""[loop]
 language    = "{language}"{' ' * (17 - len(language))}# what the student writes the kernel in
 kb_arch     = "sm100"            # B200
@@ -1357,7 +1360,8 @@ def render_readme_section(problem: Problem, kernel_file: str = "kernel.py") -> s
 def write_card(op_dir: Path, problem: Problem, template_eval: Path, *,
                dps: bool = True, kernel_file: str = "kernel.py",
                dev_arch: str | None = None,
-               init_kernel: bytes | None = None) -> list[Path]:
+               init_kernel: bytes | None = None,
+               language: str | None = None) -> list[Path]:
     """Write the leaderboard files into a freshly scaffolded card.
 
     ``dev_arch`` (the task's ``[task] dev_arch``) is the architecture the card compiles and
@@ -1366,7 +1370,8 @@ def write_card(op_dir: Path, problem: Problem, template_eval: Path, *,
     a warmstart (`--init-kernel`): the student's first iteration improves a working
     implementation. The bytes are written unchanged, so the card's kernel file is
     byte-identical to the file that was passed in.
-    """
+    ``language``: the loop language the suggested loop.toml names (``--language`` of
+    the cell; default: ``cuda-sol`` for a ``.cu`` kernel file, else ``cutedsl``)."""
     op_dir = Path(op_dir)
     lb_dir = op_dir / LEADERBOARD_DIR
     lb_dir.mkdir(parents=True, exist_ok=True)
@@ -1413,7 +1418,8 @@ def write_card(op_dir: Path, problem: Problem, template_eval: Path, *,
         put(kernel_file, render_kernel_stub_cuda(problem, dps=dps) if is_cuda_kernel_file(kernel_file)
             else render_kernel_stub(problem, dps=dps))
     put("window.toml", render_window_toml(problem))
-    put("loop.toml.example", render_loop_toml_example(problem, op_dir.name, kernel_file))
+    put("loop.toml.example", render_loop_toml_example(problem, op_dir.name, kernel_file,
+                                                      language=language))
     readme = op_dir / "README.md"
     if readme.exists():
         readme.write_text(readme.read_text(encoding="utf-8") + render_readme_section(problem, kernel_file),

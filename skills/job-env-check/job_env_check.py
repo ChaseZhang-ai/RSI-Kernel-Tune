@@ -12,9 +12,11 @@ evaluates fine (seen on a fused-norm-rope B200 run: every timeline, every stall
 ledger and every first pricing attempt of the run).
 
 Run once per loop start by the driver (``cmd:python3 notes/job_env_check.py``).
-Prints exactly one verdict line:
+``--cuda`` additionally checks the CUDA mode's toolchain (nvcc / ninja / CUTLASS
+headers); ``--triton`` additionally checks that the job's ``python3`` imports
+``triton``. Prints exactly one verdict line:
 
-    JOB-ENV-OK python3=<path> torch=<version>
+    JOB-ENV-OK python3=<path> torch=<version>[ cuda-toolchain=ok][ triton=<version>]
     JOB-ENV-FAIL python3=<path> <last line of the failure>
 
 with the failing import's own text printed verbatim above a FAIL line.
@@ -50,6 +52,26 @@ def cuda_toolchain_problem(env=None) -> str | None:
     return None
 
 
+def triton_check() -> "tuple[str | None, str]":
+    """(problem, version) for a triton-mode card (``--triton``): its kernel.py imports
+    ``triton`` and so does its reference, so the job's bare ``python3`` must have the
+    package. The SOL image ships ``fbtriton``; a python3 that cannot see it fails every
+    job of the run identically, and the loop would read that as a failing tree.
+
+    One literal probe command, no assembled source: this script is seeded into a
+    tree's ``notes/`` and the same flag/value pair is what the harness expects
+    (``forgekernel/loop/job_env.py`` MODE_IMPORT_CHECK / TRITON_MODULE)."""
+    try:
+        p = subprocess.run(["python3", "-c", "import triton; print(triton.__version__)"],
+                           capture_output=True, text=True, timeout=600)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"triton could not be probed: {e}", ""
+    if p.returncode != 0:
+        lines = (p.stderr or p.stdout or "").strip().splitlines()
+        return "triton not importable" + (f": {lines[-1]}" if lines else ""), ""
+    return None, p.stdout.strip()
+
+
 def main(argv=None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     exe = shutil.which("python3") or "(no python3 on PATH)"
@@ -60,11 +82,19 @@ def main(argv=None) -> int:
         print(f"JOB-ENV-FAIL python3={exe} could not run it: {e}", flush=True)
         return 0
     if p.returncode == 0:
-        if "--cuda" in args and (why := cuda_toolchain_problem()) is not None:
-            print(f"JOB-ENV-FAIL python3={exe} {why}", flush=True)
-            return 0
-        print(f"JOB-ENV-OK python3={exe} torch={p.stdout.strip()}"
-              + (" cuda-toolchain=ok" if "--cuda" in args else ""), flush=True)
+        ok = f"JOB-ENV-OK python3={exe} torch={p.stdout.strip()}"
+        if "--cuda" in args:
+            if (why := cuda_toolchain_problem()) is not None:
+                print(f"JOB-ENV-FAIL python3={exe} {why}", flush=True)
+                return 0
+            ok += " cuda-toolchain=ok"
+        if "--triton" in args:
+            why, version = triton_check()
+            if why is not None:
+                print(f"JOB-ENV-FAIL python3={exe} {why}", flush=True)
+                return 0
+            ok += f" triton={version}"
+        print(ok, flush=True)
         return 0
     err = (p.stderr or p.stdout or "").strip()
     if err:

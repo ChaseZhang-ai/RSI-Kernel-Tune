@@ -12,6 +12,12 @@ loop, or ``[loop] dsl_python``): the wheel family puts the whole Python DSL unde
 directory (``nvidia_cutlass_dsl/dsl_packages/``, holding ``cutlass`` and its siblings;
 a ``.pth`` file adds it to ``sys.path``), and that directory is what the student needs.
 
+A ``triton`` run gets the same treatment from its own distribution: its student is
+offline too, and the API it writes against is the installed ``triton`` package
+(``triton/language``, ``triton/compiler``, ``triton/backends/nvidia``), which is what
+the job's Triton compiler is. ``[env] TRITON_PIN`` is the pin compared against the
+installed version, the way ``DSL_PIN`` is for the DSL.
+
 Three things keep the default honest:
 
 * **Version.** The job pins the DSL with ``[env] DSL_PIN`` (submit.toml); a local
@@ -26,6 +32,8 @@ Three things keep the default honest:
 
 from __future__ import annotations
 
+import importlib.metadata
+import importlib.util
 import json
 import os
 import subprocess
@@ -34,10 +42,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 LANGUAGE_CUTEDSL = "cutedsl"
+LANGUAGE_TRITON = "triton"
 KEY_DSL_PYTHON = "dsl_python"
 ENV_DSL_PIN = "DSL_PIN"
 DIST_SHELL = "nvidia-cutlass-dsl"
 DIST_CORE = "nvidia-cutlass-dsl-libs-core"   # the pure-Python DSL body
+DIST_TRITON = "triton"
+# The card's [env] key the job pins the Triton build with. The SOL image installs
+# ``fbtriton`` (a Triton distribution); a run whose card names the version it pins
+# must not be handed another one's source.
+ENV_TRITON_PIN = "TRITON_PIN"
 PROBE_TIMEOUT_S = 60
 
 ORIGIN_EXPLICIT = "explicit"
@@ -84,6 +98,33 @@ for r in roots:
 out["roots"] = seen
 print(json.dumps(out))
 """
+
+def triton_install() -> tuple[str | None, tuple[Path, ...]]:
+    """``(version, roots)`` of the ``triton`` package installed for the interpreter
+    running this process, or ``(None, ())`` when there is none.
+
+    Read in-process -- ``importlib.metadata`` for the version (no import side
+    effects, works for a wheel that cannot be imported here) and
+    ``importlib.util.find_spec`` for the package roots (a source checkout or an
+    install without dist-info answers just the same). Deliberately not a subprocess
+    probe of another interpreter: the job's own interpreter is the authority for
+    what a Triton student may read, and this lane says so instead of opening a
+    command channel to guess."""
+    version: str | None = None
+    try:
+        version = importlib.metadata.version(DIST_TRITON)
+    except Exception:  # noqa: BLE001 — an install without metadata still has roots
+        version = None
+    roots: list[Path] = []
+    try:
+        spec = importlib.util.find_spec(DIST_TRITON)
+    except (ImportError, ValueError):
+        spec = None
+    for r in list(getattr(spec, "submodule_search_locations", None) or []):
+        p = Path(r)
+        if p.is_dir() and p not in roots:
+            roots.append(p)
+    return version, tuple(roots)
 
 
 @dataclass(frozen=True)
@@ -165,6 +206,9 @@ def resolve(cfg: dict, *, language: str, submit_env: dict | None = None,
     declared = lc.get("dsl_source_dirs") or []
     if isinstance(declared, list) and declared:
         return DslSource(dirs=tuple(_abs(p) for p in declared), origin=ORIGIN_EXPLICIT)
+    if language == LANGUAGE_TRITON:
+        return _resolve_triton(lc, submit_env=submit_env, pin_readable=pin_readable,
+                               python=python)
     if language != LANGUAGE_CUTEDSL:
         return DslSource(notes=(f"language={language!r}: no DSL source to default",))
     if not pin_readable:
@@ -221,3 +265,65 @@ def resolve(cfg: dict, *, language: str, submit_env: dict | None = None,
         notes=(f"dsl_source_dirs: defaulted to {[str(r) for r in roots]} "
                f"({DIST_SHELL} {version or 'unversioned'}, {interp_note}"
                + (f", matches [env] {ENV_DSL_PIN}" if pin else "") + ")",))
+
+
+def _resolve_triton(lc: dict, *, submit_env: dict | None, pin_readable: bool,
+                    python: str | None) -> DslSource:
+    """The Triton lane's ``dsl_source_dirs`` when the key is empty: the ``triton``
+    package installed for this interpreter, checked against the job's pin and the
+    declared reference source the way the CuTe DSL lane checks its distribution.
+
+    The install is read in-process (``triton_install``), so a ``[loop] dsl_python``
+    that is not the interpreter running the loop gets no default -- the note says so
+    and points at the explicit key, rather than guessing about an install this
+    process cannot see."""
+    if not pin_readable:
+        return DslSource(notes=(
+            f"dsl_source_dirs is empty and the card's submit config could not be read "
+            f"(submit.toml / submit.local.toml under operators/) — its [env] "
+            f"{ENV_TRITON_PIN} cannot be checked against the installed {DIST_TRITON}, so "
+            f"nothing is defaulted. Fix the card, or declare [loop] dsl_source_dirs "
+            f"explicitly",))
+    interp = python or lc.get(KEY_DSL_PYTHON) or sys.executable
+    if Path(str(interp)).resolve() != Path(sys.executable).resolve():
+        return DslSource(notes=(
+            f"dsl_source_dirs is empty and [loop] {KEY_DSL_PYTHON} = {interp} is not the "
+            f"interpreter running the loop — the {DIST_TRITON} package installed there "
+            f"cannot be read from this process. Declare [loop] dsl_source_dirs explicitly "
+            f"(the directory holding the triton package that interpreter imports)",))
+    interp_note = f"[loop] {KEY_DSL_PYTHON}" if lc.get(KEY_DSL_PYTHON) else "the loop's interpreter"
+    version, roots = triton_install()
+    if not roots:
+        return DslSource(version=version, notes=(
+            f"dsl_source_dirs is empty and {DIST_TRITON} is not installed in "
+            f"{interp_note} ({interp}) — the student is offline, so it can read the "
+            f"Triton API only from a local install named in [loop] dsl_source_dirs",))
+
+    pin = (submit_env or {}).get(ENV_TRITON_PIN)
+    pin = str(pin).strip() if pin is not None else ""
+    if pin and version and pin != version:
+        return DslSource(version=version, notes=(
+            f"dsl_source_dirs is empty; {DIST_TRITON} {version} is installed in "
+            f"{interp_note} but the job pins [env] {ENV_TRITON_PIN} = {pin} — not "
+            f"defaulting to another version's source. Install {pin} there, or declare "
+            f"[loop] dsl_source_dirs explicitly",))
+    if pin and not version:
+        return DslSource(notes=(
+            f"dsl_source_dirs is empty; a {DIST_TRITON} package was found in {interp_note} "
+            f"but without a version to check against [env] {ENV_TRITON_PIN} = {pin} — "
+            f"declare [loop] dsl_source_dirs explicitly",))
+
+    refs = [_abs(p) for p in (lc.get("ref_source_paths") or []) if isinstance(p, str)]
+    clash = [(r, ref) for r in roots for ref in refs if _overlaps(r, ref)]
+    if clash:
+        r, ref = clash[0]
+        return DslSource(version=version, notes=(
+            f"dsl_source_dirs is empty; the installed {DIST_TRITON} at {r} overlaps the "
+            f"declared reference source {ref} — not defaulting (the package door must not "
+            f"open onto the reference). Declare [loop] dsl_source_dirs explicitly",))
+
+    return DslSource(
+        dirs=tuple(roots), origin=ORIGIN_DEFAULT, version=version,
+        notes=(f"dsl_source_dirs: defaulted to {[str(r) for r in roots]} "
+               f"({DIST_TRITON} {version or 'unversioned'}, {interp_note}"
+               + (f", matches [env] {ENV_TRITON_PIN}" if pin else "") + ")",))

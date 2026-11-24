@@ -34,6 +34,9 @@ TEACHER_PROMPTS = ("recon_prompt.md", "distill_prompt.md", "distill_blackbox_pro
 # the prompts the CUDA mode reads from its own overlay (meta/cuda/); the rest are shared
 CUDA_OVERLAYS = ("recon_prompt.md", "distill_prompt.md", "distill_blackbox_prompt.md",
                  "patch_prompt.md", "student_prompt.md")
+# the same rule for the Triton mode's overlay (meta/triton/, task triton)
+TRITON_OVERLAYS = ("recon_prompt.md", "distill_prompt.md", "distill_blackbox_prompt.md",
+                   "patch_prompt.md", "student_prompt.md")
 
 TOKENS = {"target": "{TARGET_PROFILE_PATH}", "roofline": "{ROOFLINE_PATH}",
           "lessons": "{LESSONS_PATH}", "prior": "{PRIOR_PATH}"}
@@ -169,7 +172,9 @@ def test_no_prompt_outside_the_list_names_the_run_context_files():
     tokens = re.compile(r"\{(TARGET_PROFILE|ROOFLINE|LESSONS|PRIOR)_PATH\}")
     named = {p.relative_to(META).as_posix() for p in META.rglob("*.md")
              if tokens.search(p.read_text(encoding="utf-8"))}
-    assert named == set(TEACHER_PROMPTS) | {"student_prompt.md"} | {f"cuda/{n}" for n in CUDA_OVERLAYS}
+    assert named == (set(TEACHER_PROMPTS) | {"student_prompt.md"}
+                     | {f"cuda/{n}" for n in CUDA_OVERLAYS}
+                     | {f"triton/{n}" for n in TRITON_OVERLAYS})
     for outside in (REPO / "meta_milestone.md", REPO / "docs" / "milestones-template.md"):
         assert not tokens.search(outside.read_text(encoding="utf-8")), outside
 

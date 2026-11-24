@@ -175,8 +175,9 @@ def test_no_prompt_outside_the_list_names_the_run_context_files():
     # The step-0 section went to the six teacher prompts and the student prompt, to their CUDA
     # overlays where one exists, to the Triton overlays, and to nothing else. The library's two
     # generated-prompt entry points (seedlib) name the target profile too: their inputs are
-    # runtime files by design.
-    extra = {"seed_adapt_prompt.md", "baseline_rewrite_prompt.md"}
+    # runtime files by design, and so is the roofline task's cost-model prompt (it names the
+    # target profile as the context for which precision is realistic, never as arithmetic).
+    extra = {"seed_adapt_prompt.md", "baseline_rewrite_prompt.md", "cost_model_prompt.md"}
     assert named == (set(TEACHER_PROMPTS) | {"student_prompt.md"}
                      | {f"cuda/{n}" for n in CUDA_OVERLAYS}
                      | {f"triton/{n}" for n in TRITON_OVERLAYS} | extra)

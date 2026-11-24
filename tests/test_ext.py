@@ -54,11 +54,13 @@ def _with(name: str, text: str = HELLO) -> str:
 
 # --- the directory and its modules are the commands ---------------------------------------
 
-# the extension commands the tasks write (00-背景与约定 §7; module name == command): the
-# first wave's seven, then the second wave's. Step 0 shipped none on purpose; each task
-# that adds an extension command adds its module here.
-FIRST_WAVE = {"bench", "lib", "target", "prior", "campaign", "evolve", "board",
-              "shapes", "lessons", "roofline", "calibrate"}
+# the extension commands the task plan writes (00-背景与约定 §7/§13; module name == command).
+# Step 0 shipped none on purpose; each task that adds an extension command adds its module
+# here. The second wave added `shapes`, `lessons`, `calibrate` and `roofline`; the set stays
+# a closed list so a command nobody planned still fails this test.
+PLANNED = {"bench", "lib", "target", "prior", "campaign", "evolve", "board",
+           "shapes", "lessons", "calibrate", "roofline"}
+FIRST_WAVE = PLANNED          # the name the first wave's tests know
 
 
 def test_the_package_ships_only_first_wave_commands():
@@ -66,7 +68,7 @@ def test_the_package_ships_only_first_wave_commands():
     shipped = {p.stem for p in (REPO / "src" / "forgekernel" / "ext").iterdir()
                if p.suffix == ".py" and not p.name.startswith("_")}
     assert set(found) == shipped          # discovery finds exactly the modules that are there
-    assert set(found) <= FIRST_WAVE
+    assert set(found) <= PLANNED
     assert ext.command_names() == frozenset(shipped)
 
 

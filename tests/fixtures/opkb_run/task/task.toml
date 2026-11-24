@@ -1,0 +1,7 @@
+[task]
+language = "triton"
+arch     = "sm100"
+
+[leaderboard]
+suite = "sol-execbench"
+card  = "leaderboard/card"

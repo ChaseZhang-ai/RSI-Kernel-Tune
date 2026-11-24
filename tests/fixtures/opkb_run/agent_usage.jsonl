@@ -1,0 +1,2 @@
+{"role": "teacher", "tokens": 120000, "turns": 6}
+{"role": "student", "input_tokens": 300000, "output_tokens": 40000, "turns": 37}

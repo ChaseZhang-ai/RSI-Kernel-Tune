@@ -1,0 +1,19 @@
+{
+ "sha": "4c1a7d9e2b3f",
+ "window": "device",
+ "requested": 3,
+ "jobs": [
+  {"job": "record:1", "ms": 0.0471, "ref_ms": null, "ratio": null, "node": "local"},
+  {"job": "record:2", "ms": 0.0472, "ref_ms": null, "ratio": null, "node": "local"},
+  {"job": "record:3", "ms": 0.0471, "ref_ms": null, "ratio": null, "node": "local"}
+ ],
+ "median_ms": 0.0471,
+ "keep_ms": 0.0473,
+ "node_band_pct": 8.0,
+ "keep_disputed": false,
+ "nodes": ["local"],
+ "workloads": [
+  {"name": "wl0", "n": 3, "device_median_ms": 0.0312},
+  {"name": "wl1", "n": 3, "device_median_ms": 0.0711}
+ ]
+}

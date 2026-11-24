@@ -1,0 +1,7 @@
+{
+ "stop": "target",
+ "meta_steps": 2,
+ "confirm": {"median_ms": 0.0471, "median_ratio": 7.17, "n": 3, "sha": "4c1a7d9e2b"},
+ "kb_harvest": ["hw_kb/triton/sm100/rowwise_reduction.md"],
+ "unharvested": ["hw_kb/triton/sm100/rowwise_reduction.md"]
+}

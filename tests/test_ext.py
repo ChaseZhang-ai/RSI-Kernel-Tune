@@ -54,10 +54,11 @@ def _with(name: str, text: str = HELLO) -> str:
 
 # --- the directory and its modules are the commands ---------------------------------------
 
-# the extension commands the first wave of tasks writes (00-背景与约定 §7; module name ==
-# command). Step 0 shipped none on purpose; each first-wave task adds its own module here.
+# the extension commands the tasks write (00-背景与约定 §7; module name == command): the
+# first wave's seven, then the second wave's. Step 0 shipped none on purpose; each task
+# that adds an extension command adds its module here.
 FIRST_WAVE = {"bench", "lib", "target", "prior", "campaign", "evolve", "board",
-              "shapes"}          # shapes (16-任务-shapes): the second wave's command
+              "shapes", "lessons", "roofline", "calibrate"}
 
 
 def test_the_package_ships_only_first_wave_commands():

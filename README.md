@@ -145,9 +145,9 @@ PyTorch reference after about 1.5 hours:
 
 ## Board commands: the SOL-ExecBench campaign loop
 
-The first-wave extensions turn the loop into a board campaign. Each command is one step of
-the chain below; `forge <command> --help` is the reference, this table is the map. A step's
-"needs" column says what the step cannot do without.
+The extensions turn the loop into a board campaign. Each command is one step of the chain
+below; `forge <command> --help` is the reference, this table is the map. A step's "needs"
+column says what the step cannot do without.
 
 | # | Step | Command | What it does | Needs |
 |---|---|---|---|---|
@@ -155,17 +155,29 @@ the chain below; `forge <command> --help` is the reference, this table is the ma
 | 2 | find a starting point | `forge lib build`, `find <problem>`, `show <id>`, `score <problem> --card …`, `baselines <problem>`, `cover`, `adapt <problem> --seed …`, `fetch` | build and query the reference library (`kernel_library/`, 134 entries from permissively licensed sources), measure entries with `forge bench`, generate torch-only baselines, adapt a reference into this problem's `submission.py` | `forge bench` for `score`/`adapt` |
 | 3 | start from an existing kernel | `forge init <op> --leaderboard … --init-kernel <file> --prior <path>`, `forge prior build <op>` | seed the card's kernel file with a working implementation (byte-identical), copy references into the card's `prior/`, and write the `prior.md` manifest a run reads through `{PRIOR_PATH}` | — |
 | 4 | measure one candidate | `forge bench <task> --candidate <kernel.py\|solution.json>` (`compare`, `best-of` to combine readings) | one candidate through the loop's own GPU job on the frozen card: the card's clock, the card's judge, per-workload S, cold start; `--mode target` is the compile check only | a GPU for `--mode dev` |
-| 5 | optimize | `forge run`, `forge evolve <task> --lineages N --generations G` | the two-layer loop; `evolve` runs N populations of it, migrates the best into stalled lineages, keeps a refuge and archives every correct version | a model, a GPU |
-| 6 | orchestrate the board | `forge campaign targets`, `plan --pilot …`, `run`, `status`, `report`, `export <problem>`, `pack --track <t>`, `sync`, `tools` | the gap list from the board snapshot, a resumable per-problem campaign over `forge run`/`forge evolve`, the local-vs-board ratio ledger, one track's upload archive | a model/GPU for `run`, a dataset for `plan --dataset` |
-| 7 | submit and read back | `forge board whoami`, `submit <problem> <submission.py>`, `status`, `result <id>`, `publish <id>`, `submit-collection <track> <zip>`, `import <campaign>` | the board client: single-problem submissions (instant for the first five a day), track archives (two a day, ~6 h), result read-back, and import into the campaign ledger | `SOL_EXECBENCH_TOKEN` in the environment only |
+| 5 | know the hardware's limit | `forge calibrate`, `forge roofline tasks/<op> [--calibration …] [--cost-model … \| --estimate]` | measure this machine's peaks (six self-checked probes, delivery through the job path), then write each workload's floor, bottleneck class, flags and distance into the `{ROOFLINE_PATH}` context file | a GPU for `calibrate`; a model for `--estimate` |
+| 6 | optimize | `forge run`, `forge evolve <task> --lineages N --generations G` | the two-layer loop; `evolve` runs N populations of it, migrates the best into stalled lineages, keeps a refuge and archives every correct version; the `[budget]` keys cap what the teacher may eat | a model, a GPU |
+| 7 | specialise per shape | `forge shapes plan <task>`, `run`, `compose` (`--also` folds other exports in) | cluster a card's workloads by size, run each cluster, cross-evaluate the candidates per workload, and compose one `submission.py` that dispatches to the per-workload winner | a model/GPU for `run` |
+| 8 | keep the lessons | `forge lessons harvest <run>`, `query`, `render <problem> --out lessons.md`, `lint`, `stats` | mechanically extract a finished run into `op_kb/` records (kept/failed iterations, recon verdicts, usage) and render one markdown file the next run of the family reads through `{LESSONS_PATH}` | — |
+| 9 | orchestrate the board | `forge campaign targets`, `plan --pilot …`, `run`, `status`, `report`, `export <problem>`, `pack --track <t>`, `sync`, `tools` | the gap list from the board snapshot, a resumable per-problem campaign over `forge run`/`forge evolve`/`forge shapes`, the local-vs-board ratio ledger, one track's upload archive | a model/GPU for `run`, a dataset for `plan --dataset` |
+| 10 | submit and read back | `forge board whoami`, `submit <problem> <submission.py>`, `status`, `result <id>`, `publish <id>`, `submit-collection <track> <zip>`, `import <campaign>` | the board client: single-problem submissions (instant for the first five a day), track archives (two a day, ~6 h), result read-back, and import into the campaign ledger | `SOL_EXECBENCH_TOKEN` in the environment only |
+
+Every export goes through the **integrity gates**: `forge export` and the campaign's export
+refuse a file with a block-level static finding (environment writes, hidden state, absolute
+paths, architecture literals; `docs/integrity.md`), require the licence/notice banner,
+re-check the candidate on fresh inputs (`forgekernel.integrity.multiseed`) and refuse a cold
+start past `forgekernel.benchx.api.COLD_START_BUDGET_S`.
+
+Run-time mechanisms the commands rely on: the four run context files
+(`{TARGET_PROFILE_PATH}`, `{ROOFLINE_PATH}`, `{LESSONS_PATH}`, `{PRIOR_PATH}`) carry measured
+data into every prompt; the throughput governor (`[budget]` in `task.toml`, the ledger
+`governor_ledger.jsonl`, `forge status` / `report.md`) keeps the teacher from starving the
+student; the agent backend is a plugin (`[agent.teacher] backend = "claude" | "codex"`) and
+every turn's tokens and cost land in `agent_usage.jsonl` (`## Agent usage` in `report.md`).
 
 Languages: `task.toml` accepts `cutedsl`, `cuda-sol` and `triton`; a Triton card is made with
 `forge init … --language triton`, and `python -m forgekernel.triton_check <kernel.py>` is the
 standalone target compile check for a Triton kernel.
-
-The four run context files (`{TARGET_PROFILE_PATH}`, `{ROOFLINE_PATH}`, `{LESSONS_PATH}`,
-`{PRIOR_PATH}`) carry measured data into every prompt; `forge target show --out FILE` and
-`forge prior build` are what write them.
 
 ## How It Works
 

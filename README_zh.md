@@ -131,8 +131,8 @@ forge run .artifacts/rmsnorm_<id>                       # 中断后续跑
 
 ## 榜单命令：SOL-ExecBench 战役链路
 
-第一波的扩展命令把回路变成一场榜单战役。每个命令是下面链路的一步；`forge <命令> --help`
-是参考手册，这张表是地图。"需要"一列说明这一步离不开什么。
+扩展命令把回路变成一场榜单战役。每个命令是下面链路的一步；`forge <命令> --help`
+是参考手册，这张表是地图。“需要”一列说明这一步离不开什么。
 
 | # | 步骤 | 命令 | 做什么 | 需要 |
 |---|---|---|---|---|
@@ -140,15 +140,26 @@ forge run .artifacts/rmsnorm_<id>                       # 中断后续跑
 | 2 | 找起点 | `forge lib build`、`find <题>`、`show <id>`、`score <题> --card …`、`baselines <题>`、`cover`、`adapt <题> --seed …`、`fetch` | 构建并查询参考库（`kernel_library/`，134 条，来源许可证均允许），用 `forge bench` 给条目打分，生成 torch 基线，把参考改写成该题的 `submission.py` | `score`/`adapt` 要 `forge bench` |
 | 3 | 从现成 kernel 起步 | `forge init <op> --leaderboard … --init-kernel <文件> --prior <路径>`、`forge prior build <op>` | 用一份能工作的实现逐字节写入卡片 kernel 文件，把参考复制进卡片 `prior/`，写出运行经 `{PRIOR_PATH}` 读的 `prior.md` 清单 | — |
 | 4 | 量一份候选 | `forge bench <task> --candidate <kernel.py\|solution.json>`（`compare`、`best-of` 合并读数） | 让候选走回路自己的 GPU 作业：卡片自己的秒表、自己的判据、逐 workload 的 S、冷启动；`--mode target` 只做编译检查 | `--mode dev` 要 GPU |
-| 5 | 优化 | `forge run`、`forge evolve <task> --lineages N --generations G` | 两层回路；`evolve` 同时养 N 个种群，把最好的迁移给停滞者、留一个避难所，并归档每个通过正确性的版本 | 模型、GPU |
-| 6 | 调度整场战役 | `forge campaign targets`、`plan --pilot …`、`run`、`status`、`report`、`export <题>`、`pack --track <赛道>`、`sync`、`tools` | 从榜单快照算差距榜，逐题可续跑地驱动 `forge run`/`forge evolve`，本地/榜单比值台账，单赛道上传压缩包 | `run` 要模型/GPU，`plan --dataset` 要数据集 |
-| 7 | 提交与回读 | `forge board whoami`、`submit <题> <submission.py>`、`status`、`result <id>`、`publish <id>`、`submit-collection <赛道> <zip>`、`import <campaign>` | 榜单客户端：单题提交（每天前五次即时出分）、赛道压缩包（每天 2 次、约 6 小时）、回读结果并导入 campaign 台账 | 令牌只在环境变量 `SOL_EXECBENCH_TOKEN` 里 |
+| 5 | 知道硬件的极限 | `forge calibrate`、`forge roofline tasks/<题> [--calibration …] [--cost-model … \| --estimate]` | 六个自检-再计时的探针实测本机峰值（走作业投递），然后把每个 workload 的 floor、瓶颈类别、标志与余量写进 `{ROOFLINE_PATH}` 上下文文件（目标机官方峰值 vs 开发机实测值） | `calibrate` 要 GPU；`--estimate` 要模型 |
+| 6 | 优化 | `forge run`、`forge evolve <task> --lineages N --generations G` | 两层回路；`evolve` 同时养 N 个种群，把最好的迁移给停滞者、留一个避难所，并归档每个通过正确性的版本；`[budget]` 三个键限制 teacher 吃掉多少 run | 模型、GPU |
+| 7 | 按形状特化 | `forge shapes plan <题>`、`run`、`compose`（`--also` 可并入别的导出） | 按尺寸给一张卡片的 workload 聚类，逐簇跑，跨候选逐 workload 交叉评测，合成一个按 workload 分发到最快版本的 `submission.py` | `run` 要模型/GPU |
+| 8 | 攒经验 | `forge lessons harvest <run>`、`query`、`render <题> --out lessons.md`、`lint`、`stats` | 把跑完的 run 机械地提炼成 `op_kb/` 记录（保留/失败迭代、侦察判词、用量），再渲染成一份给同族下一题 teacher 读的 `{LESSONS_PATH}` | — |
+| 9 | 调度整场战役 | `forge campaign targets`、`plan --pilot …`、`run`、`status`、`report`、`export <题>`、`pack --track <赛道>`、`sync`、`tools` | 从榜单快照算差距榜，逐题可续跑地驱动 `forge run`/`forge evolve`/`forge shapes`，本地/榜单比值台账，单赛道上传压缩包 | `run` 要模型/GPU，`plan --dataset` 要数据集 |
+| 10 | 提交与回读 | `forge board whoami`、`submit <题> <submission.py>`、`status`、`result <id>`、`publish <id>`、`submit-collection <赛道> <zip>`、`import <campaign>` | 榜单客户端：单题提交（每天前五次即时出分）、赛道压缩包（每天 2 次、约 6 小时）、回读结果并导入 campaign 台账 | 令牌只在环境变量 `SOL_EXECBENCH_TOKEN` 里 |
+
+每一次导出都过**完整性闸门**：`forge export` 与 campaign 的导出会拒绝带 block 级静态发现的文件
+（写环境变量、隐藏状态、绝对路径、写死架构；见 `docs/integrity.md`），要求许可证/署名 banner 在场，
+用新输入多种子复验（`forgekernel.integrity.multiseed`），并拒绝超过
+`forgekernel.benchx.api.COLD_START_BUDGET_S` 的冷启动。
+
+命令依赖的运行期机制：四个运行上下文文件（`{TARGET_PROFILE_PATH}`、`{ROOFLINE_PATH}`、`{LESSONS_PATH}`、
+`{PRIOR_PATH}`）把测得的数据带进每一条提示词；吞吐治理器（`task.toml` 的 `[budget]`、账本
+`governor_ledger.jsonl`、`forge status` / `report.md`）不让 teacher 把 student 挤没；agent 后端是插件
+（`[agent.teacher] backend = "claude" | "codex"`），每个回合的 token 与花费落在 `agent_usage.jsonl`
+（`report.md` 的 `## Agent usage`）。
 
 语言：`task.toml` 接受 `cutedsl`、`cuda-sol`、`triton`；Triton 卡片用 `forge init … --language triton`
 生成，`python -m forgekernel.triton_check <kernel.py>` 是 Triton kernel 的独立目标编译检查。
-
-四个运行上下文文件（`{TARGET_PROFILE_PATH}`、`{ROOFLINE_PATH}`、`{LESSONS_PATH}`、`{PRIOR_PATH}`）
-把测得的数据带进每一条提示词；`forge target show --out FILE` 与 `forge prior build` 是写它们的地方。
 
 ## 工作原理
 

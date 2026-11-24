@@ -1,9 +1,0 @@
-# vendored upstreams (created by scripts/bootstrap.sh) and local caches
-vendor/
-__pycache__/
-*.pyc
-.pytest_cache/
-*.egg-info/
-run/
-results/
-ncu_tmp/

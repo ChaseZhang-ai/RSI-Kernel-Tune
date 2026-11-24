@@ -9,10 +9,21 @@ its own top-level folder and is labelled with one name:
 | folder | owner | track |
 |---|---|---|
 | [`vulcan/`](vulcan/README.md) | **zixinzenith** | reproduce the ForgeKernel architecture + score-aware orchestration research (VULCAN) |
-| *(to be added)* | other contributor | separate track |
+| [`argus/`](argus/README.md) | **zixinzenith** | reproduce the **CudaForge** agent architecture + verifier-first / attribution-driven search (ARGUS) |
 
 Nothing outside `vulcan/` belongs to the VULCAN track. Do not edit `vulcan/` from the other
-track, and do not edit the other track's folder from here.
+track, and do not edit the other track's folder from here. The same rules apply to `argus/`.
+
+### ARGUS (the `argus/` track, in one paragraph)
+
+ARGUS reproduces a **different base system** from VULCAN — **CudaForge** (a training-free
+Coder+Judge loop with hardware feedback, MIT, pin `eaba693f`) — and adds a **verifier-first,
+attribution-driven** layer: board-faithful, reward-hack-resistant verification; causal,
+counter-grounded performance attribution with model-based pre-screening; and a
+prerequisite-aware population search with regression-proof lineage. Its local results:
+4/4 realistic hacks pass CudaForge's gate but 0/4 pass ARGUS, and at equal budget the
+effective board score rises 0.00 → 0.65 (verification) and 0.79 → 0.94 (search). See
+[`argus/README.md`](argus/README.md).
 
 ---
 

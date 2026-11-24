@@ -1,0 +1,44 @@
+# Example ARGUS campaign configuration.  These are the knobs a run reads; the code paths
+# that consume them are documented in ARCHITECTURE.md.  Nothing here needs a GPU to parse.
+
+run:
+  collection: flashinfer-bench     # L1 | L2 | Quant | flashinfer-bench
+  kernels: []                      # empty = every kernel in the collection
+  peak_name: B300                  # generation/iteration device; score on B200 anchors
+  gpu_name: B300
+
+budget:
+  total_evals: 1040                # 26 kernels x 40 evals
+  min_evals_per_kernel: 8
+  plan: marginal_greedy            # schedule.plan_eval_budget
+
+search:
+  n_lineages: 4
+  max_evals_per_kernel: 40
+  ucb_c: 1.0
+  prune_margin: 0.10
+  diversity_floor: 2
+  screen_fidelity: 0               # cheap timing
+  confirm_fidelity: 1              # board-protocol timing
+  confirm_when_promising: true
+  prereq_aware: true               # install roofline.prereq_satisfied as the arm filter
+
+verification:
+  atol: 1.0e-2                     # SOL defaults
+  rtol: 1.0e-2
+  matched_ratio: 0.99
+  max_error_cap: null
+  output_dtype: float32
+  min_accum_bits: 32
+  allow_downcast: false
+  probes: true                     # metamorphic probes by operator class
+  fingerprint: true                # counter-fingerprint audit
+  require_determinism: false
+
+agents:
+  coder_model: claude-opus-5-5
+  judge_model: claude-opus-5-5
+  judge_context: causal            # causal (ARGUS) | raw_dump (CudaForge reproduction)
+
+memory:
+  path: results/mechanism_memory.jsonl

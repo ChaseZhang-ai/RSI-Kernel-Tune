@@ -104,9 +104,11 @@ _META_PHASES = {
     "kb_harvest_prompt.md": "kb",
     "kb_recipe_prompt.md": "kb",
     "student_prompt.md": "student",
-    # not phases of the two-layer loop (KLIB one-turn prompts / appended fragments)
+    # not phases of the two-layer loop (KLIB one-turn prompts / appended fragments; the
+    # cost-model prompt is `forge roofline --estimate`'s one teacher turn, outside a run)
     "seed_adapt_prompt.md": "other",
     "baseline_rewrite_prompt.md": "other",
+    "cost_model_prompt.md": "other",
     "verdict_probe_brief.md": "other",
     "verdict_probe_brief_audit.md": "other",
 }

@@ -697,21 +697,65 @@ CUDA_KERNEL_SUFFIXES = (".cu",)
 # Mirrors the card's eval/leaderboard.py (CUDA_DEFAULT_CFLAGS / CUDA_GENCODE /
 # CUDA_FLAGS_LINE / CUDA_FLAG_OK): the flags the card builds with are the flags exported.
 CUDA_DEFAULT_CFLAGS = ["-O3", "--use_fast_math"]
+# The board's own default: SOL-ExecBench's packager appends it to a solution that names no
+# architecture, and it is what `leaderboard export` writes for one that names none.
 CUDA_GENCODE = "-gencode=arch=compute_100a,code=sm_100a"
 CUDA_FLAGS_LINE = re.compile(r"^[ \t]*//[ \t]*fk-cuda-cflags:(.*)$", re.M)
+# The card compiles for the machine it runs on, not for the board: gpu_entry.sh exports this
+# from the task's dev_arch (`sm_103a` on a B300), and a job on another machine overrides it.
+CUDA_ARCH_ENV = "FK_CUDA_ARCH"
+CUDA_ARCH_FALLBACK_ENV = "CUTE_DSL_ARCH"
+# The architecture the board builds for: the `code=` side of the board's default gencode, so
+# the two can never drift apart.
+BOARD_CUDA_ARCH = CUDA_GENCODE.rsplit("code=", 1)[-1]
+_ARCH_TEXT_RE = re.compile(r"sm_?(\d{2,3})([a-z]?)")
+
+
+def cuda_arch(arch: str | None) -> str:
+    """``"sm103"`` / ``"sm_103a"`` / ``"103"`` -> ``"sm_103a"`` (the CuTe / nvcc spelling)."""
+    from forgekernel.targethw import cuda_arch as to_cuda_arch
+
+    return to_cuda_arch(arch) if arch else BOARD_CUDA_ARCH
+
+
+def gencode_of_arch(arch: str) -> str | None:
+    """``"sm_103a"`` -> ``-gencode=arch=compute_103a,code=sm_103a`` (None if not an arch)."""
+    m = _ARCH_TEXT_RE.fullmatch(str(arch or "").strip())
+    if not m:
+        return None
+    cc = f"{m.group(1)}{m.group(2)}"
+    return f"-gencode=arch=compute_{cc},code=sm_{cc}"
+
+
+def device_gencode(environ=None) -> str:
+    """The gencode for the machine this build runs on: the environment's arch, else the
+    board's default (a card that has no FK_CUDA_ARCH is not on a development machine)."""
+    import os
+
+    environ = os.environ if environ is None else environ
+    for var in (CUDA_ARCH_ENV, CUDA_ARCH_FALLBACK_ENV):
+        flag = gencode_of_arch(environ.get(var, ""))
+        if flag:
+            return flag
+    return CUDA_GENCODE
 
 
 def is_cuda_kernel_file(kernel_file: str) -> bool:
     return Path(kernel_file).suffix in CUDA_KERNEL_SUFFIXES
 
 
-def cuda_kernel_flags(src: str) -> list[str]:
+def cuda_kernel_flags(src: str, *, gencode: str | None = None) -> list[str]:
     """The nvcc flags the card builds a CUDA kernel file with (no allow-list check here: the
-    card's fence refuses a disallowed flag before a build)."""
+    card's fence refuses a disallowed flag before a build).
+
+    ``gencode`` overrides the architecture; None means "the machine this builds on"
+    (``device_gencode()``). ``leaderboard export`` passes the board's default explicitly: the
+    exported solution is built on the board, whatever the development machine was.
+    """
     extra = [f for line in CUDA_FLAGS_LINE.findall(src) for f in line.split()]
     flags = CUDA_DEFAULT_CFLAGS + [f for f in extra if f not in CUDA_DEFAULT_CFLAGS]
     if not any(f.startswith(("-gencode", "-arch")) for f in flags):
-        flags.append(CUDA_GENCODE)
+        flags.append(gencode or device_gencode())
     return flags
 
 
@@ -742,8 +786,10 @@ def render_kernel_stub_cuda(problem: Problem, *, dps: bool = True) -> str:
 // The board's cuda_cpp solution format: this one file, its own torch binding
 // (PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) below; the build names the module). Built by
 // eval/leaderboard.py the way {problem.suite} builds it: torch cpp_extension, nvcc
-// {" ".join(CUDA_DEFAULT_CFLAGS)} {CUDA_GENCODE}, -lcuda, CUTLASS / CuTe C++ headers on the
-// include path. Extra nvcc flags (code generation / diagnostics only) go on a line
+// {" ".join(CUDA_DEFAULT_CFLAGS)} -gencode for this machine's compute capability (the card
+// exports FK_CUDA_ARCH from the task's dev_arch; the board's default is {BOARD_CUDA_ARCH}),
+// -lcuda, CUTLASS / CuTe C++ headers on the include path. Extra nvcc flags (code generation /
+// diagnostics only) go on a line
 //     // fk-cuda-cflags: -Xptxas=-v
 // and are submitted with the solution. No other local file is compiled with it.
 //
@@ -824,7 +870,7 @@ cd "$WORKSPACE"
 export PYTHONPATH="$WORKSPACE:$WORKSPACE/eval:${{PYTHONPATH:-}}"
 export PYTHONUNBUFFERED=1
 export CUTE_DSL_ARCH="${{CUTE_DSL_ARCH:-{arch}}}"
-
+{cuda_arch_export}
 # Clocks. {clock_note}
 # A clock lock is GPU state, not process state: it outlives the job that set it and
 # slows every later tenant of this GPU. So every entry first clears whatever an
@@ -1006,11 +1052,33 @@ SUITE_CLOCK = {
 }
 
 
-def render_gpu_entry(problem: Problem) -> str:
+def cuda_arch_export(arch: str) -> str:
+    """The gpu_entry line that pins the *CUDA* builds to ``arch`` (a ``sm_103a`` spelling).
+
+    Empty without a development architecture: a card with no ``dev_arch`` is byte-for-byte
+    what it always was, and its CUDA builds follow ``CUTE_DSL_ARCH`` (the same value).
+    """
+    if not arch:
+        return ""
+    return ("# The CUDA builds follow the same architecture, the development GPU's (an exported\n"
+            "# solution is built on the board, which never sets this).\n"
+            f'export FK_CUDA_ARCH="${{FK_CUDA_ARCH:-{arch}}}"\n')
+
+
+def render_gpu_entry(problem: Problem, dev_arch: str | None = None) -> str:
+    """``gpu_entry.sh`` for this card.
+
+    ``dev_arch`` (the task's ``[task] dev_arch``, e.g. ``"sm103"``) is the architecture the
+    card compiles and runs for -- the development machine. Without it the card keeps the
+    board's architecture (``CUDA_GENCODE``'s), which is what a card with no task behind it
+    has always had.
+    """
     clock, mem_clock, require_lock, clock_note = SUITE_CLOCK[problem.suite]
+    arch = cuda_arch(dev_arch) if dev_arch else BOARD_CUDA_ARCH
     return GPU_ENTRY_TEMPLATE.format(
-        name=problem.name, suite=problem.suite, arch="sm_100a", clock=clock,
-        mem_clock=mem_clock, require_lock=require_lock, clock_note=clock_note)
+        name=problem.name, suite=problem.suite, arch=arch, clock=clock,
+        mem_clock=mem_clock, require_lock=require_lock, clock_note=clock_note,
+        cuda_arch_export=cuda_arch_export(arch if dev_arch else ""))
 
 
 def render_window_toml(problem: Problem) -> str:
@@ -1287,8 +1355,13 @@ def render_readme_section(problem: Problem, kernel_file: str = "kernel.py") -> s
 
 
 def write_card(op_dir: Path, problem: Problem, template_eval: Path, *,
-               dps: bool = True, kernel_file: str = "kernel.py") -> list[Path]:
-    """Write the leaderboard files into a freshly scaffolded card."""
+               dps: bool = True, kernel_file: str = "kernel.py",
+               dev_arch: str | None = None) -> list[Path]:
+    """Write the leaderboard files into a freshly scaffolded card.
+
+    ``dev_arch`` (the task's ``[task] dev_arch``) is the architecture the card compiles and
+    runs for; None keeps the board's (a card scaffolded straight from a board problem).
+    """
     op_dir = Path(op_dir)
     lb_dir = op_dir / LEADERBOARD_DIR
     lb_dir.mkdir(parents=True, exist_ok=True)
@@ -1324,7 +1397,7 @@ def write_card(op_dir: Path, problem: Problem, template_eval: Path, *,
               "judged first on every run (all must pass) and never timed.\n")}
     put("eval/bench.py", BENCH_TEMPLATE.format(**fmt))
     put("eval/ncu_run.py", NCU_TEMPLATE.format(**fmt))
-    put("gpu_entry.sh", render_gpu_entry(problem))
+    put("gpu_entry.sh", render_gpu_entry(problem, dev_arch=dev_arch))
     (op_dir / "gpu_entry.sh").chmod(0o755)
     put(kernel_file, render_kernel_stub_cuda(problem, dps=dps) if is_cuda_kernel_file(kernel_file)
         else render_kernel_stub(problem, dps=dps))
@@ -1444,7 +1517,11 @@ def export_solution(op_dir: Path, *, name: str, author: str, language: str | Non
                 "entry_point": entry, "destination_passing_style": dps,
                 "dependencies": sol_deps}
         if cuda:  # the flags the card built it with (SOL resolves ld_flags to -lcuda)
-            spec["compile_options"] = {"cuda_cflags": cuda_kernel_flags(src)}
+            # The board's default, not this machine's: the exported solution is built on the
+            # board (a submission that names its own arch flag keeps it -- cuda_kernel_flags
+            # only appends when the file names none).
+            spec["compile_options"] = {"cuda_cflags": cuda_kernel_flags(src,
+                                                                       gencode=CUDA_GENCODE)}
     return {"name": name, "definition": problem["definition"]["name"], "author": author,
             "description": desc, "spec": spec, "sources": sources}
 

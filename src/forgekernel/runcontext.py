@@ -17,10 +17,17 @@ that already exist for this one -- is data, and it reaches an agent as FILES the
     prior       FK_PRIOR_PATH             kernels already written for THIS operator or its family
                                           (paths, sources, licenses, measured scores) + its rules
 
-The driver binds each path into the prompts as ``{TARGET_PROFILE_PATH}`` and so on
-(loop/driver.py ``_bindings``); the teacher's and the student's prompts end with the section that
-says what to do with them. A variable that is not set binds ``(none)``, and the prompts tell the
-agent to proceed exactly as without the file -- so a run that sets none of them behaves as before.
+The driver binds each *path* into the prompts as ``{TARGET_PROFILE_PATH}`` and so on
+(loop/driver.py ``_bindings``, through ``binding``); the teacher's and the student's prompts end
+with the section that says what to do with them. A variable that is not set binds ``(none)``, and
+the prompts tell the agent to proceed exactly as without the file -- so a run that sets none of
+them behaves as before.
+
+A prompt builder on a machine where a path would not resolve can inline a file's *text*
+instead: ``render(text)`` replaces every placeholder with ``read``'s text, and ``bindings()``
+gives ``{placeholder: text}`` for all four. The two views are the same files; whichever one a
+caller uses, nothing is invented when a file is unset -- ``(none)`` for a path, the plain note
+from ``read`` for a text.
 
 Who measures writes: targethw the target profile, roofline the roofline, opkb the lessons,
 warmstart and seedlib the prior implementations. What each file holds is theirs to define. Two
@@ -41,15 +48,34 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
-CONTEXT_FILES = {
-    "target":    "FK_TARGET_PROFILE_PATH",   # target device profile: facts + rules for THIS project
-    "roofline":  "FK_ROOFLINE_PATH",         # measured peaks + per-workload distance to SOL
-    "lessons":   "FK_LESSONS_PATH",          # what was measured before on other operators of the class
-    "prior":     "FK_PRIOR_PATH",            # existing implementations for THIS operator (paths, sources, scores) + its rules
+# name -> (environment variable, prompt placeholder)
+CONTEXTS: dict[str, tuple[str, str]] = {
+    "target": ("FK_TARGET_PROFILE_PATH", "TARGET_PROFILE_PATH"),
+    "roofline": ("FK_ROOFLINE_PATH", "ROOFLINE_PATH"),
+    "lessons": ("FK_LESSONS_PATH", "LESSONS_PATH"),
+    "prior": ("FK_PRIOR_PATH", "PRIOR_PATH"),
 }
+
+# name -> environment variable (the same four, in the order an agent meets them)
+CONTEXT_FILES = {name: variable for name, (variable, _) in CONTEXTS.items()}
 
 # What a binding holds when the run sets no file (the prompts name this value and say to go on).
 NONE_BINDING = "(none)"
+
+# A context file is a page or two. A truncated one is still useful (its head is the summary);
+# an unbounded one would crowd out the task itself.
+MAX_CHARS = 64_000
+
+_EMPTY = {
+    "target": "(no target profile set: FK_TARGET_PROFILE_PATH is unset)",
+    "roofline": "(no measured roofline set: FK_ROOFLINE_PATH is unset)",
+    "lessons": "(no operator-family lessons set: FK_LESSONS_PATH is unset)",
+    "prior": "(no ready-made implementations listed: FK_PRIOR_PATH is unset)",
+}
+
+
+class ContextError(ValueError):
+    """A context path was named but cannot be read."""
 
 
 def _absolute(value) -> str | None:
@@ -93,3 +119,52 @@ def env_for(context: Mapping) -> dict[str, str]:
         if absolute is not None:
             out[variable] = absolute
     return out
+
+
+def env_name(name: str) -> str:
+    """The environment variable of context ``name``."""
+    try:
+        return CONTEXTS[name][0]
+    except KeyError:
+        raise KeyError(f"unknown run context {name!r}; known: {sorted(CONTEXTS)}") from None
+
+
+def placeholder(name: str) -> str:
+    """The prompt placeholder of context ``name`` (without braces)."""
+    try:
+        return CONTEXTS[name][1]
+    except KeyError:
+        raise KeyError(f"unknown run context {name!r}; known: {sorted(CONTEXTS)}") from None
+
+
+def read(name: str, environ: Mapping | None = None) -> str:
+    """The text of context ``name``; the empty-context note when unset; ``ContextError`` when
+    the variable is set but the file cannot be read (a silently missing target profile would
+    let a run proceed on assumptions the operator never chose)."""
+    environ = os.environ if environ is None else environ
+    var = env_name(name)
+    value = str(environ.get(var) or "").strip()
+    if not value:
+        return _EMPTY[name]
+    p = Path(value).expanduser()
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError as e:
+        raise ContextError(f"{var}={value}: {e.strerror or e}") from None
+    if len(text) > MAX_CHARS:
+        text = (text[:MAX_CHARS].rstrip()
+                + f"\n\n[truncated: {p.name} is {len(text)} characters, the first "
+                  f"{MAX_CHARS} are shown]")
+    return text
+
+
+def bindings(environ: Mapping | None = None) -> dict[str, str]:
+    """``{placeholder: text}`` for every context (unset ones get their note)."""
+    return {ph: read(name, environ) for name, (_, ph) in CONTEXTS.items()}
+
+
+def render(text: str, environ: Mapping | None = None) -> str:
+    """``text`` with every context placeholder replaced by the file's text."""
+    for ph, value in bindings(environ).items():
+        text = text.replace("{" + ph + "}", value)
+    return text

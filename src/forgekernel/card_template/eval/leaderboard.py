@@ -409,15 +409,19 @@ def _precision():
 # A CUDA C++ kernel file (problem.json kernel_file ``*.cu``, loop language ``cuda-sol``) is
 # compiled here the way SOL-ExecBench builds a cuda_cpp solution with compile_options: torch
 # cpp_extension, the file's own PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) binding, CUTLASS
-# headers on the include path, -O3 --use_fast_math and -lcuda (SOL's defaults), sm_100a unless
-# a flag names an arch, plus the flags of any ``// fk-cuda-cflags: ...`` line. `forge <op>
-# leaderboard export` writes the same list into the solution's compile_options, so the bytes
-# judged and timed here are the bytes the board builds. The file is compiled alone (copied
-# into its build directory): a solution is this one file.
+# headers on the include path, -O3 --use_fast_math and -lcuda (SOL's defaults), a gencode for
+# the machine this runs on unless a flag names an arch, plus the flags of any
+# ``// fk-cuda-cflags: ...`` line. `forge <op> leaderboard export` writes the board's flags
+# into the solution's compile_options. The file is compiled alone (copied into its build
+# directory): a solution is this one file.
 CUDA_KERNEL_SUFFIXES = (".cu",)
 CUDA_DEFAULT_CFLAGS = ["-O3", "--use_fast_math"]
 CUDA_DEFAULT_LDFLAGS = ["-lcuda"]
+# The board's default. The card builds for the machine it runs on: gpu_entry.sh exports
+# FK_CUDA_ARCH from the task's dev_arch (sm_103a on a B300), so this is only the fallback.
 CUDA_GENCODE = "-gencode=arch=compute_100a,code=sm_100a"
+CUDA_ARCH_ENV = "FK_CUDA_ARCH"
+CUDA_ARCH_FALLBACK_ENV = "CUTE_DSL_ARCH"
 CUDA_FLAGS_LINE = re.compile(r"^[ \t]*//[ \t]*fk-cuda-cflags:(.*)$", re.M)
 # "1" from the loop's stall pricing (recon/stall_price_run.py): the build adds -lineinfo.
 CUDA_LINEINFO_ENV = "FK_CUDA_LINEINFO"
@@ -430,6 +434,30 @@ CUDA_FLAG_OK = re.compile(
     r"|-std=c\+\+\d\d|--?expt-relaxed-constexpr|--?expt-extended-lambda|--?restrict"
     r"|-gencode=arch=compute_\w+,code=(sm|compute)_\w+|-arch=(sm|compute)_\w+"
     r"|--?default-stream=(legacy|null|per-thread)|-Xcompiler=-O[0-3]|-w|-Wno-[-\w]+")
+_ARCH_TEXT_RE = re.compile(r"sm_?(\d{2,3})([a-z]?)")
+
+
+def gencode_of_arch(arch: str) -> str | None:
+    """``"sm_103a"`` -> ``-gencode=arch=compute_103a,code=sm_103a`` (None if not an arch)."""
+    m = _ARCH_TEXT_RE.fullmatch(str(arch or "").strip())
+    if not m:
+        return None
+    cc = f"{m.group(1)}{m.group(2)}"
+    return f"-gencode=arch=compute_{cc},code=sm_{cc}"
+
+
+def device_gencode() -> str:
+    """The gencode for the machine this build runs on, or the board's default.
+
+    No device is queried: the card exports FK_CUDA_ARCH from the task's dev_arch, and the
+    board's own evaluation never sets it. A build must not silently pick a third
+    architecture, so this reads the environment and falls back to the documented default.
+    """
+    for var in (CUDA_ARCH_ENV, CUDA_ARCH_FALLBACK_ENV):
+        flag = gencode_of_arch(os.environ.get(var, ""))
+        if flag:
+            return flag
+    return CUDA_GENCODE
 
 
 def cuda_kernel_flags(src: str) -> list[str]:
@@ -441,7 +469,7 @@ def cuda_kernel_flags(src: str) -> list[str]:
                          f"flags only: no paths, libraries or linker options)")
     flags = CUDA_DEFAULT_CFLAGS + [f for f in extra if f not in CUDA_DEFAULT_CFLAGS]
     if not any(f.startswith(("-gencode", "-arch")) for f in flags):
-        flags.append(CUDA_GENCODE)
+        flags.append(device_gencode())
     return flags
 
 

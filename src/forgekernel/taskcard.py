@@ -49,6 +49,13 @@ def kernel_file(task) -> str:
     return KERNEL_FILE[task.language]
 
 
+def _cute_arch(arch: str) -> str:
+    """A task's arch spelling (``"sm103"`` or ``"sm_103a"``) as CuTe DSL / nvcc spell it."""
+    from forgekernel.targethw import cuda_arch as to_cuda_arch
+
+    return to_cuda_arch(arch)
+
+
 def card_problem(task, check, *, reference_impl: dict | None = None,
                  tolerance: dict | None = None) -> dict:
     """problem.json for ``task`` judged by ``check`` (forgekernel.judge.Check)."""
@@ -147,8 +154,12 @@ def write_card(run, task, check, machine) -> Path:
     (op_dir / "eval" / "bench.py").write_text(lbmod.BENCH_TEMPLATE.format(**fmt), encoding="utf-8")
     (op_dir / "eval" / "ncu_run.py").write_text(lbmod.NCU_TEMPLATE.format(**fmt), encoding="utf-8")
     entry = op_dir / "gpu_entry.sh"
+    # The card compiles and runs for the development GPU (`dev_arch`); `arch` -- the graded
+    # one -- still picks the knowledge base and the profile the agents read.
+    cute_arch = _cute_arch(task.compiled_arch)
     text = lbmod.GPU_ENTRY_TEMPLATE.format(
-        name=task.name, suite=SUITE, arch=CUTE_ARCH.get(task.arch, task.arch + "a"),
+        name=task.name, suite=SUITE, arch=cute_arch,
+        cuda_arch_export=lbmod.cuda_arch_export(cute_arch if task.dev_arch else ""),
         clock="", mem_clock="", require_lock="0",
         clock_note="A task runs at the GPU's own clocks unless LB_SM_CLOCK_MHZ / "
                    "LB_MEM_CLOCK_MHZ pin one (that needs permission to lock); the eval JSON "
@@ -280,8 +291,10 @@ def write_submit(tree: Path, task, machine, timeout: int = JOB_TIMEOUT_S) -> Pat
         f'workdir = {json.dumps(machine.remote_workdir)}',
         f'env_file = {json.dumps(machine.remote_env_file)}', f'gpu = "{machine.gpu}"',
         "[env]", 'PYTHONUNBUFFERED = "1"',
-        f'CUTE_DSL_ARCH = "{CUTE_ARCH.get(task.arch, task.arch + "a")}"',
+        f'CUTE_DSL_ARCH = "{_cute_arch(task.compiled_arch)}"',
     ]
+    if task.dev_arch:      # the card's own architecture, explicitly (a job may override it)
+        lines.append(f'FK_CUDA_ARCH = "{_cute_arch(task.dev_arch)}"')
     p = Path(tree) / "submit.toml"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p

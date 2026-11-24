@@ -602,3 +602,87 @@ def test_deny_urls_and_modules_reach_the_policy_the_guards_and_the_fence(repo):
     assert "reflib" in lbm.kernel_fence(problem)
     kfile.write_text("def reflib_like(x):\n    return x\n\nrun = reflib_like\n")
     assert lbm.kernel_fence(problem) is None
+
+
+# -- the throughput governor in the launch surfaces -----------------------------------------
+
+
+def _student_dir(run, task) -> Path:
+    d = run.operators_dir / task.name / "student"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _ledger(d: Path, rows: list[dict]) -> Path:
+    from forgekernel.loop import governor as gov
+    p = d / gov.LEDGER_NAME
+    p.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    return p
+
+
+def test_describe_shows_the_throughput_policy(repo):
+    run, task, _ = _run_with_check(repo)
+    text = launch.describe(task, load_machine(repo, environ={}))
+    assert ("throughput: teacher <= 0.5 x 4 h until 5 student iteration(s); "
+            "<= 12 teacher turn(s) per phase") in text
+
+
+def test_status_text_reports_the_governor_turns_and_rules(repo):
+    run, task, _ = _run_with_check(repo)
+    student = _student_dir(run, task)
+    (student / "status.jsonl").write_text(json.dumps(
+        {"iter": 1, "decision_id": "D1.1", "verdict": "KEEP", "correctness": True}) + "\n",
+        encoding="utf-8")
+    _ledger(student, [{"event": "policy", "hours": 4, "teacher_share": 0.5,
+                       "min_student_iters": 5, "max_teacher_turns_per_phase": 12},
+                      {"event": "turn", "role": "teacher", "phase": "recon",
+                       "elapsed_s": 12.5},
+                      {"event": "turn", "role": "student", "phase": "student",
+                       "elapsed_s": 7.5},
+                      {"event": "over_share"}])
+    text = launch.status_text(run)
+    assert "throughput: teacher 1 / 12.5 s; student 1 / 7.5 s" in text
+    assert "throughput rules: teacher_over_share, budget_starved" in text
+    assert "soft brakes 0, hard stops 0" in text
+
+
+def test_status_text_has_no_throughput_lines_without_a_ledger(repo):
+    run, task, _ = _run_with_check(repo)
+    _student_dir(run, task)
+    assert "throughput" not in launch.status_text(run)
+
+
+def test_write_report_has_the_throughput_section(repo):
+    from forgekernel.loop import governor as gov
+    run, task, _ = _run_with_check(repo)
+    student = _student_dir(run, task)
+    (student / "status.jsonl").write_text(
+        "".join(json.dumps({"iter": i, "decision_id": f"D1.{i}", "verdict": "KEEP",
+                            "correctness": True}) + "\n" for i in (1, 2)),
+        encoding="utf-8")
+    _ledger(student, [{"event": "policy", "hours": 4, "teacher_share": 0.5,
+                       "min_student_iters": 5, "max_teacher_turns_per_phase": 12},
+                      {"event": "turn", "role": "teacher", "phase": "recon",
+                       "elapsed_s": 20.0},
+                      {"event": "over_share"}])
+    (run.dir / gov.USAGE_NAME).write_text(json.dumps(
+        {"role": "teacher", "phase": "recon", "total_tokens": 4200,
+         "duration_s": 20.0}) + "\n", encoding="utf-8")
+    report = launch.write_report(run, task, 0).read_text()
+    assert "## Throughput" in report
+    assert "- student iterations: 2" in report
+    assert "teacher_over_share=yes" in report
+    assert "budget_starved=yes" in report and "escape_fired=no" in report
+    assert "turns by role: teacher 1 / 20.0 s" in report
+    assert "4200 tokens / 20.0 s" in report
+
+    # without the usage ledger the section stays, the usage line does not
+    (run.dir / gov.USAGE_NAME).unlink()
+    report = launch.write_report(run, task, 0).read_text()
+    assert "## Throughput" in report and "agent_usage.jsonl" not in report
+
+
+def test_write_report_says_when_there_is_no_governor_ledger(repo):
+    run, task, _ = _run_with_check(repo)
+    report = launch.write_report(run, task, 0).read_text()
+    assert "## Throughput" in report and "no ledger" in report

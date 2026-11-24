@@ -186,6 +186,10 @@ def describe(task, machine) -> str:
               f"  budget: {task.budget.hours:g} h, {task.budget.max_meta} teacher round(s)"
               + (f", {task.budget.reference_hours:g} h to write the reference"
                  if task.mode == MODE_GENERATE else ""),
+              f"  throughput: teacher <= {task.budget.teacher_share:g} x "
+              f"{task.budget.hours:g} h until {task.budget.min_student_iters} student "
+              f"iteration(s); <= {task.budget.max_teacher_turns_per_phase} teacher turn(s) "
+              f"per phase",
               f"  GPU: {machine.describe()}"]
     lines += [f"  note: {n}" for n in task.notes]
     return "\n".join(lines)
@@ -285,6 +289,8 @@ def status_text(run) -> str:
         rows = [json.loads(x) for x in status.read_text().splitlines() if x.strip()]
         keeps = [r for r in rows if r.get("verdict") == "KEEP"]
         lines.append(f"  iterations: {len(rows)} ({len(keeps)} kept)")
+    from forgekernel.loop import governor as governor_mod
+    lines += governor_mod.status_lines(governor_mod.ledger_path(status), status)
     if run.log.is_file():
         lines.append(f"  log: {run.log}")
     return "\n".join(lines)
@@ -586,6 +592,7 @@ def _refresh_machine(run, task, machine) -> None:
 
 def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
     from forgekernel.loop import cli as loop_cli
+    from forgekernel.loop import governor as governor_mod
     argv = [task.name, "--workspace", str(run.ws),
             "--hours", f"{task.budget.hours:g}", "--max-meta", str(task.budget.max_meta),
             "--agent-cmd", agent_command(task.student, "student"),
@@ -599,7 +606,23 @@ def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
     if harvest_only:
         argv.append("--harvest-only")
     _say("the loop: " + " ".join(argv[:5]) + " ...")
-    return loop_cli.main(argv)
+    # The throughput governor's [budget] policy rides to the loop as JSON. Set for the
+    # call and restored after it: the loop may run in this process, and a later run (or
+    # a test) must not inherit this run's policy.
+    policy = json.dumps({"hours": task.budget.hours,
+                         "teacher_share": task.budget.teacher_share,
+                         "min_student_iters": task.budget.min_student_iters,
+                         "max_teacher_turns_per_phase":
+                             task.budget.max_teacher_turns_per_phase})
+    previous = os.environ.get(governor_mod.POLICY_ENV)
+    os.environ[governor_mod.POLICY_ENV] = policy
+    try:
+        return loop_cli.main(argv)
+    finally:
+        if previous is None:
+            os.environ.pop(governor_mod.POLICY_ENV, None)
+        else:
+            os.environ[governor_mod.POLICY_ENV] = previous
 
 
 # -- the report -----------------------------------------------------------------------------
@@ -672,6 +695,11 @@ def write_report(run, task, rc: int) -> Path:
             kf.write_text(best["kernel"], encoding="utf-8")
             lines.append(f"- kernel: {kf.relative_to(run.dir)}")
     lines.append(f"- workspace: {run.ws}")
+    from forgekernel.loop import governor as governor_mod
+    status = run.operators_dir / task.name / "student" / "status.jsonl"
+    lines += [""] + governor_mod.report_lines(
+        governor_mod.ledger_path(status), status,
+        usage_path=run.dir / governor_mod.USAGE_NAME)
     kb = kb_changes()
     if kb:
         lines += ["", "## New knowledge-base entries (review, then commit or discard)", ""]

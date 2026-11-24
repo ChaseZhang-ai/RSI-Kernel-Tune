@@ -1087,7 +1087,12 @@ def fib_correctness(problem: dict, impl, dps: bool, device, prec=None) -> tuple[
         sets.append(inp)
         if t < PRECISION_SETS:
             pristine.append(_precision_snapshot(prec, inp))
+        # the integrity check's reference record rides the first set (the one the card's
+        # own reading is taken on); the copy is taken before the reference can write back
+        keep = _clone(inp) if integrity_on() and t == 0 else None
         refs.append(call_impl(problem, ref_run, inp, False, device, no_grad=True))
+        if keep is not None:
+            _capture_reference(problem, keep, refs[-1])
     verdict = {"pass": True, "status": "PASSED", "max_abs": 0.0, "max_rel": 0.0,
                "matched_ratio": 1.0, "checks": [],
                "tolerance": {"atol": cfg["atol"], "rtol": cfg["rtol"],
@@ -1151,7 +1156,12 @@ def sol_correctness(problem: dict, impl, dps: bool, device, prec=None) -> tuple[
     for rnd in range(SOL_ROUNDS):
         inp = gen_inputs(problem, device, custom_inputs_fn=custom)
         pristine = _precision_snapshot(prec, inp) if rnd < PRECISION_SETS else None
+        # the last round's input is the timed set: keep a copy for the integrity check's
+        # reference record, taken before the reference can write into its input
+        keep = _clone(inp) if integrity_on() and rnd == SOL_ROUNDS - 1 else None
         refs = call_impl(problem, ref_run, inp, False, device, no_grad=False)
+        if keep is not None:
+            _capture_reference(problem, keep, refs)
         try:
             outs = call_impl(problem, impl, inp, dps, device, no_grad=False)
         except Exception as exc:  # noqa: BLE001 — the solution is foreign code
@@ -2351,7 +2361,10 @@ def task_correctness(problem: dict, impl, dps: bool, device, prec=None) -> tuple
             return fail("INPUT_ERROR", f"input group {group['name']}: {type(exc).__name__}: {exc}")
         sets.append(inp)
         pristine = _precision_snapshot(prec, inp) if prec is not None and gi < PRECISION_SETS else None
+        keep = _clone(inp) if integrity_on() and gi == len(task_groups(problem)) - 1 else None
         refs = call_impl(problem, judge, _clone(inp), False, device, no_grad=True)
+        if keep is not None:
+            _capture_reference(problem, keep, refs)
         if why := _task_judge_error(problem, refs):
             return fail("JUDGE_ERROR", f"input group {group['name']}: {why}")
         try:
@@ -2433,6 +2446,7 @@ def _run_task(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, timed
     fails."""
     views = _task_shapes(problem)
     per, blocks, first_bad = [], [], None
+    judged: list = []
     for v in views:
         verdict, sets = _correctness(v, impl, dps, device)
         per.append((v, verdict))
@@ -2444,16 +2458,24 @@ def _run_task(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, timed
         if args.mode == "correctness":
             continue
         block = _task_side(v, sets, impl, dps, timed_ref, ref_dps, device)
+        judged.append((v, sets, block.get("device_median_ms")))
         blocks.append({"name": v["_wl_name"], "axes": v["workload"].get("axes"), **block})
         print(f"[task] {v['_wl_name']}: kernel device {block['device_median_ms']} ms, e2e "
               f"{block['bwd_median_ms']} ms"
               + (f"; reference device {block['ref_device_ms']} ms, x{block['vs_ref_device']}"
                  if block.get("ref_device_ms") else f" [reference: {block.get('in_job_ref')}]"))
     verdict = group_verdict(per, len(views), first_bad)
+    if integrity_on():
+        _INTEGRITY["state_correct"] = _global_state()
     result = {"correctness": _correctness_json(verdict), "performance": None}
     print(f"[task] correctness: {verdict['status']} ({len(per)}/{len(views)} shapes judged)"
           + (f" — {verdict.get('error')}" if not verdict["pass"] else ""))
     if not verdict["pass"] or args.mode == "correctness":
+        block, failures = _integrity_finish(
+            problem, impl, dps, device, pairs=[], timed=False) if verdict["pass"] else (None, [])
+        if block is not None:
+            result["integrity"] = block
+        _integrity_fail(result, failures)
         _emit(result)
         return 0
     perf = _task_aggregate(problem, blocks)
@@ -2463,6 +2485,11 @@ def _run_task(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, timed
           + (f"; reference device {perf['ref_device_ms']} ms, x{perf['vs_ref_device']}"
              if perf.get("vs_ref_device") else f" [reference: {perf.get('in_job_ref')}]")
           + f"; clock {clock_state()}")
+    block, failures = _integrity_finish(problem, impl, dps, device,
+                                        pairs=judged, timed=True)
+    if block is not None:
+        result["integrity"] = block
+    _integrity_fail(result, failures)
     _emit(result)
     return 0
 
@@ -2569,6 +2596,660 @@ def _ref_alone(problem: dict, ref_fn, ref_dps: bool, device) -> int:
     return 0
 
 
+# --- integrity checks (task guard) -----------------------------------------------------
+#
+# The loop is rewarded by this card's reading, and a reading can be gamed: return a cached
+# answer the first time and something cheap afterwards, capture a CUDA graph whose replay
+# skips the work, raise a global flag so the reference gets slower or less precise, put the
+# work on a stream the stopwatch does not see.  Five checks, all of them AFTER the timed
+# window (so none of them moves the reading), each reported in the eval JSON's `integrity`
+# block and each a NEW failure category -- the suite's own protocol (inputs, tolerance,
+# 10+50 calls, L2 flush, median) is untouched:
+#
+#   fresh-input recheck   the candidate on inputs it has never seen, drawn the card's way
+#                         with a different seed, judged by the card's own tolerance
+#   global state          the torch flags / environment variables / thread count before the
+#                         candidate was imported and after it ran
+#   reference stability   the reference on the correctness phase's own input, recomputed
+#                         after every candidate call and compared with what correctness saw
+#   timer consistency     CUDA-event, CUPTI-span and wall-clock readings of one call
+#   implausible speedup   a reading below 0.6 x the board's T_SOL
+#
+# A failure is `correctness.pass = false` with an `INTEGRITY: ...` error, so the loop
+# reverts it instead of banking a kernel that only looked right.  Every check degrades to
+# `skipped` / `unavailable` with a reason rather than failing the job: a check that cannot
+# run must never break the evaluation.
+#
+# FK_INTEGRITY=0 turns the block off; FK_INTEGRITY_FRESH_N sets how many workloads are
+# rechecked (default 2: the representative and one rotated by the job); FK_INTEGRITY_SEED
+# sets the redraw's base seed (forgekernel.integrity.multiseed drives it);
+# FK_INTEGRITY_STRICT=1 makes a suspicious timer reading a failure too.
+
+INTEGRITY_ENV_OFF = "FK_INTEGRITY"
+INTEGRITY_FRESH_ENV = "FK_INTEGRITY_FRESH_N"
+INTEGRITY_SEED_ENV = "FK_INTEGRITY_SEED"
+INTEGRITY_STRICT_ENV = "FK_INTEGRITY_STRICT"
+INTEGRITY_FRESH_N = 2
+INTEGRITY_SEED_BASE = 90000
+INTEGRITY_SEED_STRIDE = 101
+INTEGRITY_PREFIX = "INTEGRITY: "
+# A reading below this share of the board's T_SOL is not a kernel: above the speed of
+# light only a measurement defect or a cheat can sit.
+IMPLAUSIBLE_SHARE = 0.6
+# Timer consistency (check C).  A per-call span measurement has an expected shape: the
+# CUDA-event window is the span plus launch latency (events >= span), and the wall clock
+# is the event window plus host time (wall >= events >= span).  Each bound is a factor of
+# 2 away from that shape -- loose enough for a call whose kernels queue behind an L2
+# flush, tight enough that work leaving the window shows.  The last bound only fires on a
+# large reading, so an ordinary host-bound micro-kernel is not called suspicious.
+TIMER_SPAN_SHARE = 0.5
+TIMER_EVENTS_SHARE = 0.5
+TIMER_WALL_SHARE = 0.5
+TIMER_WALL_MAX = 20.0
+TIMER_WALL_FLOOR_MS = 1.0
+TIMER_ITERS = 5
+
+# The global flags whose value changes what the reference computes (or how fast it runs).
+_INTEGRITY_FLAGS = (
+    ("torch.backends.cuda.matmul.allow_tf32",
+     lambda: torch.backends.cuda.matmul.allow_tf32),
+    ("torch.backends.cudnn.allow_tf32", lambda: torch.backends.cudnn.allow_tf32),
+    ("torch.get_float32_matmul_precision", lambda: torch.get_float32_matmul_precision()),
+    ("torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction",
+     lambda: torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction),
+    ("torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction",
+     lambda: torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction),
+    ("torch.backends.cudnn.benchmark", lambda: torch.backends.cudnn.benchmark),
+)
+# Environment variables the GPU stack reads.  The harness's own switches are excluded: a
+# check may not read its own configuration as evidence about the candidate.
+_INTEGRITY_ENV_RE = re.compile(r"CUBLAS|CUDNN|CUDA|NVIDIA|TF32|TORCH|OMP|NCCL")
+_INTEGRITY_ENV_IGNORE = ("FK_INTEGRITY_", "FK_LB_", "LB_", "FK_TARGET_")
+
+# What the checks remember between the phases (cleared per run).
+_INTEGRITY: dict = {}
+
+
+def integrity_on() -> bool:
+    raw = (os.environ.get(INTEGRITY_ENV_OFF) or "").strip().lower()
+    return raw not in ("0", "off", "no", "false")
+
+
+def integrity_strict() -> bool:
+    return (os.environ.get(INTEGRITY_STRICT_ENV) or "").strip().lower() in ("1", "on", "yes",
+                                                                           "true")
+
+
+def _integrity_int(name: str, default: int) -> int:
+    try:
+        return int((os.environ.get(name) or "").strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _integrity_job_index() -> int:
+    """A number that differs between jobs, for rotating which workload is rechecked."""
+    raw = (os.environ.get("FK_JOB_INDEX") or "").strip()
+    if raw.isdigit():
+        return int(raw)
+    return os.getpid()
+
+
+def _global_state() -> dict:
+    """The evaluation's own state: the flags the reference's numbers depend on, the
+    environment variables the GPU stack reads, and how many threads are alive."""
+    flags = {}
+    for name, getter in _INTEGRITY_FLAGS:
+        try:
+            flags[name] = repr(getter())
+        except Exception as exc:  # noqa: BLE001 -- an older torch lacks a flag
+            flags[name] = f"<unavailable: {type(exc).__name__}>"
+    env = {}
+    for key in sorted(os.environ):
+        if key.startswith(_INTEGRITY_ENV_IGNORE):
+            continue
+        if _INTEGRITY_ENV_RE.search(key):
+            env[key] = os.environ[key]
+    return {"flags": flags, "env": env, "threads": threading.active_count()}
+
+
+def _global_state_diff(before: dict | None, after: dict | None) -> tuple[list, list]:
+    """(settings the candidate changed, thread-count changes), each as a readable line."""
+    if not before or not after:
+        return [], []
+    settings, threads = [], []
+    for name, value in after["flags"].items():
+        was = before["flags"].get(name)
+        if was != value:
+            settings.append(f"{name}: {was} -> {value}")
+    for name, value in after["env"].items():
+        was = before["env"].get(name)
+        if was != value:
+            settings.append(f"env {name}: {was if was is not None else '(unset)'} -> {value}")
+    for name, value in before["env"].items():
+        if name not in after["env"]:
+            settings.append(f"env {name}: {value} -> (removed)")
+    if before["threads"] != after["threads"]:
+        threads.append(f"threads: {before['threads']} -> {after['threads']}")
+    return settings, threads
+
+
+def _capture_reference(problem: dict, pristine: list, refs: list) -> None:
+    """Keep the reference's outputs on the correctness phase's own input.
+
+    ``pristine`` is a copy of the input taken before the reference ran (an in-place
+    definition writes back into its input); ``refs`` are the outputs correctness judged the
+    candidate against.  Recomputing the reference on ``pristine`` after the candidate has
+    run and comparing with ``refs`` is what catches a candidate that made the reference
+    slower or less precise.
+    """
+    try:
+        _INTEGRITY["reference"] = {
+            "workload": problem.get("_wl_name") or problem.get("workload", {}).get("uuid") or "",
+            "problem": problem,
+            "inputs": [t.detach().clone() if torch.is_tensor(t) else t for t in pristine],
+            "refs": [t.detach().clone() if torch.is_tensor(t) else t for t in refs],
+        }
+    except Exception:  # noqa: BLE001 -- bookkeeping must never break the judge
+        _INTEGRITY.pop("reference", None)
+
+
+class _integrity_rng:
+    """Seed the RNGs for one redraw and put them back afterwards, so the suite's own
+    seed-200 sequence (and anything after it) never moves."""
+
+    def __init__(self, seed: int):
+        self.seed = seed
+
+    def __enter__(self):
+        self.state = None
+        try:
+            self.state = (random.getstate(), torch.random.get_rng_state())
+            if torch.cuda.is_available():
+                self.cuda = torch.cuda.get_rng_state_all()
+            random.seed(self.seed)
+            torch.manual_seed(self.seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(self.seed)
+        except Exception:  # noqa: BLE001
+            self.state = None
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self.state is not None:
+                random.setstate(self.state[0])
+                torch.random.set_rng_state(self.state[1])
+            if torch.cuda.is_available() and getattr(self, "cuda", None) is not None:
+                torch.cuda.set_rng_state_all(self.cuda)
+        except Exception:  # noqa: BLE001
+            pass
+        return False
+
+
+def _fresh_reason(problem: dict) -> str | None:
+    """Why this workload's values cannot be redrawn (None when they can)."""
+    if problem["suite"] == SUITE_TASK:
+        groups = task_groups(problem)
+        if not groups:
+            return "the workload has no input group"
+        if all(g.get("kind") == "file" for g in groups):
+            return "fixed-file inputs (safetensors): the values cannot be redrawn"
+        return None
+    winputs = problem["workload"].get("inputs") or {}
+    drawn = 0
+    for name in problem["definition"]["inputs"]:
+        src = winputs.get(name) or {"type": "random"}
+        kind = src.get("type", "random")
+        if kind == "safetensors":
+            return "fixed-file inputs (safetensors): the values cannot be redrawn"
+        if kind == "random":
+            drawn += 1
+    if not drawn:
+        return "no randomly drawn input to redraw (every input is a scalar or fixed)"
+    return None
+
+
+def _fresh_input_set(problem: dict, seed: int, device) -> list:
+    """One input set of the same workload, drawn the card's way with a different seed."""
+    with _integrity_rng(seed):
+        if problem["suite"] == SUITE_TASK:
+            group = dict(task_groups(problem)[-1])
+            group["seed"] = int(group.get("seed", 0)) + seed
+            _, make_inputs = _task_custom(problem)
+            return task_inputs(problem, group, device, make_inputs)
+        if problem["suite"] == SUITE_SOL:
+            _, custom = reference_callables(problem)
+            return gen_inputs(problem, device, custom_inputs_fn=custom)
+        return gen_inputs(problem, device)
+
+
+def _same_inputs(a: list, b: list) -> bool:
+    """Whether a redraw produced exactly the values the correctness phase used (a
+    definition whose every input is a heuristic: norm weights of 1, masks, rope tables)."""
+    if len(a) != len(b):
+        return False
+    for x, y in zip(a, b):
+        if torch.is_tensor(x) and torch.is_tensor(y):
+            if tuple(x.shape) != tuple(y.shape) or x.dtype != y.dtype:
+                return False
+            if not bool(torch.equal(x, y)):
+                return False
+        elif x != y:
+            return False
+    return True
+
+
+def _integrity_judge(problem: dict, outs: list, refs: list) -> tuple[bool, float, str]:
+    """Judge ``outs`` against ``refs`` with THIS card's own tolerance.  (ok, rel error, why)."""
+    if problem["suite"] == SUITE_SOL:
+        tol = sol_tolerance(problem)
+        worst, why = 0.0, ""
+        for i, (sol, ref) in enumerate(zip(outs, refs)):
+            try:
+                stats, exceeds = sol_error_stats(sol, ref, tol)
+            except Exception as exc:  # noqa: BLE001 -- shapes that do not compare at all
+                return False, math.inf, f"output[{i}]: {type(exc).__name__}: {exc}"
+            rel = stats.get("max_rel")
+            if isinstance(rel, float) and not math.isnan(rel):
+                worst = max(worst, rel)
+            if exceeds:
+                why = why or f"output[{i}]: {stats.get('why') or 'outside the tolerance'}"
+        return (not why), worst, why
+    if problem["suite"] == SUITE_FIB:
+        result = fib_judge(outs, refs, fib_config(problem))
+        return (result["status"] == "PASSED",
+                float(result.get("max_rel") or 0.0), result.get("error", ""))
+    tol = task_tolerance(problem)
+    dtypes = {n: s["dtype"] for n, s in problem["definition"]["outputs"].items()}
+    worst, why = 0.0, ""
+    for name, out, ref in zip(problem["definition"]["outputs"], outs, refs):
+        error, bad = task_error(out, ref, dtypes[name])
+        if not math.isinf(error):
+            worst = max(worst, error)
+        if bad or error > tol[name]:
+            why = why or f"output {name}: " + (bad or f"error {error:.4g} > {tol[name]:.4g}")
+    return (not why), worst, why
+
+
+def _fresh_recheck(problem: dict, impl, dps: bool, ref_run, ref_dps: bool, device,
+                   seed: int, timed_set: list) -> dict:
+    """Check A: the candidate on values it has never seen, judged the card's way."""
+    reason = _fresh_reason(problem)
+    if reason:
+        return {"status": "skipped", "workloads": [], "reason": reason}
+    if ref_run is None:
+        try:
+            ref_run, ref_dps = _correctness_reference(problem)
+        except Exception as exc:  # noqa: BLE001 -- the definition's judge, not the candidate
+            return {"status": "skipped", "workloads": [], "reason":
+                    f"the card's reference does not load: {type(exc).__name__}: {exc}"}
+    try:
+        fresh = _fresh_input_set(problem, seed, device)
+    except Exception as exc:  # noqa: BLE001 -- the card's generator, not the candidate
+        return {"status": "skipped", "workloads": [], "reason":
+                f"the redraw failed: {type(exc).__name__}: {exc}"}
+    if timed_set and _same_inputs(fresh, timed_set):
+        return {"status": "skipped", "workloads": [], "reason":
+                "the redraw produced the same values (every input is a fixed heuristic)"}
+    try:
+        refs = call_impl(problem, ref_run, _clone(fresh), ref_dps, device, no_grad=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "skipped", "workloads": [], "reason":
+                f"the reference failed on the redrawn inputs: {type(exc).__name__}: {exc}"}
+    try:
+        outs = call_impl(problem, impl, fresh, dps, device, no_grad=False)
+    except Exception as exc:  # noqa: BLE001 -- the candidate is foreign code
+        return {"status": "fail", "workloads": [problem.get("_wl_name") or ""],
+                "max_rel_err": None,
+                "reason": f"the candidate raised on the redrawn inputs: "
+                          f"{type(exc).__name__}: {exc}"}
+    ok, worst, why = _integrity_judge(problem, outs, refs)
+    return {"status": "pass" if ok else "fail",
+            "workloads": [problem.get("_wl_name") or problem.get("workload", {}).get("uuid") or ""],
+            "max_rel_err": None if math.isinf(worst) else _round(worst),
+            "reason": "" if ok else why}
+
+
+def _reference_stability(problem: dict, device) -> dict:
+    """Check B2: the reference recomputed after the candidate ran, against what correctness
+    judged it by."""
+    cap = _INTEGRITY.get("reference")
+    if not cap:
+        return {"status": "skipped", "max_rel_err": 0.0,
+                "reason": "the correctness phase recorded no reference output"}
+    try:
+        ref_run, ref_dps = _correctness_reference(cap["problem"])
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "skipped", "max_rel_err": 0.0,
+                "reason": f"the card's reference does not load: {type(exc).__name__}: {exc}"}
+    try:
+        refs = call_impl(cap["problem"], ref_run, _clone(cap["inputs"]), ref_dps, device,
+                         no_grad=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "fail", "max_rel_err": None,
+                "reason": f"the reference no longer runs: {type(exc).__name__}: {exc}"}
+    ok, worst, why = _integrity_judge(cap["problem"], refs, cap["refs"])
+    return {"status": "pass" if ok else "fail",
+            "max_rel_err": None if math.isinf(worst) else _round(worst),
+            "reason": "" if ok else f"on {cap['workload']}: {why}"}
+
+
+def _timer_verdict(events_ms: float | None, span_ms: float | None,
+                   wall_ms: float | None) -> tuple[str, str]:
+    """Check C's rule: the three clocks of one call against the shape they must have."""
+    if not events_ms or not span_ms or events_ms <= 0 or span_ms <= 0:
+        return "unavailable", "a clock read zero"
+    if span_ms < TIMER_SPAN_SHARE * events_ms:
+        return "suspicious", (f"the device span ({span_ms:.4g} ms) is under "
+                              f"{TIMER_SPAN_SHARE:g}x the CUDA-event window ({events_ms:.4g} "
+                              f"ms): work escaped the measured interval")
+    if events_ms < TIMER_EVENTS_SHARE * span_ms:
+        return "suspicious", (f"the CUDA-event window ({events_ms:.4g} ms) is under "
+                              f"{TIMER_EVENTS_SHARE:g}x the device span ({span_ms:.4g} ms): "
+                              f"the events did not see all the work")
+    if wall_ms and wall_ms < TIMER_WALL_SHARE * span_ms:
+        return "suspicious", (f"the wall clock ({wall_ms:.4g} ms) is under "
+                              f"{TIMER_WALL_SHARE:g}x the device span ({span_ms:.4g} ms): "
+                              f"impossible for one call")
+    if wall_ms and wall_ms > TIMER_WALL_MAX * max(span_ms, events_ms) \
+            and wall_ms > TIMER_WALL_FLOOR_MS:
+        return "suspicious", (f"the wall clock ({wall_ms:.4g} ms) is over "
+                              f"{TIMER_WALL_MAX:g}x the device window ({max(span_ms, events_ms):.4g} "
+                              f"ms): host-bound, not a device reading")
+    return "ok", ""
+
+
+def _timer_consistency(problem: dict, impl, dps: bool, device, inp: list) -> dict:
+    """Check C: one call on three clocks -- CUDA events, a CUPTI span, the wall clock.
+
+    A warning by default (the suites' own timer is the gate); FK_INTEGRITY_STRICT=1 makes
+    it a failure.  It runs after the timed window on the same input set.
+    """
+    if not (torch.cuda.is_available() and torch.device(device).type == "cuda"):
+        return {"status": "unavailable", "events_ms": None, "span_ms": None,
+                "wall_ms": None, "reason": "no CUDA device"}
+    outs = allocate_outputs(problem, device) if dps else []
+    args = list(inp) + list(outs)
+
+    def call():
+        impl(*args)
+
+    try:
+        for _ in range(3):
+            call()
+        torch.cuda.synchronize()
+        events = []
+        for _ in range(TIMER_ITERS):
+            start = torch.cuda.Event(enable_timing=True)
+            stop = torch.cuda.Event(enable_timing=True)
+            start.record()
+            call()
+            stop.record()
+            torch.cuda.synchronize()
+            events.append(start.elapsed_time(stop))
+        walls = []
+        for _ in range(TIMER_ITERS):
+            t0 = time.perf_counter()
+            call()
+            torch.cuda.synchronize()
+            walls.append((time.perf_counter() - t0) * 1e3)
+        flush_buf = _flush_buffer(device)
+
+        def flush():
+            _reset_persisting_l2()
+            flush_buf.zero_()
+
+        spans = time_profiler_spans(call, lambda: args, flush, warmup=2, iters=TIMER_ITERS,
+                                   include_memory=(problem["suite"] == SUITE_SOL))
+    except Exception as exc:  # noqa: BLE001 -- a check may not break the evaluation
+        return {"status": "unavailable", "events_ms": None, "span_ms": None,
+                "wall_ms": None, "reason": f"{type(exc).__name__}: {exc}"}
+    events_ms = statistics.median(events)
+    span_ms = statistics.median(spans)
+    wall_ms = statistics.median(walls)
+    status, why = _timer_verdict(events_ms, span_ms, wall_ms)
+    out = {"status": status, "events_ms": _round(events_ms), "span_ms": _round(span_ms),
+           "wall_ms": _round(wall_ms)}
+    if why:
+        out["reason"] = why
+    return out
+
+
+def _implausible_speedup(problem: dict, kernel_ms: float | None) -> bool | None:
+    """Check D: a reading below 0.6 x T_SOL is above the speed of light."""
+    board = problem.get("sol_board")
+    if not board or not kernel_ms:
+        return None
+    t_sol = float(board.get("t_sol_ms") or 0.0)
+    if t_sol <= 0:
+        return None
+    return bool(kernel_ms < IMPLAUSIBLE_SHARE * t_sol)
+
+
+def _integrity_pick(pairs: list, n: int) -> list[int]:
+    """Which workloads to recheck: the representative, then ones rotated by the job.
+
+    The default is 2 (``FK_INTEGRITY_FRESH_N``): workload 0 and a second one that moves
+    with the job, so repeated jobs do not keep rechecking the same shape.
+    """
+    if not pairs or n <= 0:
+        return []
+    picks = [0]
+    rotated = _integrity_job_index() % len(pairs)
+    for k in range(len(pairs)):
+        if len(picks) >= n:
+            break
+        candidate = (rotated + k) % len(pairs)
+        if candidate not in picks:
+            picks.append(candidate)
+    return picks[:max(1, n)]
+
+
+def _correctness_reference(problem: dict):
+    """The reference the correctness phase judges against: the definition's own run.
+
+    Not the in-job *timing* reference (``_impl(problem, "ref")``, which a FlashInfer card
+    takes from the dataset's baseline and a SOL card does not time at all): the fresh-input
+    recheck and the reference-stability recheck extend the correctness verdict, so they
+    must use the judge that verdict came from.  Both protocols use
+    ``reference_callables`` (a task suite its judge), value-returning, on the card's inputs.
+    """
+    if problem["suite"] == SUITE_TASK:
+        return _task_custom(problem)[0], False
+    return reference_callables(problem)[0], False
+
+
+def _integrity_device(pairs: list, default):
+    """The device the checks run on: the one the judged inputs are on.
+
+    A job delivers to a GPU and the card's inputs are CUDA tensors, so this is ``cuda``
+    there; a card driven on CPU tensors (a test, a CPU self-check) keeps every check on
+    CPU.  Reading it from the data rather than from the argument keeps a CPU run from
+    quietly touching a GPU.
+    """
+    for _view, sets, _reading in pairs or ():
+        for one in sets or ():
+            for value in one or ():
+                if torch.is_tensor(value):
+                    return str(value.device)
+    return default
+
+
+def _integrity_phase(problem: dict, impl, dps: bool, device, *,
+                     pairs: list, timed: bool) -> tuple[dict, list, list]:
+    """Every check that can run now; (the eval JSON's block, failures, warnings).
+
+    ``pairs`` is ``[(view, the input sets correctness judged it on, its reading)]`` for the
+    workloads this run judged; ``timed`` says whether the timed window happened (the fresh
+    recheck and the timer consistency have nothing to protect without it).
+    """
+    failures: list[str] = []
+    warnings: list[str] = []
+    device = _integrity_device(pairs, device)
+
+    before = _INTEGRITY.get("state_before")
+    after_correct = _INTEGRITY.get("state_correct")
+    after_timed = _INTEGRITY.get("state_timed")
+    settings, threads = _global_state_diff(before, after_correct)
+    more, more_threads = _global_state_diff(before, after_timed)
+    settings += [s for s in more if s not in settings]
+    threads += [t for t in more_threads if t not in threads]
+    global_state = {"status": "changed" if settings else "clean", "diff": settings}
+    if threads:
+        global_state["threads"] = threads
+        warnings.append(f"thread count changed: {', '.join(threads)}")
+    if settings:
+        failures.append(INTEGRITY_PREFIX + "global state changed after the candidate ran: "
+                        + "; ".join(settings))
+
+    stability = _reference_stability(problem, device)
+    if stability["status"] == "fail":
+        failures.append(INTEGRITY_PREFIX + "reference output changed after the candidate "
+                        f"ran: {stability.get('reason')}")
+
+    n = _integrity_int(INTEGRITY_FRESH_ENV, INTEGRITY_FRESH_N)
+    base = _integrity_int(INTEGRITY_SEED_ENV, INTEGRITY_SEED_BASE + _integrity_job_index())
+    recheck = {"status": "skipped", "workloads": [], "reason": ""}
+    if not timed:
+        recheck["reason"] = "no timed window in this run (--mode correctness)"
+    elif not pairs:
+        recheck["reason"] = "the run judged no workload"
+    elif n <= 0:
+        recheck["reason"] = f"{INTEGRITY_FRESH_ENV}=0: the redraw is off"
+    else:
+        picked = _integrity_pick(pairs, n)
+        results, names, reasons = [], [], []
+        for i in picked:
+            view, sets, _reading = pairs[i]
+            if not sets or not sets[0]:
+                reasons.append(f"{view.get('_wl_name') or 'workload'}: the run kept no input "
+                               f"set to redraw")
+                continue
+            seed = base + i * INTEGRITY_SEED_STRIDE
+            one = _fresh_recheck(view, impl, dps, None, False, device, seed, sets[0])
+            results.append(one)
+            names += one["workloads"]
+            if one.get("reason"):
+                reasons.append(one["reason"])
+        fails = [r for r in results if r["status"] == "fail"]
+        passed = [r for r in results if r["status"] == "pass"]
+        if fails:
+            recheck = {"status": "fail", "workloads": names,
+                       "max_rel_err": max((r.get("max_rel_err") or 0.0) for r in fails),
+                       "reason": "; ".join(r.get("reason", "") for r in fails)}
+        elif passed:
+            recheck = {"status": "pass", "workloads": names,
+                       "max_rel_err": max((r.get("max_rel_err") or 0.0) for r in passed),
+                       "reason": ""}
+        else:
+            recheck = {"status": "skipped", "workloads": [],
+                       "reason": "; ".join(reasons) or "no workload could be redrawn"}
+    if recheck["status"] == "fail":
+        failures.append(INTEGRITY_PREFIX + "fresh-input recheck mismatch"
+                        + (f" on {', '.join(w for w in recheck['workloads'] if w)}"
+                           if any(recheck["workloads"]) else "")
+                        + f": {recheck.get('reason')} (max relative error "
+                          f"{recheck.get('max_rel_err')})")
+
+    timers = {"status": "unavailable", "events_ms": None, "span_ms": None, "wall_ms": None,
+              "reason": ""}
+    if not timed:
+        timers["reason"] = "no timed window in this run (--mode correctness)"
+    elif pairs:
+        view, sets, _reading = pairs[0]
+        if sets:
+            timers = _timer_consistency(view, impl, dps, device, sets[0])
+        else:
+            timers["reason"] = "the run kept no input set to re-time"
+    if timers["status"] == "suspicious":
+        warnings.append("timer consistency: " + str(timers.get("reason")))
+        if integrity_strict():
+            failures.append(INTEGRITY_PREFIX + "timer consistency suspicious: "
+                            + str(timers.get("reason")))
+
+    implausible = [flag for _v, _s, reading in pairs
+                   if (flag := _implausible_speedup(problem, reading)) is not None]
+    implausible_speedup = any(implausible) if implausible else None
+    if implausible_speedup:
+        warnings.append(f"implausible speedup: a reading below {IMPLAUSIBLE_SHARE:g} x T_SOL")
+        if timed and pairs:
+            for view, _sets, reading in pairs:
+                if _implausible_speedup(view, reading):
+                    board = view.get("sol_board") or {}
+                    warnings[-1] += (f" ({view.get('_wl_name') or 'workload'}: {reading} ms vs "
+                                     f"T_SOL {board.get('t_sol_ms')} ms)")
+
+    block = {"fresh_input_recheck": recheck, "global_state": global_state,
+             "reference_stability": stability, "timer_consistency": timers,
+             "implausible_speedup": implausible_speedup}
+    if not timed:
+        block["timed_window"] = False
+    return block, failures, warnings
+
+
+def _integrity_unavailable(reason: str) -> dict:
+    """A block every check gave up on, still in the documented shape.
+
+    The checks are diagnostics: a card whose integrity phase itself failed must still
+    produce a readable eval JSON, with the reason attached instead of a verdict.
+    """
+    return {
+        "fresh_input_recheck": {"status": "skipped", "workloads": [], "reason": reason},
+        "global_state": {"status": "clean", "diff": [], "note": f"not compared: {reason}"},
+        "reference_stability": {"status": "skipped", "max_rel_err": 0.0, "reason": reason},
+        "timer_consistency": {"status": "unavailable", "events_ms": None, "span_ms": None,
+                              "wall_ms": None, "reason": reason},
+        "implausible_speedup": None,
+        "unavailable": reason,
+    }
+
+
+def _integrity_finish(problem: dict, impl, dps: bool, device, *,
+                      pairs: list, timed: bool) -> tuple[dict | None, list]:
+    """Snapshot the state after the timed window, run the checks, print them.  (block,
+    failures); (None, []) when the block is off."""
+    if not integrity_on():
+        return None, []
+    try:
+        if timed:
+            _INTEGRITY["state_timed"] = _global_state()
+        block, failures, warnings = _integrity_phase(
+            problem, impl, dps, device, pairs=pairs, timed=timed)
+    except Exception as exc:  # noqa: BLE001 -- a check may not break the evaluation
+        reason = f"{type(exc).__name__}: {exc}"
+        print(f"[leaderboard] integrity: unavailable ({reason})")
+        return _integrity_unavailable(reason), []
+    _say_integrity(block, warnings)
+    return block, failures
+
+
+def _say_integrity(block: dict, warnings: list) -> None:
+    fresh = block.get("fresh_input_recheck") or {}
+    print(f"[leaderboard] integrity: fresh-input recheck {fresh.get('status')}"
+          + (f" ({fresh.get('reason')})" if fresh.get("reason") else "")
+          + f"; global state {block.get('global_state', {}).get('status')}"
+          + f"; reference stability {block.get('reference_stability', {}).get('status')}"
+          + f"; timers {block.get('timer_consistency', {}).get('status')}"
+          + (f"; implausible speedup {block.get('implausible_speedup')}"
+             if block.get("implausible_speedup") else ""))
+    for warning in warnings:
+        print(f"[leaderboard] WARNING {warning}")
+
+
+def _integrity_fail(result: dict, failures: list) -> dict:
+    """Mark a passing result as an integrity failure, reading and performance untouched."""
+    if not failures:
+        return result
+    correctness = dict(result.get("correctness") or {})
+    correctness["pass"] = False
+    correctness["status"] = "INTEGRITY_ERROR"
+    correctness["error"] = "; ".join(failures)[:6000]
+    result["correctness"] = correctness
+    print("[leaderboard] correctness: INTEGRITY_ERROR — " + "; ".join(failures)[:1000])
+    return result
+
+
 def run_leaderboard_bench(argv=None, problem_path=None) -> int:
     """The card's eval/bench.py: correctness then timing, the problem's suite's way."""
     p = argparse.ArgumentParser(prog="bench.py (leaderboard mode)")
@@ -2581,6 +3262,7 @@ def run_leaderboard_bench(argv=None, problem_path=None) -> int:
     args = p.parse_args(argv)
     problem = load_problem(problem_path)
     _SCOPE.clear()
+    _INTEGRITY.clear()
     if scope := apply_workload_scope(problem):
         _SCOPE.update(scope)
         which = "representative workload" if scope["workloads"] == "representative" else "workload"
@@ -2625,6 +3307,10 @@ def run_leaderboard_bench(argv=None, problem_path=None) -> int:
     if timed_ref is not None and args.mode != "correctness" and \
             (problem.get("reference_impl") or {}).get("kind") not in (None, "definition"):
         warm_reference(problem, ref_fn, ref_dps, device)
+    # the state the candidate must not change: taken before its module is imported (an
+    # import-time torch.backends write is a change like any other)
+    if integrity_on():
+        _INTEGRITY["state_before"] = _global_state()
     try:
         impl, dps = (ref_fn, ref_dps) if args.impl == "ref" else _impl(problem, "kernel")
     except Exception as e:  # noqa: BLE001
@@ -2646,6 +3332,8 @@ def run_leaderboard_bench(argv=None, problem_path=None) -> int:
         _emit({"correctness": _correctness_json(verdict), "performance": None})
         return 0
     verdict, sets = _correctness(problem, impl, dps, device)
+    if integrity_on():
+        _INTEGRITY["state_correct"] = _global_state()
     result = {"correctness": _correctness_json(verdict), "performance": None}
     if verdict.get("precision"):
         result["precision"] = verdict["precision"]
@@ -2656,6 +3344,11 @@ def run_leaderboard_bench(argv=None, problem_path=None) -> int:
           + (f" — {verdict.get('error')}" if not verdict["pass"] else ""))
     _say_precision(result.get("precision"))
     if not verdict["pass"] or args.mode == "correctness":
+        block, failures = _integrity_finish(
+            problem, impl, dps, device, pairs=[], timed=False) if verdict["pass"] else (None, [])
+        if block is not None:
+            result["integrity"] = block
+        _integrity_fail(result, failures)
         _emit(result)
         return 0
     timed_sets = sets
@@ -2684,6 +3377,12 @@ def run_leaderboard_bench(argv=None, problem_path=None) -> int:
             print(f"[leaderboard] WARNING {lb[note]}")
     if board and board.get("clock_warning"):
         print(f"[leaderboard] WARNING {board['clock_warning']}")
+    block, failures = _integrity_finish(
+        problem, impl, dps, device,
+        pairs=[(problem, timed_sets, m["kernel_ms"])], timed=True)
+    if block is not None:
+        result["integrity"] = block
+    _integrity_fail(result, failures)
     _emit(result)
     return 0
 
@@ -2698,6 +3397,7 @@ def _run_group(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, time
     # single timed workload is paid for
     per, first_bad = judge_check_only(problem, impl, dps, device)
     blocks = []
+    judged: list = []          # (view, its input sets, its reading) for the integrity phase
     for v in views if first_bad is None else []:
         verdict, sets = _correctness(v, impl, dps, device)
         per.append((v, verdict))
@@ -2717,6 +3417,7 @@ def _run_group(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, time
                                       f"after timing vs {threads_mark} before"})
             per[-1] = first_bad
             break
+        judged.append((v, sets, m["kernel_ms"]))
         kwin = _side_windows(impl, dps, v, sets[0], device)
         rwin = (_side_windows(ref_fn, ref_dps, v, sets[0], device)
                 if m["ref_ms"] is not None else None)
@@ -2729,6 +3430,8 @@ def _run_group(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, time
               + (f"; SOL {block['leaderboard']['sol_board']['sol_score']}"
                  if block["leaderboard"].get("sol_board") else ""))
     verdict = group_verdict(per, len(views) + n_checks, first_bad)
+    if integrity_on():
+        _INTEGRITY["state_correct"] = _global_state()
     result = {"correctness": _correctness_json(verdict), "performance": None}
     if verdict.get("precision"):
         result["precision"] = verdict["precision"]
@@ -2737,6 +3440,11 @@ def _run_group(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, time
           + (f", {n_checks} of them correctness-only" if n_checks else "") + ")"
           + (f" — {verdict.get('error')}" if not verdict["pass"] else ""))
     if not verdict["pass"] or args.mode == "correctness":
+        block, failures = _integrity_finish(
+            problem, impl, dps, device, pairs=[], timed=False) if verdict["pass"] else (None, [])
+        if block is not None:
+            result["integrity"] = block
+        _integrity_fail(result, failures)
         _emit(result)
         return 0
     perf = group_performance_block(problem, blocks)
@@ -2755,6 +3463,11 @@ def _run_group(problem: dict, args, impl, dps: bool, ref_fn, ref_dps: bool, time
             print(f"[leaderboard] WARNING {lb[note]}")
     if board and board.get("clock_warning"):
         print(f"[leaderboard] WARNING {board['clock_warning']}")
+    block, failures = _integrity_finish(problem, impl, dps, device,
+                                        pairs=judged, timed=True)
+    if block is not None:
+        result["integrity"] = block
+    _integrity_fail(result, failures)
     _emit(result)
     return 0
 

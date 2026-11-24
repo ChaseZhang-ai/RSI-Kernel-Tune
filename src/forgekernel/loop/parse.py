@@ -184,6 +184,14 @@ class EvalResult:
     # ``correctness``; the driver applies the card's [loop] precision_contract
     # (loop/precision_gate.py). None = the bench reported none.
     precision: dict | None = None
+    # The eval JSON's top-level ``integrity`` block (src/forgekernel/card_template/eval/leaderboard.py,
+    # task guard): the fresh-input recheck, the global-state diff, the reference-stability
+    # recheck, the three-clock consistency reading and the implausibility flag. Carried
+    # through verbatim, and NEVER folded into a gate reading — a check that turns into a
+    # failure does it by making ``correctness.pass`` false with an ``INTEGRITY:`` error,
+    # which arrives through ``correctness`` / ``error`` like any other failure. None = the
+    # card reported none (a card that predates the check, or the block switched off).
+    integrity: dict | None = None
 
 
 _WORKLOAD_KEYS = ("device_median_ms", "bwd_median_ms", "ref_device_ms", "vs_ref_device", "vs_ref")
@@ -315,6 +323,7 @@ def parse_eval(text: str) -> EvalResult:
     return EvalResult(
         prep=prep,
         precision=obj.get("precision") if isinstance(obj.get("precision"), dict) else None,
+        integrity=obj.get("integrity") if isinstance(obj.get("integrity"), dict) else None,
         n_workloads=n_wl,
         workloads=workloads,
         correctness=correct,

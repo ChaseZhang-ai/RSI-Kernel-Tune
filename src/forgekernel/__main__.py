@@ -14,14 +14,19 @@ monitor raised no alarm on that kernel), and 2 otherwise.
 
 `forge help internal` lists the lower-level commands the loop itself uses.
 
-Extensions (``src/forgekernel/ext/``: one module per command, ``COMMAND`` + ``main(argv)``)
-add commands without touching this file. The built-ins win over an extension of the same
-name; an extension that fails to import is skipped, never fatal.
+Commands from extensions (src/forgekernel/ext/, forgekernel.ext) are looked up after every
+built-in one and are listed at the end of `forge --help`.
 """
 
 from __future__ import annotations
 
 import sys
+
+# The commands `forge <word> ...` dispatches itself, by name: the ones forgekernel.launch
+# has, then `help` (with -h / --help). An extension command named like one of them is never
+# reached (forgekernel.ext), and no task may take one of them as its name.
+BUILTIN_COMMANDS = ("init", "new", "run", "status", "harvest", "export")
+HELP_WORDS = ("-h", "--help", "help")
 
 INTERNAL_HELP = """\
 Lower-level commands. They act on the operator trees a run generates under
@@ -41,40 +46,31 @@ to configure one.
 """
 
 
+def _usage() -> str:
+    """The command list, then the extension commands found -- named only: nothing of an
+    extension is imported to write this, so a broken one cannot break `forge --help`."""
+    from forgekernel import ext
+
+    return __doc__.strip() + "\n\n" + ext.usage((*BUILTIN_COMMANDS, "help"))
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:2] == ["help", "internal"]:
         print(INTERNAL_HELP.strip())
         return 0
-    if len(argv) >= 2 and argv[0] == "help":
-        from forgekernel import ext as extmod
-
-        if extmod.is_command(argv[1]):
-            return extmod.dispatch([argv[1], "--help"]) or 0
-    if not argv or argv[0] in ("-h", "--help", "help"):
-        from forgekernel import ext as extmod
-
-        print(__doc__.strip())
-        if lines := extmod.help_lines():
-            print("\nExtensions:\n" + "\n".join(lines))
+    if not argv or argv[0] in HELP_WORDS:
+        print(_usage())
         return 0
     if argv[0] in ("-V", "--version"):
         from forgekernel import __version__
 
         print(f"forgekernel {__version__}")
         return 0
-    if argv and argv[0] in ("init", "new", "run", "status", "harvest", "export"):
+    if argv and argv[0] in BUILTIN_COMMANDS:
         from forgekernel.launch import COMMANDS
 
         return COMMANDS[argv[0]](argv[1:])
-
-    # An extension command (`forge target ...`) before per-op subcommands: task names may
-    # not be extension names (task.load_task refuses them), so the two never collide.
-    from forgekernel import ext as extmod
-
-    extension_rc = extmod.dispatch(argv)
-    if extension_rc is not None:
-        return extension_rc
 
     if len(argv) >= 2 and argv[1] == "ncu-trace":
         from forgekernel.inner.ncu import main as ncu_main
@@ -110,6 +106,13 @@ def main(argv: list[str] | None = None) -> int:
         from forgekernel.loop.cli import main as loop_main
 
         return loop_main([argv[0], *argv[2:]])
+
+    # Extension commands: looked up only here, after every built-in, and imported only when
+    # called (forgekernel.ext).
+    from forgekernel import ext
+
+    if argv[0] in ext.commands():
+        return ext.run(argv[0], argv[1:])
 
     from forgekernel.submit.cli import main as submit_main
 

@@ -18,11 +18,13 @@ be diffed against the next run's.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 from forgekernel.paths import repo_root as default_repo_root
 
 PROFILE_REL = Path("target") / "B200.json"
+PROFILE_FILE = str(PROFILE_REL)          # the same file, as the string the profile is named by
 DEV_REL = Path("target") / "dev.json"
 RENDERED_REL = Path("target") / "B200.rendered.md"
 
@@ -50,11 +52,13 @@ def load(root: str | Path | None = None) -> dict:
         raise ProfileError(f"{path}: {e.strerror or e}") from None
     except json.JSONDecodeError as e:
         raise ProfileError(f"{path} does not parse: {e}") from None
+    if not isinstance(profile, dict):
+        raise ProfileError(f"{path}: a target profile is a JSON object, "
+                           f"got {type(profile).__name__}")
     schema = profile.get("schema")
     if schema != _SCHEMA:
         raise ProfileError(f"{path}: schema {schema!r}, expected {_SCHEMA!r}")
     return profile
-
 
 def load_dev(root: str | Path | None = None) -> dict | None:
     """The probe's result (``target/dev.json``), or None when no probe has run here."""
@@ -208,6 +212,8 @@ def _stack_text(software: dict | None) -> str:
 
 def render_markdown(profile: dict, dev: dict | None = None, *, title: str | None = None) -> str:
     """The profile as the Markdown an agent reads (English, stable, one screen and a half)."""
+    if not isinstance(profile, Mapping):
+        raise TypeError(f"a target profile is a JSON object, got {type(profile).__name__}")
     device = profile.get("device") or {}
     software = profile.get("software") or {}
     evaluation = profile.get("evaluation") or {}

@@ -71,6 +71,7 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from forgekernel import ext
 from forgekernel import provider as provider_mod
 from forgekernel.paths import global_config_dir, repo_root
 
@@ -100,6 +101,8 @@ LEADERBOARD_PROBLEM = "eval/leaderboard/problem.json"
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # `forge <name> ...` dispatches these as commands, so no task (operator tree) may be one.
+# The same goes for the extension commands (forgekernel.ext: src/forgekernel/ext/<name>.py),
+# which are read where this check is made.
 RESERVED_NAMES = frozenset({"init", "new", "run", "status", "harvest", "export"})
 _ARCH_RE = re.compile(r"^sm_?\d+[af]?$")
 _ENTRY_RE = re.compile(r"^(?P<file>[^:]+\.py):(?P<fn>[A-Za-z_][A-Za-z0-9_]*)$")
@@ -252,9 +255,9 @@ def load_task(task_dir: str | Path, *, kb_root: Path | None = None,
                         f"(letters, digits, '_', '.', '-'; not starting with '_')")
     elif name in RESERVED_NAMES:
         problems.append(f"{name!r} is one of forge's own commands; name the task otherwise")
-    elif name in _extension_commands():
-        problems.append(f"{name!r} is one of forge's extension commands "
-                        f"(`forge {name}`); name the task otherwise")
+    elif name in ext.command_names():
+        problems.append(f"{name!r} is a forge extension command (src/forgekernel/ext/{name}.py); "
+                        f"name the task otherwise")
 
     own = _read_toml(d / TASK_FILE, problems)
     _unknown_keys(own, problems)
@@ -482,19 +485,6 @@ def _kb_dir(kb_root: Path | None, language: str, arch: str) -> Path:
     from forgekernel.loop import lang_mode
     root = kb_root if kb_root is not None else repo_root()
     return Path(root) / lang_mode.kb_root_name(LOOP_LANGUAGE[language]) / arch
-
-
-def _extension_commands() -> frozenset:
-    """The commands registered by ``forgekernel.ext`` (a task may not be named like one).
-
-    Imported lazily: task loading is on every command's path, and an extension imports its
-    own dependencies (torch, the submit layer) only when it is actually dispatched.
-    """
-    try:
-        from forgekernel import ext
-        return frozenset(ext.commands())
-    except Exception:  # noqa: BLE001 -- a broken extension must not break every task
-        return frozenset()
 
 
 def _inside(d: Path, rel: object, what: str, problems: list[str]) -> Path | None:

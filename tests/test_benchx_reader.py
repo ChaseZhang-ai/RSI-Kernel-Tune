@@ -322,6 +322,6 @@ def test_fake_bench_returns_a_copy_each_call():
     assert a.mean_s == 0.7 and a.workloads[0].t_ms == 0.5
     a.workloads[0].t_ms = 99.0
     assert b.workloads[0].t_ms == 0.5        # the preset is not shared state
-    assert bench.calls[0] == {"card_dir": bench.calls[0]["card_dir"],
-                              "candidate": "cand.py", "workloads": "all",
-                              "mode": "dev"}
+    call = bench.calls[0]                    # the shared contract records BenchCall
+    assert (str(call.card_dir), call.candidate, call.workloads, call.mode) == \
+        ("card", "cand.py", "all", "dev")

@@ -8,19 +8,25 @@
   forge status [.artifacts/<op>_<id>]  -> where a run is (every run when omitted)
   forge harvest .artifacts/<op>_<id>   -> the knowledge-base write-up of a stopped run
   forge export .artifacts/<op>_<id>    -> the best kernel (a board task's as the board's solution)
-  forge bench <task> --candidate <kernel.py|solution.json>
-                                       -> one candidate's readings on a board card
-                                          (docs/benchx.md; `forge bench --help`)
 
 `forge run` exits 0 when the final confirmation meets the target (and the correctness
 monitor raised no alarm on that kernel), and 2 otherwise.
 
 `forge help internal` lists the lower-level commands the loop itself uses.
+
+Commands from extensions (src/forgekernel/ext/, forgekernel.ext) are looked up after every
+built-in one and are listed at the end of `forge --help`.
 """
 
 from __future__ import annotations
 
 import sys
+
+# The commands `forge <word> ...` dispatches itself, by name: the ones forgekernel.launch
+# has, then `help` (with -h / --help). An extension command named like one of them is never
+# reached (forgekernel.ext), and no task may take one of them as its name.
+BUILTIN_COMMANDS = ("init", "new", "run", "status", "harvest", "export")
+HELP_WORDS = ("-h", "--help", "help")
 
 INTERNAL_HELP = """\
 Lower-level commands. They act on the operator trees a run generates under
@@ -40,20 +46,28 @@ to configure one.
 """
 
 
+def _usage() -> str:
+    """The command list, then the extension commands found -- named only: nothing of an
+    extension is imported to write this, so a broken one cannot break `forge --help`."""
+    from forgekernel import ext
+
+    return __doc__.strip() + "\n\n" + ext.usage((*BUILTIN_COMMANDS, "help"))
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:2] == ["help", "internal"]:
         print(INTERNAL_HELP.strip())
         return 0
-    if not argv or argv[0] in ("-h", "--help", "help"):
-        print(__doc__.strip())
+    if not argv or argv[0] in HELP_WORDS:
+        print(_usage())
         return 0
     if argv[0] in ("-V", "--version"):
         from forgekernel import __version__
 
         print(f"forgekernel {__version__}")
         return 0
-    if argv and argv[0] in ("init", "new", "run", "status", "harvest", "export"):
+    if argv and argv[0] in BUILTIN_COMMANDS:
         from forgekernel.launch import COMMANDS
 
         return COMMANDS[argv[0]](argv[1:])
@@ -93,18 +107,12 @@ def main(argv: list[str] | None = None) -> int:
 
         return loop_main([argv[0], *argv[2:]])
 
-    # Commands that live outside this CLI (`src/forgekernel/ext/`: each module defines
-    # COMMAND and main(argv); discovered on demand). Built-in names never reach here, and
-    # an unknown name still falls through to the submit CLI below.
+    # Extension commands: looked up only here, after every built-in, and imported only when
+    # called (forgekernel.ext).
     from forgekernel import ext
 
-    try:
-        ext_rc = ext.command_main(argv)
-    except ImportError as e:      # a broken extension: say which, do not blame submit
-        sys.stderr.write(f"[forge] {argv[0]}: {e}\n")
-        return 2
-    if ext_rc is not None:
-        return ext_rc
+    if argv[0] in ext.commands():
+        return ext.run(argv[0], argv[1:])
 
     from forgekernel.submit.cli import main as submit_main
 

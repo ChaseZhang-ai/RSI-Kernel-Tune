@@ -58,6 +58,7 @@ __all__ = [
 ]
 
 license = license_mod
+lint = lint_mod
 notices = notices_mod
 multiseed = multiseed_mod
 report = report_mod

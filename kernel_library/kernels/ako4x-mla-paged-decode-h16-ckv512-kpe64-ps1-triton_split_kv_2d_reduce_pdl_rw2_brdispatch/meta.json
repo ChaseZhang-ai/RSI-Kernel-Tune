@@ -1,0 +1,55 @@
+{
+  "id": "ako4x-mla-paged-decode-h16-ckv512-kpe64-ps1-triton_split_kv_2d_reduce_pdl_rw2_brdispatch",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-mla-paged-decode-h16-ckv512-kpe64-ps1-triton_split_kv_2d_reduce_pdl_rw2_brdispatch",
+    "problem_keys": [
+      "attention",
+      "018_mla_paged_decode_h16_ckv512_kpe64_ps1"
+    ],
+    "family": "attention",
+    "path": "kernels/ako4x-mla-paged-decode-h16-ckv512-kpe64-ps1-triton_split_kv_2d_reduce_pdl_rw2_brdispatch/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/mla-paged-decode-h16-ckv512-kpe64-ps1/variants/triton_split_kv_2d_reduce_pdl_rw2_brdispatch/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.4750185412552044,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/mla-paged-decode-h16-ckv512-kpe64-ps1/variants/triton_split_kv_2d_reduce_pdl_rw2_brdispatch/result.json",
+      "label": "iter-8 final state (iter-5 config: D_CHUNK=64 nw=4 for b>=16)",
+      "backend": "modal-b200",
+      "timestamp": "2026-05-20T09:41:07.261270"
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.4750185412552044,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/mla-paged-decode-h16-ckv512-kpe64-ps1/variants/triton_split_kv_2d_reduce_pdl_rw2_brdispatch/result.json",
+    "label": "iter-8 final state (iter-5 config: D_CHUNK=64 nw=4 for b>=16)",
+    "backend": "modal-b200",
+    "timestamp": "2026-05-20T09:41:07.261270"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "trap: over-paralleling failure mode as the parent's nw=8 dead-end at"
+  ],
+  "extra": {}
+}

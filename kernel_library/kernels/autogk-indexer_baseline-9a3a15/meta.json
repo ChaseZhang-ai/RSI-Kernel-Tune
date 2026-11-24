@@ -1,0 +1,37 @@
+{
+  "id": "autogk-indexer_baseline-9a3a15",
+  "origin": "auto-gpu-kernel",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "autogk-indexer_baseline-9a3a15",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/autogk-indexer_baseline-9a3a15/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "BBuf/auto-gpu-kernel",
+      "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+      "path": "archive/dsa_topk_indexer_fp8_h64_d128_topk2048_ps64/solution/triton/indexer_baseline.py"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "kernel",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "auto-gpu-kernel/LICENSE",
+  "reported": null,
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "archive only; the repository ranks #1 on the MLSys 2026 FlashInfer contest DSA track (README.md: average speedup 34.93x)"
+  ],
+  "extra": {}
+}

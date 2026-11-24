@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-cutlass-PR-2881",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-cutlass-PR-2881",
+    "problem_keys": [
+      "gemm"
+    ],
+    "family": "gemm",
+    "path": "kernels/kernelwiki-cutlass-PR-2881/kernel.py",
+    "language": "cutedsl",
+    "source": {
+      "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+      "commit": "3f4c086d",
+      "path": "artifacts/prs/cutlass/PR-2881",
+      "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2881"
+    },
+    "license": "BSD-3-Clause",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "cutedsl",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "BSD-3-Clause",
+  "license_source": "header: key-files/examples/python/CuTeDSL/blackwell/dense_blockscaled_gemm_persistent_prefetch.py",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: BSD-3-Clause (header: key-files/examples/python/CuTeDSL/blackwell/dense_blockscaled_gemm_persistent_prefetch.py)",
+    "files: dense_blockscaled_gemm_persistent_prefetch.py, dense_gemm_persistent_prefetch.py"
+  ],
+  "extra": {}
+}

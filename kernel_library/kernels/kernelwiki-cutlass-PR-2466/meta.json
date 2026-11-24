@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-cutlass-PR-2466",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-cutlass-PR-2466",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-cutlass-PR-2466/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+      "commit": "0e026982",
+      "path": "artifacts/prs/cutlass/PR-2466",
+      "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2466"
+    },
+    "license": "BSD-3-Clause",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "BSD-3-Clause",
+  "license_source": "header: key-files/examples/77_blackwell_fmha/77_blackwell_fmha.cu",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: BSD-3-Clause (header: key-files/examples/77_blackwell_fmha/77_blackwell_fmha.cu)",
+    "files: 77_blackwell_fmha.cu, 77_blackwell_fmha_bwd.cu, 77_blackwell_mla.cu, 77_blackwell_mla_fwd.cu, fmha_device_bwd.hpp, fmha_fusion.hpp, sm100_fmha_bwd_kernel_tma_warpspecialized.hpp, sm100_fmha_bwd_mla_kernel_tma_warpspecialized.hpp, sm100_fmha_mla_reduction.hpp, sm100_fmha_mla_tma_warpspecialized.hpp, sm100_mla.hpp, sm100_mla_tile_scheduler.hpp"
+  ],
+  "extra": {}
+}

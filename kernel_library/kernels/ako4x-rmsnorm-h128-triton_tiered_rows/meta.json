@@ -1,0 +1,53 @@
+{
+  "id": "ako4x-rmsnorm-h128-triton_tiered_rows",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-rmsnorm-h128-triton_tiered_rows",
+    "problem_keys": [
+      "rmsnorm",
+      "021_rmsnorm_h128"
+    ],
+    "family": "rmsnorm",
+    "path": "kernels/ako4x-rmsnorm-h128-triton_tiered_rows/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/rmsnorm-h128/variants/triton_tiered_rows/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.1621461711921366,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/rmsnorm-h128/variants/triton_tiered_rows/result.json",
+      "label": "iter-12 aligned-fast-path",
+      "backend": "modal-b200",
+      "timestamp": "2026-05-20T17:21:27.799908"
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.1621461711921366,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/rmsnorm-h128/variants/triton_tiered_rows/result.json",
+    "label": "iter-12 aligned-fast-path",
+    "backend": "modal-b200",
+    "timestamp": "2026-05-20T17:21:27.799908"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

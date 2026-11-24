@@ -17,3 +17,6 @@ uv.lock
 # machine. target/B200.json is the target profile and *is* committed.
 target/dev.json
 target/B200.rendered.md
+# `forge lib fetch` clones external kernel libraries here; the index records what they are,
+# never the trees themselves.
+kernel_library/_sources/

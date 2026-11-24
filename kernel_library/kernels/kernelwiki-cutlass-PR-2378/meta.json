@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-cutlass-PR-2378",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-cutlass-PR-2378",
+    "problem_keys": [
+      "other"
+    ],
+    "family": "other",
+    "path": "kernels/kernelwiki-cutlass-PR-2378/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+      "commit": "26b74500",
+      "path": "artifacts/prs/cutlass/PR-2378",
+      "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2378"
+    },
+    "license": "BSD-3-Clause",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "BSD-3-Clause",
+  "license_source": "header: key-files/include/cute/arch/mma_sm89.hpp",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: BSD-3-Clause (header: key-files/include/cute/arch/mma_sm89.hpp)",
+    "files: mma_sm89.hpp, mma_traits_sm89.hpp"
+  ],
+  "extra": {}
+}

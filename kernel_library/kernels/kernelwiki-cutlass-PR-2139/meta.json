@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-cutlass-PR-2139",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-cutlass-PR-2139",
+    "problem_keys": [
+      "quant_gemm"
+    ],
+    "family": "quant_gemm",
+    "path": "kernels/kernelwiki-cutlass-PR-2139/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+      "commit": "ca4fdbea",
+      "path": "artifacts/prs/cutlass/PR-2139",
+      "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2139"
+    },
+    "license": "BSD-3-Clause",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "BSD-3-Clause",
+  "license_source": "header: key-files/examples/67_hopper_fp8_warp_specialized_gemm_with_blockwise_scaling/67_hopper_fp8_warp_specialized_gemm_with_blockwise_scaling.cu",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: BSD-3-Clause (header: key-files/examples/67_hopper_fp8_warp_specialized_gemm_with_blockwise_scaling/67_hopper_fp8_warp_specialized_gemm_with_blockwise_scaling.cu)",
+    "files: 67_hopper_fp8_warp_specialized_gemm_with_blockwise_scaling.cu, 67_hopper_fp8_warp_specialized_gemm_with_groupwise_scaling.cu, 68_hopper_fp8_warp_specialized_grouped_gemm_with_blockwise_scaling.cu, 81_blackwell_gemm_blockwise.cu, 81_blackwell_gemm_groupwise.cu, collective_builder.hpp, collective_mma.hpp, dispatch_policy.hpp, fp8_accumulation.hpp, gemm_universal.hpp, gemm_with_groupwise_scaling.h, hopper_fp8_commandline.hpp, hopper_fp8_commandline.hpp, sm100_blockwise_scale_layout.hpp, sm100_blockwise_umma_builder.inl, sm100_gemm_tma_warpspecialized_mma_transform.hpp, sm100_mma_warpspecialized_blockwise_scaling.hpp, sm90_gemm_array_tma_warpspecialized_cooperative.hpp, sm90_gemm_array_tma_warpspecialized_pingpong.hpp, sm90_gmma_builder.inl, sm90_mma_array_tma_gmma_rs_warpspecialized_mixed_input.hpp, sm90_mma_array_tma_gmma_ss_warpspecialized.hpp, sm90_mma_array_tma_gmma_ss_warpspecialized_fp8.hpp, sm90_mma_array_tma_gmma_ss_warpspecialized_fp8_blockwise_scaling.hpp, sm90_mma_tma_gmma_ss_warpspecialized_fp8_blockwise_scaling.hpp"
+  ],
+  "extra": {}
+}

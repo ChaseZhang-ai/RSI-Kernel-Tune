@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-sglang-PR-21019",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-sglang-PR-21019",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-sglang-PR-21019/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "KernelWiki artifact (sgl-project/sglang)",
+      "commit": "5bdc07d9",
+      "path": "artifacts/prs/sglang/PR-21019",
+      "upstream_url": "https://github.com/sgl-project/sglang/pull/21019"
+    },
+    "license": "unknown",
+    "entry": "run",
+    "usable_in_submission": false
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "unknown",
+  "license_source": "PR-21019/PROVENANCE.yaml (inherits-from-upstream)",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": false,
+  "notes": [
+    "license: unknown (PR-21019/PROVENANCE.yaml (inherits-from-upstream))",
+    "files: gdn_fused_proj.py"
+  ],
+  "extra": {}
+}

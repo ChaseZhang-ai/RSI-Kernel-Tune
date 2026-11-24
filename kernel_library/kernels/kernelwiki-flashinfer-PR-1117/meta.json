@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-flashinfer-PR-1117",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-flashinfer-PR-1117",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-flashinfer-PR-1117/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+      "commit": "2f01a9a3",
+      "path": "artifacts/prs/flashinfer/PR-1117",
+      "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1117"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "header: key-files/csrc/batch_decode.cu",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: Apache-2.0 (header: key-files/csrc/batch_decode.cu)",
+    "files: batch_decode.cu, batch_decode.cu, batch_decode_jit_pybind.cu, batch_decode_jit_tvm_binding.cu, batch_decode_mla_cute_sm80.cu, batch_decode_mla_plan.cu, batch_decode_mla_pybind.cu, batch_decode_mla_run.cu, batch_prefill.cu, batch_prefill.cu, batch_prefill_fp8_sm90.cu, batch_prefill_jit_pybind.cu, batch_prefill_jit_tvm_binding.cu, batch_prefill_sm90.cu, batch_prefill_sm90.cu, batch_prefill_sm90_jit_pybind.cu, batch_prefill_sm90_jit_tvm_binding.cu, cascade.cuh, decode.cuh, flashinfer_ops.cu, flashinfer_ops_sm90.cu, pod.cu, pod.cuh, pod_jit_pybind.cu, prefill.cuh, prefill_sm90.cuh, prefill_sm90.cuh"
+  ],
+  "extra": {}
+}

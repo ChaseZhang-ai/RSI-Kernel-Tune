@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-sglang-PR-21203",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-sglang-PR-21203",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-sglang-PR-21203/kernel.py",
+    "language": "cutedsl",
+    "source": {
+      "repo": "KernelWiki artifact (sgl-project/sglang)",
+      "commit": "f273ba1c",
+      "path": "artifacts/prs/sglang/PR-21203",
+      "upstream_url": "https://github.com/sgl-project/sglang/pull/21203"
+    },
+    "license": "unknown",
+    "entry": "run",
+    "usable_in_submission": false
+  },
+  "language": "cutedsl",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "unknown",
+  "license_source": "PR-21203/PROVENANCE.yaml (inherits-from-upstream)",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": false,
+  "notes": [
+    "license: unknown (PR-21203/PROVENANCE.yaml (inherits-from-upstream))",
+    "files: cutedsl_kda.py, kda_cutedsl.py"
+  ],
+  "extra": {}
+}

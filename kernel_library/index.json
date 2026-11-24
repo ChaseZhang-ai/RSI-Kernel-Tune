@@ -1,0 +1,2803 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "ako4x-dsa-sparse-attention-cute_reduce",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-cute_reduce/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/cute_reduce/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-sparse-attention-cute_reduce_v5",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-cute_reduce_v5/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/cute_reduce_v5/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-sparse-attention-cute_reduce_v6",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-cute_reduce_v6/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/cute_reduce_v6/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-sparse-attention-cute_reduce_v7",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-cute_reduce_v7/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/cute_reduce_v7/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-sparse-attention-hybrid_2d_reduce",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-hybrid_2d_reduce/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/hybrid_2d_reduce/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-sparse-attention-hybrid_dual_ns",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-hybrid_dual_ns/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/hybrid_dual_ns/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-sparse-attention-hybrid_pdl",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-hybrid_pdl/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/hybrid_pdl/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-sparse-attention-hybrid_pdl_v2",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-hybrid_pdl_v2/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/hybrid_pdl_v2/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-sparse-attention-pure_tilelang",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-pure_tilelang/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/pure_tilelang/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-sparse-attention-pure_triton",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-sparse-attention-pure_triton/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-sparse-attention/variants/pure_triton/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-topk-indexer-evict_last_v4",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-topk-indexer-evict_last_v4/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-topk-indexer/variants/evict_last_v4/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-topk-indexer-fast_split_v6",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-topk-indexer-fast_split_v6/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-topk-indexer/variants/fast_split_v6/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-topk-indexer-graph_cached",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-topk-indexer-graph_cached/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-topk-indexer/variants/graph_cached/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-topk-indexer-no_graph",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-topk-indexer-no_graph/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-topk-indexer/variants/no_graph/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-topk-indexer-v8_radix_bt256",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-topk-indexer-v8_radix_bt256/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-topk-indexer/variants/v8_radix_bt256/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-dsa-topk-indexer-warp_coop_v3",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-dsa-topk-indexer-warp_coop_v3/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/dsa-topk-indexer/variants/warp_coop_v3/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gdn-decode-cuda_bv32_register_resident",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/ako4x-gdn-decode-cuda_bv32_register_resident/kernel.py",
+      "language": "cuda-inline",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gdn-decode/variants/cuda_bv32_register_resident/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gdn-decode-triton_bv_dispatch_graph",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/ako4x-gdn-decode-triton_bv_dispatch_graph/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gdn-decode/variants/triton_bv_dispatch_graph/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.1261804926343575,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gdn-decode/variants/triton_bv_dispatch_graph/result.json",
+        "label": "iter-27 final graph+dispatch confirmation",
+        "backend": "modal-b200",
+        "timestamp": "2026-04-23T13:59:37.092392"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gdn-decode-triton_swap_grid_evict_lsr",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/ako4x-gdn-decode-triton_swap_grid_evict_lsr/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gdn-decode/variants/triton_swap_grid_evict_lsr/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.1386721342978419,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gdn-decode/variants/triton_swap_grid_evict_lsr/result.json",
+        "label": "iter-9 final (archived 2026-04-24)",
+        "backend": "modal-b200",
+        "timestamp": "2026-04-24T11:23:45.859951"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gdn-prefill-cuda_graph_v1",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/ako4x-gdn-prefill-cuda_graph_v1/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gdn-prefill/variants/cuda_graph_v1/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 2.0307217754983484,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gdn-prefill/variants/cuda_graph_v1/result.json",
+        "label": "iter-12 BV_rec=16",
+        "backend": "modal-b200",
+        "timestamp": "2026-04-23T05:19:42.731316"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gdn-prefill-cuda_graph_v2",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/ako4x-gdn-prefill-cuda_graph_v2/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gdn-prefill/variants/cuda_graph_v2/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 4.253312127336773,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gdn-prefill/variants/cuda_graph_v2/result.json",
+        "label": "iter-12 dead-buf cleanup",
+        "backend": "modal-b200",
+        "timestamp": "2026-04-24T11:33:28.045755"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gdn-prefill-cuda_graph_v3",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/ako4x-gdn-prefill-cuda_graph_v3/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gdn-prefill/variants/cuda_graph_v3/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 4.583236884837246,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gdn-prefill/variants/cuda_graph_v3/result.json",
+        "label": "iter-9 kkt_solve big-matmul phases 5/6",
+        "backend": "modal-b200",
+        "timestamp": "2026-04-24T14:39:12.383534"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gdn-prefill-cuda_graph_v4",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/ako4x-gdn-prefill-cuda_graph_v4/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gdn-prefill/variants/cuda_graph_v4/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 4.670153276806475,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gdn-prefill/variants/cuda_graph_v4/result.json",
+        "label": "iter-11 PDL kkt_solve+state_rec+fwd_o chain",
+        "backend": "modal-b200",
+        "timestamp": "2026-04-25T02:15:39.283597"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gdn-prefill-cuda_graph_v5",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/ako4x-gdn-prefill-cuda_graph_v5/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gdn-prefill/variants/cuda_graph_v5/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 4.702840281179878,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gdn-prefill/variants/cuda_graph_v5/result.json",
+        "label": "iter-2 fwd_o FP8 e4m3 all 3 MMAs full",
+        "backend": "modal-b200",
+        "timestamp": "2026-04-25T08:23:48.326325"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_flash_decode_split_stages4",
+      "problem_keys": [
+        "attention",
+        "013_gqa_paged_decode_h32_kv8_d128_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_flash_decode_split_stages4/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_flash_decode_split_stages4/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.1671163876612103,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_flash_decode_split_stages4/result.json",
+        "label": "iter-14 confirm anchor (SPLIT=8 B=64, num_stages=4)",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-21T15:10:07.583918"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_pdl_grid_dispatch",
+      "problem_keys": [
+        "attention",
+        "013_gqa_paged_decode_h32_kv8_d128_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_pdl_grid_dispatch/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_pdl_grid_dispatch/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.4453261523901249,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_pdl_grid_dispatch/result.json",
+        "label": "iter14-reduce-grid-swap",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-21T17:46:29.148278"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_per_workload_split_max",
+      "problem_keys": [
+        "attention",
+        "013_gqa_paged_decode_h32_kv8_d128_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_per_workload_split_max/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_per_workload_split_max/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.424028640906707,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_per_workload_split_max/result.json",
+        "label": "iter-3 per-workload SPLIT_MAX routing on avg_kv_len>=400",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-21T19:28:11.290606"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-decode-h16-ckv512-kpe64-ps1-triton_split_kv_2d_reduce",
+      "problem_keys": [
+        "attention",
+        "018_mla_paged_decode_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-decode-h16-ckv512-kpe64-ps1-triton_split_kv_2d_reduce/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-decode-h16-ckv512-kpe64-ps1/variants/triton_split_kv_2d_reduce/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.2135986402797534,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-decode-h16-ckv512-kpe64-ps1/variants/triton_split_kv_2d_reduce/result.json",
+        "label": "iter-8 revert confirm (= iter-5)",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-20T03:51:45.514860"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-decode-h16-ckv512-kpe64-ps1-triton_split_kv_2d_reduce_pdl_rw2",
+      "problem_keys": [
+        "attention",
+        "018_mla_paged_decode_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-decode-h16-ckv512-kpe64-ps1-triton_split_kv_2d_reduce_pdl_rw2/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-decode-h16-ckv512-kpe64-ps1/variants/triton_split_kv_2d_reduce_pdl_rw2/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.4609535094280677,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-decode-h16-ckv512-kpe64-ps1/variants/triton_split_kv_2d_reduce_pdl_rw2/result.json",
+        "label": "iter-9 reduce num_warps=2 (PDL+reduce-tune)",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-20T08:14:07.915518"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-decode-h16-ckv512-kpe64-ps1-triton_split_kv_2d_reduce_pdl_rw2_brdispatch",
+      "problem_keys": [
+        "attention",
+        "018_mla_paged_decode_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-decode-h16-ckv512-kpe64-ps1-triton_split_kv_2d_reduce_pdl_rw2_brdispatch/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-decode-h16-ckv512-kpe64-ps1/variants/triton_split_kv_2d_reduce_pdl_rw2_brdispatch/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.4750185412552044,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-decode-h16-ckv512-kpe64-ps1/variants/triton_split_kv_2d_reduce_pdl_rw2_brdispatch/result.json",
+        "label": "iter-8 final state (iter-5 config: D_CHUNK=64 nw=4 for b>=16)",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-20T09:41:07.261270"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter1-cute-mla-donor-build-probe",
+      "problem_keys": [
+        "attention",
+        "019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter1-cute-mla-donor-build-probe/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter1-cute-mla-donor-build-probe/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.45606215155693,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter1-cute-mla-donor-build-probe/result.json",
+        "label": "iter1-cute-mla-donor-build-probe",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-22T08:00:40.391467"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter1-cute-mla-donor-discovery",
+      "problem_keys": [
+        "attention",
+        "019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter1-cute-mla-donor-discovery/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter1-cute-mla-donor-discovery/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.4566835671090417,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter1-cute-mla-donor-discovery/result.json",
+        "label": "iter1-cute-mla-donor-discovery",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-22T07:02:33.983905"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter12-triton-kvaware-bn-splitk",
+      "problem_keys": [
+        "attention",
+        "019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter12-triton-kvaware-bn-splitk/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter12-triton-kvaware-bn-splitk/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.4022310660554562,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter12-triton-kvaware-bn-splitk/result.json",
+        "label": "iter-12 kv-aware BLOCK_N (>32 use 64, else 32)",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-22T02:12:57.858435"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter2-workmap-cross-dsl-archive",
+      "problem_keys": [
+        "attention",
+        "019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter2-workmap-cross-dsl-archive/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter2-workmap-cross-dsl-archive/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.4528918494726284,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter2-workmap-cross-dsl-archive/result.json",
+        "label": "iter1-workmap-batch-flatten",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-22T05:53:44.999891"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter5-triton-graph-tilelang-archive",
+      "problem_keys": [
+        "attention",
+        "019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter5-triton-graph-tilelang-archive/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter5-triton-graph-tilelang-archive/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.4772537273494855,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter5-triton-graph-tilelang-archive/result.json",
+        "label": "iter-5-disable-tl-add-graph-capture",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-22T04:19:32.120509"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter6-triton-m64-dtile-tmem-archive",
+      "problem_keys": [
+        "attention",
+        "019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter6-triton-m64-dtile-tmem-archive/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter6-triton-m64-dtile-tmem-archive/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.4493478167507199,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter6-triton-m64-dtile-tmem-archive/result.json",
+        "label": "iter6-triton-anchor-restored",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-22T05:21:15.942314"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter6-triton-split-K-grid-pid0-kvsplit",
+      "problem_keys": [
+        "attention",
+        "019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/ako4x-mla-paged-prefill-causal-h16-ckv512-kpe64-ps1-iter6-triton-split-K-grid-pid0-kvsplit/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter6-triton-split-K-grid-pid0-kvsplit/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.4717075406372135,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/mla-paged-prefill-causal-h16-ckv512-kpe64-ps1/variants/iter6-triton-split-K-grid-pid0-kvsplit/result.json",
+        "label": "iter-6 split-K grid pid0=kv_split",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-22T03:30:49.751770"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter1-trtllm-turnkey-seed",
+      "problem_keys": [
+        "moe",
+        "020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter1-trtllm-turnkey-seed/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter1-trtllm-turnkey-seed/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.0277369065389859,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter1-trtllm-turnkey-seed/result.json",
+        "label": "iter-1-seed-trtllm",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-23T12:38:19.321793"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter2-direct-cpp-bypass",
+      "problem_keys": [
+        "moe",
+        "020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter2-direct-cpp-bypass/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter2-direct-cpp-bypass/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.2115918529773013,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter2-direct-cpp-bypass/result.json",
+        "label": "iter-2-direct-cpp-bypass",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-23T14:03:21.513516"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter3c-cuda-graph-eager-T1-fallback",
+      "problem_keys": [
+        "moe",
+        "020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter3c-cuda-graph-eager-T1-fallback/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter3c-cuda-graph-eager-T1-fallback/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.3191507763676422,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter3c-cuda-graph-eager-T1-fallback/result.json",
+        "label": "iter-3c-cuda-graph-eager-T1-fallback",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-23T15:23:28.913175"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter4-autotune-tactic-sweep-gated",
+      "problem_keys": [
+        "moe",
+        "020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter4-autotune-tactic-sweep-gated/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter4-autotune-tactic-sweep-gated/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.3250124999901507,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter4-autotune-tactic-sweep-gated/result.json",
+        "label": "iter4-autotune-tactic-sweep-gated",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-23T17:06:46.282005"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter5-forensic-closure",
+      "problem_keys": [
+        "moe",
+        "020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter5-forensic-closure/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter5-forensic-closure/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.3091119644122398,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter5-forensic-closure/result.json",
+        "label": "iter5-forensic-closure",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-23T18:33:02.320788"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-fused_graph_all_t",
+      "problem_keys": [
+        "moe"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-fused_graph_all_t/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale/variants/fused_graph_all_t/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-fused_graph_swiglu_tuned",
+      "problem_keys": [
+        "moe"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-fused_graph_swiglu_tuned/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale/variants/fused_graph_swiglu_tuned/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-fused_indirect_v1",
+      "problem_keys": [
+        "moe"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-fused_indirect_v1/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale/variants/fused_indirect_v1/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-fused_routing_v2",
+      "problem_keys": [
+        "moe"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-fused_routing_v2/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale/variants/fused_routing_v2/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-moe-fp8-block-scale-presync_v1",
+      "problem_keys": [
+        "moe"
+      ],
+      "family": "moe",
+      "path": "kernels/ako4x-moe-fp8-block-scale-presync_v1/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/moe-fp8-block-scale/variants/presync_v1/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "ako4x-rmsnorm-h128-triton_tiered_rows",
+      "problem_keys": [
+        "rmsnorm",
+        "021_rmsnorm_h128"
+      ],
+      "family": "rmsnorm",
+      "path": "kernels/ako4x-rmsnorm-h128-triton_tiered_rows/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "TongmingLAIC/AKO4X",
+        "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+        "path": "reference/rmsnorm-h128/variants/triton_tiered_rows/kernel.py"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "reported": {
+        "score": 1.1621461711921366,
+        "metric": "speedup_vs_expert",
+        "board": "FlashInfer-Bench (MLSys 2026)",
+        "source": "reference/rmsnorm-h128/variants/triton_tiered_rows/result.json",
+        "label": "iter-12 aligned-fast-path",
+        "backend": "modal-b200",
+        "timestamp": "2026-05-20T17:21:27.799908"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "autogk-dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64-31ce60",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/autogk-dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64-31ce60/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "BBuf/auto-gpu-kernel",
+        "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+        "path": "archive/fable/dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "autogk-dsa_topk_indexer_fp8_h64_d128_topk2048_ps64-43c07b",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/autogk-dsa_topk_indexer_fp8_h64_d128_topk2048_ps64-43c07b/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "BBuf/auto-gpu-kernel",
+        "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+        "path": "archive/fable/dsa_topk_indexer_fp8_h64_d128_topk2048_ps64.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "autogk-gdn_decode_qk4_v8_d128_k_last-1a65c1",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/autogk-gdn_decode_qk4_v8_d128_k_last-1a65c1/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "BBuf/auto-gpu-kernel",
+        "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+        "path": "archive/fable/gdn_decode_qk4_v8_d128_k_last.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "autogk-gdn_prefill_qk4_v8_d128_k_last-1f7c6f",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/autogk-gdn_prefill_qk4_v8_d128_k_last-1f7c6f/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "BBuf/auto-gpu-kernel",
+        "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+        "path": "archive/fable/gdn_prefill_qk4_v8_d128_k_last.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "autogk-indexer_baseline-9a3a15",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/autogk-indexer_baseline-9a3a15/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "BBuf/auto-gpu-kernel",
+        "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+        "path": "archive/dsa_topk_indexer_fp8_h64_d128_topk2048_ps64/solution/triton/indexer_baseline.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "autogk-indexer_fused-f4ef91",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/autogk-indexer_fused-f4ef91/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "BBuf/auto-gpu-kernel",
+        "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+        "path": "archive/dsa_topk_indexer_fp8_h64_d128_topk2048_ps64/solution/triton/indexer_fused.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "autogk-moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048-11b403",
+      "problem_keys": [
+        "moe"
+      ],
+      "family": "moe",
+      "path": "kernels/autogk-moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048-11b403/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "BBuf/auto-gpu-kernel",
+        "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+        "path": "archive/fable/moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "autogk-sparse_baseline-a855c7",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/autogk-sparse_baseline-a855c7/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "BBuf/auto-gpu-kernel",
+        "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+        "path": "archive/dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64/solution/triton/sparse_baseline.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "autogk-sparse_fused-bd15d9",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/autogk-sparse_fused-bd15d9/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "BBuf/auto-gpu-kernel",
+        "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+        "path": "archive/dsa_sparse_attention_h16_ckv512_kpe64_topk2048_ps64/solution/triton/sparse_fused.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-attn_bwd_gqa8-h100",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-attn_bwd_gqa8-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/attn_bwd_gqa8/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "FlashAttention-4",
+        "speedup": "+2.7%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-attn_bwd_mha-b200",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-attn_bwd_mha-b200/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/attn_bwd_mha/b200/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "FlashAttention-4",
+        "speedup": "+2.5%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-attn_bwd_mha-h100",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-attn_bwd_mha-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/attn_bwd_mha/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "FlashAttention-4",
+        "speedup": "+5.1%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-attn_fwd_gqa16-h100-from_agent",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-attn_fwd_gqa16-h100-from_agent/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/attn_fwd_gqa16/h100/from_agent/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "/goal agent kernel (sealed)",
+        "speedup": "+5.0% (+29% vs FlashAttention-4)",
+        "source": "kernels/README.md (Table 1)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-attn_fwd_gqa16-h100-gen0",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-attn_fwd_gqa16-h100-gen0/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/attn_fwd_gqa16/h100/gen0/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "FlashAttention-4",
+        "speedup": "+0.3%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-attn_fwd_gqa16-h100-gen1",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-attn_fwd_gqa16-h100-gen1/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/attn_fwd_gqa16/h100/gen1/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "ForgeKernel gen 0 (sealed)",
+        "speedup": "+9.9% (+10% vs FlashAttention-4)",
+        "source": "kernels/README.md (Table 1)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-attn_fwd_gqa16-h100-gen2",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-attn_fwd_gqa16-h100-gen2/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/attn_fwd_gqa16/h100/gen2/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "ForgeKernel gen 1 (sealed)",
+        "speedup": "+4.2% (+15% vs FlashAttention-4)",
+        "source": "kernels/README.md (Table 1)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-gqa_paged_decode-h100",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-gqa_paged_decode-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/gqa_paged_decode/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "K-Search",
+        "speedup": "+24.5%",
+        "source": "kernels/README.md (Figure 4)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-mla_paged_decode-h100",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-mla_paged_decode-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/mla_paged_decode/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "K-Search",
+        "speedup": "+170.6%",
+        "source": "kernels/README.md (Figure 4)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-attention-mla_paged_prefill-h100",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-attention-mla_paged_prefill-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/attention/mla_paged_prefill/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "K-Search",
+        "speedup": "+146.1%",
+        "source": "kernels/README.md (Figure 4)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-conv-conv2d_dgrad-h100",
+      "problem_keys": [
+        "conv"
+      ],
+      "family": "conv",
+      "path": "kernels/forgekernel-conv-conv2d_dgrad-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/conv/conv2d_dgrad/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "cuDNN",
+        "speedup": "+0.7%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-conv-conv2d_wgrad-h100",
+      "problem_keys": [
+        "conv"
+      ],
+      "family": "conv",
+      "path": "kernels/forgekernel-conv-conv2d_wgrad-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/conv/conv2d_wgrad/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "cuDNN",
+        "speedup": "+1.0%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-conv-conv3d_fwd-h100",
+      "problem_keys": [
+        "conv"
+      ],
+      "family": "conv",
+      "path": "kernels/forgekernel-conv-conv3d_fwd-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/conv/conv3d_fwd/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "cuDNN",
+        "speedup": "+7.6%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-gemm-fp4_grouped_gemm-b200",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/forgekernel-gemm-fp4_grouped_gemm-b200/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/gemm/fp4_grouped_gemm/b200/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "DeepGEMM",
+        "speedup": "+0.6%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-gemm-fp8_gemm-h100",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/forgekernel-gemm-fp8_gemm-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/gemm/fp8_gemm/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "DeepGEMM",
+        "speedup": "+0.8%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-gemm-gemm_fp16-h100",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/forgekernel-gemm-gemm_fp16-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/gemm/gemm_fp16/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "cuBLAS",
+        "speedup": "+0.9%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-linear_attention-gdn_prefill_bwd-h100",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/forgekernel-linear_attention-gdn_prefill_bwd-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/linear_attention/gdn_prefill_bwd/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "FlashQLA",
+        "speedup": "+1.1%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-linear_attention-gdn_prefill_fwd-h100-from_agent",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/forgekernel-linear_attention-gdn_prefill_fwd-h100-from_agent/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/linear_attention/gdn_prefill_fwd/h100/from_agent/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "/goal agent kernel (sealed)",
+        "speedup": "+9.5% (+100% vs FlashInfer)",
+        "source": "kernels/README.md (Table 1)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-linear_attention-gdn_prefill_fwd-h100-gen0",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/forgekernel-linear_attention-gdn_prefill_fwd-h100-gen0/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/linear_attention/gdn_prefill_fwd/h100/gen0/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "FlashInfer",
+        "speedup": "−0.2%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-linear_attention-gdn_prefill_varlen-b200",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/forgekernel-linear_attention-gdn_prefill_varlen-b200/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/linear_attention/gdn_prefill_varlen/b200/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "Kernel Design Agents (KDA-v0.5)",
+        "speedup": "+5.8%",
+        "source": "kernels/README.md (Figure 4)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-linear_attention-recurrent_kda_prefill-b200",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/forgekernel-linear_attention-recurrent_kda_prefill-b200/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/linear_attention/recurrent_kda_prefill/b200/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "CAKE",
+        "speedup": "+0.4%",
+        "source": "kernels/README.md (Figure 4)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-sparse_attention-dsa_indexer_bwd-h100",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-sparse_attention-dsa_indexer_bwd-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/sparse_attention/dsa_indexer_bwd/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "cuDNN-frontend",
+        "speedup": "+2.5%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-sparse_attention-dsa_score_recompute-h100",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-sparse_attention-dsa_score_recompute-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/sparse_attention/dsa_score_recompute/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "cuDNN-frontend",
+        "speedup": "+6.2%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-sparse_attention-dsa_sparse_bwd-h100",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-sparse_attention-dsa_sparse_bwd-h100/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/sparse_attention/dsa_sparse_bwd/h100/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "cuDNN-frontend",
+        "speedup": "+1.4%",
+        "source": "kernels/README.md (Figure 3)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "forgekernel-sparse_attention-dsv41_fused_attn_rope_cast-b200",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/forgekernel-sparse_attention-dsv41_fused_attn_rope_cast-b200/kernel.py",
+      "language": "cuda-inline",
+      "source": {
+        "repo": "OpenBMB/ForgeKernel",
+        "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+        "path": "kernels/sparse_attention/dsv41_fused_attn_rope_cast/b200/kernel.py"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "vs": "FlashMLA",
+        "speedup": "1.104–1.105×",
+        "source": "kernels/README.md (After the paper)"
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-006_gemm_n2048_k4096",
+      "problem_keys": [
+        "gemm",
+        "006_gemm_n2048_k4096"
+      ],
+      "family": "gemm",
+      "path": "kernels/hyra-006_gemm_n2048_k4096/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k215__sid25844__gemm_n2048_k4096__006_gemm_n2048_k4096.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.536168,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.023509,
+        "submission_id": 25844,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-009_nvfp4_vision_temporal_patch_merge_with_projection",
+      "problem_keys": [
+        "quant_gemm",
+        "009_nvfp4_vision_temporal_patch_merge_with_projection"
+      ],
+      "family": "quant_gemm",
+      "path": "kernels/hyra-009_nvfp4_vision_temporal_patch_merge_with_projection/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k185__sid25691__nvfp4_vision_temporal_patch_merge_with_projection__009_nvfp4_vision_temporal_patch_merge_with_projection.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.948448,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.038247,
+        "submission_id": 25691,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-016_gqa_ragged_prefill_causal_h32_kv4_d128",
+      "problem_keys": [
+        "attention",
+        "016_gqa_ragged_prefill_causal_h32_kv4_d128"
+      ],
+      "family": "attention",
+      "path": "kernels/hyra-016_gqa_ragged_prefill_causal_h32_kv4_d128/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k225__sid25891__gqa_ragged_prefill_causal_h32_kv4_d128__016_gqa_ragged_prefill_causal_h32_kv4_d128.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.925048,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.008197,
+        "submission_id": 25891,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-018_mla_paged_decode_h16_ckv512_kpe64_ps1",
+      "problem_keys": [
+        "attention",
+        "018_mla_paged_decode_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/hyra-018_mla_paged_decode_h16_ckv512_kpe64_ps1/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k227__sid25893__mla_paged_decode_h16_ckv512_kpe64_ps1__018_mla_paged_decode_h16_ckv512_kpe64_ps1.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.956477,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.018297,
+        "submission_id": 25893,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1",
+      "problem_keys": [
+        "attention",
+        "019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1"
+      ],
+      "family": "attention",
+      "path": "kernels/hyra-019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k228__sid25896__mla_paged_prefill_causal_h16_ckv512_kpe64_ps1__019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.96666,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.045929,
+        "submission_id": 25896,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-044_mamba_discretization_and_segsum",
+      "problem_keys": [
+        "ssm",
+        "044_mamba_discretization_and_segsum"
+      ],
+      "family": "ssm",
+      "path": "kernels/hyra-044_mamba_discretization_and_segsum/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k138__sid25471__mamba_discretization_and_segsum__044_mamba_discretization_and_segsum.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.913815,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.025766,
+        "submission_id": 25471,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-051_seqlen-finetuned-reconstructed_hyena_complete_forward_block",
+      "problem_keys": [
+        "ssm",
+        "051_seqlen-finetuned-reconstructed_hyena_complete_forward_block"
+      ],
+      "family": "ssm",
+      "path": "kernels/hyra-051_seqlen-finetuned-reconstructed_hyena_complete_forward_block/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k145__sid25621__hyena_complete_forward_block__051_seqlen-finetuned-reconstructed_hyena_complete_forward_block.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.965872,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.021479,
+        "submission_id": 25621,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-060_chunk_gated_delta_rule_linear_attention",
+      "problem_keys": [
+        "ssm",
+        "060_chunk_gated_delta_rule_linear_attention"
+      ],
+      "family": "ssm",
+      "path": "kernels/hyra-060_chunk_gated_delta_rule_linear_attention/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k154__sid25648__chunk_gated_delta_rule_linear_attention__060_chunk_gated_delta_rule_linear_attention.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.909533,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.05929,
+        "submission_id": 25648,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-067_flash_attention_gqa_ultralong",
+      "problem_keys": [
+        "attention",
+        "067_flash_attention_gqa_ultralong"
+      ],
+      "family": "attention",
+      "path": "kernels/hyra-067_flash_attention_gqa_ultralong/kernel.py",
+      "language": "cuda-inline",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k067__sid24692__flash_attention_gqa_ultralong__067_flash_attention_gqa_ultralong.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.69289,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.177612,
+        "submission_id": 24692,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "hyra-081_moe_sparse_expert_dispatch",
+      "problem_keys": [
+        "moe",
+        "081_moe_sparse_expert_dispatch"
+      ],
+      "family": "moe",
+      "path": "kernels/hyra-081_moe_sparse_expert_dispatch/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "Tencent/Hyra-results",
+        "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+        "path": "Hyra-results/AI4AI/sol_execbench/k175__sid25683__moe_sparse_expert_dispatch__081_moe_sparse_expert_dispatch.json",
+        "license_file": "Hyra-results/LICENSE"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "reported": {
+        "score": 0.924206,
+        "metric": "sol_score",
+        "board": "SOL-ExecBench",
+        "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+        "latency_ms": 0.887775,
+        "submission_id": 25683,
+        "kernel_id": null
+      },
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-DeepGEMM-PR-304",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-DeepGEMM-PR-304/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (deepseek-ai/DeepGEMM)",
+        "commit": "7f2a703e",
+        "path": "artifacts/prs/deepgemm/PR-304",
+        "upstream_url": "https://github.com/deepseek-ai/DeepGEMM/pull/304"
+      },
+      "license": "unknown",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-DeepGEMM-full",
+      "problem_keys": [
+        "quant_gemm"
+      ],
+      "family": "quant_gemm",
+      "path": "kernels/kernelwiki-DeepGEMM-full/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (deepseek-ai/DeepGEMM)",
+        "commit": "891d57b4db1071624b5c8fa0d1e51cb317fa709f",
+        "path": "artifacts/kernels/deepgemm/full",
+        "upstream_url": "https://github.com/deepseek-ai/DeepGEMM"
+      },
+      "license": "MIT",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-TensorRT-LLM-PR-13340",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-TensorRT-LLM-PR-13340/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/TensorRT-LLM)",
+        "commit": "897c4bff",
+        "path": "artifacts/prs/tensorrt-llm/PR-13340",
+        "upstream_url": "https://github.com/NVIDIA/TensorRT-LLM/pull/13340"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cccl-PR-3559",
+      "problem_keys": [
+        "other"
+      ],
+      "family": "other",
+      "path": "kernels/kernelwiki-cccl-PR-3559/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cccl)",
+        "commit": "25523da2",
+        "path": "artifacts/prs/cccl/PR-3559",
+        "upstream_url": "https://github.com/NVIDIA/cccl/pull/3559"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cccl-PR-6152",
+      "problem_keys": [
+        "other"
+      ],
+      "family": "other",
+      "path": "kernels/kernelwiki-cccl-PR-6152/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cccl)",
+        "commit": "3fb05826",
+        "path": "artifacts/prs/cccl/PR-6152",
+        "upstream_url": "https://github.com/NVIDIA/cccl/pull/6152"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2139",
+      "problem_keys": [
+        "quant_gemm"
+      ],
+      "family": "quant_gemm",
+      "path": "kernels/kernelwiki-cutlass-PR-2139/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "ca4fdbea",
+        "path": "artifacts/prs/cutlass/PR-2139",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2139"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2161",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/kernelwiki-cutlass-PR-2161/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "06e560d9",
+        "path": "artifacts/prs/cutlass/PR-2161",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2161"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2378",
+      "problem_keys": [
+        "other"
+      ],
+      "family": "other",
+      "path": "kernels/kernelwiki-cutlass-PR-2378/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "26b74500",
+        "path": "artifacts/prs/cutlass/PR-2378",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2378"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2466",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-cutlass-PR-2466/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "0e026982",
+        "path": "artifacts/prs/cutlass/PR-2466",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2466"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2472",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-cutlass-PR-2472/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "9baa06dd",
+        "path": "artifacts/prs/cutlass/PR-2472",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2472"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2492",
+      "problem_keys": [
+        "other"
+      ],
+      "family": "other",
+      "path": "kernels/kernelwiki-cutlass-PR-2492/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "84a27b39",
+        "path": "artifacts/prs/cutlass/PR-2492",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2492"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2599",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-cutlass-PR-2599/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "9ca7e877",
+        "path": "artifacts/prs/cutlass/PR-2599",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2599"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2881",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/kernelwiki-cutlass-PR-2881/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "3f4c086d",
+        "path": "artifacts/prs/cutlass/PR-2881",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2881"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2921",
+      "problem_keys": [
+        "other"
+      ],
+      "family": "other",
+      "path": "kernels/kernelwiki-cutlass-PR-2921/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "8c524595",
+        "path": "artifacts/prs/cutlass/PR-2921",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2921"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-cutlass-PR-2995",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/kernelwiki-cutlass-PR-2995/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "KernelWiki artifact (NVIDIA/cutlass)",
+        "commit": "1cfbb53a",
+        "path": "artifacts/prs/cutlass/PR-2995",
+        "upstream_url": "https://github.com/NVIDIA/cutlass/pull/2995"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-flash-attention-PR-1236",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-flash-attention-PR-1236/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (Dao-AILab/flash-attention)",
+        "commit": "a5a75274",
+        "path": "artifacts/prs/flash-attention/PR-1236",
+        "upstream_url": "https://github.com/Dao-AILab/flash-attention/pull/1236"
+      },
+      "license": "unknown",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-flash-attention-PR-2441",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-flash-attention-PR-2441/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "KernelWiki artifact (Dao-AILab/flash-attention)",
+        "commit": "f219c89c",
+        "path": "artifacts/prs/flash-attention/PR-2441",
+        "upstream_url": "https://github.com/Dao-AILab/flash-attention/pull/2441"
+      },
+      "license": "unknown",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-flashinfer-PR-1025",
+      "problem_keys": [
+        "conv"
+      ],
+      "family": "conv",
+      "path": "kernels/kernelwiki-flashinfer-PR-1025/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+        "commit": "890df95b",
+        "path": "artifacts/prs/flashinfer/PR-1025",
+        "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1025"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-flashinfer-PR-1039",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-flashinfer-PR-1039/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+        "commit": "9a05c92a",
+        "path": "artifacts/prs/flashinfer/PR-1039",
+        "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1039"
+      },
+      "license": "multiple (Apache-2.0, BSD-3-Clause)",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-flashinfer-PR-1117",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-flashinfer-PR-1117/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+        "commit": "2f01a9a3",
+        "path": "artifacts/prs/flashinfer/PR-1117",
+        "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1117"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-flashinfer-PR-1850",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-flashinfer-PR-1850/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+        "commit": "f3ea938d",
+        "path": "artifacts/prs/flashinfer/PR-1850",
+        "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1850"
+      },
+      "license": "multiple (Apache-2.0, BSD-3-Clause)",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-flashinfer-PR-2387",
+      "problem_keys": [
+        "ssm"
+      ],
+      "family": "ssm",
+      "path": "kernels/kernelwiki-flashinfer-PR-2387/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+        "commit": "18804cd5",
+        "path": "artifacts/prs/flashinfer/PR-2387",
+        "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/2387"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-flashinfer-PR-982",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/kernelwiki-flashinfer-PR-982/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+        "commit": "5751fc68",
+        "path": "artifacts/prs/flashinfer/PR-982",
+        "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/982"
+      },
+      "license": "unknown",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-flashinfer-PR-983",
+      "problem_keys": [
+        "norm"
+      ],
+      "family": "norm",
+      "path": "kernels/kernelwiki-flashinfer-PR-983/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+        "commit": "893172c1",
+        "path": "artifacts/prs/flashinfer/PR-983",
+        "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/983"
+      },
+      "license": "unknown",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-flashinfer-full",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-flashinfer-full/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (flashinfer-ai/flashinfer)",
+        "commit": "9a05c92a",
+        "path": "artifacts/kernels/warp-specialization/full",
+        "upstream_url": "https://github.com/flashinfer-ai/flashinfer/pull/1039"
+      },
+      "license": "BSD-3-Clause",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-sglang-PR-21019",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-sglang-PR-21019/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "KernelWiki artifact (sgl-project/sglang)",
+        "commit": "5bdc07d9",
+        "path": "artifacts/prs/sglang/PR-21019",
+        "upstream_url": "https://github.com/sgl-project/sglang/pull/21019"
+      },
+      "license": "unknown",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-sglang-PR-21203",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-sglang-PR-21203/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "KernelWiki artifact (sgl-project/sglang)",
+        "commit": "f273ba1c",
+        "path": "artifacts/prs/sglang/PR-21203",
+        "upstream_url": "https://github.com/sgl-project/sglang/pull/21203"
+      },
+      "license": "unknown",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-sglang-PR-22079",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-sglang-PR-22079/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "KernelWiki artifact (sgl-project/sglang)",
+        "commit": "5638d40f",
+        "path": "artifacts/prs/sglang/PR-22079",
+        "upstream_url": "https://github.com/sgl-project/sglang/pull/22079"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-sglang-full",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-sglang-full/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "KernelWiki artifact (sgl-project/sglang)",
+        "commit": "5bdc07d9",
+        "path": "artifacts/kernels/gated-delta-net/full",
+        "upstream_url": "https://github.com/sgl-project/sglang/pull/21019"
+      },
+      "license": "unknown",
+      "entry": "run",
+      "usable_in_submission": false
+    },
+    {
+      "id": "kernelwiki-vllm-PR-16032",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-vllm-PR-16032/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (vllm-project/vllm)",
+        "commit": "ed7a29d9",
+        "path": "artifacts/prs/vllm/PR-16032",
+        "upstream_url": "https://github.com/vllm-project/vllm/pull/16032"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-vllm-PR-34597",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/kernelwiki-vllm-PR-34597/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "KernelWiki artifact (vllm-project/vllm)",
+        "commit": "a1257fd1",
+        "path": "artifacts/prs/vllm/PR-34597",
+        "upstream_url": "https://github.com/vllm-project/vllm/pull/34597"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "kernelwiki-vllm-full",
+      "problem_keys": [
+        "quant_gemm"
+      ],
+      "family": "quant_gemm",
+      "path": "kernels/kernelwiki-vllm-full/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "KernelWiki artifact (vllm-project/vllm)",
+        "commit": "ed7a29d9",
+        "path": "artifacts/kernels/epilogue-fusion/full",
+        "upstream_url": "https://github.com/vllm-project/vllm/pull/16032"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-cuda_cpp-flux_rope",
+      "problem_keys": [
+        "rope"
+      ],
+      "family": "rope",
+      "path": "kernels/sol-example-cuda_cpp-flux_rope/kernel.py",
+      "language": "cuda-inline",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/cuda_cpp/flux_rope/solution_cuda.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-cuda_cpp-rmsnorm",
+      "problem_keys": [
+        "rmsnorm"
+      ],
+      "family": "rmsnorm",
+      "path": "kernels/sol-example-cuda_cpp-rmsnorm/kernel.py",
+      "language": "cuda-inline",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/cuda_cpp/rmsnorm/solution_cuda.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-cudnn-softmax",
+      "problem_keys": [
+        "attention"
+      ],
+      "family": "attention",
+      "path": "kernels/sol-example-cudnn-softmax/kernel.py",
+      "language": "cuda-inline",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/cudnn/softmax/solution_cudnn.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-cute_dsl-jamba_attn_proj",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/sol-example-cute_dsl-jamba_attn_proj/kernel.py",
+      "language": "cutedsl",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/cute_dsl/jamba_attn_proj/solution_cute_dsl.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-cutlass-gemm",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/sol-example-cutlass-gemm/kernel.py",
+      "language": "cuda-inline",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/cutlass/gemm/solution_cutlass.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-pytorch-gemma3_swiglu",
+      "problem_keys": [
+        "mlp"
+      ],
+      "family": "mlp",
+      "path": "kernels/sol-example-pytorch-gemma3_swiglu/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/pytorch/gemma3_swiglu/solution_python.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-pytorch-linear_backward",
+      "problem_keys": [
+        "gemm"
+      ],
+      "family": "gemm",
+      "path": "kernels/sol-example-pytorch-linear_backward/kernel.py",
+      "language": "pytorch",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/pytorch/linear_backward/solution_python.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-triton-nemotron_rms_norm",
+      "problem_keys": [
+        "rmsnorm"
+      ],
+      "family": "rmsnorm",
+      "path": "kernels/sol-example-triton-nemotron_rms_norm/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/triton/nemotron_rms_norm/solution_triton.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-triton-olmo3_post_norm",
+      "problem_keys": [
+        "norm"
+      ],
+      "family": "norm",
+      "path": "kernels/sol-example-triton-olmo3_post_norm/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/triton/olmo3_post_norm/solution_triton.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    },
+    {
+      "id": "sol-example-triton-rmsnorm",
+      "problem_keys": [
+        "rmsnorm"
+      ],
+      "family": "rmsnorm",
+      "path": "kernels/sol-example-triton-rmsnorm/kernel.py",
+      "language": "triton",
+      "source": {
+        "repo": "NVIDIA/SOL-ExecBench",
+        "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+        "path": "examples/triton/rmsnorm/solution_triton.json"
+      },
+      "license": "Apache-2.0",
+      "entry": "run",
+      "usable_in_submission": true
+    }
+  ]
+}

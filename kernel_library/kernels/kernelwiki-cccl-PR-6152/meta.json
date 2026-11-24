@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-cccl-PR-6152",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-cccl-PR-6152",
+    "problem_keys": [
+      "other"
+    ],
+    "family": "other",
+    "path": "kernels/kernelwiki-cccl-PR-6152/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (NVIDIA/cccl)",
+      "commit": "3fb05826",
+      "path": "artifacts/prs/cccl/PR-6152",
+      "upstream_url": "https://github.com/NVIDIA/cccl/pull/6152"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "header: key-files/cub/cub/device/dispatch/dispatch_topk.cuh",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: Apache-2.0 (header: key-files/cub/cub/device/dispatch/dispatch_topk.cuh)",
+    "files: dispatch_topk.cuh"
+  ],
+  "extra": {}
+}

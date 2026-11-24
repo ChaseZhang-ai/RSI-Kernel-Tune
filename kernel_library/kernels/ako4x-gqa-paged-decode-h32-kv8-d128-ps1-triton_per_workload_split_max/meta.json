@@ -1,0 +1,55 @@
+{
+  "id": "ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_per_workload_split_max",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_per_workload_split_max",
+    "problem_keys": [
+      "attention",
+      "013_gqa_paged_decode_h32_kv8_d128_ps1"
+    ],
+    "family": "attention",
+    "path": "kernels/ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_per_workload_split_max/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_per_workload_split_max/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.424028640906707,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_per_workload_split_max/result.json",
+      "label": "iter-3 per-workload SPLIT_MAX routing on avg_kv_len>=400",
+      "backend": "modal-b200",
+      "timestamp": "2026-05-21T19:28:11.290606"
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.424028640906707,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_per_workload_split_max/result.json",
+    "label": "iter-3 per-workload SPLIT_MAX routing on avg_kv_len>=400",
+    "backend": "modal-b200",
+    "timestamp": "2026-05-21T19:28:11.290606"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "trap: host-only shape query, no GPU sync (round-1's closed dead-end on"
+  ],
+  "extra": {}
+}

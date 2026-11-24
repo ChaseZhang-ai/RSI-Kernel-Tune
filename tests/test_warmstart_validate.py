@@ -132,13 +132,14 @@ def test_an_unknown_import_is_refused_with_the_import_named():
     assert not r.ok and "cupy" in r.problems[0] and "triton" in r.problems[0]
 
 
-def test_triton_is_inferred_but_refused_while_the_build_lacks_that_language():
+def test_triton_is_inferred_and_now_accepted_by_the_build():
     src = "import triton\nimport triton.language as tl\n\ndef run(*args):\n    pass\n"
     r = check(src)
     assert (r.language, r.method) == ("triton", "triton")
-    assert not r.ok and "languages" in r.problems[0]
-    # once the language is accepted (the triton task merges) the same file passes
-    assert check(src, languages=("cutedsl", "triton")).ok
+    assert r.ok                             # the triton task has merged: this is a task kernel
+    # a build without the language still refuses the same file, and says so
+    r2 = check(src, languages=("cutedsl", "cuda"))
+    assert not r2.ok and "languages" in r2.problems[0]
 
 
 def test_with_no_definition_the_arity_is_not_checked_and_says_so():

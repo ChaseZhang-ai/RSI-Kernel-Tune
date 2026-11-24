@@ -1,0 +1,49 @@
+{
+  "id": "forgekernel-attention-attn_fwd_gqa16-h100-from_agent",
+  "origin": "forgekernel",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "forgekernel-attention-attn_fwd_gqa16-h100-from_agent",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/forgekernel-attention-attn_fwd_gqa16-h100-from_agent/kernel.py",
+    "language": "cutedsl",
+    "source": {
+      "repo": "OpenBMB/ForgeKernel",
+      "commit": "5997d28d40cdad7a3371645f2c461b061ecebbd0",
+      "path": "kernels/attention/attn_fwd_gqa16/h100/from_agent/kernel.py"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "vs": "/goal agent kernel (sealed)",
+      "speedup": "+5.0% (+29% vs FlashAttention-4)",
+      "source": "kernels/README.md (Table 1)"
+    },
+    "usable_in_submission": true
+  },
+  "language": "cutedsl",
+  "entry_point": "run",
+  "original_entry": "attn_fwd",
+  "original_files": [
+    {
+      "path": "attention/attn_fwd_gqa16/h100/from_agent/kernel.py",
+      "bytes": 128288
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "kernels/README.md",
+  "reported": {
+    "vs": "/goal agent kernel (sealed)",
+    "speedup": "+5.0% (+29% vs FlashAttention-4)",
+    "source": "kernels/README.md (Table 1)"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

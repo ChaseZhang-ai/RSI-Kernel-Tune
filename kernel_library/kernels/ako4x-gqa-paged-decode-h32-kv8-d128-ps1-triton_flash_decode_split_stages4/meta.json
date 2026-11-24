@@ -1,0 +1,53 @@
+{
+  "id": "ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_flash_decode_split_stages4",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_flash_decode_split_stages4",
+    "problem_keys": [
+      "attention",
+      "013_gqa_paged_decode_h32_kv8_d128_ps1"
+    ],
+    "family": "attention",
+    "path": "kernels/ako4x-gqa-paged-decode-h32-kv8-d128-ps1-triton_flash_decode_split_stages4/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_flash_decode_split_stages4/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.1671163876612103,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_flash_decode_split_stages4/result.json",
+      "label": "iter-14 confirm anchor (SPLIT=8 B=64, num_stages=4)",
+      "backend": "modal-b200",
+      "timestamp": "2026-05-21T15:10:07.583918"
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.1671163876612103,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/gqa-paged-decode-h32-kv8-d128-ps1/variants/triton_flash_decode_split_stages4/result.json",
+    "label": "iter-14 confirm anchor (SPLIT=8 B=64, num_stages=4)",
+    "backend": "modal-b200",
+    "timestamp": "2026-05-21T15:10:07.583918"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

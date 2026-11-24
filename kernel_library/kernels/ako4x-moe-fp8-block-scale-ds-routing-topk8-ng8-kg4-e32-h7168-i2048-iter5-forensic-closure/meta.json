@@ -1,0 +1,55 @@
+{
+  "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter5-forensic-closure",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter5-forensic-closure",
+    "problem_keys": [
+      "moe",
+      "020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+    ],
+    "family": "moe",
+    "path": "kernels/ako4x-moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048-iter5-forensic-closure/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter5-forensic-closure/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.3091119644122398,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter5-forensic-closure/result.json",
+      "label": "iter5-forensic-closure",
+      "backend": "modal-b200",
+      "timestamp": "2026-05-23T18:33:02.320788"
+    },
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.3091119644122398,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/moe-fp8-block-scale-ds-routing-topk8-ng8-kg4-e32-h7168-i2048/variants/iter5-forensic-closure/result.json",
+    "label": "iter5-forensic-closure",
+    "backend": "modal-b200",
+    "timestamp": "2026-05-23T18:33:02.320788"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "trap: Inherits iter4's dead-ends (none on the autotune lever itself beyond"
+  ],
+  "extra": {}
+}

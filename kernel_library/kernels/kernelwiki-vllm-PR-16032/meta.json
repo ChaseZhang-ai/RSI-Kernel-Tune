@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-vllm-PR-16032",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-vllm-PR-16032",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-vllm-PR-16032/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (vllm-project/vllm)",
+      "commit": "ed7a29d9",
+      "path": "artifacts/prs/vllm/PR-16032",
+      "upstream_url": "https://github.com/vllm-project/vllm/pull/16032"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "header: key-files/csrc/attention/mla/cutlass_mla_entry.cu",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: Apache-2.0 (header: key-files/csrc/attention/mla/cutlass_mla_entry.cu)",
+    "files: _custom_ops.py, cutlass_mla_entry.cu, cutlass_mla_kernels.cu, nvfp4_scaled_mm_kernels.cu, ops.h, torch_bindings.cpp"
+  ],
+  "extra": {}
+}

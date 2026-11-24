@@ -1,0 +1,52 @@
+{
+  "id": "ako4x-gdn-decode-triton_swap_grid_evict_lsr",
+  "origin": "ako4x",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "ako4x-gdn-decode-triton_swap_grid_evict_lsr",
+    "problem_keys": [
+      "ssm"
+    ],
+    "family": "ssm",
+    "path": "kernels/ako4x-gdn-decode-triton_swap_grid_evict_lsr/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "TongmingLAIC/AKO4X",
+      "commit": "ce030ebd855dffb7ba6bdaef7ba7504a92cb9393",
+      "path": "reference/gdn-decode/variants/triton_swap_grid_evict_lsr/kernel.py"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "reported": {
+      "score": 1.1386721342978419,
+      "metric": "speedup_vs_expert",
+      "board": "FlashInfer-Bench (MLSys 2026)",
+      "source": "reference/gdn-decode/variants/triton_swap_grid_evict_lsr/result.json",
+      "label": "iter-9 final (archived 2026-04-24)",
+      "backend": "modal-b200",
+      "timestamp": "2026-04-24T11:23:45.859951"
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "AKO4X/LICENSE",
+  "reported": {
+    "score": 1.1386721342978419,
+    "metric": "speedup_vs_expert",
+    "board": "FlashInfer-Bench (MLSys 2026)",
+    "source": "reference/gdn-decode/variants/triton_swap_grid_evict_lsr/result.json",
+    "label": "iter-9 final (archived 2026-04-24)",
+    "backend": "modal-b200",
+    "timestamp": "2026-04-24T11:23:45.859951"
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

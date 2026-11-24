@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-DeepGEMM-full",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-DeepGEMM-full",
+    "problem_keys": [
+      "quant_gemm"
+    ],
+    "family": "quant_gemm",
+    "path": "kernels/kernelwiki-DeepGEMM-full/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (deepseek-ai/DeepGEMM)",
+      "commit": "891d57b4db1071624b5c8fa0d1e51cb317fa709f",
+      "path": "artifacts/kernels/deepgemm/full",
+      "upstream_url": "https://github.com/deepseek-ai/DeepGEMM"
+    },
+    "license": "MIT",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "MIT",
+  "license_source": "full/PROVENANCE.yaml",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: MIT (full/PROVENANCE.yaml)",
+    "files: sm100_fp8_gemm_1d1d.cuh, sm90_fp8_gemm_1d1d.cuh"
+  ],
+  "extra": {}
+}

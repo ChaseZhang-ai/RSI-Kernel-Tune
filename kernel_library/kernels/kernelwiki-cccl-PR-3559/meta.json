@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-cccl-PR-3559",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-cccl-PR-3559",
+    "problem_keys": [
+      "other"
+    ],
+    "family": "other",
+    "path": "kernels/kernelwiki-cccl-PR-3559/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (NVIDIA/cccl)",
+      "commit": "25523da2",
+      "path": "artifacts/prs/cccl/PR-3559",
+      "upstream_url": "https://github.com/NVIDIA/cccl/pull/3559"
+    },
+    "license": "BSD-3-Clause",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "BSD-3-Clause",
+  "license_source": "header: key-files/cub/cub/device/device_scan.cuh",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": true,
+  "notes": [
+    "license: BSD-3-Clause (header: key-files/cub/cub/device/device_scan.cuh)",
+    "files: device_scan.cuh, dispatch_scan.cuh, inclusive_scan.h, scan.cu, scan.h, tuning_scan.cuh"
+  ],
+  "extra": {}
+}

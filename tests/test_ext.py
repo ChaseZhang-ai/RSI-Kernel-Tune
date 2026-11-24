@@ -54,20 +54,18 @@ def _with(name: str, text: str = HELLO) -> str:
 
 # --- the directory and its modules are the commands ---------------------------------------
 
-# the extension commands the first wave of tasks writes (00-背景与约定 §7; module name == command)
+# the extension commands the first wave of tasks writes (00-背景与约定 §7; module name ==
+# command). Step 0 shipped none on purpose; each first-wave task adds its own module here.
 FIRST_WAVE = {"bench", "lib", "target", "prior", "campaign", "evolve", "board"}
 
 
-def test_every_module_in_the_directory_is_a_command_and_no_other():
-    """The directory's modules are the commands, each named for its module, and nothing else
-    is: the first wave's extensions appear without being imported."""
-    import pkgutil
-
-    modules = {m.name for m in pkgutil.iter_modules(ext.__path__) if not m.name.startswith("_")}
-    on_disk = {p.stem for p in (REPO / "src" / "forgekernel" / "ext").glob("*.py")
-               if not p.name.startswith("_")}
-    assert set(ext.command_names()) == modules == on_disk
-    assert modules <= FIRST_WAVE
+def test_the_package_ships_only_first_wave_commands():
+    found = ext.commands()
+    shipped = {p.stem for p in (REPO / "src" / "forgekernel" / "ext").iterdir()
+               if p.suffix == ".py" and not p.name.startswith("_")}
+    assert set(found) == shipped          # discovery finds exactly the modules that are there
+    assert set(found) <= FIRST_WAVE
+    assert ext.command_names() == frozenset(shipped)
 
 
 # --- found ---------------------------------------------------------------------------------
@@ -76,15 +74,16 @@ def test_every_module_in_the_directory_is_a_command_and_no_other():
 def test_a_module_in_the_directory_is_a_command_before_anything_imports_it(tmp_path, monkeypatch):
     _plug(monkeypatch, tmp_path, hello=HELLO, zeta=_with("zeta"), _helper=_with("_helper"))
     found = ext.commands()
-    assert [n for n in found if n in ("hello", "zeta")] == ["hello", "zeta"]  # `_helper` is not
+    # `_helper` is a helper, not a command; the shipped modules stay listed too
+    assert [n for n in found if n in {"hello", "zeta", "_helper"}] == ["hello", "zeta"]
     assert found["hello"] == ext.Extension("hello", "forgekernel.ext.hello")
     assert found["hello"].module == found["hello"].load().__name__
     assert "forgekernel.ext._helper" not in sys.modules
     assert ext.command_names() == frozenset(found)
     # listed again on each call: a module added later is a command the moment it is there
     _plug(monkeypatch, tmp_path, late=_with("late"))
-    assert [n for n in ext.commands() if n in ("hello", "late", "zeta")] == \
-        ["hello", "late", "zeta"]
+    assert [n for n in ext.commands() if n in {"hello", "zeta", "late"}] == ["hello", "late",
+                                                                             "zeta"]
 
 
 def test_what_cannot_be_listed_is_no_command_and_breaks_nothing_that_asks(tmp_path, monkeypatch):
@@ -128,13 +127,15 @@ def test_the_usage_text_names_the_commands_without_importing_them(tmp_path, monk
     _plug(monkeypatch, tmp_path, zeta=_with("zeta"), hello=HELLO)
     assert forge_main.main(["--help"]) == 0
     out = capsys.readouterr().out
-    # the built-in usage as it was, then the extensions
+    # the built-in usage as it was, then one line per extension command, in name order
     assert "forge new tasks/<op>" in out and "forge run .artifacts/<op>_<id>" in out
     tail = out.split("Extension commands (src/forgekernel/ext/, one module each):", 1)[1]
     lines = [line.split()[1] for line in tail.splitlines() if line.startswith("  forge ")]
     assert lines == sorted(lines)                     # one line per command, by name
     assert {"hello", "zeta"} <= set(lines)
     assert set(ext.command_names()) <= set(lines)     # whatever is found is listed
+    for name in ("hello", "zeta"):
+        assert f"(`forge {name} --help`)" in out
     assert out == forge_main._usage() + "\n"
     assert "forgekernel.ext.hello" not in sys.modules and "forgekernel.ext.zeta" not in sys.modules
     for word in ([], ["help"], ["-h"], ["--help"]):

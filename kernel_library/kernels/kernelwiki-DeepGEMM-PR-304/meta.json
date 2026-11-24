@@ -1,0 +1,39 @@
+{
+  "id": "kernelwiki-DeepGEMM-PR-304",
+  "origin": "kernelwiki",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "kernelwiki-DeepGEMM-PR-304",
+    "problem_keys": [
+      "attention"
+    ],
+    "family": "attention",
+    "path": "kernels/kernelwiki-DeepGEMM-PR-304/kernel.py",
+    "language": "pytorch",
+    "source": {
+      "repo": "KernelWiki artifact (deepseek-ai/DeepGEMM)",
+      "commit": "7f2a703e",
+      "path": "artifacts/prs/deepgemm/PR-304",
+      "upstream_url": "https://github.com/deepseek-ai/DeepGEMM/pull/304"
+    },
+    "license": "unknown",
+    "entry": "run",
+    "usable_in_submission": false
+  },
+  "language": "pytorch",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [],
+  "merged_from": [],
+  "license": "unknown",
+  "license_source": "PR-304/PROVENANCE.yaml (inherits-from-upstream)",
+  "reported": null,
+  "signature_check": "not-applicable",
+  "runnable": false,
+  "usable_in_submission": false,
+  "notes": [
+    "license: unknown (PR-304/PROVENANCE.yaml (inherits-from-upstream))",
+    "files: __init__.py, attention.hpp, barrier.cuh, cache.hpp, common.hpp, compile.cuh, compiler.hpp, config.hpp, cute_tie.cuh, device_runtime.hpp, einsum.hpp, epilogue.hpp, exception.cuh, exception.hpp, gemm.cuh, gemm.hpp, handle.hpp, hash.hpp, hyperconnection.hpp, include_parser.hpp, kernel_runtime.hpp, layout.hpp, layout.hpp, ld_st.cuh, main.cu, math.cuh, math.hpp, mega.hpp, mega_moe.cuh, mega_moe.cuh, mega_moe.hpp, paged_mqa_logits.cuh, python_api.cpp, runtime.hpp, runtime.hpp, runtime_utils.hpp, sm100.cuh, sm100.hpp, sm100_bf16_gemm.cuh, sm100_bf16_gemm.hpp, sm100_bmk_bnk_mn.cuh, sm100_bmk_bnk_mn.hpp, sm100_fp4_mqa_logits.cuh, sm100_fp4_paged_mqa_logits.cuh, sm100_fp8_fp4_gemm_1d1d.cuh, sm100_fp8_fp4_gemm_1d1d.hpp, sm100_fp8_fp4_mega_moe.cuh, sm100_fp8_fp4_mega_moe.hpp, sm100_fp8_mqa_logits.cuh, sm100_fp8_paged_mqa_logits.cuh, sm100_store_cd.cuh, sm100_store_cd_swap_ab.cuh, sm100_tf32_hc_prenorm_gemm.cuh, sm100_tf32_hc_prenorm_gemm.hpp, sm90.cuh, sm90.hpp, sm90_bf16_gemm.cuh, sm90_bf16_gemm.hpp, sm90_bmk_bnk_mn.cuh, sm90_bmk_bnk_mn.hpp, sm90_fp8_gemm_1d1d.cuh, sm90_fp8_gemm_1d1d.hpp, sm90_fp8_gemm_1d2d.cuh, sm90_fp8_gemm_1d2d.hpp, sm90_fp8_mqa_logits.cuh, sm90_fp8_paged_mqa_logits.cuh, sm90_tf32_hc_prenorm_gemm.cuh, sm90_tf32_hc_prenorm_gemm.hpp, smxx_clean_logits.cuh, smxx_clean_logits.hpp, smxx_cublaslt.hpp, smxx_fp8_fp4_mqa_logits.hpp, smxx_fp8_fp4_paged_mqa_logits.hpp, smxx_layout.cuh, smxx_layout.hpp, swiglu_apply_weight_to_fp8.py, sym_buffer.cuh, system.hpp, tcgen05.cuh, tma.cuh, tma_copy.cuh, transform.cuh, types.cuh, utils.cuh, utils.cuh, utils.hpp, utils.py, wgmma.cuh"
+  ],
+  "extra": {}
+}

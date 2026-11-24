@@ -1,0 +1,37 @@
+{
+  "id": "autogk-gdn_prefill_qk4_v8_d128_k_last-1f7c6f",
+  "origin": "auto-gpu-kernel",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "autogk-gdn_prefill_qk4_v8_d128_k_last-1f7c6f",
+    "problem_keys": [
+      "ssm"
+    ],
+    "family": "ssm",
+    "path": "kernels/autogk-gdn_prefill_qk4_v8_d128_k_last-1f7c6f/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "BBuf/auto-gpu-kernel",
+      "commit": "db02153a64f0edf9d428f91a241d5cca2ddef9dd",
+      "path": "archive/fable/gdn_prefill_qk4_v8_d128_k_last.py"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "kernel",
+  "original_files": [],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "auto-gpu-kernel/LICENSE",
+  "reported": null,
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [
+    "archive only; the repository ranks #1 on the MLSys 2026 FlashInfer contest DSA track (README.md: average speedup 34.93x)"
+  ],
+  "extra": {}
+}

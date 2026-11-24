@@ -58,3 +58,34 @@ src/sol_execbench/core/bench/timing.py, src/sol_execbench/driver/templates/eval_
 
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
+
+--------------------------------------------------------------------------------
+The reference library (kernel_library/)
+
+`kernel_library/kernels/**` copies or embeds source files from the projects below. Each
+entry's `meta.json` records the exact file it came from, its commit and the license it was
+read under (`license`, `license_source`); the index (`kernel_library/index.json`) carries
+`license` and `usable_in_submission` for every entry. Only Apache-2.0 / MIT / BSD-2-Clause /
+BSD-3-Clause entries may be merged into a submission.
+
+- Tencent Hyra-results — https://github.com/Tencent/Hyra-results — Apache-2.0
+  (AI4AI/sol_execbench: 10 SOL-ExecBench submissions, scores from its manifest.json)
+- OpenBMB/ForgeKernel (this repository) — Apache-2.0 (kernels/: the released kernels)
+- TongmingLAIC/AKO4X — https://github.com/TongmingLAIC/AKO4X — MIT (reference/: archived
+  optimization variants)
+- BBuf/auto-gpu-kernel — https://github.com/BBuf/auto-gpu-kernel — Apache-2.0 (archive/:
+  kernel sources of an MLSys 2026 contest entry)
+- KernelWiki artifacts — artifacts captured from upstream pull requests; each artifact's own
+  `PROVENANCE.yaml` names the upstream repository and commit, and every source file keeps its
+  own license header. Upstream projects represented: NVIDIA/cutlass (BSD-3-Clause headers),
+  flashinfer-ai/flashinfer (Apache-2.0), sgl-project/sglang (Apache-2.0),
+  vllm-project/vllm (Apache-2.0), deepseek-ai/DeepGEMM (MIT), Dao-AILab/flash-attention
+  (BSD-3-Clause), NVIDIA/TensorRT-LLM (Apache-2.0), NVIDIA/cccl (Apache-2.0). Artifacts whose
+  files carry NVIDIA's proprietary `LicenseRef-NvidiaProprietary` identifier are **not**
+  redistributed here.
+- NVIDIA/SOL-ExecBench examples — https://github.com/NVIDIA/SOL-ExecBench — Apache-2.0
+  (examples/: the official language examples)
+
+No source file's license header was removed or rewritten; the library's normalizer only adds
+provenance comments and renames identifiers when merging files.
+

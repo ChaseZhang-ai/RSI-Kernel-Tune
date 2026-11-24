@@ -1,0 +1,59 @@
+{
+  "id": "hyra-016_gqa_ragged_prefill_causal_h32_kv4_d128",
+  "origin": "hyra",
+  "generated_by": "forge lib build",
+  "entry": {
+    "id": "hyra-016_gqa_ragged_prefill_causal_h32_kv4_d128",
+    "problem_keys": [
+      "attention",
+      "016_gqa_ragged_prefill_causal_h32_kv4_d128"
+    ],
+    "family": "attention",
+    "path": "kernels/hyra-016_gqa_ragged_prefill_causal_h32_kv4_d128/kernel.py",
+    "language": "triton",
+    "source": {
+      "repo": "Tencent/Hyra-results",
+      "commit": "b24e7f5543f08069fe190e98c5c05b62ca28a074",
+      "path": "Hyra-results/AI4AI/sol_execbench/k225__sid25891__gqa_ragged_prefill_causal_h32_kv4_d128__016_gqa_ragged_prefill_causal_h32_kv4_d128.json",
+      "license_file": "Hyra-results/LICENSE"
+    },
+    "license": "Apache-2.0",
+    "entry": "run",
+    "reported": {
+      "score": 0.925048,
+      "metric": "sol_score",
+      "board": "SOL-ExecBench",
+      "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+      "latency_ms": 0.008197,
+      "submission_id": 25891,
+      "kernel_id": null
+    },
+    "usable_in_submission": true
+  },
+  "language": "triton",
+  "entry_point": "run",
+  "original_entry": "run",
+  "original_files": [
+    {
+      "path": "kernel.py",
+      "bytes": 48214
+    }
+  ],
+  "merged_from": [],
+  "license": "Apache-2.0",
+  "license_source": "Hyra-results/LICENSE",
+  "reported": {
+    "score": 0.925048,
+    "metric": "sol_score",
+    "board": "SOL-ExecBench",
+    "source": "Hyra-results/AI4AI/sol_execbench/manifest.json",
+    "latency_ms": 0.008197,
+    "submission_id": 25891,
+    "kernel_id": null
+  },
+  "signature_check": "pending",
+  "runnable": true,
+  "usable_in_submission": true,
+  "notes": [],
+  "extra": {}
+}

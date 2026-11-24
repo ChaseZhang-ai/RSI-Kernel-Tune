@@ -1,0 +1,17 @@
+{
+  "name": "fixture_shapes_gemm",
+  "description": "A square-ish GEMM whose row count is the only variable (the fixture's definition, as the dataset would carry it: the same object problem.json embeds).",
+  "axes": {
+    "M": {"type": "var", "description": "rows of A / C"},
+    "N": {"type": "const", "value": 1024, "description": "columns of B / C"},
+    "K": {"type": "const", "value": 1024, "description": "columns of A / rows of B"}
+  },
+  "inputs": {
+    "A": {"shape": ["M", "K"], "dtype": "float16"},
+    "B": {"shape": ["K", "N"], "dtype": "float16"}
+  },
+  "outputs": {
+    "C": {"shape": ["M", "N"], "dtype": "float16"}
+  },
+  "reference": "import torch\n\n\ndef run(A, B):\n    return (A.to(torch.float32) @ B.to(torch.float32)).to(A.dtype)\n"
+}

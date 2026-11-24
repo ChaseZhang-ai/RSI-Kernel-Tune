@@ -99,16 +99,26 @@ class Config:
 
 
 def context_env(mapping: dict) -> dict[str, str]:
-    """``runcontext.env_for`` when task runcontext is installed, else the documented
-    env-var names.  ``{TARGET_PROFILE_PATH}`` etc. are what the prompts read."""
+    """``runcontext.env_for`` for the names run context defines, else the documented
+    env-var names.  ``{TARGET_PROFILE_PATH}`` etc. are what the prompts read; a name run
+    context does not define (``hypotheses``) keeps its documented ``FK_<NAME>_PATH``."""
     clean = {str(k): str(v) for k, v in mapping.items() if v}
     if not clean:
         return {}
+    known: set[str] = set()
     try:
-        from forgekernel.runcontext import env_for
-        return {str(k): str(v) for k, v in dict(env_for(clean)).items()}
+        from forgekernel.runcontext import CONTEXT_FILES
+        known = set(CONTEXT_FILES)
     except Exception:  # noqa: BLE001 — absent/partial package = the documented names
-        return {f"FK_{name.upper()}_PATH": path for name, path in clean.items()}
+        known = set()
+    env: dict[str, str] = {}
+    if known:
+        from forgekernel.runcontext import env_for
+        env.update({str(k): str(v) for k, v in env_for(
+            {k: v for k, v in clean.items() if k in known}).items()})
+    rest = {k: v for k, v in clean.items() if k not in known}
+    env.update({f"FK_{name.upper()}_PATH": path for name, path in rest.items()})
+    return env
 
 
 def default_target_profile(repo: Path) -> Path | None:

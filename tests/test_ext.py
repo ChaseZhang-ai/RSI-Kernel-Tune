@@ -54,9 +54,13 @@ def _with(name: str, text: str = HELLO) -> str:
 
 # --- the directory and its modules are the commands ---------------------------------------
 
-# the extension commands the first wave of tasks writes (00-背景与约定 §7; module name ==
-# command). Step 0 shipped none on purpose; each first-wave task adds its own module here.
-FIRST_WAVE = {"bench", "lib", "target", "prior", "campaign", "evolve", "board"}
+# the extension commands the task plan writes (00-背景与约定 §13; module name == command).
+# Step 0 shipped none on purpose; each task adds its own module here. The second wave added
+# `calibrate` and `roofline` (task roofline, 18-任务-roofline.md §7); the set stays a closed
+# list so a command nobody planned still fails this test.
+PLANNED = {"bench", "lib", "target", "prior", "campaign", "evolve", "board",
+           "calibrate", "roofline"}
+FIRST_WAVE = PLANNED          # the name the first wave's tests know
 
 
 def test_the_package_ships_only_first_wave_commands():
@@ -64,7 +68,7 @@ def test_the_package_ships_only_first_wave_commands():
     shipped = {p.stem for p in (REPO / "src" / "forgekernel" / "ext").iterdir()
                if p.suffix == ".py" and not p.name.startswith("_")}
     assert set(found) == shipped          # discovery finds exactly the modules that are there
-    assert set(found) <= FIRST_WAVE
+    assert set(found) <= PLANNED
     assert ext.command_names() == frozenset(shipped)
 
 

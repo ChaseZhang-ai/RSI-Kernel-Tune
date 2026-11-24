@@ -314,6 +314,28 @@ def test_the_stats_command_prints_a_table(tmp_path, capsys):
     assert "rmsnorm  1" in out and "total    1" in out
 
 
+def test_the_root_comes_from_fk_opkb_root_when_not_given(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "env_kb"
+    monkeypatch.setenv("FK_OPKB_ROOT", str(root))
+    assert lessons_cli.main(["harvest", str(FIXTURE)]) == 0
+    assert (root / "rmsnorm" / "069_rms_norm-251124-101500-ab12.json").is_file()
+
+
+def test_lint_on_a_missing_base_says_so_and_does_not_claim_an_index(tmp_path, capsys):
+    rc = lessons_cli.main(["lint", "--root", str(tmp_path / "absent")])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "does not exist" in out and "index rebuilt" not in out
+
+
+def test_root_precedence_is_flag_then_environment_then_the_repository(tmp_path, monkeypatch):
+    monkeypatch.setenv(store.ROOT_ENV, str(tmp_path / "env"))
+    assert store.root_dir() == (tmp_path / "env").resolve()
+    assert store.root_dir(tmp_path / "explicit") == (tmp_path / "explicit").resolve()
+    monkeypatch.delenv(store.ROOT_ENV)
+    assert store.root_dir() == REPO / "op_kb"
+
+
 # --- the repository boundary ------------------------------------------------------------------
 
 

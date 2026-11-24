@@ -137,6 +137,62 @@ def test_an_unknown_usage_ledger_is_ignored_instead_of_guessed(run):
     assert "usage" not in record.extract_run(run).record
 
 
+def test_a_card_without_a_sol_board_scores_by_the_same_job_speedup(run):
+    card = json.loads((run / "operators/069_rms_norm/eval/leaderboard/problem.json")
+                      .read_text(encoding="utf-8"))
+    card.pop("group")
+    card.pop("sol_board", None)
+    (run / "operators/069_rms_norm/eval/leaderboard/problem.json").write_text(
+        json.dumps(card), encoding="utf-8")
+    confirm = json.loads((run / "operators/069_rms_norm/best_confirmation.json")
+                         .read_text(encoding="utf-8"))
+    confirm["median_ratio"] = 1.31
+    (run / "operators/069_rms_norm/best_confirmation.json").write_text(
+        json.dumps(confirm), encoding="utf-8")
+
+    rec = record.extract_run(run).record
+    assert rec["outcome"]["metric_kind"] == "speedup"
+    assert rec["outcome"]["value"] == 1.31
+    assert rec["problem"]["workloads"] == 1
+
+
+def test_a_plain_task_run_without_a_card_has_no_suite_and_no_definition(tmp_path):
+    """A non-leaderboard run (the real harness's own shape: no eval/leaderboard/): the
+    card-derived fields are omitted and the reference kind comes from [reference]."""
+    run = tmp_path / "rmsnorm_251124-101500-ab12"
+    (run / "task").mkdir(parents=True)
+    (run / "task/task.toml").write_text(
+        '[task]\nlanguage = "cutedsl"\narch = "sm100"\n\n'
+        '[reference]\nrun = "reference/run.py:run"\nsource = "reference"\n',
+        encoding="utf-8")
+    op = run / "operators" / "rmsnorm"
+    (op / "student").mkdir(parents=True)
+    (op / "loop.toml").write_text('[loop]\ngate_window = "e2e"\n', encoding="utf-8")
+    (op / "student/status.jsonl").write_text(json.dumps({
+        "iter": 1, "decision_id": "D1", "change": "fuse the reduction",
+        "correctness": True, "verdict": "KEEP", "bwd_median_ms": 0.9}) + "\n",
+        encoding="utf-8")
+    (op / "loop_summary.json").write_text('{"stop": "meta_budget", "meta_steps": 1}',
+                                          encoding="utf-8")
+    (op / "best_confirmation.json").write_text(json.dumps({
+        "sha": "abcdef123456", "window": "e2e", "median_ms": 0.01, "median_ratio": 1.3}),
+        encoding="utf-8")
+    (run / "run.json").write_text(json.dumps({
+        "task": "rmsnorm", "id": "251124-101500-ab12",
+        "created": "2026-11-24T10:00:00+0800", "updated": "2026-11-24T12:00:00+0800"}),
+        encoding="utf-8")
+
+    rec = record.extract_run(run).record
+    assert rec["family"] == "rmsnorm"
+    assert rec["problem"] == {"name": "rmsnorm", "arch": "sm100", "language": "cutedsl"}
+    assert rec["reference"] == {"kind": "eager"}
+    assert rec["outcome"] == {"window": "e2e", "metric_kind": "speedup", "value": 1.3,
+                             "stop": "meta_budget", "hours": 2.0, "student_iterations": 1}
+    assert rec["kept"] == [{"iter": 1, "change": "fuse the reduction", "verbatim": True,
+                            "after_ms": 0.9}]
+    assert "certified_kb" not in rec and "usage" not in rec and "recon" not in rec
+
+
 def test_flat_usage_columns_are_accepted_too(run):
     (run / "agent_usage.jsonl").write_text(
         '{"teacher_tokens": 5, "student_tokens": 7, "teacher_turns": 1, "student_turns": 2}\n',

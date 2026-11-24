@@ -109,17 +109,17 @@ def _kept_lines(kept) -> list[str]:
     for item in kept:
         if not isinstance(item, dict):
             continue
-        bits = [f"iter {_num(item['iter'])}" if "iter" in item else "iter ?"]
+        head = f"  - iter {_num(item['iter'])}" if "iter" in item else "  - iter ?"
         if "change" in item:
-            bits.append(_one_line(item["change"]))
+            head += ": " + _one_line(item["change"])
         readings = []
         if "before_ms" in item:
             readings.append(f"before {_num(item['before_ms'])} ms")
         if "after_ms" in item:
             readings.append(f"after {_num(item['after_ms'])} ms")
         if readings:
-            bits.append("(" + " -> ".join(readings) + ")")
-        lines.append("  - " + ": ".join(bits[:2]) + (("  " + bits[2]) if len(bits) > 2 else ""))
+            head += "  (" + " -> ".join(readings) + ")"
+        lines.append(head)
     return lines
 
 

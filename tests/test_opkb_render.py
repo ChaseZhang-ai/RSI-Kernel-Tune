@@ -168,7 +168,7 @@ def test_the_render_command_on_an_empty_family_still_writes_and_succeeds(tmp_pat
 
 def test_the_render_command_rejects_a_non_problem(tmp_path, capsys):
     assert lessons_cli.main(["render", str(tmp_path), "--out", str(tmp_path / "x.md")]) == 2
-    assert "not a task directory" in capsys.readouterr().err
+    assert "neither a task directory" in capsys.readouterr().err
 
 
 def test_the_rendered_file_is_the_lessons_run_context_path(tmp_path):

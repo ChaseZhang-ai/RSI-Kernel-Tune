@@ -174,20 +174,24 @@ def _lint(args) -> int:
     from forgekernel.opkb import lint, store
 
     report = lint.lint_root(args.root)
+    base = store.root_dir(args.root)
     if args.json:
         print(json.dumps({"findings": report.findings,
                           "quarantined": report.quarantined,
                           "checked": report.checked, "valid": report.valid,
-                          "index": str(store.index_path(store.root_dir(args.root)))},
+                          "index": str(store.index_path(base))
+                          if report.index is not None else None},
                          indent=1, ensure_ascii=False))
     else:
         for finding in report.findings:
             print(f"[forge lessons] {finding}")
         for src, dest in report.quarantined:
             _say(f"quarantined {src} -> {dest}")
-        _say(f"{report.valid}/{report.checked} record(s) valid, "
-             f"{len(report.quarantined)} quarantined; index rebuilt at "
-             f"{store.index_path(store.root_dir(args.root))}")
+        line = (f"{report.valid}/{report.checked} record(s) valid, "
+                f"{len(report.quarantined)} quarantined")
+        if report.index is not None:
+            line += f"; index rebuilt at {store.index_path(base)}"
+        _say(line)
     return 0 if report.ok else 1
 
 

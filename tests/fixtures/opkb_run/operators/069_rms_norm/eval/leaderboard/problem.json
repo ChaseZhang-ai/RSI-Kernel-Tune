@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "suite": "sol-execbench",
+ "definition": {
+  "name": "069_rms_norm",
+  "description": "RMSNorm over the last dimension.",
+  "axes": {"B": {"type": "var"}, "H": {"type": "const", "value": 2048}},
+  "inputs": {"input": {"shape": ["B", "H"], "dtype": "bfloat16"},
+             "weight": {"shape": ["H"], "dtype": "bfloat16"}},
+  "outputs": {"output": {"shape": ["B", "H"], "dtype": "bfloat16"}}
+ },
+ "workload": {"uuid": "7d1b0f0e-0000-4000-8000-000000000000",
+              "axes": {"B": 4096, "H": 2048},
+              "inputs": {"input": {"type": "random"}, "weight": {"type": "random"}}},
+ "dps": true,
+ "kernel_file": "kernel.py",
+ "entry": "run",
+ "reference_impl": {"kind": "definition", "name": "definition reference (eager)"},
+ "time_reference": false,
+ "source": {"dataset": "L1", "problem": "069_rms_norm"},
+ "group": [
+  {"index": 0, "name": "wl0",
+   "workload": {"uuid": "7d1b0f0e-0000-4000-8000-000000000000",
+                "axes": {"B": 4096, "H": 2048}},
+   "sol_board": {"kernel_id": 69, "workload_index": 0, "t_b_ms": 0.0338,
+                 "t_sol_ms": 0.011022, "source": "snapshot",
+                 "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}},
+  {"index": 1, "name": "wl1",
+   "workload": {"uuid": "7d1b0f0e-0000-4000-8000-000000000001",
+                "axes": {"B": 8192, "H": 2048}},
+   "sol_board": {"kernel_id": 69, "workload_index": 1, "t_b_ms": 0.0676,
+                 "t_sol_ms": 0.022044, "source": "snapshot",
+                 "clock_mhz": {"sm_mhz": 1500, "mem_mhz": 3996}}}
+ ],
+ "meta_workloads": ["wl0", "wl1"]
+}

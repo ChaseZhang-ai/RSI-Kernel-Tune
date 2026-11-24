@@ -1,0 +1,14 @@
+{
+ "task": "069_rms_norm",
+ "task_source": "tasks/069_rms_norm",
+ "id": "251124-101500-ab12",
+ "created": "2026-11-24T10:15:00+0800",
+ "updated": "2026-11-24T14:30:00+0800",
+ "snapshot_sha256": "5c1f0e6b7a2d4839b0c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f7081",
+ "forgekernel_commit": "0a4eff2",
+ "machine": {"delivery": "local", "gpu": "sm100", "host": null},
+ "status": "done",
+ "loop_rc": 0,
+ "stop": "target",
+ "target_met": true
+}

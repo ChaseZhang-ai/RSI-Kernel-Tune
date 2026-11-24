@@ -194,7 +194,8 @@ def test_priors_alone_keep_the_generated_stub(tmp_path, base, sol_root, board_fi
     assert (card / "prior" / "lib" / "alt.py").read_text().startswith("import torch")
 
 
-def test_the_loop_toml_carries_the_warmstart_context(tmp_path, base, sol_root, board_file):
+def test_the_loop_toml_carries_the_warmstart_context(tmp_path, base, sol_root, board_file,
+                                                     monkeypatch):
     repo, card, _ = _init(tmp_path, base, sol_root, board_file)
     task_dir = repo / "tasks" / "warmop"
     (task_dir / "leaderboard").mkdir(parents=True)
@@ -204,12 +205,24 @@ def test_the_loop_toml_carries_the_warmstart_context(tmp_path, base, sol_root, b
         '[leaderboard]\nsuite = "sol-execbench"\ncard = "leaderboard/card"\n')
     (task_dir / "prior.md").write_text("# manifest\n")
     task = load_task(task_dir)
-    cfg = tomllib.loads(taskcard.write_board_loop_toml(
-        None, task, task_dir / "leaderboard" / "card", deny=[], ncu=False).read_text())["loop"]
+    # `local_knowledge_dirs()` reads `_reference/` beside the checkout, which a fresh clone
+    # does not have: pin both branches instead of depending on this machine's tree.
+    knowledge = tmp_path / "reference" / "KernelWiki"
+    knowledge.mkdir(parents=True)
+
+    def loop_cfg():
+        return tomllib.loads(taskcard.write_board_loop_toml(
+            None, task, task_dir / "leaderboard" / "card", deny=[],
+            ncu=False).read_text())["loop"]
+
+    monkeypatch.setattr(taskcard, "local_knowledge_dirs", lambda: [knowledge])
+    cfg = loop_cfg()
     assert cfg["student_online"] is True
     assert cfg["prior_dir"] == str(task_dir / "leaderboard" / "card" / "prior")
     assert cfg["prior_manifest"] == str(task_dir / "prior.md")
-    assert all(Path(d).is_dir() for d in cfg["local_knowledge_dirs"])
+    assert cfg["local_knowledge_dirs"] == [str(knowledge)]
+    monkeypatch.setattr(taskcard, "local_knowledge_dirs", lambda: [])
+    assert "local_knowledge_dirs" not in loop_cfg()      # no tree: the key is simply absent
     lines = taskcard.context_lines(card, task)
     assert "student_online = true" in lines
     assert "[online]" in launch.describe(task, _Machine())

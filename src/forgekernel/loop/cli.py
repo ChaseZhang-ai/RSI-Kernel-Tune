@@ -396,6 +396,17 @@ class RealBackend:
         outage_waits = 0
         while attempt < self.agent_retries:
             rc, out, err = self._agent_turn(cmd, prompt, role)
+            if "FK_AGENT_FALLBACK" in err or "FK_AGENT_FALLBACK" in out:
+                # The turn was quietly moved to a fallback model (a safeguard refusal, or a
+                # gateway that routed it elsewhere) and scripts/agent_trailer.py marked it.
+                # A retry sends the same context again, which is refused again, so it only
+                # spends another turn on a model the task did not choose -- and what that
+                # turn produces cannot be attributed to the model the run is about. Stop.
+                reason = next((line for line in (err + "\n" + out).splitlines()
+                               if "FK_AGENT_FALLBACK" in line), "FK_AGENT_FALLBACK")
+                raise AgentError(
+                    f"the agent turn ({role}) was downgraded to a fallback model; not "
+                    f"retrying (docs/safeguard-refusals.md): {reason.strip()[-600:]}")
             if rc == 0 and out.strip():
                 return out
             last = (f"rc={rc} "

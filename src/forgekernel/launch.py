@@ -56,6 +56,10 @@ TEMPLATE_TASK = "_template"
 CALIBRATE_MODE = "calibrate"
 KB_DIRS = ("hw_kb", "docs/kb-provenance")
 BEST_DIR = "best"
+# While a run is driven, every agent turn appends its usage record here (the launcher
+# scripts' structured turn: scripts/agent_trailer.py). One file per run: teacher, student
+# and judge turns together.
+USAGE_ENV = "FK_AGENT_USAGE_FILE"
 
 
 def _say(msg: str) -> None:
@@ -285,6 +289,13 @@ def status_text(run) -> str:
         rows = [json.loads(x) for x in status.read_text().splitlines() if x.strip()]
         keeps = [r for r in rows if r.get("verdict") == "KEEP"]
         lines.append(f"  iterations: {len(rows)} ({len(keeps)} kept)")
+    usage_line = ""
+    from forgekernel import usage as usage_mod
+    records = usage_mod.read_ledger(run.dir / "agent_usage.jsonl")
+    if records:
+        usage_line = usage_mod.summary_line(usage_mod.summarize(records))
+    if usage_line:
+        lines.append(f"  agent usage: {usage_line}")
     if run.log.is_file():
         lines.append(f"  log: {run.log}")
     return "\n".join(lines)
@@ -328,10 +339,11 @@ class _Tee:
 def _entered(run, machine):
     """While the run is driven, this process and everything it starts work on the run's
     trees with local.env's credentials, and its output goes to run.log as well; both are
-    put back afterwards."""
-    saved_env = {k: os.environ.get(k) for k in [OPERATORS_ENV, *machine.env]}
+    put back afterwards. The agent turns also write their usage ledger here."""
+    saved_env = {k: os.environ.get(k) for k in [OPERATORS_ENV, USAGE_ENV, *machine.env]}
     saved_out, saved_err = sys.stdout, sys.stderr
     os.environ[OPERATORS_ENV] = str(run.operators_dir)
+    os.environ[USAGE_ENV] = str(run.dir / "agent_usage.jsonl")
     for k, v in machine.env.items():
         if v:       # an empty KEY= line (local.env.example) must not blank a login
             os.environ.setdefault(k, v)
@@ -678,6 +690,13 @@ def write_report(run, task, rc: int) -> Path:
         lines += [f"- {p}" for p in kb]
         _say(f"{len(kb)} new knowledge-base file(s) wait for review: "
              + ", ".join(kb[:5]) + (" ..." if len(kb) > 5 else ""))
+    from forgekernel import usage as usage_mod
+    records = usage_mod.read_ledger(run.dir / "agent_usage.jsonl")
+    if records:
+        lines += ["", "## Agent usage", "",
+                  f"From `{usage_mod.LEDGER_NAME}` ({len(records)} turn(s)), as the agent "
+                  f"CLIs reported it. Display only: no budget, no cap.", "",
+                  usage_mod.render_markdown(usage_mod.summarize(records))]
     p = run.dir / "report.md"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     _say(f"report: {p}")

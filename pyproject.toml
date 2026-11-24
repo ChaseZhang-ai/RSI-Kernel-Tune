@@ -9,6 +9,20 @@ description = "A self-evolving GPU kernel agent that learns the architecture of 
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 readme = "README.md"
+# The machine that runs `forge` judges and plans, so it needs PyTorch and safetensors there
+# too. If the default wheel does not match the GPU machine's CUDA, install the right build
+# first (`pip install torch --index-url https://download.pytorch.org/whl/cuXXX`); a torch
+# that already satisfies the pin is left as it is.
+dependencies = [
+    "torch>=2.1",
+    "safetensors>=0.4",
+]
+
+[project.optional-dependencies]
+# `pip install -e ".[dev]"` to run the test suite.
+dev = ["pytest>=7"]
+# `pip install -e ".[triton]"` for tasks with `language = "triton"`.
+triton = ["triton>=3.0"]
 
 [project.scripts]
 forge = "forgekernel.__main__:main"

@@ -81,12 +81,25 @@ ForgeKernel 属于 **Forge 家族**，同一家族的项目还有
 Hopper（`sm90`）或 Blackwell（`sm100`）GPU，`python3` 带 CUDA 版 PyTorch，CuTe DSL 任务还需要
 `nvidia-cutlass-dsl`；建议装 Nsight Compute（`ncu`），没有它时运行只按计时推进。
 
+**克隆即跑（最短路径）。**
+
+```bash
+git clone https://github.com/ChaseZhang-ai/RSI-Kernel-Tune.git && cd RSI-Kernel-Tune
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .                 # 会一并装上 torch + safetensors
+cp local.env.example local.env   # 告诉它 GPU 在哪（本机或 ssh 主机）
+forge --help                     # 内置命令 + 11 个扩展命令
+```
+
+[`docs/quickstart.md`](docs/quickstart.md) 是同一路径的详细版：完全不需要 GPU 的自检命令、
+SOL-ExecBench 战役链路，以及目前哪些验过、哪些还没验过。
+
 **1. 安装**
 
 ```bash
 cd ForgeKernel                   # 本仓库的 clone
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
+pip install -e .                 # 同时装 torch + safetensors
 pip install nvidia-cutlass-dsl   # 建议安装，见下
 forge --version                  # forgekernel 0.1.0
 ```

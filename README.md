@@ -93,12 +93,25 @@ host): an NVIDIA Hopper (`sm90`) or Blackwell (`sm100`) GPU, `python3` with a CU
 PyTorch and, for CuTe DSL tasks, `nvidia-cutlass-dsl`; Nsight Compute (`ncu`) is recommended,
 and without it a run proceeds on timings alone.
 
+**Clone and run (the short version).**
+
+```bash
+git clone https://github.com/ChaseZhang-ai/RSI-Kernel-Tune.git && cd RSI-Kernel-Tune
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .                 # torch + safetensors come with it
+cp local.env.example local.env   # say where the GPU is (local or an ssh host)
+forge --help                     # built-ins + the 11 extension commands
+```
+
+[`docs/quickstart.md`](docs/quickstart.md) is the same path in more detail: the checks that
+need no GPU at all, the SOL-ExecBench campaign loop, and what is (and is not) verified so far.
+
 **1. Install**
 
 ```bash
 cd ForgeKernel                   # a clone of this repository
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
+pip install -e .                 # installs torch + safetensors too
 pip install nvidia-cutlass-dsl   # recommended, see below
 forge --version                  # forgekernel 0.1.0
 ```

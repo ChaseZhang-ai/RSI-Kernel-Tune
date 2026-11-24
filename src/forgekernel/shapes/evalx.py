@@ -34,19 +34,22 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from forgekernel.paths import repo_root
 from forgekernel.shapes import ShapesError
 
 KIND_CLUSTER = "cluster"
 KIND_OVERALL = "overall"
 KIND_EXTRA = "extra"
 KIND_VERSION = "version"
+KIND_LIBRARY = "library"
 KIND_BASELINE = "baseline"
 KIND_EAGER = "eager"
 
 # The order the routing prefers on a tie (task §5.3: specialists first, the eager
-# reference last). `version` sits with the cluster it came from, `baseline` with extras.
+# reference last). `version` sits with the cluster it came from, `library` (a kernel the
+# reference library already holds for this problem) with the extras it competes with.
 KIND_ORDER = {KIND_CLUSTER: 0, KIND_VERSION: 1, KIND_OVERALL: 2, KIND_EXTRA: 3,
-              KIND_BASELINE: 4, KIND_EAGER: 5}
+              KIND_LIBRARY: 4, KIND_BASELINE: 5, KIND_EAGER: 6}
 
 
 @dataclass
@@ -301,6 +304,63 @@ def _git_show(ws: Path, sha: str, rel: str) -> str:
     except (OSError, subprocess.SubprocessError):
         return ""
     return proc.stdout if proc.returncode == 0 else ""
+
+
+def library_candidates(problem: dict, *, root: str | Path | None = None,
+                       out_dir: Path | None = None) -> tuple[list[Candidate], list[str]]:
+    """The reference library's kernels for **this** problem (soft: seedlib may be absent).
+
+    A kernel whose ``problem_keys`` name this problem is already a candidate: it is one file
+    with a positional ``run``, and its licence is on the entry. Only entries the library
+    marks submittable are taken (Apache-2.0 / MIT / BSD and ``usable_in_submission``); a
+    kernel that only matches a *family* keyword is not: turning a family reference into a
+    kernel for this problem is `forge lib adapt`'s job, and its output reaches `compose` as
+    an ``--also`` candidate.
+    """
+    notes: list[str] = []
+    try:
+        from forgekernel.klib import schema as klib
+    except ImportError:
+        return [], ["kernel library: unavailable (the seedlib task has not landed)"]
+    base = Path(root) if root is not None else repo_root()
+    index = base / "kernel_library" / "index.json"
+    if not index.is_file():
+        return [], [f"kernel library: no index at {index}"]
+    try:
+        entries = klib.load_index(index)
+    except Exception as e:                                   # noqa: BLE001 -- soft
+        return [], [f"kernel library: {index} does not read ({type(e).__name__}: {e})"]
+    wanted = {str((problem.get("definition") or {}).get("name") or "").lower(),
+              str((problem.get("source") or {}).get("problem") or "").rsplit("/", 1)[-1].lower()}
+    wanted.discard("")
+    out: list[Candidate] = []
+    skipped: list[str] = []
+    for entry in entries:
+        keys = {str(k).lower() for k in (entry.problem_keys or ())}
+        if not (keys & wanted):
+            continue
+        if not klib.submittable(entry):
+            skipped.append(f"{entry.id} (licence {entry.license!r})")
+            continue
+        path = base / "kernel_library" / str(entry.path)
+        if not path.is_file():
+            skipped.append(f"{entry.id} ({path} is missing)")
+            continue
+        source = path.read_text(encoding="utf-8")
+        cand = candidate_from_source(source, f"lib:{entry.id}", KIND_LIBRARY,
+                                     out_dir=out_dir, language=str(entry.language or "python"),
+                                     origin=str(path),
+                                     notes=[f"kernel library entry {entry.id} "
+                                            f"({entry.license})"])
+        if cand is None:
+            skipped.append(f"{entry.id} (not a kernel: "
+                           f"{'; '.join(kernel_findings(source))})")
+            continue
+        cand.sha = sha256_text(source)
+        out.append(cand)
+    notes.append(f"kernel library: {len(out)} submittable entry(ies) name this problem"
+                 + (f"; skipped {', '.join(skipped)}" if skipped else ""))
+    return out, notes
 
 
 def lib_baselines(problem: dict, *, out_dir: Path, log=None) -> tuple[list[Candidate], list[str]]:

@@ -757,6 +757,7 @@ class ComposeOptions:
     reuse: bool = True
     with_versions: bool = True
     with_lib: bool = True
+    root: str | Path | None = None       # where the kernel library is (default: the checkout)
     repeat: int = 1
     keep: bool = False
     out: Path | None = None
@@ -870,10 +871,16 @@ def build_candidates(plan: dict, opts: ComposeOptions, *, product: Path,
                                                 f"{'' if i == 0 else f'+{i}'}",
                                           out_dir=out_dir))
     if opts.with_lib:
-        lib_cands, lib_notes = evalx.lib_baselines(problem, out_dir=Path(product) / "baselines",
-                                                   log=log)
+        lib_cands, lib_notes = evalx.library_candidates(problem, root=opts.root,
+                                                        out_dir=out_dir)
         notes += lib_notes
         for cand in lib_cands:
+            cands.append(cand)
+        base_cands, base_notes = evalx.lib_baselines(problem,
+                                                     out_dir=Path(product) / "baselines",
+                                                     log=log)
+        notes += base_notes
+        for cand in base_cands:
             written = evalx.candidate_from_source(cand.source, cand.label,
                                                   evalx.KIND_BASELINE, out_dir=out_dir,
                                                   origin=str(cand.path or ""))
@@ -898,7 +905,8 @@ def build_candidates(plan: dict, opts: ComposeOptions, *, product: Path,
             continue
         kept.append(cand)
     order = {evalx.KIND_CLUSTER: 0, evalx.KIND_VERSION: 1, evalx.KIND_OVERALL: 2,
-             evalx.KIND_EXTRA: 3, evalx.KIND_BASELINE: 4, evalx.KIND_EAGER: 5}
+             evalx.KIND_EXTRA: 3, evalx.KIND_LIBRARY: 4, evalx.KIND_BASELINE: 5,
+             evalx.KIND_EAGER: 6}
     kept.sort(key=lambda c: order.get(c.kind, 9))          # stable within a kind
     return kept, notes
 

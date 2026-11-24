@@ -448,9 +448,10 @@ def excluded_rels(plan: dict) -> list[str]:
     """What a plan's directories are, relative to the repository root.
 
     The cluster tasks are always ``tasks/<cluster>``: `forge init` writes under the
-    checkout's ``tasks/`` whatever directory the plan was made from. The product directory
-    is added too when it is inside the repository; one outside (a fixture, a scratch tree)
-    has no relative form, and an exclude entry must be relative.
+    checkout's ``tasks/`` whatever directory the plan was made from. The product directory is
+    added only when it lives under ``tasks/`` too (a fixture or a scratch tree outside the
+    task tree has no business in the exclude list), and an entry outside the repository has
+    no relative form at all.
     """
     root = repo_root()
     rels = [f"{TASKS_DIR}/{c.get('name')}" for c in plan.get("clusters") or []
@@ -461,6 +462,6 @@ def excluded_rels(plan: dict) -> list[str]:
             text = str(Path(product).relative_to(root))
         except ValueError:
             text = ""
-        if text and text != ".":
+        if text.startswith(f"{TASKS_DIR}/"):
             rels.append(text)
     return rels

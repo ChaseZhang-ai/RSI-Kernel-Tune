@@ -526,6 +526,41 @@ def test_load_candidate_accepts_py_and_solution_json(tmp_path):
         evalx.load_candidate(broken, evalx.KIND_EXTRA)
 
 
+def test_library_candidates_take_submittable_entries_for_this_problem(tmp_path):
+    root = tmp_path / "repo"
+    (root / "kernel_library" / "kernels" / "mine").mkdir(parents=True)
+    (root / "kernel_library" / "kernels" / "mine" / "kernel.py").write_text(
+        "def run(*args):\n    return None\n", encoding="utf-8")
+    (root / "kernel_library" / "kernels" / "theirs").mkdir(parents=True)
+    (root / "kernel_library" / "kernels" / "theirs" / "kernel.py").write_text(
+        "def run(*args):\n    return None\n", encoding="utf-8")
+    (root / "kernel_library" / "kernels" / "other").mkdir(parents=True)
+    (root / "kernel_library" / "kernels" / "other" / "kernel.py").write_text(
+        "def run(*args):\n    return None\n", encoding="utf-8")
+
+    def entry(e_id, keys, license, usable=True):
+        return {"id": e_id, "problem_keys": list(keys), "family": "gemm",
+                "path": f"kernels/{e_id}/kernel.py", "language": "triton", "entry": "run",
+                "source": {"repo": "r", "commit": "c", "path": "p"}, "license": license,
+                "reported": None, "verified_local": None,
+                "usable_in_submission": usable}
+
+    index = {"version": 1, "entries": [
+        entry("mine", ["small_gemm", "gemm"], "MIT"),
+        entry("theirs", ["small_gemm", "gemm"], "unknown-proprietary", usable=False),
+        entry("other", ["something_else", "gemm"], "MIT")]}
+    (root / "kernel_library" / "index.json").write_text(json.dumps(index), encoding="utf-8")
+    problem, _card = P.load_problem(_small_task(tmp_path))
+    cands, notes = evalx.library_candidates(problem, root=root, out_dir=tmp_path / "c")
+    assert [c.label for c in cands] == ["lib:mine"]
+    assert cands[0].kind == evalx.KIND_LIBRARY and cands[0].path.is_file()
+    assert "1 submittable entry" in notes[0]
+    assert "theirs" in notes[0]                       # the licence refusal is reported
+    # a root without the library says so instead of failing
+    empty, notes = evalx.library_candidates(problem, root=tmp_path / "nothing")
+    assert empty == [] and "no index at" in notes[0]
+
+
 def test_versions_of_run_reads_status_jsonl_and_the_workspace_git(tmp_path):
     import subprocess
 

@@ -167,13 +167,18 @@ def test_ensure_excluded_writes_git_info_exclude_only(tmp_path):
     assert missing["error"] and missing["added"] == []
 
 
-def test_excluded_rels_are_repository_relative(tmp_path):
+def test_excluded_rels_are_repository_relative(tmp_path, monkeypatch):
     doc = {"task": str(tmp_path / "tasks" / "op"),
            "product_dir": str(tmp_path / "tasks" / "op" / "shapes"),
            "clusters": [{"name": "op-c0"}, {"name": "op-c1"}]}
+    monkeypatch.setattr(P, "repo_root", lambda: tmp_path)
     rels = P.excluded_rels(doc)
     assert "tasks/op-c0" in rels and "tasks/op-c1" in rels
+    assert "tasks/op/shapes" in rels                 # the product dir is a working directory
     assert not any(r.startswith("/") or r.startswith("tmp") for r in rels)
+    # a product directory outside the task tree (a fixture) is not excluded
+    doc["product_dir"] = str(tmp_path / "tests" / "fixtures" / "x" / "shapes")
+    assert P.excluded_rels(doc) == ["tasks/op-c0", "tasks/op-c1"]
 
 
 def test_the_plan_cli_writes_the_plan_and_prints_it(tmp_path, monkeypatch, capsys):

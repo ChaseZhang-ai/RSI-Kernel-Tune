@@ -189,8 +189,13 @@ forge shapes compose <plan.json | tasks/<op>> [--out PATH] [--also FILE ...]
 | `version` | every KEEP with `correctness != False` in the cluster runs' `status.jsonl`, read from the run workspace's git (`git show <sha>:kernel.py`); evolve populations contribute their `variants/*/kernel.*` |
 | `overall` | `--overall`: one run's whole-card export; it also becomes the fallback |
 | `extra` | `--also` (repeatable): another agent's solution, a hand-written variant |
+| `library` | `kernel_library/index.json` entries whose `problem_keys` name this problem and whose licence is submittable (`forgekernel.klib.schema.submittable`) |
 | `baseline` | `forge lib baselines`' mechanical torch candidates (soft dependency on seedlib) |
 | `eager` | the definition's own reference, wrapped as a DPS kernel |
+
+A library entry that only matches a *family* keyword is deliberately not taken: turning a
+family reference into a kernel for this problem is `forge lib adapt`'s job, and its output
+reaches `compose` as an `--also` candidate.
 
 A candidate that does not parse, has no top-level `run`, or is a `.cu` is reported and left
 out (`cuda_to_inline`, seedlib, is what turns CUDA C++ into a single-file candidate; until
@@ -215,7 +220,7 @@ Per workload:
    reading) never competes;
 2. **a tie is not a win**: readings within the noise floor (1.5 %, the number
    `benchx.compare` uses) are a tie, and the tie goes to the earlier kind -- cluster
-   specialist, that run's other correct versions, overall, extra, baseline;
+   specialist, that run's other correct versions, overall, extra, library, baseline;
 3. **the eager reference is the floor, not a competitor**: a workload whose best specialist
    is slower than the reference beyond the noise floor routes to the **reference**, and the
    route says why. `--allow-slower` keeps the specialist instead and records the workload as

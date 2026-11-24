@@ -200,7 +200,8 @@ def cmd_compose(argv: list[str]) -> int:
     p.add_argument("--no-versions", action="store_true",
                    help="do not add the cluster runs' other correctness-passing versions")
     p.add_argument("--no-lib", action="store_true",
-                   help="do not add `forge lib baselines`' torch candidates")
+                   help="do not add the reference library's kernels for this problem, nor "
+                        "`forge lib baselines`' torch candidates")
     p.add_argument("--repeat", type=int, default=1,
                    help="bench jobs per candidate; each workload's reading is their median")
     p.add_argument("--keep", action="store_true",

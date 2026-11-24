@@ -328,6 +328,18 @@ def test_forge_lessons_help_and_every_subcommands_help(capsys):
         assert "forge lessons" in capsys.readouterr().out
 
 
+def test_the_forge_extension_entry_point_reaches_the_command(capsys):
+    from forgekernel import __main__ as forge_main
+
+    with pytest.raises(SystemExit) as e:
+        forge_main.main(["lessons", "--help"])            # `forge lessons --help`
+    assert e.value.code == 0
+    out = capsys.readouterr().out
+    assert "harvest" in out and "render" in out
+    assert forge_main.main(["--help"]) == 0
+    assert "forge lessons ..." in capsys.readouterr().out
+
+
 def test_harvest_prints_a_summary_and_the_record_is_on_disk(tmp_path, capsys):
     root = tmp_path / "op_kb"
     assert lessons_cli.main(["harvest", str(FIXTURE), "--root", str(root)]) == 0

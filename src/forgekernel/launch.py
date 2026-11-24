@@ -686,7 +686,19 @@ def write_report(run, task, rc: int) -> Path:
 
 def cmd_export(argv) -> int:
     """The run's best kernel: a leaderboard task's as the board's solution JSON, any other
-    task's as its source."""
+    task's as its source.
+
+    Before anything is written, the source that is about to leave the harness is reviewed
+    (``forgekernel.integrity.export_check``: the board's prohibited behaviours in source
+    form, plus the target rules when targethw is installed) and the candidate's cold start
+    is read from a benchx result when one is on disk.  A ``block``-level finding refuses
+    the export unless ``--allow-integrity-findings`` says the human has looked; a cold
+    start past the board's compile budget refuses it outright (a candidate the board times
+    out scores 0 whatever its steady state).  Nothing here changes what is exported -- the
+    checks only decide whether it may be.  Diagnostics go to stderr: the exported bytes are
+    stdout's whole content.
+    """
+    from forgekernel import integrity as icheck
     from forgekernel import leaderboard as lbmod
     p = argparse.ArgumentParser(prog="forge export")
     p.add_argument("run")
@@ -694,7 +706,18 @@ def cmd_export(argv) -> int:
     p.add_argument("--name", default=None, help="the solution's name")
     p.add_argument("--author", default="forgekernel")
     p.add_argument("--hardware", default="B200")
+    p.add_argument("--allow-integrity-findings", action="store_true",
+                   help="export despite block-level integrity findings (they are printed)")
+    p.add_argument("--bench-result", default=None,
+                   help="a benchx result JSON to read the cold start from (default: the "
+                        "conventional files beside the run)")
+    p.add_argument("--allow-slow-cold-start", action="store_true",
+                   help="export although the cold start is past the board's compile budget")
     args = p.parse_args(argv)
+
+    def say(msg: str) -> None:
+        sys.stderr.write(f"[forge] {msg}\n")
+
     try:
         run = open_run(args.run)
         task = load_task(run.task_dir, name=run.task_name)
@@ -705,6 +728,37 @@ def cmd_export(argv) -> int:
     if best is None or not best.get("kernel"):
         sys.stderr.write("[forge] the run has no confirmed best kernel to export yet\n")
         return 2
+
+    gate = icheck.cold_start_gate(args.bench_result, *_bench_result_paths(run.dir))
+    if gate["state"] == "over-budget" and not args.allow_slow_cold_start:
+        sys.stderr.write(f"[forge] export refused: cold start past the board's budget — "
+                         f"{gate['why']} (a timing-out submission scores 0; "
+                         f"--allow-slow-cold-start overrides)\n")
+        return 2
+    if gate["state"] == "unmeasured":
+        say(f"cold start: not measured ({gate['why']})")
+    elif gate["state"] == "over-budget":
+        say(f"cold start over budget, allowed: {gate['why']}")
+    else:
+        say(f"cold start {gate['cold_start_s']:.1f}s (budget {gate['budget_s']:.0f}s)")
+
+    verdict = icheck.export_check(best["kernel"], path=False)
+    for finding in verdict["findings"]:
+        say(f"integrity {finding['severity']}: {finding['rule']}"
+            + (f" line {finding['line']}" if finding.get("line") else "")
+            + (f": {finding.get('detail')}" if finding.get("detail") else ""))
+    say(f"integrity review: {verdict['summary']}")
+    overridden = 0
+    if not verdict["ok"]:
+        if not args.allow_integrity_findings:
+            sys.stderr.write(
+                f"[forge] export refused: {verdict['blocks']} block-level integrity "
+                f"finding(s) — fix them, or re-run with --allow-integrity-findings if a "
+                f"human has read each one\n")
+            return 2
+        overridden = verdict["blocks"]
+        say(f"{overridden} block-level finding(s) overridden by --allow-integrity-findings")
+
     if task.mode != MODE_LEADERBOARD:
         # no board to submit to: the kernel source itself
         if args.out:
@@ -727,6 +781,9 @@ def cmd_export(argv) -> int:
         except (OSError, ValueError) as e:
             sys.stderr.write(f"[forge] export refused: {e}\n")
             return 2
+    if overridden:
+        sol["description"] = (str(sol.get("description") or "").rstrip()
+                              + f"\nintegrity: {overridden} block-level finding(s) overridden")
     text = json.dumps(sol, indent=2) + "\n"
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
@@ -735,6 +792,17 @@ def cmd_export(argv) -> int:
     else:
         sys.stdout.write(text)
     return 0
+
+
+# Where a benchx run leaves its result for a candidate (benchx --json is explicit; these are
+# the conventional places a campaign writes it), read by `forge export`'s cold-start gate.
+BENCH_RESULT_FILES = ("bench.json", "bench_result.json", "bench/last.json",
+                      "bench/result.json")
+
+
+def _bench_result_paths(run_dir) -> list:
+    run_dir = Path(run_dir)
+    return [run_dir / name for name in BENCH_RESULT_FILES]
 
 
 COMMANDS = {"init": cmd_init, "new": cmd_new, "run": cmd_run, "status": cmd_status,

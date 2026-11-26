@@ -11,7 +11,7 @@ own `--help` is the reference.
 |---|---|
 | Control machine (runs `forge`) | Linux or macOS, Python ≥ 3.11, git |
 | GPU machine (same machine, or an ssh host) | an NVIDIA Hopper (`sm90`) or Blackwell (`sm100`/`sm103`) GPU, a CUDA build of PyTorch there; `nvcc` for the target compile checks; Nsight Compute (`ncu`) recommended |
-| A model | the **Codex CLI** (logged in, or `OPENAI_API_KEY` / `CODEX_API_KEY` in `local.env`); the default teacher is Codex. Keep Claude for the student unless a task explicitly overrides it. |
+| A model | the **Codex CLI** (logged in, or `OPENAI_API_KEY` / `CODEX_API_KEY` in `local.env`); the default teacher is Codex (`sol6.2`, reasoning effort `high`). Keep Claude for the student unless a task explicitly overrides it. |
 | Only for board submissions | `SOL_EXECBENCH_TOKEN` in the environment (never in a file), and the SOL-ExecBench dataset (§4) |
 
 ## 1. Clone and install

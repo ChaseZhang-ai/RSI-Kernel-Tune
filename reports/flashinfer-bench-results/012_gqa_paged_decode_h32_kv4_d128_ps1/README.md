@@ -82,3 +82,14 @@ The best local candidate passed 48/48 in the full pinned-stack SOL-ExecBench CLI
 - Both sides passed all 48 in the paired run with 10 warmups and 50 timed iterations. The pair used PyTorch 2.10.0+cu130 and Triton 3.6.0. The exact CLI bundle used PyTorch 2.9.0+cu130 and Triton 3.5.0, with CUDA 13.2 PTXAS for GB300 support. Both used SOL-ExecBench 1.0.2. Cold first calls including the native build and Triton JIT took 3.401 s combined.
 - Warp-coalesced index loads feed the existing asynchronous K/V staging. All 20 shuffled, unequal-length and empty-row synthetic calls passed.
 - The final DPS bundle contains the exact source bytes and was evaluated against the official 48 workload UUIDs, with the trace dataset pinned to revision 1.0. The submitted Python SHA-256 is `b293696f31b3959a16556349f9b51a1e653877a4c526c15ab9bba7bfad0cf70e`.
+
+## Direct baseline against the final artifact
+
+Both sides passed 48/48 in a paired repeat with PyTorch 2.9.0+cu130 and Triton 3.5.0. The runs used physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, capability 10.3, 152 queried SMs and locked 1500/3996 MHz clocks. [Direct-versus-final paired timings](gb300-direct-vs-final.jsonl)
+
+| Batch size | Direct baseline geomean (µs) | Final candidate geomean (µs) |
+|---:|---:|---:|
+| 1 | 6.656 | 4.809 |
+| 16 | 46.324 | 14.307 |
+| 64 | 108.422 | 38.073 |
+| All | 32.214 | 13.785 |

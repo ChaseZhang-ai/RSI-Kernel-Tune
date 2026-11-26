@@ -1,5 +1,25 @@
 # 001_fused_add_rmsnorm_h2048
 
+## 2026-11-26 17:42 UTC · Packed CUDA candidate on GB300
+
+The exact standalone Python file passed all seven workloads, including CUPTI timing, via the open SOL-ExecBench CLI. The candidate loads and stores 32-byte BF16 vectors, adds in FP32, uses packed FP32 square accumulation, and rounds after the final multiply. Small batches replicate the reduction across CTAs with disjoint stores. The large path reuses the loaded weight for two rows per CTA. [Archive entry](../../../flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)
+
+- Physical GPU 1, `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, 152 SMs, CUDA capability 10.3. The GPU was pinned by UUID. SM locked to 1500 MHz and memory measured at its only supported 3996 MHz. The GPU lock and contention monitoring covered correctness and timing.
+- SOL-ExecBench 1.0.2 commit `a9fa080`, v1.1 timing methodology, PyTorch 2.9.0+cu130, Triton 3.5.0, CUDA bindings 13.1.1, CUPTI Python 13.5.0. NVRTC built the loaded cubin for the capability returned by PyTorch.
+- Cold NVRTC compilation, module load and first launch took 0.069 s in the paired process. The packed route uses the destination buffer directly without a GPU workspace.
+- Paired speedup over the single-CTA Triton baseline was **1.185×** by geometric mean. Paired timings used 10 warmups and 50 cold-L2 CUPTI iterations, cloned inputs and preallocated outputs. Near-cancellation and input-preservation checks passed.
+- Candidate SHA-256 `5ab09e89dfb5e4f993b1d739188a4896c13d3229547e0dfc569eb8c686a5a75b`. Verification is GB300 only while the shared B200 account is at capacity.
+
+| Batch | Workload UUID | GB300 status | Paired baseline (µs) | Paired candidate (µs) | Official CLI candidate (µs) |
+|---:|---|---|---:|---:|---:|
+| 6 | `906efdc6-aa3b-4b4f-a291-3a2be509d354` | PASSED | 3.296 | 2.576 | 2.561 |
+| 1 | `1526086b-0c06-41a1-b7b9-47b5cfc830d7` | PASSED | 3.648 | 2.848 | 2.688 |
+| 34 | `78c9b621-e151-4fb2-9162-f1b39afe573a` | PASSED | 3.136 | 2.720 | 2.688 |
+| 79 | `7fd454c3-9611-4376-a920-3d1c30639790` | PASSED | 3.200 | 2.816 | 2.816 |
+| 16254 | `724a6dfa-06ff-45b7-9972-d174a0e23737` | PASSED | 32.688 | 28.832 | 28.817 |
+| 12383 | `5ede385e-9b04-4b49-903f-375a5180d815` | PASSED | 25.985 | 22.208 | 22.784 |
+| 64 | `1602b8db-16e2-4d3f-b63d-68d4ee32e2cc` | PASSED | 3.200 | 2.784 | 2.784 |
+
 ## 2026-11-26 17:35 UTC · Standard Triton retry passed on GB300
 
 The exact archive entry passed 7/7 workloads, including timed CUPTI records. The paired trial also passed input preservation and near-cancellation checks, including calls with changed inputs and output pointers. The candidate uses standard Triton for all dispatch paths.

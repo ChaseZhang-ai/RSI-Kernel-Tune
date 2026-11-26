@@ -1,0 +1,9 @@
+# 023_rmsnorm_h1536
+
+The padded 2048-wide Triton direct-launch baseline passed all eight official workloads, including CUPTI timing, on GB300. The archive entry is provisional for the B200 collection. [Exact baseline source](triton-baseline.py) · [Evaluator traces](gb300-baseline.jsonl)
+
+The SOL-ExecBench CLI 1.0.2 (`a9fa0804c793d438e70850c33fe34426e66d53dd`) evaluated the exact standalone Python file as a destination-passing solution with the official Parquet workload IDs and evaluator tolerances. It used 10 warmups and 50 timed iterations per workload with cold L2, cloned inputs, preallocated outputs, and CUPTI first-to-last activity. The run completed at 2026-11-26 18:39 UTC on physical GB300 1 (`GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`), at 1500 MHz locked SM and 3996 MHz memory. The device reports 152 SMs and capability 10.3. The evaluator used PyTorch 2.9.0+cu130 and Triton 3.5.0.
+
+The initial attempt failed at build with the bundled PTX assembler (`Value 'sm_103a' is not defined for option 'gpu-name'`). The passing attempt used the installed CUDA 13.1 assembler through `TRITON_PTXAS_PATH`. Per-workload status, latency, and numerical error are in the evaluator traces. Cold first-launch timing is collected separately in the paired trials.
+
+The public B200 v1.1 leader at 2026-11-26 18:37:21 UTC was rank 1 submission 104773 with 0.929768 SOL. [NVIDIA B200 operator board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/232/B200)

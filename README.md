@@ -63,7 +63,7 @@ Contributors should push their **best candidate so far** to `flashinfer-bench/<o
 | [020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/229/B200) | 1.000000 | — | — | — | Pending | — |
 | [021_rmsnorm_h128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/230/B200) | 0.799820 | — | — | — | Pending | — |
 | [022_rmsnorm_h512](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/231/B200) | 0.818143 | — | — | — | Pending | — |
-| [023_rmsnorm_h1536](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/232/B200) | 0.929768 | — | — | — | Pending | — |
+| [023_rmsnorm_h1536](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/232/B200) | 0.929768 | — | — | — | GB300 only · Triton baseline 8/8 passed · [evidence](reports/flashinfer-bench-results/023_rmsnorm_h1536/README.md) | [Provisional](flashinfer-bench/023_rmsnorm_h1536/submission.py) |
 | [024_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/233/B200) | 0.815575 | — | — | — | Pending | — |
 | [025_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/234/B200) | 0.904060 | — | — | — | Pending | — |
 | [026_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/235/B200) | 0.937995 | — | — | — | Pending | — |

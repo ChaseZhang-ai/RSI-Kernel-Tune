@@ -27,3 +27,14 @@ Physical GPU 3 (`GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`) reported 152 SMs and
 The sweep measured 299 passing trials. PTXAS rejected 54 variants that combined `.cg` with `.evict_first`. The sweep recorded zero numerical and CUPTI timing failures. The exact archive entry remains the verified baseline during finalist verification.
 
 A 128-thread CTA with eight contiguous BF16 values per thread was fastest among the small-batch layouts in the sweep. At batch 539 the four-row packed CTA improved 3.040 µs to 2.944 µs. The eight-row packed CTA reused the weight fragment across two rows per warp and measured 6.528–7.408 µs for the two largest workloads.
+
+
+## GB300 finalist comparison
+
+The direct baseline and both finalists passed all eight workloads with CUPTI timing on physical GPU 1 (`GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, 152 SMs, capability 10.3, 1500/3996 MHz). Each trial used 10 warmups and 50 timed iterations. Both finalists and the baseline also passed two fresh-pointer tests per workload using changed non-uniform weights and rows near zero. [Finalist trial record](gb300-finalists.jsonl)
+
+| Candidate | Median latency geometric mean (µs) | Passed |
+|---|---:|---:|
+| Direct Triton baseline | 4.008 | 8/8 |
+| Gluon blocked | 3.470 | 8/8 |
+| Gluon with packed 256-bit loads and stores | 3.359 | 8/8 |

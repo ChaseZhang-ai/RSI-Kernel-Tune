@@ -6,5 +6,8 @@
   "submitted_utc": "2026-11-26T18:23:57.331298Z",
   "status": "PENDING_RESULT",
   "expected_workloads": 48,
-  "source_sha256": "0a956bf31d3d5de95944f9fe99579973dc5dbf2772c9464886050de6e1b7b70e"
+  "source_sha256": "0a956bf31d3d5de95944f9fe99579973dc5dbf2772c9464886050de6e1b7b70e",
+  "result_available_utc": "2026-11-26T19:25:19.503233Z",
+  "published_workload_rows": 0,
+  "visible_timing_failures": 6
 }

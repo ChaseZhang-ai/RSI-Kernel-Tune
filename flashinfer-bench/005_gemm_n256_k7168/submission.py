@@ -12,9 +12,12 @@ from ctypes import c_int, c_void_p
 from functools import lru_cache
 
 import torch
+import triton
+import triton.language as tl
 from cuda.bindings import driver, nvrtc
+from triton.tools.tensor_descriptor import TensorDescriptor as TmaDescriptor
 
-# Replaced with the embedded CUDA source when assembling submission.py.
+
 _CUDA = r"""
 using U32 = unsigned int;
 using U64 = unsigned long long;
@@ -100,14 +103,9 @@ __device__ __forceinline__ void receive(U64* barrier) {
                  "@!ready bra AGAIN; }" :: "r"(shared_addr(barrier)) : "memory");
 }
 
-__device__ __forceinline__ void send(float* dst, float value, U64* barrier, U32 owner) {
-    asm volatile("st.async.shared::cluster.mbarrier::complete_tx::bytes.b32 [%0], %1, [%2];"
-                 :: "r"(remote_addr(dst, owner)), "f"(value), "r"(remote_addr(barrier, owner)) : "memory");
-}
-
 template <int NR>
 __global__ __launch_bounds__(448, 2)
-void gemv_direct(const Half* A, const Half* B, Half* C, int m) {
+void gemv_direct(const Half* A, const Half* B, Half* C, int /* M */) {
     __shared__ float partial[NR][14];
     const int row = blockIdx.y;
     const int weight = blockIdx.x * NR;
@@ -122,43 +120,6 @@ void gemv_direct(const Half* A, const Half* B, Half* C, int m) {
     }
     __syncthreads();
     if (threadIdx.x < NR) {
-        float sum = 0.f;
-        #pragma unroll
-        for (int w = 0; w < 14; ++w)
-            sum += partial[threadIdx.x][w];
-        C[row * N + weight + threadIdx.x] = fp16(sum);
-    }
-}
-
-template <int NR>
-__global__ __cluster_dims__(2, 1, 1) __launch_bounds__(224, 4)
-void gemv_split(const Half* A, const Half* B, Half* C, int m) {
-    __shared__ U64 barrier;
-    __shared__ float partial[NR][14];
-    const int rank = blockIdx.x % 2;
-    const int row = blockIdx.y;
-    const int weight = blockIdx.x / 2 * NR;
-    const int k = rank * (K / 2) + 16 * threadIdx.x;
-    const Vec a = load32<false>(A + row * K + k);
-    Vec b[NR];
-    #pragma unroll
-    for (int j = 0; j < NR; ++j)
-        b[j] = load32<true>(B + (weight + j) * K + k);
-    if (threadIdx.x == 0 && rank == 0)
-        arm(&barrier, NR * 14 * sizeof(float));
-    cluster_arrive();
-    float values[NR];
-    #pragma unroll
-    for (int j = 0; j < NR; ++j)
-        values[j] = warp_dot(a, b[j]);
-    cluster_wait();
-    if (threadIdx.x % 32 == 0) {
-        #pragma unroll
-        for (int j = 0; j < NR; ++j)
-            send(&partial[j][rank * 7 + threadIdx.x / 32], values[j], &barrier, 0);
-    }
-    if (rank == 0 && threadIdx.x < NR) {
-        receive(&barrier);
         float sum = 0.f;
         #pragma unroll
         for (int w = 0; w < 14; ++w)
@@ -192,8 +153,9 @@ __device__ __forceinline__ void send4(Float4* dst, const Float4& v, U64* barrier
 }
 
 template <int TM, int TN, int Cluster, int Warps, bool Swap = false>
-__global__ __cluster_dims__(Cluster, 1, 1) __launch_bounds__(32 * Warps, 2)
+__global__ __cluster_dims__(Cluster, 1, 1) __launch_bounds__(32 * Warps, Warps > 8 ? 1 : 2)
 void gemm_cluster(const Half* A, const Half* B, Half* C, int m) {
+    // Pad each shared row to distribute the warp fragment stores across banks.
     constexpr int padded_n = TN + 8;
     constexpr int groups = TM * TN / 4;
     constexpr int per_owner = (groups + Cluster - 1) / Cluster;
@@ -266,6 +228,7 @@ void gemm_cluster(const Half* A, const Half* B, Half* C, int m) {
             }
         }
     }
+    // Each rank owns a disjoint output range and receives FP32 partials from all ranks.
     __syncthreads();
     cluster_wait();
     for (int i = tid; i < groups; i += 32 * Warps) {
@@ -304,22 +267,14 @@ def _checked(result):
     return values[0] if len(values) == 1 else values
 
 
-_VARIANTS = {}
-for width in (1, 2, 4):
-    for kind in ("direct", "split"):
-        _VARIANTS[f"gemv_{kind}_{width}"] = f"&gemv_{kind}<{width}>"
-for tm, tn, cluster, warps, swap in (
-    (8, 16, 8, 7, True), (8, 16, 7, 8, True), (8, 16, 4, 7, True),
-    (16, 8, 7, 8, False), (16, 16, 8, 7, False), (16, 16, 7, 8, False),
-    (16, 16, 4, 7, False), (32, 16, 8, 7, False), (32, 16, 7, 8, False),
-    (32, 16, 4, 7, False), (32, 32, 8, 7, False), (32, 32, 7, 8, False),
-    (64, 16, 8, 7, False), (64, 16, 7, 8, False), (64, 8, 8, 7, False),
-    (64, 32, 8, 7, False),
-):
-    _VARIANTS[f'mma_{tm}_{tn}_{cluster}_{warps}_{"swap" if swap else "normal"}'] = (
-        f"&gemm_cluster<{tm},{tn},{cluster},{warps},{str(swap).lower()}>"
-    )
-
+_VARIANTS = {
+    "gemv_direct_2": "&gemv_direct<2>",
+    "mma_8_16_7_8_swap": "&gemm_cluster<8, 16, 7, 8, true>",
+    "mma_16_8_7_8_normal": "&gemm_cluster<16, 8, 7, 8, false>",
+    "mma_16_16_7_8_normal": "&gemm_cluster<16, 16, 7, 8, false>",
+    "mma_32_16_7_8_normal": "&gemm_cluster<32, 16, 7, 8, false>",
+    "mma_32_32_8_7_normal": "&gemm_cluster<32, 32, 8, 7, false>",
+}
 
 @lru_cache(maxsize=None)
 def _module(major, minor, context):
@@ -364,7 +319,7 @@ def _balance():
     return [attr]
 
 
-def _native(A, B, C, name, x, y, threads, clustered, balance=True):
+def _native(A, B, C, name, x, y, threads, clustered):
     m = A.shape[0]
     device = A.device
     with torch.cuda.device(device):
@@ -374,7 +329,7 @@ def _native(A, B, C, name, x, y, threads, clustered, balance=True):
         fn, smem = module[name]
         params = ((A.data_ptr(), B.data_ptr(), C.data_ptr(), m),
                   (c_void_p, c_void_p, c_void_p, c_int))
-        if clustered and balance:
+        if clustered:
             attrs = _balance()
             config = driver.CUlaunchConfig()
             config.gridDimX, config.gridDimY, config.gridDimZ = x, y, 1
@@ -387,71 +342,36 @@ def _native(A, B, C, name, x, y, threads, clustered, balance=True):
             _checked(driver.cuLaunchKernel(fn, x, y, 1, threads, 1, 1, smem, stream, params, 0))
 
 
-import triton
-import triton.language as tl
-
-
 @triton.jit
-def _gemv(A, B, C, AM: tl.constexpr, AK: tl.constexpr, BN: tl.constexpr,
-          BK: tl.constexpr, CM: tl.constexpr, CN: tl.constexpr):
-    m = tl.program_id(0)
-    n = tl.program_id(1)
-    k = tl.arange(0, 8192)
-    a = tl.load(A + m * AM + k * AK, k < 7168, 0).to(tl.float32)
-    b = tl.load(B + n * BN + k * BK, k < 7168, 0).to(tl.float32)
-    tl.store(C + m * CM + n * CN, tl.sum(a * b, 0))
-
-
-@triton.jit
-def _matmul(A, B, C, M, AM: tl.constexpr, AK: tl.constexpr, BN: tl.constexpr,
-            BK: tl.constexpr, CM: tl.constexpr, CN: tl.constexpr,
-            TM: tl.constexpr, TN: tl.constexpr, TK: tl.constexpr, SPLIT: tl.constexpr):
-    m = tl.program_id(0) * TM + tl.arange(0, TM)
-    n = tl.program_id(1) * TN + tl.arange(0, TN)
-    split = tl.program_id(2)
-    k = split * (7168 // SPLIT) + tl.arange(0, TK)
-    a = A + m[:, None] * AM + k[None, :] * AK
-    b = B + n[:, None] * BN + k[None, :] * BK
-    acc = tl.full((TM, TN), 0, tl.float32)
-    for step in range(7168 // SPLIT // TK):
-        av = tl.load(a + step * TK * AK, m[:, None] < M, 0)
-        bv = tl.load(b + step * TK * BK)
+def _strided_gemm(A, B, C, M, AM, AK, BM, BK, CM, CN):
+    rows = tl.program_id(0) * 32 + tl.arange(0, 32)
+    cols = tl.program_id(1) * 32 + tl.arange(0, 32)
+    k = tl.arange(0, 64)
+    a = A + rows[:, None] * AM + k[None, :] * AK
+    b = B + cols[:, None] * BM + k[None, :] * BK
+    acc = tl.full((32, 32), 0, tl.float32)
+    for ki in range(112):
+        av = tl.load(a + ki * 64 * AK, rows[:, None] < M, 0)
+        bv = tl.load(b + ki * 64 * BK)
         acc = tl.dot(av, tl.trans(bv), acc)
-    if SPLIT == 1:
-        tl.store(C + m[:, None] * CM + n[None, :] * CN, acc, m[:, None] < M)
-    else:
-        tl.store(C + (split * M + m[:, None]) * 256 + n[None, :], acc, m[:, None] < M)
+    tl.store(C + rows[:, None] * CM + cols[None, :] * CN, acc, rows[:, None] < M)
+
 
 
 @triton.jit
-def _merge(P, C, M, CM: tl.constexpr, CN: tl.constexpr, S: tl.constexpr):
-    i = tl.program_id(0) * 128 + tl.arange(0, 128)
-    s = tl.arange(0, S)
-    values = tl.load(P + s[:, None] * M * 256 + i[None, :], i[None, :] < M * 256, 0)
-    tl.store(C + i // 256 * CM + i % 256 * CN, tl.sum(values, 0), i < M * 256)
-
-
-from triton.tools.tensor_descriptor import TensorDescriptor as TmaDescriptor
-
-
-@triton.jit
-def _tma_gemm(a, b, c, P, M, CM: tl.constexpr, CN: tl.constexpr,
-              TM: tl.constexpr, TN: tl.constexpr, TK: tl.constexpr,
-              SPLIT: tl.constexpr, WORKERS: tl.constexpr, SWAP: tl.constexpr,
-              WARP_SPECIALIZE: tl.constexpr, TMA_STORE: tl.constexpr):
+def _tma_gemm(a, b, c, C, M, TM: tl.constexpr, TN: tl.constexpr, TK: tl.constexpr,
+              WORKERS: tl.constexpr, SWAP: tl.constexpr, TMA_STORE: tl.constexpr):
     tiles_n: tl.constexpr = 256 // TN
     tiles_m = tl.cdiv(M, TM)
-    split = tl.program_id(1)
-    for tile in tl.range(tl.program_id(0), tiles_m * tiles_n, WORKERS,
-                         warp_specialize=WARP_SPECIALIZE):
+    for tile in range(tl.program_id(0), tiles_m * tiles_n, WORKERS):
         row = tile // tiles_n * TM
         col = tile % tiles_n * TN
         if SWAP:
             acc = tl.full((TN, TM), 0, tl.float32)
         else:
             acc = tl.full((TM, TN), 0, tl.float32)
-        for ki in range(7168 // (SPLIT * TK)):
-            k = split * (7168 // SPLIT) + ki * TK
+        for ki in range(7168 // TK):
+            k = ki * TK
             av = a.load([row, k])
             bv = b.load([col, k])
             if SWAP:
@@ -462,68 +382,56 @@ def _tma_gemm(a, b, c, P, M, CM: tl.constexpr, CN: tl.constexpr,
             values = tl.trans(acc)
         else:
             values = acc
-        if SPLIT == 1 and TMA_STORE:
+        if TMA_STORE:
             c.store([row, col], values.to(tl.float16))
         else:
             rows = row + tl.arange(0, TM)
             cols = col + tl.arange(0, TN)
-            if SPLIT > 1:
-                tl.store(P + (split * M + rows[:, None]) * 256 + cols[None, :],
-                         values, rows[:, None] < M)
-            else:
-                tl.store(P + rows[:, None] * CM + cols[None, :] * CN,
-                         values, rows[:, None] < M)
+            tl.store(C + rows[:, None] * 256 + cols[None, :], values, rows[:, None] < M)
 
 
-def _tma(A, B, C, tm, tn, tk, stages, warps=4, waves=0, swap=False,
-         split=1, ws=False, tma_store=True):
+def _tma(A, B, C, tm, tn, tk, stages, persistent=False, swap=False, tma_store=True):
     m = A.shape[0]
     tiles = triton.cdiv(m, tm) * (256 // tn)
-    workers = min(tiles, torch.cuda.get_device_properties(A.device).multi_processor_count * waves) if waves else tiles
-    partial = torch.empty((split, m, 256), dtype=torch.float32, device=A.device) if split > 1 else C
-    _tma_gemm[(workers, split)](
+    if persistent:
+        sm_count = torch.cuda.get_device_properties(A.device).multi_processor_count
+        workers = min(tiles, sm_count)
+    else:
+        workers = tiles
+    _tma_gemm[(workers,)](
         TmaDescriptor.from_tensor(A, [tm, tk]), TmaDescriptor.from_tensor(B, [tn, tk]),
-        TmaDescriptor.from_tensor(C, [tm, tn]) if tma_store else C,
-        partial, m, *C.stride(), tm, tn, tk, split, workers, swap, ws, tma_store,
-        num_warps=warps, num_stages=stages
+        TmaDescriptor.from_tensor(C, [tm, tn]) if tma_store else None,
+        C, m, tm, tn, tk, workers, swap, tma_store, num_warps=4, num_stages=stages,
     )
-    if split > 1:
-        _merge[(triton.cdiv(m * 256, 128),)](partial, C, m, *C.stride(), split, num_warps=4)
 
 
-def _compact(A, B, C, tm, tn, cluster, warps, swap=False, balance=True):
+def _compact(A, B, C, tm, tn, cluster, warps, swap=False):
     name = f'mma_{tm}_{tn}_{cluster}_{warps}_{"swap" if swap else "normal"}'
-    _native(A, B, C, name, 256 // tn * cluster, triton.cdiv(A.shape[0], tm), 32 * warps, True, balance)
-
-
-def _vector(A, B, C, width, split):
-    name = f'gemv_{"split" if split else "direct"}_{width}'
-    _native(A, B, C, name, 256 // width * (2 if split else 1), A.shape[0],
-            224 if split else 448, split)
+    _native(A, B, C, name, 256 // tn * cluster, triton.cdiv(A.shape[0], tm), 32 * warps, True)
 
 
 def run(A, B, C):
     m = A.shape[0]
-    if not m:
+    if m == 0:
         return
-    if any(not t.is_contiguous() or t.data_ptr() % 32 for t in (A, B, C)):
-        _matmul[(triton.cdiv(m, 32), 8, 1)](
-            A, B, C, m, *A.stride(), *B.stride(), *C.stride(), 32, 32, 64, 1,
-            num_warps=4, num_stages=3
+    if any(not tensor.is_contiguous() or tensor.data_ptr() % 32 for tensor in (A, B, C)):
+        _strided_gemm[(triton.cdiv(m, 32), 8)](
+            A, B, C, m, *A.stride(), *B.stride(), *C.stride(), num_warps=4, num_stages=3
         )
     elif m == 1:
-        _vector(A, B, C, 2, False)
+        _native(A, B, C, "gemv_direct_2", 128, 1, 448, False)
     elif m <= 8:
-        _compact(A, B, C, 8, 16, 8, 7, True)
+        _compact(A, B, C, 8, 16, 7, 8, swap=True)
     elif m <= 16:
         _compact(A, B, C, 16, 8, 7, 8)
     elif m <= 32:
-        _compact(A, B, C, 32, 16, 8, 7)
+        _compact(A, B, C, 16, 16, 7, 8)
     elif m <= 64:
-        _compact(A, B, C, 64, 16, 8, 7)
+        # Two 32-row tiles give the dense 53–63 range more resident work.
+        _compact(A, B, C, 32, 16, 7, 8)
     elif m <= 128:
-        _compact(A, B, C, 32, 16, 8, 7)
+        _compact(A, B, C, 32, 32, 8, 7)
     elif m <= 1024:
-        _tma(A, B, C, 32, 64, 128, 4, swap=True, split=4)
+        _tma(A, B, C, 32, 64, 128, 4, swap=True)
     else:
-        _tma(A, B, C, 128, 256, 64, 3, waves=1)
+        _tma(A, B, C, 128, 256, 64, 4, persistent=True, tma_store=False)

@@ -46,4 +46,18 @@ Both the baseline and tuned candidate passed all 38 official workloads with 50 v
 - The 22-query long-prefix workload measured 54.001 µs, down from 878.139 µs. The largest single-request workload measured 14.717 ms, down from 59.015 ms.
 - The exact candidate compiled 25 specializations in 16.619 s total on an empty Triton cache. The slowest compile took 0.881 s and the longest first call including launch and synchronization took 0.930 s. The paired evaluator peaked at 7,089,917,440 bytes of PyTorch allocations. The largest candidate tile uses 229,520 bytes of shared memory per CTA. [Compiler measurements](gb300-tuned-cold-compile.jsonl)
 - Fifteen synthetic calls passed across the four dispatch paths. They used changed contents at the same addresses, independent input and output allocations, permuted and repeated page IDs, NaNs in unreferenced pages, empty requests, and nondefault positive and negative scales. For a fully masked query with a nonempty KV request, the reference returns NaN output and negative-infinite LSE. Empty KV requests return zero output and negative-infinite LSE. [Synthetic results](gb300-tuned-synthetic.jsonl)
-- Exact candidate SHA-256 `c64fc642f781aee4d09b888fa5163536cc996f69b28b3cdb725ee07575a95a0c`. The local DPS bundle contains the identical `submission.py`. The exact-bundle CLI trial is running.
+- Exact candidate SHA-256 `c64fc642f781aee4d09b888fa5163536cc996f69b28b3cdb725ee07575a95a0c`. The local DPS bundle contains the identical `submission.py`.
+
+## Exact candidate, official GB300 evaluator
+
+The exact collection file passed 38/38 official workloads, with valid CUPTI timings, on 2026-11-26 at 19:07:23 UTC. The geometric mean was **43.939 µs**. The 19 short-query workloads measured 11.751 µs geometric mean, and the five long-query workloads measured 2,582.775 µs geometric mean. The long-prefix short case took 53.713 µs. The largest single-request case took 14.718 ms. GPU 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, was pinned and monitored under the host lock with 1500/3996 MHz SM/memory clocks, 152 queried SMs and CUDA capability 10.3. It used the same evaluator, 10 warmups and 50 timed iterations as the baseline. Maximum split-KV scratch across the official workloads was 22.043 MiB. [Official per-workload CLI results](gb300-tuned-evaluator.jsonl) · [Exact collection source](../../../flashinfer-bench/019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1/submission.py)
+
+The DPS bundle embeds the exact Python bytes under `sources[0].path = "submission.py"`, with `entry_point = "submission.py::run"` and `destination_passing_style = true`. Materialize the named Parquet row into `definition.json` and `workload.jsonl`, resolve the version 1.0 trace metadata with `FLASHINFER_TRACE_DIR`, and invoke:
+
+```sh
+sol-execbench "$problem_dir" --solution solution.json --output results.jsonl
+```
+
+An offline Triton 3.5.0 cross-compilation from the exact source generated all 25 SM100 specializations in 15.047 s using CUDA 13.2 PTXAS. The Triton 3.5.0 SM103 compiler check failed while lowering `llvm.nvvm.tcgen05.wait.ld`. The GB300 runtime verification used Triton 3.6.0, and the SM100 check covered code generation only. [SM100 code-generation measurements](sm100-triton35-codegen.jsonl)
+
+The B200 v1.1 board showed June in first place at **0.998735 SOL**, submission 104795, checked 2026-11-26 19:08:38 UTC. This candidate is provisional GB300 only. The coordinator owns B200 evaluation. [B200 v1.1 kernel leaderboard](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/228/B200)

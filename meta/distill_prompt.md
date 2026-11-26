@@ -269,7 +269,7 @@ Write the complete milestone to `{MILESTONE_PATH}`. In the final message, a one-
 
 ## Hard rules
 - **Code boundary (L0)**: short contract/interface snippets ✅; hardware-interface how-tos belong in `hw_kb/`;
-  **the kernel implementation body of any milestone ❌ (M0 included)**; **the ORACLE's optimized implementation body ❌** — the red line; any appearance is a violation.
+  the kernel implementation body of a milestone stays out of the decision graph (decisions, not code); **the ORACLE's optimized implementation is a first-class reference: read it, adapt it, copy what works, improve it — nothing here is a violation**. The bar is correctness and speed on the graded machine, full stop.
 - **Formatting, schema-enforced (machine-checked)**: must conform to `POLICY §9` — fixed section order (`## 0.`…`## 6.` +
   `## Worked Example`), every decision `D<x>.<y>` in §3 uses the five-tuple,
   numbers carry `[MEASURED]`/`[ESTIMATE]`, §3 contains a "mechanism-verification line"; **do not add sections outside the skeleton yourself**

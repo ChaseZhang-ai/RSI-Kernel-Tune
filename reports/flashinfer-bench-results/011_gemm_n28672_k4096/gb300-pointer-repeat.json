@@ -1,0 +1,307 @@
+{
+  "source_sha256": "3c9a596e72e9efeb7c7d85a08ea4698385fd9f10a3e951443b476ad759865b6b",
+  "scope": "GB300 only. Exact selected collection source embedded in the standalone DPS bundle.",
+  "timestamp_utc": "2026-11-26T18:27:20.547102Z",
+  "command": "sol-execbench . --solution solution.json --output results.jsonl",
+  "device": {
+    "device": "NVIDIA GB300",
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "physical_index": 0,
+    "sm_count": 152,
+    "compute_capability": [
+      10,
+      3
+    ],
+    "clocks_mhz": [
+      1500,
+      3996
+    ],
+    "memory_clock_lock": "driver accepted a deferred lock; only supported memory clock observed at 3996 MHz"
+  },
+  "evaluator": {
+    "version": "1.0.2",
+    "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "cupti_python": "13.5.0",
+    "warmup_runs": 10,
+    "timed_iterations": 50,
+    "seed": 200,
+    "timing": "CUPTI first-to-last kernel, cold L2, cloned inputs, shifted pointers and preallocated DPS outputs"
+  },
+  "cold_compile_plus_first_dispatch_s_from_paired_run": 3.038632641546428,
+  "passed": 43,
+  "total": 43,
+  "mean_latency_ms": 0.10183106976744186,
+  "workloads": [
+    {
+      "workload_uuid": "181e4a1e-6dec-4bca-8a21-703c35d0762a",
+      "M": 256,
+      "status": "PASSED",
+      "latency_ms": 0.066656
+    },
+    {
+      "workload_uuid": "4723ac5c-205a-454d-9318-2ea368b0a57d",
+      "M": 248,
+      "status": "PASSED",
+      "latency_ms": 0.0664795
+    },
+    {
+      "workload_uuid": "014b776b-dc2b-4468-b5ae-aa0d7d1491aa",
+      "M": 240,
+      "status": "PASSED",
+      "latency_ms": 0.066352
+    },
+    {
+      "workload_uuid": "e9dbb6fb-dcd7-4c59-a138-19f8acab3497",
+      "M": 232,
+      "status": "PASSED",
+      "latency_ms": 0.0663195
+    },
+    {
+      "workload_uuid": "b246cb12-d35d-44c4-b52b-57cc08b837d8",
+      "M": 224,
+      "status": "PASSED",
+      "latency_ms": 0.066559
+    },
+    {
+      "workload_uuid": "3cb71ee9-6d8b-4870-bfb3-5ac6ed8e94f8",
+      "M": 216,
+      "status": "PASSED",
+      "latency_ms": 0.0664795
+    },
+    {
+      "workload_uuid": "9565455d-3c4f-4cb0-ada2-7b08fcd4fb6f",
+      "M": 208,
+      "status": "PASSED",
+      "latency_ms": 0.065935
+    },
+    {
+      "workload_uuid": "641e402f-322a-4b01-bac9-af4d4865de6a",
+      "M": 200,
+      "status": "PASSED",
+      "latency_ms": 0.065984
+    },
+    {
+      "workload_uuid": "fa47c843-0516-4bd4-88fc-362c4ce5f1d1",
+      "M": 192,
+      "status": "PASSED",
+      "latency_ms": 0.06614300000000001
+    },
+    {
+      "workload_uuid": "3df3dc7e-f4e9-474c-9192-7b18755fc3b0",
+      "M": 184,
+      "status": "PASSED",
+      "latency_ms": 0.0661595
+    },
+    {
+      "workload_uuid": "2f234a95-9ef4-4d59-a4ba-753a719da828",
+      "M": 176,
+      "status": "PASSED",
+      "latency_ms": 0.065983
+    },
+    {
+      "workload_uuid": "d28934a3-5ae0-4359-a8af-aa78f6825bd4",
+      "M": 168,
+      "status": "PASSED",
+      "latency_ms": 0.0659835
+    },
+    {
+      "workload_uuid": "afc3f412-1263-4231-a128-3db3cc459631",
+      "M": 160,
+      "status": "PASSED",
+      "latency_ms": 0.06635150000000001
+    },
+    {
+      "workload_uuid": "498af316-9b62-4b8d-8870-d3e831d8bc35",
+      "M": 152,
+      "status": "PASSED",
+      "latency_ms": 0.066576
+    },
+    {
+      "workload_uuid": "08a36139-09d0-4091-ad63-e3d74002fa46",
+      "M": 144,
+      "status": "PASSED",
+      "latency_ms": 0.066336
+    },
+    {
+      "workload_uuid": "cc57db8a-c093-4d47-aac6-79d1f06d74a2",
+      "M": 136,
+      "status": "PASSED",
+      "latency_ms": 0.0655835
+    },
+    {
+      "workload_uuid": "ac3459e6-fc10-4842-9957-a2885ba92ddd",
+      "M": 128,
+      "status": "PASSED",
+      "latency_ms": 0.056416
+    },
+    {
+      "workload_uuid": "a55ceb91-1f69-4502-9fd1-3b92038931d8",
+      "M": 120,
+      "status": "PASSED",
+      "latency_ms": 0.056127
+    },
+    {
+      "workload_uuid": "89b6dc1d-d97e-4c9d-80fc-abad9894f173",
+      "M": 112,
+      "status": "PASSED",
+      "latency_ms": 0.056143
+    },
+    {
+      "workload_uuid": "293bf53a-b0e0-4767-8d3f-222bcc4c44a7",
+      "M": 104,
+      "status": "PASSED",
+      "latency_ms": 0.055904
+    },
+    {
+      "workload_uuid": "008975ac-5de6-49ad-b8d7-27b23050319f",
+      "M": 96,
+      "status": "PASSED",
+      "latency_ms": 0.055823
+    },
+    {
+      "workload_uuid": "7c60474c-51bc-4c8e-9a79-6477f4136609",
+      "M": 88,
+      "status": "PASSED",
+      "latency_ms": 0.055712
+    },
+    {
+      "workload_uuid": "41ef6224-1145-4c56-8e47-ac9b27d6d528",
+      "M": 80,
+      "status": "PASSED",
+      "latency_ms": 0.055728
+    },
+    {
+      "workload_uuid": "1342dfbf-6c83-478b-b221-fc6432fec7a3",
+      "M": 72,
+      "status": "PASSED",
+      "latency_ms": 0.055632
+    },
+    {
+      "workload_uuid": "995bbfe6-34a2-423d-8539-daa8bfa84483",
+      "M": 64,
+      "status": "PASSED",
+      "latency_ms": 0.053775500000000004
+    },
+    {
+      "workload_uuid": "7133808e-23cc-44e1-8ee8-77a53d28829e",
+      "M": 56,
+      "status": "PASSED",
+      "latency_ms": 0.0534875
+    },
+    {
+      "workload_uuid": "aff180b9-9ebd-453a-b56a-d3ec1fd28e3b",
+      "M": 48,
+      "status": "PASSED",
+      "latency_ms": 0.0535195
+    },
+    {
+      "workload_uuid": "a2d7f478-41fb-4bf9-9066-baa5d7059d51",
+      "M": 40,
+      "status": "PASSED",
+      "latency_ms": 0.0533915
+    },
+    {
+      "workload_uuid": "14748fea-144e-4a8d-ab41-c9a43c970e3a",
+      "M": 32,
+      "status": "PASSED",
+      "latency_ms": 0.0505915
+    },
+    {
+      "workload_uuid": "63685675-d12d-48c3-b9cb-3f9267730506",
+      "M": 24,
+      "status": "PASSED",
+      "latency_ms": 0.0510705
+    },
+    {
+      "workload_uuid": "787cce2f-8971-4c13-94a7-860e15cc5f3a",
+      "M": 16,
+      "status": "PASSED",
+      "latency_ms": 0.0485275
+    },
+    {
+      "workload_uuid": "8e4f12e6-e907-4e38-8da2-c0ec3d79a163",
+      "M": 8,
+      "status": "PASSED",
+      "latency_ms": 0.0477915
+    },
+    {
+      "workload_uuid": "57cfab24-885a-474c-a1c8-25db5c9c482d",
+      "M": 4,
+      "status": "PASSED",
+      "latency_ms": 0.047936
+    },
+    {
+      "workload_uuid": "bd3fe06b-2d0d-418b-9f5b-6bc0f6663295",
+      "M": 2,
+      "status": "PASSED",
+      "latency_ms": 0.047776
+    },
+    {
+      "workload_uuid": "de80b1bd-7720-48ef-af97-c8e22a667ed3",
+      "M": 1,
+      "status": "PASSED",
+      "latency_ms": 0.048927
+    },
+    {
+      "workload_uuid": "ab620041-cf92-429e-978b-52f236566a91",
+      "M": 7,
+      "status": "PASSED",
+      "latency_ms": 0.048
+    },
+    {
+      "workload_uuid": "2bf902f9-da1a-44de-b0e2-7941bef4b717",
+      "M": 35,
+      "status": "PASSED",
+      "latency_ms": 0.053391999999999995
+    },
+    {
+      "workload_uuid": "d7d2b46a-3430-472e-87bd-c5da54f4a024",
+      "M": 972,
+      "status": "PASSED",
+      "latency_ms": 0.173487
+    },
+    {
+      "workload_uuid": "4c7c227f-3c0f-44eb-8e62-6f0fd507f276",
+      "M": 70,
+      "status": "PASSED",
+      "latency_ms": 0.05624
+    },
+    {
+      "workload_uuid": "161e08d9-8ec9-4559-beed-a7713cb1a92f",
+      "M": 2053,
+      "status": "PASSED",
+      "latency_ms": 0.345774
+    },
+    {
+      "workload_uuid": "32cd2698-78a7-4446-9691-2b3e42fc68b7",
+      "M": 8192,
+      "status": "PASSED",
+      "latency_ms": 1.2112064999999999
+    },
+    {
+      "workload_uuid": "05c12114-0686-4973-a9f3-cb03db06d110",
+      "M": 2379,
+      "status": "PASSED",
+      "latency_ms": 0.378397
+    },
+    {
+      "workload_uuid": "cb7a5636-4658-4a52-b8ac-fd0c7213381b",
+      "M": 15,
+      "status": "PASSED",
+      "latency_ms": 0.04808
+    }
+  ],
+  "exact_value_guard_check": {
+    "status": "passed",
+    "count": 43,
+    "calls_per_workload": 2,
+    "compared_columns": 28672,
+    "changed_input_contents": true,
+    "input_output_addresses_changed": true,
+    "guards_fp16_values_each_side": 128,
+    "physical_index": 0,
+    "gpu_uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d"
+  }
+}

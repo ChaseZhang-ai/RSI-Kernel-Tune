@@ -1,0 +1,93 @@
+{
+  "official_workload_status": {
+    "PASSED": 43
+  },
+  "official_geomean_latency_us": 24.611081327758136,
+  "official_selected_latency_us": {
+    "1": 13.3125,
+    "8": 16.416,
+    "15": 16.256,
+    "35": 17.663999999999998,
+    "70": 20.9605,
+    "128": 21.328,
+    "256": 27.535999999999998,
+    "972": 59.5365,
+    "2053": 104.4165,
+    "2379": 104.64,
+    "8192": 342.657
+  },
+  "official_gpu": {
+    "physical_index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "initial_query": "0, GPU-abbc4299-8500-54d7-2a37-3ccac762f30d, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+    "sm_lock": [
+      1500,
+      1500
+    ],
+    "memory_lock": null,
+    "supported_memory_clocks_mhz": [
+      3996
+    ],
+    "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000008:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+    "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+    "samples": [
+      "1500 MHz, 3996 MHz"
+    ]
+  },
+  "runtime_libraries": {
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta",
+    "cuda": "13.0"
+  },
+  "source_sha256": "db4f7ec81aa274a8599c401635d2904b09e744dfcaa7719df6e84ff9f9e66206",
+  "paired_gpu": {
+    "physical_index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "initial_query": "0, GPU-abbc4299-8500-54d7-2a37-3ccac762f30d, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+    "sm_lock": [
+      1500,
+      1500
+    ],
+    "memory_lock": null,
+    "supported_memory_clocks_mhz": [
+      3996
+    ],
+    "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000008:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+    "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+    "samples": [
+      "1500 MHz, 3996 MHz"
+    ]
+  },
+  "paired_runtime": {
+    "device": "NVIDIA GB300",
+    "capability": [
+      10,
+      3
+    ],
+    "multiprocessor_count": 152,
+    "torch": "2.10.0+cu130",
+    "cuda": "13.0",
+    "sum_of_first_call_and_sync_seconds_from_empty_triton_cache": {
+      "baseline": 2.269559280015528,
+      "submission": 1.3992891176603734
+    },
+    "peak_allocated_bytes": 830603264
+  },
+  "paired_status": {
+    "PASSED": 172
+  },
+  "paired": {
+    "0": {
+      "both_timed": 43,
+      "baseline_geomean_latency_us": 45.95839040362727,
+      "candidate_geomean_latency_us": 24.516088008073158,
+      "baseline_over_candidate_geomean": 1.874621692844843
+    },
+    "1": {
+      "both_timed": 43,
+      "baseline_geomean_latency_us": 45.946845392450065,
+      "candidate_geomean_latency_us": 24.502916546567853,
+      "baseline_over_candidate_geomean": 1.8751582206603021
+    }
+  }
+}

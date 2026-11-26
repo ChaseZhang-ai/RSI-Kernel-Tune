@@ -1,0 +1,14 @@
+{
+  "timestamp_utc": "2026-11-26T17:58:04+00:00",
+  "gpu_type": "B200",
+  "mode": "private",
+  "evaluation_stack_target": "v1.1",
+  "source_sha256": "463cdd340a208fffbf14cdfc3f96d21ed0dee5a0d54243f6a202e9ee9ad089ec",
+  "slot": 10,
+  "active_at_whoami": 0,
+  "active_limit": 5,
+  "outcome": "upload_rate_limited_http_429",
+  "submission_id": null,
+  "workloads_passed": 0,
+  "workloads_evaluated": 0
+}

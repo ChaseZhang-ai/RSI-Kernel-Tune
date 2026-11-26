@@ -1,0 +1,441 @@
+{
+  "verification_scope": "GB300 only, paired direct launches using SOL-ExecBench reference, tolerance and timer",
+  "device": {
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "physical_index": 0,
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0"
+  },
+  "evaluator_version": "sol-execbench 1.0.2",
+  "timing": {
+    "warmups": 10,
+    "iterations": 50,
+    "method": "CUPTI first-to-last user kernel",
+    "cache": "cold L2",
+    "inputs": "cloned",
+    "outputs": "preallocated"
+  },
+  "workloads": [
+    {
+      "uuid": "007ddabb-3c8c-48a1-a693-c0618d32243c",
+      "axes": {
+        "len_indptr": 34,
+        "total_q": 16294,
+        "total_kv": 16294
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 1.676825800910592,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 687.1265
+        },
+        "candidate-v2": {
+          "first_call_s": 1.5376809262670577,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 839.9125
+        },
+        "packed-aligned": {
+          "first_call_s": 1.4565272969193757,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 853.255
+        },
+        "packed-forward": {
+          "first_call_s": 1.5059002162888646,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 843.303
+        },
+        "packed-8m": {
+          "first_call_s": 1.1881069294176996,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 728.3735
+        },
+        "packed-128n": {
+          "first_call_s": 2.6407639998942614,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 1505.5485
+        },
+        "packed-16m-mid": {
+          "first_call_s": 0.005549007095396519,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 839.56
+        },
+        "short-2w": {
+          "first_call_s": 0.005275276955217123,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 839.766
+        }
+      }
+    },
+    {
+      "uuid": "5c51d2e8-4c3e-42db-8f9c-73c09ab81e29",
+      "axes": {
+        "len_indptr": 28,
+        "total_q": 12251,
+        "total_kv": 12251
+      },
+      "trials": {
+        "candidate-v2": {
+          "first_call_s": 1.5434825653210282,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 588.869
+        },
+        "packed-aligned": {
+          "first_call_s": 1.529493282083422,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 606.934
+        },
+        "packed-forward": {
+          "first_call_s": 1.541347833815962,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 590.293
+        },
+        "packed-8m": {
+          "first_call_s": 1.2557247187942266,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 506.1165000000001
+        },
+        "packed-128n": {
+          "first_call_s": 2.6568493843078613,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 1069.6575
+        },
+        "packed-16m-mid": {
+          "first_call_s": 0.0027161831967532635,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 588.74
+        },
+        "short-2w": {
+          "first_call_s": 0.002552405931055546,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 588.5005000000001
+        },
+        "baseline": {
+          "first_call_s": 1.476567116100341,
+          "max_abs_errors": [
+            0.015625,
+            2.384185791015625e-06
+          ],
+          "status": "passed",
+          "latency_us": 481.57300000000004
+        }
+      }
+    },
+    {
+      "uuid": "b3445888-8668-4721-9359-9da119ab9f34",
+      "axes": {
+        "len_indptr": 16,
+        "total_q": 969,
+        "total_kv": 969
+      },
+      "trials": {
+        "packed-aligned": {
+          "first_call_s": 1.2557787606492639,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 29.727999999999998
+        },
+        "packed-forward": {
+          "first_call_s": 1.265582867898047,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 29.5045
+        },
+        "packed-8m": {
+          "first_call_s": 0.001752366777509451,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 29.520999999999997
+        },
+        "packed-128n": {
+          "first_call_s": 0.001564140897244215,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 29.3605
+        },
+        "packed-16m-mid": {
+          "first_call_s": 1.6382354088127613,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 38.080000000000005
+        },
+        "short-2w": {
+          "first_call_s": 0.0019408492371439934,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 29.392500000000002
+        },
+        "baseline": {
+          "first_call_s": 0.0020061610266566277,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 26.176499999999997
+        },
+        "candidate-v2": {
+          "first_call_s": 0.0018386710435152054,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 29.536
+        }
+      }
+    },
+    {
+      "uuid": "1f97930e-1a06-4e84-9875-09a22fff8a7c",
+      "axes": {
+        "len_indptr": 4,
+        "total_q": 172,
+        "total_kv": 172
+      },
+      "trials": {
+        "packed-forward": {
+          "first_call_s": 0.8231350588612258,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.56
+        },
+        "packed-8m": {
+          "first_call_s": 0.0016344459727406502,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.48
+        },
+        "packed-128n": {
+          "first_call_s": 0.0016988301649689674,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.56
+        },
+        "packed-16m-mid": {
+          "first_call_s": 1.116214457899332,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 17.535999999999998
+        },
+        "short-2w": {
+          "first_call_s": 0.0018507987260818481,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.56
+        },
+        "baseline": {
+          "first_call_s": 0.0018456471152603626,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.144
+        },
+        "candidate-v2": {
+          "first_call_s": 0.0020065130665898323,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.527999999999999
+        },
+        "packed-aligned": {
+          "first_call_s": 0.8401893028058112,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.144
+        }
+      }
+    },
+    {
+      "uuid": "3ca7457e-e4b1-42a4-b6c7-c0b37c461054",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "trials": {
+        "packed-8m": {
+          "first_call_s": 0.4203933239914477,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 4.32
+        },
+        "packed-128n": {
+          "first_call_s": 0.002855928149074316,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 4.288500000000001
+        },
+        "packed-16m-mid": {
+          "first_call_s": 0.0024815890938043594,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 4.288
+        },
+        "short-2w": {
+          "first_call_s": 0.32518933014944196,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 4.672
+        },
+        "baseline": {
+          "first_call_s": 0.003240603022277355,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.096
+        },
+        "candidate-v2": {
+          "first_call_s": 0.002563668880611658,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 4.240499999999999
+        },
+        "packed-aligned": {
+          "first_call_s": 0.0027660708874464035,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 4.240000000000001
+        },
+        "packed-forward": {
+          "first_call_s": 0.002664310857653618,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 4.304
+        }
+      }
+    }
+  ]
+}

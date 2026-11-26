@@ -1,0 +1,178 @@
+{
+  "verification_scope": "GB300 only, paired direct launches using SOL-ExecBench reference, tolerance and timer",
+  "device": {
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "physical_index": 0,
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0"
+  },
+  "evaluator_version": "sol-execbench 1.0.2",
+  "timing": {
+    "warmups": 10,
+    "iterations": 50,
+    "method": "CUPTI first-to-last user kernel",
+    "cache": "cold L2",
+    "inputs": "cloned",
+    "outputs": "preallocated"
+  },
+  "workloads": [
+    {
+      "uuid": "5c51d2e8-4c3e-42db-8f9c-73c09ab81e29",
+      "axes": {
+        "len_indptr": 28,
+        "total_q": 12251,
+        "total_kv": 12251
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 0.3015928650274873,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 480.4035
+        },
+        "candidate-v2": {
+          "first_call_s": 0.005328428000211716,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 588.309
+        },
+        "tma-128-64-ws": {
+          "status": "build_failure",
+          "error_summary": "PassManager::run failed"
+        },
+        "tma-128-128-ws": {
+          "status": "build_failure",
+          "error_summary": "PassManager::run failed"
+        },
+        "tma-64-64-ws": {
+          "status": "build_failure",
+          "error_summary": "PassManager::run failed"
+        },
+        "tma-128-64-nospec": {
+          "first_call_s": 0.8715675929561257,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 568.532
+        }
+      }
+    },
+    {
+      "uuid": "007ddabb-3c8c-48a1-a693-c0618d32243c",
+      "axes": {
+        "len_indptr": 34,
+        "total_q": 16294,
+        "total_kv": 16294
+      },
+      "trials": {
+        "candidate-v2": {
+          "first_call_s": 0.0027799271047115326,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 838.855
+        },
+        "tma-128-64-ws": {
+          "status": "build_failure",
+          "error_summary": "PassManager::run failed"
+        },
+        "tma-128-128-ws": {
+          "status": "build_failure",
+          "error_summary": "PassManager::run failed"
+        },
+        "tma-64-64-ws": {
+          "status": "build_failure",
+          "error_summary": "PassManager::run failed"
+        },
+        "tma-128-64-nospec": {
+          "first_call_s": 0.6864476893097162,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 823.2705
+        },
+        "baseline": {
+          "first_call_s": 0.00487898476421833,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 687.141
+        }
+      }
+    },
+    {
+      "uuid": "b3445888-8668-4721-9359-9da119ab9f34",
+      "axes": {
+        "len_indptr": 16,
+        "total_q": 969,
+        "total_kv": 969
+      },
+      "trials": {
+        "tma-128-64-ws": {
+          "status": "build_failure",
+          "error_summary": "PassManager::run failed"
+        },
+        "tma-128-128-ws": {
+          "status": "build_failure",
+          "error_summary": "PassManager::run failed"
+        },
+        "tma-64-64-ws": {
+          "status": "build_failure",
+          "error_summary": "PassManager::run failed"
+        },
+        "tma-128-64-nospec": {
+          "first_call_s": 0.7130232960917056,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 25.1045
+        },
+        "baseline": {
+          "first_call_s": 0.0017866380512714386,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 26.288
+        },
+        "candidate-v2": {
+          "first_call_s": 0.001688429620116949,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 29.3765
+        }
+      }
+    }
+  ]
+}

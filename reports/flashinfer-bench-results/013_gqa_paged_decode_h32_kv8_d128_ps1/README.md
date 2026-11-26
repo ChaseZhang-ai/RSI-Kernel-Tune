@@ -70,3 +70,28 @@ The fresh Triton cache trial took 4.066 seconds summed across synchronized candi
 [Paired timings](gb300-v3-paired.jsonl) · [Official evaluator timings](gb300-v3-official.jsonl) · [Synthetic checks](gb300-v3-edge-cases.jsonl)
 
 The 256-token scheduling slots use at most 4.63 MiB of scratch across the official workloads. The largest official K and V tensors total 318 MiB. The distributed Gluon prototypes hit compiler lowering errors and were dropped. The materialized Parquet SHA-256 was `89d1feacf02b6f8c07ec8d67a9dbb2c531652251095a7f762f2bc296f6a1fe74`. The local SOL-ExecBench source checkout resolved to `a9fa0804c793d438e70850c33fe34426e66d53dd`.
+
+## GB300 paired and standalone trial v4
+
+The kernel uses 64-token slots for short B=16 rows and two pipeline stages for long rows. Programmatic dependent launch overlaps the split merge while preserving the device dependency before reading partials. This trial also remeasured v3 against the same inputs on the same GPU.
+
+The AKO4X seed, v1, and the new candidate each passed 48/48 paired checks and timings. The exact bundled DPS source passed 48/48 in the standalone evaluator, including all ten numerical rounds and CUPTI timing. All 22 synthetic invocations passed separately for output and base-2 LSE.
+
+| Batch | AKO4X seed | v1 | New candidate |
+| ---: | ---: | ---: | ---: |
+| 1 | 6.744 µs | 6.057 µs | 5.932 µs |
+| 16 | 34.657 µs | 19.293 µs | 12.216 µs |
+| 64 | 68.876 µs | 68.502 µs | 59.431 µs |
+| All | 25.250 µs | 20.004 µs | 16.270 µs |
+
+Geometric means are from cold-L2 CUPTI first-to-last kernel timing with 10 warmups, 50 timed calls, cloned inputs at shifted addresses, and preallocated outputs. All runs in this trial used physical GB300 2, UUID `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, capability 10.3, 152 queried SMs, 1500/3996 MHz, SOL-ExecBench 1.0.2, Torch 2.10.0+cu130, and Triton 3.6.0.
+
+The fresh Triton cache trial took 3.657 seconds summed across synchronized candidate first calls, with a maximum of 0.765 seconds per call. The maximum paired absolute errors were 0.0078125 for BF16 output and 1.90735e-06 for base-2 LSE. The submission SHA-256 is `a87829109655b600d34e2d4741f2f495817caaa4affdefe561dff6f088956bf9`.
+
+[Paired timings](gb300-v4-paired.jsonl) · [Official evaluator timings](gb300-v4-official.jsonl) · [Synthetic checks](gb300-v4-edge-cases.jsonl)
+
+The same-GPU v3 rerun measured 16.971 µs overall, 13.822 µs at B=16 and 61.944 µs at B=64. The v4 candidate improved the overall geometric mean by 4.1% versus v3 and by 35.6% versus the seed.
+
+The exact v4 DPS bundle also passed 48/48 on physical GB300 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, using Torch 2.9.0+cu130, Triton 3.5.0, and the CUDA 13.1 `ptxas` for the queried capability 10.3. GPU 3 has 152 queried SMs and was locked at 1500/3996 MHz. An earlier alternate-stack v3 trial hit a build error because the bundled assembler lacked `sm_103a` support. The build error is recorded separately from timing and numerical outcomes. [Alternate stack pass](gb300-v4-torch29-triton35.jsonl) · [Legacy assembler error](gb300-v3-legacy-assembler-build.jsonl)
+
+Materialization preserved the official axes, reference and per-workload tolerances. The Parquet row’s empty optional `hf_id` field was omitted to satisfy the local evaluator’s definition schema.

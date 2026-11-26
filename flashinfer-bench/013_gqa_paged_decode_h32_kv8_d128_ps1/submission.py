@@ -9,6 +9,7 @@ loading the page index once per token tile and reusing it for K and V.
 import torch
 import triton
 import triton.language as tl
+from triton.language.extra.cuda import gdc_launch_dependents, gdc_wait
 
 
 @triton.jit
@@ -156,9 +157,12 @@ def _launch(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse,
 def _chunked(
     Q, K, V, Indptr, Indices, Partial, PartialLse, scale,
     BATCH: tl.constexpr, CHUNK: tl.constexpr, N: tl.constexpr,
+    PDL: tl.constexpr,
 ):
-    slot = tl.program_id(0)
-    kv_head = tl.program_id(1)
+    if PDL:
+        gdc_wait()
+    kv_head = tl.program_id(2)
+    slot = tl.program_id(1)
     # Sequence b owns [indptr[b] // CHUNK + b, indptr[b + 1] // CHUNK + b + 1).
     # The extra slot lets the same grid handle an empty row. Clamp each tile
     # to the live bounds in indptr.
@@ -178,7 +182,7 @@ def _chunked(
     max_score = tl.full((16,), -float("inf"), tl.float32)
     denom = tl.full((16,), 0.0, tl.float32)
     numer = tl.full((16, 128), 0.0, tl.float32)
-    for start in range(begin, end, N):
+    for start in range(begin, begin + N if N == CHUNK else end, N):
         tile = start + token
         valid = tile < end
         page = tl.load(Indices + tile, valid, 0)
@@ -188,8 +192,9 @@ def _chunked(
         score = tl.dot(query, tl.trans(key)) * scale
         score = tl.where(valid[None, :], score, -float("inf"))
         next_max = tl.maximum(max_score, tl.max(score, 1))
-        corr = tl.exp2(max_score - next_max)
-        weights = tl.exp2(score - next_max[:, None])
+        safe_max = tl.where(end > begin, next_max, 0.0) if N == CHUNK else next_max
+        corr = tl.exp2(max_score - safe_max)
+        weights = tl.exp2(score - safe_max[:, None])
         denom = denom * corr + tl.sum(weights, 1)
         numer = tl.dot(weights.to(tl.bfloat16), value, numer * corr[:, None])
         max_score = next_max
@@ -198,15 +203,19 @@ def _chunked(
     slot_head = slot * 32 + kv_head * 4 + row
     tl.store(Partial + slot_head[:, None] * 128 + dim[None, :], result, row[:, None] < 4)
     tl.store(PartialLse + slot_head, max_score + tl.log2(denom), row < 4)
+    if PDL:
+        gdc_launch_dependents()
 
 
 @triton.jit
 def _chunked_merge(
     Indptr, Partial, PartialLse, Out, Lse,
-    CHUNK: tl.constexpr, G: tl.constexpr, STRIDE: tl.constexpr,
+    CHUNK: tl.constexpr, G: tl.constexpr, STRIDE: tl.constexpr, PDL: tl.constexpr,
 ):
     pg = tl.program_id(0)
     batch = tl.program_id(1)
+    if PDL:
+        gdc_wait()
     begin = tl.load(Indptr + batch) // CHUNK + batch
     end = tl.load(Indptr + batch + 1) // CHUNK + batch + 1
     heads = pg * G + tl.arange(0, G)
@@ -241,13 +250,13 @@ def _launch_chunked(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output
     slots = count // chunk + batch
     partial = torch.empty((slots * 32, 128), device=q.device, dtype=torch.float32)
     partial_lse = torch.empty((slots * 32,), device=q.device, dtype=torch.float32)
-    _chunked[(slots, 8)](
+    _chunked[(1, slots, 8)](
         q, k_cache, v_cache, kv_indptr, kv_indices, partial, partial_lse,
-        float(sm_scale) * 1.4426950408889634, batch, chunk, tile,
-        num_warps=warps, num_stages=stages,
+        float(sm_scale) * 1.4426950408889634, batch, chunk, tile, True,
+        num_warps=warps, num_stages=stages, launch_pdl=True,
     )
     _chunked_merge[(8, batch)](
-        kv_indptr, partial, partial_lse, output, lse, chunk, 4, 8, num_warps=4,
+        kv_indptr, partial, partial_lse, output, lse, chunk, 4, 8, True, num_warps=4, launch_pdl=True,
     )
 
 
@@ -259,13 +268,15 @@ def run(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse):
             float(sm_scale) * 1.4426950408889634,
             max(1, triton.next_power_of_2(count)), num_warps=1,
         )
-    elif batch >= 32 or (batch > 1 and count > batch * 281):
-        # Balance work across CTAs by splitting contiguous spans of the page
-        # list, regardless of how the sequence lengths vary within a batch.
-        if batch < 32 and count <= batch * 1024:
+    elif batch >= 32 or (batch > 1 and count > batch * 32):
+        # Keep chunk work bounded as row lengths vary. The larger batches
+        # amortize each CTA over more tokens.
+        if batch < 32 and count <= batch * 281:
+            config = (64, 64, 4, 1)
+        elif batch < 32 and count <= batch * 1024:
             config = (128, 32, 2, 2)
         else:
-            config = (256, 64, 4, 3)
+            config = (256, 64, 4, 2)
         _launch_chunked(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale,
                         output, lse, config)
     else:

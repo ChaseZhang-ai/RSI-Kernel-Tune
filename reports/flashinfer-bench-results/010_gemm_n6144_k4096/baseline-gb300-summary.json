@@ -1,0 +1,37 @@
+{
+  "official_workload_status": {
+    "PASSED": 43
+  },
+  "official_geomean_latency_us": 45.51562035015791,
+  "official_selected_latency_us": {
+    "1": 36.257,
+    "8": 36.352000000000004,
+    "15": 36.208000000000006,
+    "35": 40.5595,
+    "70": 38.144,
+    "128": 38.144,
+    "256": 39.808,
+    "972": 103.04050000000001,
+    "2053": 190.9125,
+    "2379": 204.657,
+    "8192": 692.9935
+  },
+  "official_gpu": {
+    "physical_index": 1,
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "initial_query": "1, GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+    "sm_lock": [
+      1500,
+      1500
+    ],
+    "memory_lock": [
+      3996,
+      3996
+    ],
+    "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+    "samples": [
+      "1500 MHz, 3996 MHz"
+    ]
+  },
+  "source_sha256": "6ed6aa0cac935aeb5fc14f2845190fe9c82552dee20a50c061e66179d754a976"
+}

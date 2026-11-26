@@ -1,0 +1,324 @@
+{
+  "id": 105828,
+  "status": "PENDING_RESULT",
+  "is_correct": null,
+  "sol_score": null,
+  "latency_ms": null,
+  "gpu_type": "B200",
+  "evaluation_stack_version": "v1.1",
+  "submission_mode": "private",
+  "submitted_at": "2026-11-26T17:08:39.344820",
+  "finished_at": "2026-11-26T17:09:23.547141",
+  "result_available_at": "2026-11-26T18:09:23.547147",
+  "fast_1_count": null,
+  "fast_1_total": null,
+  "avg_speedup": null,
+  "benchmark_results": null,
+  "reported_failures": [
+    {
+      "M": 216,
+      "uuid": "4bc7f138-6225-4981-a282-a7f63c9ba77c",
+      "status": "TIMING_FAILURE",
+      "detail": "Missing CUPTI kernel activity",
+      "latency_ms": null
+    },
+    {
+      "M": 192,
+      "uuid": "7cb4e12c-193b-4d8f-b129-e3a3c3a44a34",
+      "status": "TIMING_FAILURE",
+      "detail": "Missing CUPTI kernel activity",
+      "latency_ms": null
+    },
+    {
+      "M": 104,
+      "uuid": "70741a6a-fb7f-4a85-95e3-f53a23877d6a",
+      "status": "TIMING_FAILURE",
+      "detail": "Missing CUPTI kernel activity",
+      "latency_ms": null
+    },
+    {
+      "M": 56,
+      "uuid": "100982d0-47c3-4558-b420-7c7e03cc14c8",
+      "status": "TIMING_FAILURE",
+      "detail": "Missing CUPTI kernel activity",
+      "latency_ms": null
+    },
+    {
+      "M": 1,
+      "uuid": "74c12c29-4826-400f-a5ab-30eea79defcc",
+      "status": "TIMING_FAILURE",
+      "detail": "Missing CUPTI kernel activity",
+      "latency_ms": null
+    },
+    {
+      "M": 8192,
+      "uuid": "33a78bbf-0071-43b4-874b-60aee52b5f08",
+      "status": "TIMING_FAILURE",
+      "detail": "Missing CUPTI kernel activity",
+      "latency_ms": null
+    },
+    {
+      "M": 256,
+      "uuid": "000bed54-6e96-4655-a8ef-61dd810c6e1b",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 248,
+      "uuid": "342e6dfa-076a-499f-8921-054f503100b7",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 240,
+      "uuid": "a73527f6-7701-43ac-8032-077e7461926c",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 232,
+      "uuid": "bfd9b353-4131-474b-8060-ca1d57c7c86e",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 224,
+      "uuid": "c5c256fc-8483-44f4-8e20-e6ca0a7de69a",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 208,
+      "uuid": "3fb595c8-b079-4104-9971-ea111675a54a",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 200,
+      "uuid": "39b0275d-3832-4e0c-857e-23f93b4a49cd",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 184,
+      "uuid": "f8b22ebe-fd61-4fbe-a25c-028cdbf38d66",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 176,
+      "uuid": "af0d058f-cf8c-4029-8551-795c61b3e68a",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 168,
+      "uuid": "2e011468-f5ac-4a2d-a453-6049544454bc",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 160,
+      "uuid": "410434c2-b732-44ce-9caa-658471c62b5c",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 152,
+      "uuid": "b598d604-a3dc-473a-8774-d8ff8be018f9",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 144,
+      "uuid": "1459cc54-6a42-4c66-b36e-af363b08b406",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 136,
+      "uuid": "1d65bb75-1568-4f2f-a5ce-1e2f051d2c52",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 128,
+      "uuid": "fa90185a-1549-434f-8b2d-da007c55d3d0",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 120,
+      "uuid": "5b2af05a-42ea-427e-9252-8477591651d3",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 112,
+      "uuid": "973e9b89-5cb2-4bf7-921d-5aa195cd483e",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 96,
+      "uuid": "044a0e91-093b-451c-b350-4e3584664f78",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 88,
+      "uuid": "6d52724e-c22e-4d5f-884a-e36c8bb56f88",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 80,
+      "uuid": "b3cd8379-9eb0-4962-9fd7-c9689563c3d6",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 72,
+      "uuid": "f0d7afa3-602d-4b39-bf81-6b269da7da1f",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 64,
+      "uuid": "8c2d42fd-2a7f-46f9-b1f5-9bcb9197486d",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 48,
+      "uuid": "e2a669f0-171e-4e7e-9a8f-8371097345bd",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 40,
+      "uuid": "9c87618b-7b6e-43b5-9169-dc68e949097a",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 32,
+      "uuid": "b0931dc6-2aed-46aa-9199-afbfbc630edf",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 24,
+      "uuid": "245cb53f-3029-4153-bcdd-a01789ff8142",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 16,
+      "uuid": "ae01e4c2-42c3-4187-805c-c7a8ec6ee61f",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 8,
+      "uuid": "eaecffe5-237c-4bb9-89c7-c62175ee0ae6",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 4,
+      "uuid": "38c73574-2719-45ca-8d62-0b8103ef95a1",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 2,
+      "uuid": "3413462d-a144-4035-8773-af31e628a066",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 7,
+      "uuid": "0fa99f0b-1334-417d-b5a9-087806b5b511",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 35,
+      "uuid": "2f89fa7f-23ba-46c7-b422-cee6b677f943",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 972,
+      "uuid": "35af8dd3-037e-4d78-ba39-61795bc40112",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 70,
+      "uuid": "ba973a1f-ae70-4542-9456-1179812aa0a6",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 2053,
+      "uuid": "88ff8914-263f-4202-8093-826f2f30810a",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 2379,
+      "uuid": "3c6254c6-20a6-459e-80e4-46d5d04b1762",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    },
+    {
+      "M": 15,
+      "uuid": "cd17170b-a377-49cc-a779-3728c0287a1c",
+      "status": "FAILED",
+      "detail": "Board marked the workload failed without a specific cause",
+      "latency_ms": null
+    }
+  ],
+  "failure_status_counts": {
+    "TIMING_FAILURE": 6,
+    "FAILED": 37
+  }
+}

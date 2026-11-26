@@ -1,0 +1,95 @@
+{
+  "operator": "014_gqa_paged_prefill_causal_h32_kv4_d128_ps1",
+  "verification": {
+    "official_local": {
+      "command": "sol-execbench <problem_dir> --solution solution.json --output results.jsonl",
+      "evaluator": "sol-execbench 1.0.2 (a9fa080)",
+      "gpu": {
+        "model": "GB300",
+        "physical_index": 3,
+        "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+        "sm_count": 152,
+        "sm_mhz": 1500,
+        "memory_mhz": 3996,
+        "capability": [
+          10,
+          3
+        ]
+      },
+      "triton": "3.6.0",
+      "torch": "2.10.0+cu130",
+      "reference_rounds": 10,
+      "baseline": {
+        "passed": 30,
+        "total": 30,
+        "sha256": "d4731b603d2acbc6138d80d482e37330ad4b0f2b9961cac1e707da5b526f2a7a",
+        "median_latency_us": 34.28
+      }
+    },
+    "paired_screen_v1": {
+      "evaluator": "sol-execbench 1.0.2 CUPTI and tolerance helpers",
+      "gpu": {
+        "model": "GB300",
+        "physical_index": 0,
+        "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+        "sm_count": 152,
+        "sm_mhz": 1500,
+        "memory_mhz": 3996,
+        "capability": [
+          10,
+          3
+        ]
+      },
+      "triton": "3.6.0",
+      "torch": "2.10.0+cu130",
+      "reference_rounds": 1,
+      "reference": "FP32 batched matmul with official causal rule and tolerances",
+      "all_workloads_paired": 30,
+      "geomean_baseline_over_candidate": 1.7468762902363961,
+      "baseline": {
+        "passed": 30,
+        "median_latency_us": 34.1285,
+        "cold_first_calls_total_s": 6.0361,
+        "cold_first_calls_max_s": 0.9472
+      },
+      "packed_sparse": {
+        "passed": 30,
+        "median_latency_us": 16.48025,
+        "cold_first_calls_total_s": 14.4535,
+        "cold_first_calls_max_s": 1.1266
+      }
+    },
+    "timing": {
+      "warmups": 10,
+      "iterations": 50,
+      "statistic": "median",
+      "cold_l2": true,
+      "cloned_inputs": true,
+      "preallocated_outputs": true,
+      "method": "CUPTI first-to-last activity"
+    }
+  },
+  "experiments": [
+    {
+      "outcome": "build_error",
+      "case": "first sparse sweep",
+      "details": "Incompatible scalar/vector types in Triton conditional. Fixed before the paired sweep."
+    },
+    {
+      "outcome": "build_error",
+      "case": "automatic warp specialization on Triton 3.6.0",
+      "details": "Automatic warp-specialization pass failed. Non-specialized packed K/V passed."
+    },
+    {
+      "outcome": "numerical_failure",
+      "case": "single-query page histogram",
+      "details": "Incorrect output and LSE with unmasked padding. Plain gather passed."
+    },
+    {
+      "outcome": "submission_rate_limited",
+      "gpu": "B200",
+      "timestamp_utc": "2026-11-26T17:40:00Z",
+      "detail": "HTTP 429 during upload. No submission ID."
+    }
+  ]
+}

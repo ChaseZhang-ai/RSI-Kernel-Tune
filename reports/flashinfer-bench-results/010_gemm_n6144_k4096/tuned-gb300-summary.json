@@ -31,6 +31,11 @@
       "1500 MHz, 3996 MHz"
     ]
   },
+  "runtime_libraries": {
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "cuda": "13.0"
+  },
   "source_sha256": "7fdd29e170190a870eea9fd678a0547622fa91adc35f80b03d45fb27e719599f",
   "paired_gpu": {
     "physical_index": 0,

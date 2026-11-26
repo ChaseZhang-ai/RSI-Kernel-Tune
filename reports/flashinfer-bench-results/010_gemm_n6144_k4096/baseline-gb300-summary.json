@@ -24,14 +24,16 @@
       1500,
       1500
     ],
-    "memory_lock": [
-      3996,
-      3996
-    ],
+    "memory_lock": null,
     "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
     "samples": [
       "1500 MHz, 3996 MHz"
     ]
+  },
+  "runtime_libraries": {
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "cuda": "13.0"
   },
   "source_sha256": "6ed6aa0cac935aeb5fc14f2845190fe9c82552dee20a50c061e66179d754a976"
 }

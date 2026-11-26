@@ -1,68 +1,153 @@
-"""FP16 GEMM with FP32 accumulation and destination-passing output."""
+"""Destination-passing FP16 GEMM using Blackwell tensor cores."""
 
 import torch
 import triton
 import triton.language as tl
-from triton.tools.tensor_descriptor import TensorDescriptor
+from triton.experimental import gluon
+from triton.experimental.gluon import language as gl
+from triton.experimental.gluon.language.nvidia.blackwell import (
+    TensorMemoryLayout,
+    allocate_tensor_memory,
+    tcgen05_commit,
+    tcgen05_mma,
+)
+from triton.experimental.gluon.language.nvidia.hopper import fence_async_shared, mbarrier, tma
+from triton.experimental.gluon.nvidia.hopper import TensorDescriptor
 
 
-N = 6144
-_N: tl.constexpr = tl.constexpr(6144)
-_K: tl.constexpr = tl.constexpr(4096)
+# The producer/MMA/epilogue partitioning follows the Triton Gluon tutorial.
+# https://github.com/triton-lang/triton/blob/main/python/tutorials/gluon/08-warp-specialization.py
+# Swapped operands for small M follow QianQu and the CompoundingKernel Explorer.
+# https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/main/kernels/FlashInfer/010_gemm_n6144_k4096
+# Tile residency and staging draw on RSI-Kernel-Tune's H100 GEMM.
+# https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/main/kernels/gemm/gemm_fp16/h100/kernel.py
+
+
+@gluon.jit
+def _read_tiles(a, b, a_ring, b_ring, load_free, load_ready,
+                TM: gl.constexpr, TN: gl.constexpr, TK: gl.constexpr,
+                STAGES: gl.constexpr, WORKERS: gl.constexpr):
+    tiles_n: gl.constexpr = 6144 // TN
+    total = gl.cdiv(a.shape[0], TM) * tiles_n
+    step = 0
+    for tile in range(gl.program_id(0), total, WORKERS):
+        row = tile // tiles_n * TM
+        col = tile % tiles_n * TN
+        for k in range(4096 // TK):
+            index = step % STAGES
+            phase = step // STAGES & 1
+            mbarrier.wait(load_free.index(index), phase ^ 1)
+            ready = load_ready.index(index)
+            mbarrier.expect(ready, (TM + TN) * TK * 2)
+            tma.async_copy_global_to_shared(a, [row, k * TK], ready, a_ring.index(index))
+            tma.async_copy_global_to_shared(b, [col, k * TK], ready, b_ring.index(index))
+            step += 1
+
+
+@gluon.jit
+def _multiply_tiles(m, a_ring, b_ring, load_free, load_ready, acc, acc_free, acc_ready,
+                    TM: gl.constexpr, TN: gl.constexpr, TK: gl.constexpr,
+                    STAGES: gl.constexpr, WORKERS: gl.constexpr, SWAP: gl.constexpr,
+                    ACC_STAGES: gl.constexpr):
+    total = gl.cdiv(m, TM) * (6144 // TN)
+    step = 0
+    wave = 0
+    for tile in range(gl.program_id(0), total, WORKERS):
+        acc_index = wave % ACC_STAGES
+        acc_phase = wave // ACC_STAGES & 1
+        mbarrier.wait(acc_free.index(acc_index), acc_phase ^ 1)
+        out = acc.index(acc_index)
+        for k in range(4096 // TK):
+            index = step % STAGES
+            phase = step // STAGES & 1
+            mbarrier.wait(load_ready.index(index), phase)
+            operand_a = a_ring.index(index)
+            operand_b = b_ring.index(index)
+            if SWAP:
+                tcgen05_mma(operand_b, operand_a.permute((1, 0)), out, use_acc=k != 0)
+            else:
+                tcgen05_mma(operand_a, operand_b.permute((1, 0)), out, use_acc=k != 0)
+            tcgen05_commit(load_free.index(index))
+            step += 1
+        tcgen05_commit(acc_ready.index(acc_index))
+        wave += 1
+
+
+@gluon.jit
+def _write_tiles(c, acc, acc_free, acc_ready, TM: gl.constexpr, TN: gl.constexpr,
+                 WORKERS: gl.constexpr, SWAP: gl.constexpr, ACC_STAGES: gl.constexpr):
+    tiles_n: gl.constexpr = 6144 // TN
+    total = gl.cdiv(c.shape[0], TM) * tiles_n
+    temp = gl.allocate_shared_memory(gl.float16, [TM, TN], c.layout)
+    wave = 0
+    for tile in range(gl.program_id(0), total, WORKERS):
+        row = tile // tiles_n * TM
+        col = tile % tiles_n * TN
+        acc_index = wave % ACC_STAGES
+        acc_phase = wave // ACC_STAGES & 1
+        mbarrier.wait(acc_ready.index(acc_index), acc_phase)
+        values = acc.index(acc_index).load().to(gl.float16)
+        tma.store_wait(pendings=0)
+        if SWAP:
+            temp.store(values.permute((1, 0)))
+        else:
+            temp.store(values)
+        mbarrier.arrive(acc_free.index(acc_index), count=1)
+        fence_async_shared()
+        tma.async_copy_shared_to_global(c, [row, col], temp)
+        wave += 1
+    tma.store_wait(pendings=0)
+
+
+@gluon.jit
+def _matmul(a, b, c, TM: gl.constexpr, TN: gl.constexpr, TK: gl.constexpr,
+            STAGES: gl.constexpr, WORKERS: gl.constexpr, SWAP: gl.constexpr,
+            ACC_STAGES: gl.constexpr):
+    a_ring = gl.allocate_shared_memory(gl.float16, [STAGES, TM, TK], a.layout)
+    b_ring = gl.allocate_shared_memory(gl.float16, [STAGES, TN, TK], b.layout)
+    load_free = gl.allocate_shared_memory(gl.int64, [STAGES, 1], mbarrier.MBarrierLayout())
+    load_ready = gl.allocate_shared_memory(gl.int64, [STAGES, 1], mbarrier.MBarrierLayout())
+    acc_free = gl.allocate_shared_memory(gl.int64, [ACC_STAGES, 1], mbarrier.MBarrierLayout())
+    acc_ready = gl.allocate_shared_memory(gl.int64, [ACC_STAGES, 1], mbarrier.MBarrierLayout())
+    for i in gl.static_range(STAGES):
+        mbarrier.init(load_free.index(i), count=1)
+        mbarrier.init(load_ready.index(i), count=1)
+    for i in gl.static_range(ACC_STAGES):
+        mbarrier.init(acc_free.index(i), count=1)
+        mbarrier.init(acc_ready.index(i), count=1)
+    mm: gl.constexpr = TN if SWAP else TM
+    nn: gl.constexpr = TM if SWAP else TN
+    layout: gl.constexpr = TensorMemoryLayout([mm, nn], col_stride=1)
+    acc = allocate_tensor_memory(gl.float32, [ACC_STAGES, mm, nn], layout)
+    gl.warp_specialize([
+        (_write_tiles, (c, acc, acc_free, acc_ready, TM, TN, WORKERS, SWAP, ACC_STAGES)),
+        (_read_tiles, (a, b, a_ring, b_ring, load_free, load_ready, TM, TN, TK, STAGES, WORKERS)),
+        (_multiply_tiles, (a.shape[0], a_ring, b_ring, load_free, load_ready,
+                           acc, acc_free, acc_ready, TM, TN, TK, STAGES, WORKERS, SWAP, ACC_STAGES)),
+    ], [1, 1], [24, 32])
+
+
+def _desc(tensor, rows, cols):
+    shape = [rows, cols]
+    layout = gl.NVMMASharedLayout.get_default_for(shape, gl.float16)
+    return TensorDescriptor.from_tensor(tensor, shape, layout)
+
+
+def _launch(A, B, C, tm, tn, tk, stages, swap, acc_stages=2):
+    properties = torch.cuda.get_device_properties(A.device)
+    tiles = triton.cdiv(A.shape[0], tm) * (6144 // tn)
+    workers = min(tiles, properties.multi_processor_count)
+    _matmul[(workers,)](_desc(A, tm, tk), _desc(B, tn, tk), _desc(C, tm, tn),
+                       tm, tn, tk, stages, workers, swap, acc_stages, num_warps=4)
 
 
 @triton.jit
 def _gemv(A, B, C):
-    columns = tl.program_id(0) * 4 + tl.arange(0, 4)
-    k = tl.arange(0, _K)
+    n = tl.program_id(0) * 4 + tl.arange(0, 4)
+    k = tl.arange(0, 4096)
     a = tl.load(A + k).to(tl.float32)
-    b = tl.load(B + columns[:, None] * _K + k[None, :]).to(tl.float32)
-    tl.store(C + columns, tl.sum(a[None, :] * b, axis=1))
-
-
-# Swapping the operands for small M follows the public CompoundingKernel
-# Explorer implementation by QianQu and collaborators.
-# https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/main/kernels/FlashInfer/010_gemm_n6144_k4096
-@triton.jit
-def _swapped_gemm(A, B, C, M, TM: tl.constexpr, TK: tl.constexpr,
-                  WARP_SPECIALIZE: tl.constexpr):
-    row = tl.program_id(0) * TM
-    col = tl.program_id(1) * 64
-    acc = tl.full((64, TM), 0, tl.float32)
-    for step in tl.range(_K // TK, warp_specialize=WARP_SPECIALIZE):
-        a = A.load([row, step * TK])
-        b = B.load([col, step * TK])
-        acc = tl.dot(b, tl.trans(a), acc)
-    rows = row + tl.arange(0, TM)
-    cols = col + tl.arange(0, 64)
-    tl.store(C + rows[:, None] * _N + cols[None, :], tl.trans(acc), rows[:, None] < M)
-
-
-# The resident CTA schedule and asynchronous staging build on the ideas in
-# RSI-Kernel-Tune's H100 GEMM, with K-contiguous FP16 operands for Blackwell.
-# https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/main/kernels/gemm/gemm_fp16/h100/kernel.py
-@triton.jit
-def _persistent_gemm(A, B, C, M, TM: tl.constexpr, TN: tl.constexpr,
-                     TK: tl.constexpr, WORKERS: tl.constexpr,
-                     SEGMENTED_EPILOGUE: tl.constexpr):
-    tiles: tl.constexpr = _N // TN
-    total_tiles = tl.cdiv(M, TM) * tiles
-    for tile in tl.range(tl.program_id(0), total_tiles, WORKERS,
-                         flatten=True, warp_specialize=True):
-        row = tile // tiles * TM
-        col = tile % tiles * TN
-        acc = tl.full((TM, TN), 0, tl.float32)
-        for step in range(_K // TK):
-            a = A.load([row, step * TK])
-            b = B.load([col, step * TK])
-            acc = tl.dot(a, tl.trans(b), acc)
-        if SEGMENTED_EPILOGUE:
-            halves = tl.reshape(acc, (TM, 2, TN // 2))
-            left, right = tl.split(tl.permute(halves, (0, 2, 1)))
-            C.store([row, col], left.to(tl.float16))
-            C.store([row, col + TN // 2], right.to(tl.float16))
-        else:
-            C.store([row, col], acc.to(tl.float16))
+    b = tl.load(B + n[:, None] * 4096 + k[None, :]).to(tl.float32)
+    tl.store(C + n, tl.sum(a[None, :] * b, axis=1))
 
 
 @triton.jit
@@ -73,57 +158,35 @@ def _strided_gemm(A, B, C, M, AM, AK, BN, BK, CM, CN):
     a = A + rows[:, None] * AM + k[None, :] * AK
     b = B + cols[:, None] * BN + k[None, :] * BK
     acc = tl.full((32, 64), 0, tl.float32)
-    for step in range(_K // 64):
+    for step in range(4096 // 64):
         av = tl.load(a + step * 64 * AK, rows[:, None] < M, 0)
         bv = tl.load(b + step * 64 * BK)
         acc = tl.dot(av, tl.trans(bv), acc)
     tl.store(C + rows[:, None] * CM + cols[None, :] * CN, acc, rows[:, None] < M)
 
 
-def _descriptor(tensor, rows, cols):
-    return TensorDescriptor(tensor, tensor.shape, tensor.stride(), [rows, cols])
-
-
 def run(A, B, C):
     m = A.shape[0]
     if m == 0:
         return
-    tensors = (A, B, C)
-    if any(not tensor.is_contiguous() or tensor.data_ptr() % 16 for tensor in tensors):
-        _strided_gemm[(triton.cdiv(m, 32), N // 64)](
+    if any(not tensor.is_contiguous() or tensor.data_ptr() % 16 for tensor in (A, B, C)):
+        _strided_gemm[(triton.cdiv(m, 32), 6144 // 64)](
             A, B, C, m, *A.stride(), *B.stride(), *C.stride(),
             num_warps=4, num_stages=3,
         )
         return
     if m == 1:
-        _gemv[(N // 4,)](A, B, C, num_warps=8)
+        _gemv[(6144 // 4,)](A, B, C, num_warps=8)
         return
-    if m <= 128:
-        if m <= 16:
-            tm, tk, stages, specialize = 16, 256, 3, True
-        elif m <= 64:
-            tm, tk, stages, specialize = 64, 256, 3, True
-        elif m <= 72:
-            tm, tk, stages, specialize = 32, 128, 4, False
-        else:
-            tm, tk, stages, specialize = 128, 128, 4, True
-        _swapped_gemm[(triton.cdiv(m, tm), N // 64)](
-            _descriptor(A, tm, tk), _descriptor(B, 64, tk), C, m, tm, tk,
-            specialize, num_warps=4, num_stages=stages,
-        )
-        return
-    if m <= 192:
-        tm, tn, tk, stages, cluster, segmented = 64, 128, 128, 4, 1, False
-    elif m <= 256:
-        tm, tn, tk, stages, cluster, segmented = 128, 256, 128, 3, 2, False
-    elif 2048 < m <= 2176 or m >= 4096:
-        tm, tn, tk, stages, cluster, segmented = 128, 256, 64, 3, 1, True
+
+    if m <= 64:
+        tm = max(16, triton.next_power_of_2(m))
+        _launch(A, B, C, tm, 64, 256, 3, True, acc_stages=1)
+    elif m <= 128:
+        _launch(A, B, C, 128, 64, 128, 4, True, acc_stages=1)
+    elif m <= 192:
+        _launch(A, B, C, 64, 128, 128, 4, False)
+    elif 2048 < m <= 2560 or m >= 4096:
+        _launch(A, B, C, 128, 256, 64, 3, False)
     else:
-        tm, tn, tk, stages, cluster, segmented = 128, 128, 128, 3, 1, False
-    tiles = triton.cdiv(m, tm) * (N // tn)
-    workers = torch.cuda.get_device_properties(A.device).multi_processor_count // cluster
-    _persistent_gemm[(min(tiles, workers),)](
-        _descriptor(A, tm, tk), _descriptor(B, tn, tk),
-        _descriptor(C, tm, tn // 2 if segmented else tn), m,
-        tm, tn, tk, workers, segmented, num_warps=4, num_stages=stages, num_ctas=cluster,
-    )
+        _launch(A, B, C, 128, 128, 128, 3, False)

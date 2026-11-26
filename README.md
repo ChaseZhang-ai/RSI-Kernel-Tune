@@ -41,7 +41,7 @@ Contributors should push their **best candidate so far** to `flashinfer-bench/<o
 
 | Operator | B200 leader SOL | Campaign best B200 SOL | Public rank | SOL gap to leader | Latest run and evidence | Best candidate |
 |---|---:|---:|---:|---:|---|---|
-| [001_fused_add_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/210/B200) | 0.721444 | — | — | — | Pending | — |
+| [001_fused_add_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/210/B200) | 0.721444 | — | — | — | GB300 tuned packed CUDA passed 7/7 · B200 retry waiting for shared capacity · [evidence](reports/flashinfer-bench-results/001_fused_add_rmsnorm_h2048/README.md) | [GB300 only](flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py) |
 | [002_fused_add_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/211/B200) | 0.975342 | — | — | — | Pending | — |
 | [003_fused_add_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/212/B200) | 0.863498 | — | — | — | Pending | — |
 | [004_gemm_n128_k2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/213/B200) | 0.894803 | — | — | — | Pending | — |

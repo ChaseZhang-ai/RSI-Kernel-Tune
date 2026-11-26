@@ -34,3 +34,18 @@ Completed 2026-11-26 17:45:33 UTC on physical GPU 0 at the same queried clocks a
 - The v2 submission SHA-256 is `0df5d83bb655f4475beb8c0fbc77b0c9a81bda774f61ac3fee438b0214d3529f`.
 - The v2 synthetic suite passed 16 calls with shuffled and repeated page IDs, reversed uneven row lengths, empty rows, non-default scales, changed pointers and unreferenced NaN pages. Triton 3.5.0 required the CUDA 13.2 assembler on local SM 10.3 because the older bundled PTXAS lacks SM 10.3 support. The full evaluator above used Triton 3.6.0.
 - The first two private B200 upload requests were rate limited and returned no submission ID. Local results are provisional GB300 only.
+
+## GB300 hybrid v3
+
+Completed 2026-11-26 17:51:08 UTC on physical GPU 1, UUID `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`. SM/memory clocks were locked to 1500/3996 MHz. CUDA capability was 10.3 and the device reported 152 SMs. The paired comparison used the same lock and evaluator timing protocol as v1 and v2. Both sides passed 48/48. The exact standalone artifact passed the full CLI 48/48 and the 16-call synthetic suite. [Paired timings](gb300-pair-v3.jsonl) · [CLI results](gb300-evaluator-v3.jsonl)
+
+| Batch size | Workloads | Tuned v2 geomean (µs) | Hybrid v3 geomean (µs) |
+|---:|---:|---:|---:|
+| 1 | 16 | 5.243 | 5.086 |
+| 16 | 16 | 18.056 | 15.338 |
+| 64 | 16 | 43.644 | 41.488 |
+| All | 48 | 16.047 | 14.792 |
+
+- The CLI geomean was 14.815 µs. The sum of cold first-call wall times, including the native build, Triton JIT and synchronization, was 4.638 s. Native compilation used the capability queried from PyTorch.
+- The hybrid uses an asynchronous gather and a thread-block-cluster merge on the selected shapes. The Triton routes apply the same scaling, CSR traversal and destination-passing contract. Native partials live in shared memory, and global scratch on the remaining split route is bounded by the number of populated tiles plus one slot per row.
+- Exact submission SHA-256 `b77763759a56fcab9cd1838dd46ced5d31a2c76c811264c3759d9e2281f4914d`. Provisional GB300 verification.

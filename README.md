@@ -50,7 +50,7 @@ Contributors should push their **best candidate so far** to `flashinfer-bench/<o
 | [007_gemm_n4096_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/216/B200) | 1.000000 | — | — | — | Pending | — |
 | [008_gemm_n4096_k14336](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/217/B200) | 1.000000 | — | — | — | Pending | — |
 | [009_gemm_n5120_k2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/218/B200) | 1.000000 | — | — | — | Pending | — |
-| [010_gemm_n6144_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/219/B200) | 1.000000 | — | — | — | Pending | — |
+| [010_gemm_n6144_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/219/B200) | 1.000000 | — | — | — | GB300 baseline passed 43/43 with CUPTI · [evidence](reports/flashinfer-bench-results/010_gemm_n6144_k4096/) | [Provisional GB300 only](flashinfer-bench/010_gemm_n6144_k4096/submission.py) |
 | [011_gemm_n28672_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/220/B200) | 1.000000 | — | — | — | Pending | — |
 | [012_gqa_paged_decode_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/221/B200) | 0.992633 | — | — | — | Pending | — |
 | [013_gqa_paged_decode_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/222/B200) | 0.979799 | — | — | — | Pending | — |

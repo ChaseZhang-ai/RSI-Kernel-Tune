@@ -18,7 +18,8 @@ from triton.experimental.gluon.nvidia.hopper import TensorDescriptor
 # Pipeline adapted from the repository submission for FlashInfer 010.
 # The producer/MMA/epilogue partitioning follows the Triton Gluon tutorial.
 # https://github.com/triton-lang/triton/blob/main/python/tutorials/gluon/08-warp-specialization.py
-# Swapped operands for small M follow QianQu and the CompoundingKernel Explorer.
+# Swapped operands for small M follow the CompoundingKernel Explorer archive
+# (search-agent implementation by Claude, published by QianQu).
 # https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/main/kernels/FlashInfer/007_gemm_n4096_k4096
 # Tile residency and staging draw on RSI-Kernel-Tune's H100 GEMM.
 # https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/main/kernels/gemm/gemm_fp16/h100/kernel.py
@@ -144,10 +145,10 @@ def _desc(tensor, rows, cols):
     return TensorDescriptor.from_tensor(tensor, shape, layout)
 
 
-def launch(A, B, C, tm, tn, tk, stages, swap, waves=1, acc_stages=2, group=1):
+def _launch(A, B, C, tm, tn, tk, stages, swap, acc_stages=2, group=1):
     properties = torch.cuda.get_device_properties(A.device)
     tiles = triton.cdiv(A.shape[0], tm) * (4096 // tn)
-    workers = min(tiles, properties.multi_processor_count * waves)
+    workers = min(tiles, properties.multi_processor_count)
     _matmul[(workers,)](_desc(A, tm, tk), _desc(B, tn, tk), _desc(C, tm, tn),
                        tm, tn, tk, stages, workers, swap, acc_stages, group, num_warps=4)
 
@@ -159,6 +160,29 @@ def _gemv(A, B, C):
     a = tl.load(A + k).to(tl.float32)
     b = tl.load(B + n[:, None] * 4096 + k[None, :]).to(tl.float32)
     tl.store(C + n, tl.sum(a[None, :] * b, axis=1))
+
+
+# Four interleaved K slices improve weight-read parallelism within a CTA.
+# Reduce their FP32 partials before the sole FP16 output store.
+@triton.jit
+def _thin_gemm(A, B, C, M):
+    TM: tl.constexpr = 16
+    TN: tl.constexpr = 32
+    TK: tl.constexpr = 128
+    PARTS: tl.constexpr = 4
+    rows = tl.program_id(0) * TM + tl.arange(0, TM)
+    cols = tl.program_id(1) * TN + tl.arange(0, TN)
+    part = tl.arange(0, PARTS)
+    k = part[:, None] * TK + tl.arange(0, TK)[None, :]
+    a = A + rows[None, :, None] * 4096 + k[:, None, :]
+    b = B + cols[None, :, None] * 4096 + k[:, None, :]
+    acc = tl.full((PARTS, TM, TN), 0, tl.float32)
+    for step in range(4096 // (TK * PARTS)):
+        av = tl.load(a + step * TK * PARTS, rows[None, :, None] < M, 0)
+        bv = tl.load(b + step * TK * PARTS)
+        acc = tl.dot(av, tl.permute(bv, (0, 2, 1)), acc)
+    tl.store(C + rows[:, None] * 4096 + cols[None, :], tl.sum(acc, axis=0),
+             rows[:, None] < M)
 
 
 @triton.jit
@@ -187,17 +211,18 @@ def run(A, B, C):
         )
         return
     if m == 1:
-        _gemv[(4096 // 4,)](A, B, C, num_warps=8)
+        _gemv[(4096 // 4,)](A, B, C, num_warps=4)
         return
 
+    if m <= 16:
+        _thin_gemm[(1, 4096 // 32)](A, B, C, m, num_warps=4, num_stages=3)
+        return
     if m <= 64:
-        tm = max(16, triton.next_power_of_2(m))
-        launch(A, B, C, tm, 64, 256, 3, True, acc_stages=1)
+        tm = triton.next_power_of_2(m)
+        _launch(A, B, C, tm, 64, 256, 3, True, acc_stages=1)
     elif m <= 128:
-        launch(A, B, C, 128, 64, 128, 4, True, acc_stages=1)
-    elif m <= 192:
-        launch(A, B, C, 64, 128, 128, 4, False)
-    elif 2048 < m <= 2560 or m >= 4096:
-        launch(A, B, C, 128, 256, 64, 3, False)
+        _launch(A, B, C, 64, 64, 256, 3, True, acc_stages=1)
+    elif m <= 256:
+        _launch(A, B, C, 64, 128, 128, 4, False)
     else:
-        launch(A, B, C, 128, 128, 128, 3, False)
+        _launch(A, B, C, 128, 256, 64, 3, False, group=4 if m > 1024 else 1)

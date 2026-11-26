@@ -173,9 +173,11 @@ def run(A, B, C):
         a = TensorDescriptor.from_tensor(A, [bm, bk])
         b = TensorDescriptor.from_tensor(B, [64, bk])
         _weight_first[(28672 // 64,)](a, b, C, m, bm, 64, bk, num_warps=4, num_stages=stages)
+    elif 128 < m <= 256:
+        _launch_persistent(A, B, C, bn=128, stages=6)
     elif m <= 1024:
         _launch_persistent(A, B, C)
     elif m < 4096:
-        _launch_persistent(A, B, C, part=128, group=24)
+        _launch_persistent(A, B, C, part=32, group=24)
     else:
-        _launch_persistent(A, B, C, group=16)
+        _launch_persistent(A, B, C, part=32, group=16)

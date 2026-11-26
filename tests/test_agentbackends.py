@@ -280,7 +280,9 @@ def test_codex_on_a_leaderboard_task_without_a_reference_tree_is_fine(tmp_path):
 
 
 def test_claude_may_serve_every_task(tmp_path):
-    toml = MINIMAL + '[reference]\nrun = "reference/run.py:run"\n'
+    toml = (MINIMAL + '[reference]\nrun = "reference/run.py:run"\n'
+            '[agent.teacher]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n'
+            '[agent.student]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n')
     t = load_task(_task(tmp_path, toml, files={"reference/run.py": "def run(x):\n    return x\n"}),
                   kb_root=_kb(tmp_path))
     assert t.mode == task_mod.MODE_BLACKBOX

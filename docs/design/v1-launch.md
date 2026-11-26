@@ -107,9 +107,9 @@ endpoints). The "Default" column below is what `global_config/` holds.
 | | `deny` | no | `[]` | extra paths no agent may read |
 | `[target]` | `ratio` / `ms` | no | `ratio = 1.2` | one or the other; by default 20% faster than the reference; without a reference and without `ms`, see §3.3 |
 | | `timing` | no | `device` | the timing basis |
-| `[agent]` (both agents), `[agent.teacher]`, `[agent.student]` (one) | `backend` | no | `claude` | the agent CLI; V1 supports only `claude` |
+| `[agent]` (both agents), `[agent.teacher]`, `[agent.student]` (one) | `backend` | no | `codex` (teacher) / `claude` (student) | the agent CLI; V1 supports `claude` and `codex` |
 | | `provider` | no | `native` | where the tokens go: `native` = the CLI's own login state and environment; or a name from `backends.toml` |
-| | `model` | no | `claude-opus-5-5` | the model actually used is written into the run's snapshot |
+| | `model` | no | teacher `gpt-5.5-codex`; student `claude-opus-5-5` | the model actually used is written into the run's snapshot |
 | | `effort` | no | teacher `high`; student left to the CLI | reasoning effort |
 | | `timeout_s` | no | student 7200; teacher 14400 | one turn's wall-clock limit |
 | `[budget]` | `hours` | no | `4` | the inner loop's wall clock |
@@ -280,14 +280,14 @@ the run directory, the delivery) is as for an ordinary task. Details are in
 - One table each for the teacher and the student, with structured fields: `backend`, `provider`,
   `model`, `effort`, `timeout_s`. The harness builds the command itself, so it can handle /goal
   sessions, session continuation, usage accounting and permission settings uniformly.
-- V1 supports only `backend = "claude"` (the Claude Code CLI); the field stays so that adding a backend
-  later does not change the format.
+- The harness supports `backend = "claude"` and `backend = "codex"` (the Claude Code
+  CLI and the Codex CLI); the field stays so that adding a backend later does not change the format.
 - With `provider = "native"`, the CLI's own login state and environment decide where the tokens go;
   any other provider is an endpoint in `global_config/backends.toml`, whose key is read from the
   variable its `key_env` names.
 - Credentials are read only from the environment or from `local.env`; they never appear in any file
   under version control.
-- Without a `model`, `claude-opus-5-5` is used; the model actually used is written into the run's
+- Without a `model`, the backend's default is used; the model actually used is written into the run's
   snapshot.
 
 ---

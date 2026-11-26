@@ -29,9 +29,9 @@
     timing = "device"               # device | e2e
 
     [agent]                         # both agents; [agent.teacher] / [agent.student] for one
-    backend   = "claude"
+    backend   = "codex"              # preferred teacher; student stays claude by default
     provider  = "native"            # or a table of global_config/backends.toml
-    model     = "claude-opus-5-5"
+    model     = "gpt-5.5-codex"
     effort    = "high"
     timeout_s = 7200                # one turn's wall clock
     online    = true                # the student may use the network (see below)

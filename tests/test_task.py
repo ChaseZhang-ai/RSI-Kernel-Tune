@@ -52,8 +52,9 @@ def test_minimal_task_takes_every_default(tmp_path):
     assert t.arch == "sm100"
     assert t.reference is None and t.mode == task_mod.MODE_GENERATE
     assert t.target.ratio == 1.2 and t.target.ms is None and t.target.timing == "device"
-    assert t.teacher.backend == "claude" and t.teacher.model == "claude-opus-5-5"
-    assert t.student.effort is None
+    assert t.teacher.backend == "codex" and t.teacher.model == "gpt-5.5-codex"
+    assert t.student.backend == "claude" and t.student.model == "claude-opus-5-5"
+    assert t.student.effort == "high"
     assert (t.budget.hours, t.budget.max_meta, t.budget.reference_hours) == (4.0, 3, 8.0)
     assert [s.name for s in t.shapes] == ["small", "large"]
     assert all(s.groups_to_add == 3 for s in t.shapes)
@@ -107,13 +108,17 @@ def test_reference_with_source_is_source_mode(tmp_path):
 
 
 def test_reference_without_source_is_blackbox(tmp_path):
-    toml = MINIMAL + '[reference]\nrun = "reference/run.py:run"\n'
+    toml = MINIMAL + ('[reference]\nrun = "reference/run.py:run"\n'
+                      '[agent.teacher]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n'
+                      '[agent.student]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n')
     t = load_task(_task(tmp_path, toml, files=REF_FILES), kb_root=_kb(tmp_path))
     assert t.mode == task_mod.MODE_BLACKBOX and t.reference.source is None
 
 
 def test_blackbox_flag_withholds_a_source_on_disk(tmp_path):
-    toml = WITH_REF + "blackbox = true\n"
+    toml = (WITH_REF + "blackbox = true\n"
+            '[agent.teacher]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n'
+            '[agent.student]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n')
     t = load_task(_task(tmp_path, toml, files=REF_FILES), kb_root=_kb(tmp_path))
     assert t.mode == task_mod.MODE_BLACKBOX
 
@@ -232,7 +237,9 @@ def test_deny_paths_resolve_against_the_task(tmp_path):
 def test_deny_urls_and_modules_are_read(tmp_path):
     toml = (MINIMAL + '[reference]\nrun = "reference/run.py:run"\n'
             'deny_urls = ["github.com/org/RefLib ", "pypi.org/project/ref-lib"]\n'
-            'deny_modules = ["reflib", "ref-lib"]\n')
+            'deny_modules = ["reflib", "ref-lib"]\n'
+            '[agent.teacher]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n'
+            '[agent.student]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n')
     t = load_task(_task(tmp_path, toml, files=REF_FILES), kb_root=_kb(tmp_path))
     assert t.mode == task_mod.MODE_BLACKBOX
     assert t.reference.deny_urls == ("github.com/org/RefLib", "pypi.org/project/ref-lib")

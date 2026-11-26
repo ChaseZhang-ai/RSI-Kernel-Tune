@@ -23,7 +23,9 @@ cannot be held to the policy is restricted instead (see §2).
 | /goal session (`FK_AGENT_DRIVER=goal`) | yes (`scripts/claude-goal.sh`) | **no** (refused with a reason) |
 | exercised on this machine | yes | **no** — codex is not installed |
 
-`global_config/models.toml` names the default; a task overrides the teacher or the student:
+`global_config/models.toml` names the default; it is Codex-first: the teacher defaults to
+`codex` / `gpt-5.5-codex`, while the student remains `claude` / `claude-opus-5-5` unless a task
+overrides it. A task overrides the teacher or the student:
 
 ```toml
 [task]

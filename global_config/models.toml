@@ -8,10 +8,13 @@
 #
 #   claude   both roles. The agent policy (offline student, no ssh, no reference reads) is
 #            enforced through Claude Code's own settings and hooks.
-#   codex    the teacher only, and only on a task whose reference is readable -- Codex has no
-#            such hooks, so forge refuses `backend = "codex"` for the student and for a task
-#            with a sealed reference. Codex is not installed on this machine: the backend is
-#            written and documented but not exercised (scripts/agent-codex.sh).
+#   codex    preferred teacher. It serves the teacher role and, on a task whose reference
+#            is readable, any role it is allowed to serve. Codex has no such hooks, so the
+#            policy is prompt-level rather than refused by the CLI; a sealed-reference
+#            task is refused for this backend.
+#
+# The default is codex-first: teacher uses Codex; student keeps Claude for offline/hook
+# enforcement unless the task explicitly overrides it.
 #
 # [agent.teacher]
 # backend = "codex"
@@ -21,9 +24,9 @@
 # /goal sessions (a task with no reference, FK_AGENT_DRIVER=goal) are Claude Code only: a
 # codex agent on such a task is refused, not silently replaced.
 [agent]
-backend   = "claude"
+backend   = "codex"
 provider  = "native"
-model     = "claude-opus-5-5"
+model     = "gpt-5.5-codex"
 timeout_s = 7200            # one student turn is one iteration
 # The student may use the network by default: existing kernels are allowed to be looked up
 # and reused (a run hands it the local ones in prior/ and lists the rest in prior.md). A
@@ -33,5 +36,13 @@ timeout_s = 7200            # one student turn is one iteration
 online    = true
 
 [agent.teacher]
+backend   = "codex"
+model     = "gpt-5.5-codex"
 effort    = "high"
 timeout_s = 14400           # reconnaissance, distillation and diagnosis run for hours
+
+[agent.student]
+backend   = "claude"
+model     = "claude-opus-5-5"
+effort    = "high"
+timeout_s = 7200

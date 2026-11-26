@@ -1,5 +1,9 @@
 # 001_fused_add_rmsnorm_h2048
 
+## 2026-11-26 17:23 UTC · B200 submission pending
+
+Private v1.1 submission `105846` contains the candidate SHA-256 recorded below. The board lists 18:23:46 UTC as its scheduled result availability. [NVIDIA submission](https://research.nvidia.com/benchmarks/sol-execbench/submission/105846)
+
 ## 2026-11-26 17:22 UTC · GB300 candidate v1
 
 The direct-launch Triton baseline and the exact collection candidate each passed 7/7 workloads in the local SOL-ExecBench CLI. The candidate uses replicated reductions for small batches and two rows per CTA for large batches. The paired run also passed input-preservation, near-cancellation, and changed-pointer checks. This candidate is provisional and verified on GB300 only.

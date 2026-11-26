@@ -220,7 +220,7 @@ forge run .artifacts/rmsnorm_<id>                       # 中断后续跑
 `models.toml` 定 `[agent]`（`backend`、`provider`、`model`、`effort`、`timeout_s`；`[agent.teacher]` /
 `[agent.student]` 只改一个 agent），`loop.toml` 定 `[target]` 与 `[budget]`，`backends.toml` 列出
 `provider` 不是 `native` 时可以指定的 API 端点，key 从 `local.env` 读。默认目标是 device 时间达到参照的
-1.2 倍，内层循环 4 小时，teacher 3 轮，**默认优先 Codex 跑 teacher**（`gpt-5.5-codex`），student 仍保留 Claude
+1.2 倍，内层循环 4 小时，teacher 3 轮，**默认优先 Codex 跑 teacher**（`sol6.2`，思考深度 `high`），student 仍保留 Claude
 （`claude-opus-5-5`），任务可以再覆盖。
 
 ## 自进化

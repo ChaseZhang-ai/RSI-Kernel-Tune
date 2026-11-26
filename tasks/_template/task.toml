@@ -23,7 +23,7 @@ arch     = "sm100"                   # the target GPU (sm90, sm100, ...)
 
 # [agent]                            # both agents; [agent.teacher] / [agent.student] for one
 # backend = "codex"                  # preferred teacher; student stays claude by default
-# model  = "gpt-5.5-codex"
+# model  = "sol6.2"
 # effort = "high"
 
 # [budget]

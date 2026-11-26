@@ -245,7 +245,7 @@ onto, as in ForgeTrain: `models.toml` sets `[agent]` (`backend`, `provider`, `mo
 `timeout_s`; `[agent.teacher]` / `[agent.student]` for one agent), `loop.toml` sets `[target]`
 and `[budget]`, and `backends.toml` lists the API endpoints a `provider` other than `native`
 can name, with the key read from `local.env`. The defaults are a 1.2× target in device time,
-4 hours of loop, 3 teacher rounds, and **Codex preferred for the teacher** (`gpt-5.5-codex`) with
+4 hours of loop, 3 teacher rounds, and **Codex preferred for the teacher** (`sol6.2`) with
 Claude kept for the student (`claude-opus-5-5`) unless a task overrides it.
 
 ## Self-Evolution

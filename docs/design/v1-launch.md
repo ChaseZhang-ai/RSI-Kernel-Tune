@@ -109,8 +109,8 @@ endpoints). The "Default" column below is what `global_config/` holds.
 | | `timing` | no | `device` | the timing basis |
 | `[agent]` (both agents), `[agent.teacher]`, `[agent.student]` (one) | `backend` | no | `codex` (teacher) / `claude` (student) | the agent CLI; V1 supports `claude` and `codex` |
 | | `provider` | no | `native` | where the tokens go: `native` = the CLI's own login state and environment; or a name from `backends.toml` |
-| | `model` | no | teacher `gpt-5.5-codex`; student `claude-opus-5-5` | the model actually used is written into the run's snapshot |
-| | `effort` | no | teacher `high`; student left to the CLI | reasoning effort |
+| | `model` | no | teacher `sol6.2`; student `claude-opus-5-5` | the model actually used is written into the run's snapshot |
+| | `effort` | no | `high` for both | reasoning effort |
 | | `timeout_s` | no | student 7200; teacher 14400 | one turn's wall-clock limit |
 | `[budget]` | `hours` | no | `4` | the inner loop's wall clock |
 | | `max_meta` | no | `3` | the cap on outer rounds |

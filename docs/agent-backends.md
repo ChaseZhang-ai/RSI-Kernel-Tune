@@ -24,7 +24,7 @@ cannot be held to the policy is restricted instead (see §2).
 | exercised on this machine | yes | **no** — codex is not installed |
 
 `global_config/models.toml` names the default; it is Codex-first: the teacher defaults to
-`codex` / `gpt-5.5-codex`, while the student remains `claude` / `claude-opus-5-5` unless a task
+`codex` / `sol6.2`, while the student remains `claude` / `claude-opus-5-5` unless a task
 overrides it. A task overrides the teacher or the student:
 
 ```toml
@@ -34,7 +34,7 @@ arch     = "sm100"
 
 [agent.teacher]
 backend = "codex"
-model   = "gpt-5.5-codex"
+model   = "sol6.2"
 effort  = "high"            # -> -c model_reasoning_effort="high"
 ```
 
@@ -61,14 +61,14 @@ the refusal check):
 
 ```
 env FK_AGENT_ROLE=teacher bash /abs/scripts/agent-claude.sh claude-opus-5-5 high 7200
-env FK_AGENT_ROLE=teacher bash /abs/scripts/agent-codex.sh gpt-5.5-codex high 7200
+env FK_AGENT_ROLE=teacher bash /abs/scripts/agent-codex.sh sol6.2 high 7200
 ```
 
 With a provider table in front (the key itself never appears):
 
 ```
 env FK_AGENT_ROLE=teacher OPENAI_BASE_URL=https://gw.example/openai FK_PROVIDER_KEY_ENV=OA_KEY \
-    bash /abs/scripts/agent-codex.sh gpt-5.5-codex high 7200
+    bash /abs/scripts/agent-codex.sh sol6.2 high 7200
 ```
 
 Both scripts take the prompt on **stdin** and print the reply on **stdout**
@@ -79,7 +79,7 @@ What the Codex script runs (print it yourself with `FK_AGENT_ECHO=1`, which runs
 ```
 python3 scripts/timeout-run.py 7200 codex exec --json --color never \
     --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \
-    -c model_reasoning_effort="high" -m gpt-5.5-codex -
+    -c model_reasoning_effort="high" -m sol6.2 -
 ```
 
 - `-` is the prompt on stdin (`codex exec -`), so a 100 kB prompt never becomes an argv.

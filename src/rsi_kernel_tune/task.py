@@ -31,7 +31,7 @@
     [agent]                         # both agents; [agent.teacher] / [agent.student] for one
     backend   = "codex"              # preferred teacher; student stays claude by default
     provider  = "native"            # or a table of global_config/backends.toml
-    model     = "gpt-5.5-codex"
+    model     = "sol6.2"
     effort    = "high"
     timeout_s = 7200                # one turn's wall clock
     online    = true                # the student may use the network (see below)

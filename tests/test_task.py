@@ -52,7 +52,7 @@ def test_minimal_task_takes_every_default(tmp_path):
     assert t.arch == "sm100"
     assert t.reference is None and t.mode == task_mod.MODE_GENERATE
     assert t.target.ratio == 1.2 and t.target.ms is None and t.target.timing == "device"
-    assert t.teacher.backend == "codex" and t.teacher.model == "gpt-5.5-codex"
+    assert t.teacher.backend == "codex" and t.teacher.model == "sol6.2"
     assert t.student.backend == "claude" and t.student.model == "claude-opus-5-5"
     assert t.student.effort == "high"
     assert (t.budget.hours, t.budget.max_meta, t.budget.reference_hours) == (4.0, 3, 8.0)

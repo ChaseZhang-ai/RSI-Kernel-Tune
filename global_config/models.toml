@@ -18,7 +18,7 @@
 #
 # [agent.teacher]
 # backend = "codex"
-# model   = "gpt-5.5-codex"
+# model   = "sol6.2"
 # effort  = "high"            # -> -c model_reasoning_effort="high"
 #
 # /goal sessions (a task with no reference, FK_AGENT_DRIVER=goal) are Claude Code only: a
@@ -26,7 +26,7 @@
 [agent]
 backend   = "codex"
 provider  = "native"
-model     = "gpt-5.5-codex"
+model     = "sol6.2"
 timeout_s = 7200            # one student turn is one iteration
 # The student may use the network by default: existing kernels are allowed to be looked up
 # and reused (a run hands it the local ones in prior/ and lists the rest in prior.md). A
@@ -37,7 +37,7 @@ online    = true
 
 [agent.teacher]
 backend   = "codex"
-model     = "gpt-5.5-codex"
+model     = "sol6.2"
 effort    = "high"
 timeout_s = 14400           # reconnaissance, distillation and diagnosis run for hours
 

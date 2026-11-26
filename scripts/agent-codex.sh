@@ -31,7 +31,7 @@
 # plus docs/exec.md's event sample; `codex exec --help` on the machine that has it is the
 # last word. See docs/agent-backends.md.
 set -u
-MODEL=${1:?model, e.g. gpt-5.5-codex}
+MODEL=${1:?model, e.g. sol6.2}
 EFFORT=${2:-}
 TIMEOUT=${3:-7200}
 if [ "${FK_AGENT_DRIVER:-}" = "goal" ]; then

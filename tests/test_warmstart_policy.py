@@ -168,9 +168,9 @@ def test_describe_shows_whether_the_student_is_online(tmp_path):
     offline = load_task(_task(tmp_path, '[agent]\nonline = false\n'), kb_root=_kb(tmp_path))
     assert "student claude-opus-5-5 (high) [offline]" in launch.describe(offline, Machine())
     # the teacher default is Codex-first; the student keeps Claude for offline/hook policy
-    assert online.teacher.backend == "codex" and online.teacher.model == "gpt-5.5-codex"
+    assert online.teacher.backend == "codex" and online.teacher.model == "sol6.2"
     assert online.student.backend == "claude" and online.student.model == "claude-opus-5-5"
-    assert "teacher gpt-5.5-codex (high)" in launch.describe(online, Machine())
+    assert "teacher sol6.2 (high)" in launch.describe(online, Machine())
 
 
 def test_the_loop_toml_of_a_plain_task_carries_student_online(tmp_path):

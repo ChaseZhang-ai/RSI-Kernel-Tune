@@ -18,3 +18,19 @@ Paired at 2026-11-26 17:35 UTC. Both implementations passed all 48 official work
 - The initial baseline CLI run exceeded its 120 s evaluation timeout. An earlier split-KV build failed Triton's type checks when a scalar lookup variable was reused for a vector scratch offset. The paired run above uses the corrected source.
 
 The first private B200 upload attempt returned HTTP 429 before a submission ID was created.
+
+## GB300 tuned Triton v2
+
+Completed 2026-11-26 17:45:33 UTC on physical GPU 0 at the same queried clocks and device capability described above. Both sides of the pair passed 48/48. The exact v2 Python file also passed 48/48 through the SOL-ExecBench CLI. [Paired timings](gb300-pair-v2.jsonl) · [CLI results](gb300-evaluator-v2.jsonl) · [Tuning screen](tuning-screen.md)
+
+| Batch size | Workloads | Split-KV v1 geomean (µs) | Tuned v2 geomean (µs) |
+|---:|---:|---:|---:|
+| 1 | 16 | 6.797 | 4.947 |
+| 16 | 16 | 19.647 | 18.012 |
+| 64 | 16 | 50.498 | 43.792 |
+| All | 48 | 18.893 | 15.744 |
+
+- The v2 CLI geomean was 15.779 µs. The 48 paired cold-cache first calls took 3.233 s in total including Triton JIT, execution and synchronization.
+- The v2 submission SHA-256 is `0df5d83bb655f4475beb8c0fbc77b0c9a81bda774f61ac3fee438b0214d3529f`.
+- The v2 synthetic suite passed 16 calls with shuffled and repeated page IDs, reversed uneven row lengths, empty rows, non-default scales, changed pointers and unreferenced NaN pages. Triton 3.5.0 required the CUDA 13.2 assembler on local SM 10.3 because the older bundled PTXAS lacks SM 10.3 support. The full evaluator above used Triton 3.6.0.
+- The first two private B200 upload requests were rate limited and returned no submission ID. Local results are provisional GB300 only.

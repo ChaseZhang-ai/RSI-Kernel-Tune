@@ -2,14 +2,18 @@
 
 These are exploratory paired measurements under the same evaluator CUPTI protocol. The selectors use runtime batch and total token count. Full 48-workload verification is reported separately.
 
-| Screen | Passes with timing | Build failures | Numerical failures | Timing failures |
-|---|---:|---:|---:|---:|
-| Triton tile sizes and CUDA cluster | 268 | 17 | 0 | 0 |
-| Gluon layouts and absolute-index reduction | 236 | 0 | 0 | 0 |
-| CUDA TMA contiguous and gather4 | 100 | 0 | 0 | 0 |
-| CUDA split-KV final-CTA merge | 80 | 0 | 0 | 0 |
-| CUDA 32-token TMA stage | 100 | 0 | 0 | 0 |
-| Native two-kernel split-KV and merge | 80 | 0 | 0 | 0 |
+| Screen | Passes with timing | Build failures | Numerical failures | Timing failures | Runtime errors |
+|---|---:|---:|---:|---:|---:|
+| Triton tile sizes and CUDA cluster | 268 | 17 | 0 | 0 | 0 |
+| Gluon layouts and absolute-index reduction | 236 | 0 | 0 | 0 | 0 |
+| CUDA TMA contiguous and gather4 | 100 | 0 | 0 | 0 | 0 |
+| CUDA split-KV final-CTA merge | 80 | 0 | 0 | 0 | 0 |
+| CUDA 32-token TMA stage | 100 | 0 | 0 | 0 | 0 |
+| Native two-kernel split-KV and merge | 80 | 0 | 0 | 0 | 0 |
+| B=1 page histogram | 128 | 0 | 0 | 0 | 0 |
+| CUDA shared-memory push | 49 | 0 | 51 | 0 | 0 |
+| CUDA coefficient-first push | 46 | 0 | 44 | 0 | 10 |
+| CUDA coefficient-first pull | 90 | 0 | 0 | 0 | 10 |
 
 The first sweep compared split chunks of 32, 64, 128, 256, and 512 tokens, two to eight warps, and both MMA orientations. Oversized one-shot tiles or split chunks exceeded register or shared-memory limits in 17 configurations. The TMA screen compared separately encoded contiguous and gather4 paths with current input pointers. The final-CTA route included the counter clear and merge in the measured call.
 

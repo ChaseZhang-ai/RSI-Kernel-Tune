@@ -65,3 +65,20 @@ Completed 2026-11-26 17:58:28 UTC on physical GPU 1, UUID `GPU-87e04b70-e9c6-0c5
 - The exact file passed 20 synthetic calls with revised row boundaries, duplicate and shuffled indices, changed inputs and destinations, unreferenced NaN pages, non-default scale, and empty rows. The cases exercised all three native variants and both B=1 Triton paths.
 - Cluster dispatch now covers all B=64 workloads. Its partials stay in distributed shared memory. The largest official K/V input pair occupies about 120.2 MiB.
 - Submission SHA-256 `4670427cd5b87fd4047f36e2d644e11e94555f3eef2d47f16fc1be982f72be64`. Provisional GB300 verification.
+
+The exact v4 bundle separately passed all 48 workloads with PyTorch 2.9.0+cu130 and Triton 3.5.0 on the same GB300. Its pinned-stack geomean was 14.153 µs at 2026-11-26T18:02:11.224648Z. [Pinned-stack v4 CLI results](gb300-evaluator-v4-pinned.jsonl)
+
+## GB300 hybrid v5
+
+The best local candidate passed 48/48 in the full pinned-stack SOL-ExecBench CLI at 2026-11-26T18:04:57.423390Z, with a 14.032 µs geomean. It was paired with v4 on physical GPU 1, UUID `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, at locked 1500/3996 MHz. The GPU reported 152 SMs and CUDA capability 10.3. [Paired timings](gb300-pair-v5.jsonl) · [Pinned-stack CLI results](gb300-evaluator-v5.jsonl)
+
+| Batch size | Workloads | Hybrid v4 geomean (µs) | Hybrid v5 geomean (µs) |
+|---:|---:|---:|---:|
+| 1 | 16 | 5.061 | 5.008 |
+| 16 | 16 | 14.341 | 14.294 |
+| 64 | 16 | 38.657 | 37.962 |
+| All | 48 | 14.105 | 13.954 |
+
+- Both sides passed all 48 in the paired run with 10 warmups and 50 timed iterations. The pair used PyTorch 2.10.0+cu130 and Triton 3.6.0. The exact CLI bundle used PyTorch 2.9.0+cu130 and Triton 3.5.0, with CUDA 13.2 PTXAS for GB300 support. Both used SOL-ExecBench 1.0.2. Cold first calls including the native build and Triton JIT took 3.401 s combined.
+- Warp-coalesced index loads feed the existing asynchronous K/V staging. All 20 shuffled, unequal-length and empty-row synthetic calls passed.
+- The final DPS bundle contains the exact source bytes and was evaluated against the official 48 workload UUIDs, with the trace dataset pinned to revision 1.0. The submitted Python SHA-256 is `b293696f31b3959a16556349f9b51a1e653877a4c526c15ab9bba7bfad0cf70e`.

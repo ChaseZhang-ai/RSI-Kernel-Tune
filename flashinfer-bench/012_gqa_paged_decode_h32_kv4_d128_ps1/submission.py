@@ -274,11 +274,12 @@ __device__ __forceinline__ void stage(uint4* buf, const Params& p, int group, in
     constexpr int VCOL = WIDTH / 8;
     const int row_pair = lane / KCOL;
     const int col = lane % KCOL;
+    const int page_id = lane < 16 && start + lane < end ? p.indices[start + lane] : 0;
 #pragma unroll
     for (int r = 0; r < 16; r += 2) {
         const int row = r + row_pair;
         const bool live = start + row < end;
-        const int page = live ? p.indices[start + row] : 0;
+        const int page = __shfl_sync(0xffffffffu, page_id, row);
         const int offset = page * 512 + group * 128;
         copy16(buf + row * KCOL + (col ^ (row % 8)), p.k + offset + col * 8, live);
         if (col < VCOL) {

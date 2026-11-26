@@ -62,7 +62,7 @@ Contributors should push their **best candidate so far** to `flashinfer-bench/<o
 | [019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/228/B200) | 0.998735 | — | — | — | Pending | — |
 | [020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/229/B200) | 1.000000 | — | — | — | Pending | — |
 | [021_rmsnorm_h128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/230/B200) | 0.799820 | — | — | — | Pending | — |
-| [022_rmsnorm_h512](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/231/B200) | 0.818143 | — | — | — | Pending | — |
+| [022_rmsnorm_h512](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/231/B200) | 0.818143 | — | — | — | GB300 baseline passed 8/8 · 3.795 µs geometric mean · [evidence](reports/flashinfer-bench-results/022_rmsnorm_h512/README.md) | [Provisional GB300 only](flashinfer-bench/022_rmsnorm_h512/submission.py) |
 | [023_rmsnorm_h1536](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/232/B200) | 0.929768 | — | — | — | Pending | — |
 | [024_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/233/B200) | 0.815575 | — | — | — | Pending | — |
 | [025_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/234/B200) | 0.904060 | — | — | — | Pending | — |

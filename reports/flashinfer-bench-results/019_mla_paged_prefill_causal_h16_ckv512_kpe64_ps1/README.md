@@ -17,3 +17,18 @@ The B200 v1.1 public leader was June at 0.998735 SOL, checked 2026-11-26 18:37:2
 ## Initial tile screen on GB300
 
 The first screen used workload 21 on physical GPU 0 at the baseline clocks. The 16×32 query/key tile measured 37.680 µs versus 41.360 µs for the paired baseline. The 64×32 Triton tile raised a misaligned-address CUDA runtime error on its first correctness call. The subsequent calls inherited that failed CUDA context and were discarded. The revised screen isolates the experimental Gluon route in separate processes. [Valid measurements and first runtime failure](gb300-screen-initial.jsonl)
+
+## Short and tiled scheduling screen on GB300
+
+All 52 variant/workload pairs passed numerical checks and timing across 11 official workloads on physical GPU 0 at 1500/3996 MHz. The matched measurements used the evaluator’s cloned inputs, preallocated outputs, cold L2 and CUPTI timing. [Per-variant measurements](gb300-scheduling-screen.jsonl)
+
+| Official workload | Baseline | Selected schedule | Selected latency |
+|---|---:|---|---:|
+| 1 query, 34 referenced pages | 12.416 µs | Single-query tensor-core tile | 10.432 µs |
+| 69 queries, 90 referenced pages | 625.385 µs | Single-query tensor-core tile | 19.153 µs |
+| 22 queries, 17,759 referenced pages | 878.861 µs | 32-way split-KV with 32-key tiles | 53.472 µs |
+| 1,028 queries, 1,038 referenced pages | 329.541 µs | Double-buffered 64-key tile | 107.537 µs |
+| 8,987 queries, 14,390 referenced pages | 2,719.878 µs | Double-buffered 64-key tile | 752.812 µs |
+| 16,384 queries, 16,387 referenced pages | 59,003.474 µs | Double-buffered 64-key tile with conditional rescaling | 14,714.611 µs |
+
+The 128-key scalar specializations used approximately 6.9 KiB of CUDA stack per thread. The selected one-query tensor-core schedule shares CKV across heads for the short requests with more than 16 keys. For large prefills, the selected Gluon tile packs four tokens and 16 heads, overlaps the next paged gather with the current tile’s computation, and reuses the CKV panels for both the non-positional dot and the value epilogue. The positional dot has its own accumulator before the combined score is scaled.

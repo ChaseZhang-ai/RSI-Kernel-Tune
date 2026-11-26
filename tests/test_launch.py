@@ -565,7 +565,9 @@ def test_a_task_that_is_not_a_board_problem_exports_the_kernel_source(repo, monk
 
 
 DENY_TOML = (TASK_TOML + '[reference]\nrun = "reference/run.py:run"\n'
-             'deny_urls = ["github.com/org/RefLib"]\ndeny_modules = ["reflib"]\n')
+             'deny_urls = ["github.com/org/RefLib"]\ndeny_modules = ["reflib"]\n'
+             '[agent.teacher]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n'
+             '[agent.student]\nbackend = "claude"\nmodel = "claude-opus-5-5"\n')
 
 
 def _forbid(entry: Path) -> re.Pattern:

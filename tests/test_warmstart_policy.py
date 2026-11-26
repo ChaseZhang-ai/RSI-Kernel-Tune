@@ -164,9 +164,13 @@ def test_describe_shows_whether_the_student_is_online(tmp_path):
             return "a fake GPU"
 
     online = load_task(_task(tmp_path, ""), kb_root=_kb(tmp_path))
-    assert "student claude-opus-5-5 [online]" in launch.describe(online, Machine())
+    assert "student claude-opus-5-5 (high) [online]" in launch.describe(online, Machine())
     offline = load_task(_task(tmp_path, '[agent]\nonline = false\n'), kb_root=_kb(tmp_path))
-    assert "student claude-opus-5-5 [offline]" in launch.describe(offline, Machine())
+    assert "student claude-opus-5-5 (high) [offline]" in launch.describe(offline, Machine())
+    # the teacher default is Codex-first; the student keeps Claude for offline/hook policy
+    assert online.teacher.backend == "codex" and online.teacher.model == "gpt-5.5-codex"
+    assert online.student.backend == "claude" and online.student.model == "claude-opus-5-5"
+    assert "teacher gpt-5.5-codex (high)" in launch.describe(online, Machine())
 
 
 def test_the_loop_toml_of_a_plain_task_carries_student_online(tmp_path):

@@ -49,3 +49,24 @@ Geometric means are from cold-L2 CUPTI first-to-last kernel timing with 10 warmu
 The fresh Triton cache trial took 3.145 seconds summed across synchronized candidate first calls, with a maximum of 0.501 seconds per call. The maximum paired absolute errors were 0.0078125 for BF16 output and 1.90735e-06 for base-2 LSE. The submission SHA-256 is `f58b79e9768a6294cac27755b311e5d71fc546465447a43a9a8f2be8b8654091`.
 
 [Paired timings](gb300-v2-paired.jsonl) · [Official evaluator timings](gb300-v2-official.jsonl) · [Synthetic checks](gb300-v2-edge-cases.jsonl)
+
+## GB300 paired and standalone trial v3
+
+The long-row dispatch assigns each CTA a bounded span of the flattened page list and derives its sequence from live CSR metadata. The merge reads the resulting per-row slot range and handles rows of any valid length, including empty rows. The B=1 and short B=16 routes retain their tuned direct launches.
+
+The AKO4X seed, v1, and the new candidate each passed 48/48 paired checks and timings. The exact bundled DPS source passed 48/48 in the standalone evaluator, including all ten numerical rounds and CUPTI timing. All 18 synthetic invocations passed separately for output and base-2 LSE.
+
+| Batch | AKO4X seed | v1 | New candidate |
+| ---: | ---: | ---: | ---: |
+| 1 | 6.697 µs | 6.014 µs | 5.658 µs |
+| 16 | 36.834 µs | 19.245 µs | 13.970 µs |
+| 64 | 68.993 µs | 68.529 µs | 61.947 µs |
+| All | 25.722 µs | 19.943 µs | 16.981 µs |
+
+Geometric means are from cold-L2 CUPTI first-to-last kernel timing with 10 warmups, 50 timed calls, cloned inputs at shifted addresses, and preallocated outputs. All runs in this trial used physical GB300 2, UUID `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, capability 10.3, 152 queried SMs, 1500/3996 MHz, SOL-ExecBench 1.0.2, Torch 2.10.0+cu130, and Triton 3.6.0.
+
+The fresh Triton cache trial took 4.066 seconds summed across synchronized candidate first calls, with a maximum of 0.793 seconds per call. The maximum paired absolute errors were 0.0078125 for BF16 output and 1.90735e-06 for base-2 LSE. The submission SHA-256 is `a6affb9669025564fc861c0b7372fdcf3164165986e73cb523a93dd7b46cbfe3`.
+
+[Paired timings](gb300-v3-paired.jsonl) · [Official evaluator timings](gb300-v3-official.jsonl) · [Synthetic checks](gb300-v3-edge-cases.jsonl)
+
+The 256-token scheduling slots use at most 4.63 MiB of scratch across the official workloads. The largest official K and V tensors total 318 MiB. The distributed Gluon prototypes hit compiler lowering errors and were dropped. The materialized Parquet SHA-256 was `89d1feacf02b6f8c07ec8d67a9dbb2c531652251095a7f762f2bc296f6a1fe74`. The local SOL-ExecBench source checkout resolved to `a9fa0804c793d438e70850c33fe34426e66d53dd`.

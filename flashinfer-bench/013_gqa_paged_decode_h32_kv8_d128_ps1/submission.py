@@ -129,13 +129,7 @@ def _config(batch, count):
         if count <= 512:
             return 2, 64, 8, 64, 4, 2, 1
         return 4, 64, 12, 32, 4, 2, 1
-    if batch <= 16:
-        if count <= batch * 281:
-            return 4, 128, 1, 1, 4, 3, 0
-        if count <= batch * 1024:
-            return 4, 128, 8, 128, 4, 3, 0
-        return 4, 64, 8, 256, 4, 3, 0
-    return 4, 64, 8, 128, 4, 3, 1
+    return 4, 128, 1, 1, 4, 3, 0
 
 def _launch(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse,
             config):
@@ -158,6 +152,105 @@ def _launch(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse,
         _merge[(batch * 16,)](partial, partial_lse, output, lse, splits, 2, num_warps=2)
 
 
+@triton.jit
+def _chunked(
+    Q, K, V, Indptr, Indices, Partial, PartialLse, scale,
+    BATCH: tl.constexpr, CHUNK: tl.constexpr, N: tl.constexpr,
+):
+    slot = tl.program_id(0)
+    kv_head = tl.program_id(1)
+    # Sequence b owns [indptr[b] // CHUNK + b, indptr[b + 1] // CHUNK + b + 1).
+    # The extra slot lets the same grid handle an empty row. Clamp each tile
+    # to the live bounds in indptr.
+    rows = tl.arange(0, triton.next_power_of_2(BATCH))
+    offsets = tl.load(Indptr + rows, rows < BATCH, 0)
+    row_slot = offsets // CHUNK + rows
+    batch = tl.sum(((row_slot <= slot) & (rows < BATCH)).to(tl.int32), 0) - 1
+    tile_begin = (slot - batch) * CHUNK
+    begin = tl.maximum(tl.load(Indptr + batch), tile_begin)
+    end = tl.minimum(tl.load(Indptr + batch + 1), tile_begin + CHUNK)
+
+    row = tl.arange(0, 16)
+    head = batch * 32 + kv_head * 4 + row
+    dim = tl.arange(0, 128)
+    token = tl.arange(0, N)
+    query = tl.load(Q + head[:, None] * 128 + dim[None, :], row[:, None] < 4, 0)
+    max_score = tl.full((16,), -float("inf"), tl.float32)
+    denom = tl.full((16,), 0.0, tl.float32)
+    numer = tl.full((16, 128), 0.0, tl.float32)
+    for start in range(begin, end, N):
+        tile = start + token
+        valid = tile < end
+        page = tl.load(Indices + tile, valid, 0)
+        address = page[:, None] * 1024 + kv_head * 128 + dim[None, :]
+        key = tl.load(K + address, valid[:, None], 0, cache_modifier=".cg")
+        value = tl.load(V + address, valid[:, None], 0, cache_modifier=".cg")
+        score = tl.dot(query, tl.trans(key)) * scale
+        score = tl.where(valid[None, :], score, -float("inf"))
+        next_max = tl.maximum(max_score, tl.max(score, 1))
+        corr = tl.exp2(max_score - next_max)
+        weights = tl.exp2(score - next_max[:, None])
+        denom = denom * corr + tl.sum(weights, 1)
+        numer = tl.dot(weights.to(tl.bfloat16), value, numer * corr[:, None])
+        max_score = next_max
+
+    result = numer / tl.maximum(denom, 1.0)[:, None]
+    slot_head = slot * 32 + kv_head * 4 + row
+    tl.store(Partial + slot_head[:, None] * 128 + dim[None, :], result, row[:, None] < 4)
+    tl.store(PartialLse + slot_head, max_score + tl.log2(denom), row < 4)
+
+
+@triton.jit
+def _chunked_merge(
+    Indptr, Partial, PartialLse, Out, Lse,
+    CHUNK: tl.constexpr, G: tl.constexpr, STRIDE: tl.constexpr,
+):
+    pg = tl.program_id(0)
+    batch = tl.program_id(1)
+    begin = tl.load(Indptr + batch) // CHUNK + batch
+    end = tl.load(Indptr + batch + 1) // CHUNK + batch + 1
+    heads = pg * G + tl.arange(0, G)
+    d = tl.arange(0, 128)
+    relative_slot = tl.arange(0, STRIDE)
+    m = tl.full((G,), -float("inf"), tl.float32)
+    den = tl.full((G,), 0.0, tl.float32)
+    acc = tl.full((G, 128), 0.0, tl.float32)
+    for block in range(begin, end, STRIDE):
+        read = block + relative_slot
+        arg = read[None, :] * 32 + heads[:, None]
+        lse = tl.load(PartialLse + arg, read[None, :] < end, -float("inf"))
+        m_new = tl.maximum(m, tl.max(lse, 1))
+        m_safe = tl.where(m_new == -float("inf"), 0.0, m_new)
+        weight = tl.exp2(lse - m_safe[:, None])
+        factor = tl.exp2(m - m_safe)
+        x = tl.load(Partial + arg[:, :, None] * 128 + d[None, None, :],
+                    read[None, :, None] < end, 0.0)
+        den = den * factor + tl.sum(weight, 1)
+        acc = acc * factor[:, None] + tl.sum(x * weight[:, :, None], 1)
+        m = m_new
+
+    out = acc / tl.maximum(den, 1.0)[:, None]
+    h = batch * 32 + heads
+    tl.store(Out + h[:, None] * 128 + d[None, :], out)
+    tl.store(Lse + h, m + tl.log2(den))
+
+
+def _launch_chunked(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse, config):
+    chunk, tile, warps, stages = config
+    batch, count = q.shape[0], kv_indices.numel()
+    slots = count // chunk + batch
+    partial = torch.empty((slots * 32, 128), device=q.device, dtype=torch.float32)
+    partial_lse = torch.empty((slots * 32,), device=q.device, dtype=torch.float32)
+    _chunked[(slots, 8)](
+        q, k_cache, v_cache, kv_indptr, kv_indices, partial, partial_lse,
+        float(sm_scale) * 1.4426950408889634, batch, chunk, tile,
+        num_warps=warps, num_stages=stages,
+    )
+    _chunked_merge[(8, batch)](
+        kv_indptr, partial, partial_lse, output, lse, chunk, 4, 8, num_warps=4,
+    )
+
+
 def run(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse):
     batch, count = q.shape[0], kv_indices.numel()
     if batch == 1 and count <= 4:
@@ -166,6 +259,15 @@ def run(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse):
             float(sm_scale) * 1.4426950408889634,
             max(1, triton.next_power_of_2(count)), num_warps=1,
         )
+    elif batch >= 32 or (batch > 1 and count > batch * 281):
+        # Balance work across CTAs by splitting contiguous spans of the page
+        # list, regardless of how the sequence lengths vary within a batch.
+        if batch < 32 and count <= batch * 1024:
+            config = (128, 32, 2, 2)
+        else:
+            config = (256, 64, 4, 3)
+        _launch_chunked(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale,
+                        output, lse, config)
     else:
         _launch(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse,
                 _config(batch, count))

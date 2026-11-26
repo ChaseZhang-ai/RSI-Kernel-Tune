@@ -18,11 +18,11 @@ import pytest
 
 import tomllib
 
-from forgekernel.shapes import ShapesError
-from forgekernel.shapes import cluster as C
-from forgekernel.shapes import plan as P
-from forgekernel.shapes import run as R
-from forgekernel.ext import shapes as cli
+from rsi_kernel_tune.shapes import ShapesError
+from rsi_kernel_tune.shapes import cluster as C
+from rsi_kernel_tune.shapes import plan as P
+from rsi_kernel_tune.shapes import run as R
+from rsi_kernel_tune.ext import shapes as cli
 
 FIXTURE = Path(__file__).parent / "fixtures" / "shapes_card"
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -276,7 +276,7 @@ def test_run_drives_every_cluster_and_records_it(tmp_path):
     assert all(runs.state(n).status == R.STATUS_SOLVED for n in names)
     assert len(spawn.calls) == 4 * len(names)          # init, new, run, export per cluster
     for call in spawn.calls:
-        assert call[:3] == [__import__("sys").executable, "-m", "forgekernel"]
+        assert call[:3] == [__import__("sys").executable, "-m", "rsi_kernel_tune"]
     commands = [call[3] for call in spawn.calls]
     assert commands.count("init") == len(names)
     assert commands.count("export") == len(names)
@@ -381,8 +381,8 @@ def test_the_dry_run_printout_names_every_command(tmp_path, capsys):
                            log=printed.append)
     assert rc == R.EXIT_OK
     text = "\n".join(printed)
-    for word in ("forgekernel init", "forgekernel new", "forgekernel run",
-                 "forgekernel export", "[target] ms", "--workload"):
+    for word in ("rsi_kernel_tune init", "rsi_kernel_tune new", "rsi_kernel_tune run",
+                 "rsi_kernel_tune export", "[target] ms", "--workload"):
         assert word in text, word
 
 
@@ -453,5 +453,5 @@ def test_the_run_cli_prints_the_ledger(tmp_path, capsys):
     plan_path = P.write_plan_doc(doc, Path(doc["product_dir"]))
     assert cli.main(["run", str(plan_path), "--root", str(tmp_path), "--dry-run"]) == 0
     out = capsys.readouterr().out
-    assert "forgekernel init" in out and "cluster" in out
+    assert "rsi_kernel_tune init" in out and "cluster" in out
     assert cli.main(["run", str(tmp_path / "nope.json")]) == 2

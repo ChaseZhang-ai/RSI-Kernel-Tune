@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 import campaign_helpers as H
-from forgekernel.campaign import solscore, sync, tools as tools_mod
-from forgekernel.ext import campaign as cli
+from rsi_kernel_tune.campaign import solscore, sync, tools as tools_mod
+from rsi_kernel_tune.ext import campaign as cli
 
 
 def _ledger(tmp_path) -> sync.Ledger:

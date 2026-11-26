@@ -7,7 +7,7 @@ loop, collects every correct version a run produced, composes them into the **si
 upload archive. It optimizes nothing itself and changes nothing inside the loop: every
 piece of machinery it uses is either the base repository's own command
 (`forge init` / `new` / `run`) or another task's deliverable, reached through one
-replaceable registry (`forgekernel/campaign/tools.py`).
+replaceable registry (`rsi_kernel_tune/campaign/tools.py`).
 
 ```
 forge campaign targets   # the gap list: leader / best known / gap per problem
@@ -21,8 +21,8 @@ forge campaign sync      # saved board pages -> ledger.jsonl + ratios.json
 forge campaign tools     # what is installed, and what each slot resolved to
 ```
 
-The command lives in `src/forgekernel/ext/campaign.py`. Until the step-0 `ext/` discovery
-hook is in the checkout it runs as `python -m forgekernel.ext.campaign …`; once the hook
+The command lives in `src/rsi_kernel_tune/ext/campaign.py`. Until the step-0 `ext/` discovery
+hook is in the checkout it runs as `python -m rsi_kernel_tune.ext.campaign …`; once the hook
 lands, `forge campaign …` is the same code.
 
 ## Targets and priority
@@ -82,16 +82,16 @@ Each problem is a fixed stage sequence; every stage's completion is recorded in
 2. **task** — `forge init <op> --leaderboard sol-execbench --dataset … --definition
    <subset>/<problem> --workload 0-(n-1)` (all workloads: the board scores the mean over
    them) plus `--init-kernel` when a start is already known. The task is then validated
-   with `forgekernel.task.load_task`.
+   with `rsi_kernel_tune.task.load_task`.
 3. **starts** — see below. Each candidate is scored with `benchx` (`--repeat 2`) on this
    card and sorted by mean SOL score (geomean latency when the card has no board pair).
 4. **target** — `[target] ms` = the best scored start's geomean reading / `--step`
    (default 1.10), written into `task.toml`; the best start is also seeded as the card's
-   kernel file (through `forgekernel.warmstart.validate` when it exists).
+   kernel file (through `rsi_kernel_tune.warmstart.validate` when it exists).
 5. **optimize** — `forge evolve <task> --lineages 3 --generations 1 --parallel P` when the
    evolve task is installed (one lineage per available language route), else `forge new` +
    `forge run`. The target picture rides the child's environment whenever
-   `target/B200.json` exists (`FK_TARGET_PROFILE_PATH`, via `forgekernel.runcontext` when
+   `target/B200.json` exists (`FK_TARGET_PROFILE_PATH`, via `rsi_kernel_tune.runcontext` when
    that module is present); roofline / lessons files join when the plan or the environment
    names them.
 6. **versions** — every KEEP iteration of every run that passed correctness, plus the
@@ -204,18 +204,18 @@ each missing tool narrows what is exported rather than what is claimed.
 
 | tool | module probed | used for | if absent |
 |---|---|---|---|
-| benchx | `forgekernel.benchx.api` (`CardBench`), else `forgekernel.ext.bench --json` | scoring every candidate | starts are unscored (the task keeps its default target); readings carry no S |
-| evolve | `forgekernel.ext.evolve` / `forgekernel.evolve` | multi-lineage optimization | `forge new` + `forge run` |
-| seedlib | `forgekernel.ext.lib` | `find` / `baselines` / `adapt` / `cover` | only the reference + baselines are absent → the reference is the start; pack needs `--allow-reference-fallback` |
-| seedlib | `forgekernel.klib.normalize.cuda_to_inline` | a `.cu` version → a single-file submission | `not exported: needs klib` |
-| shapes | `forgekernel.ext.shapes` | per-workload winners | the best mean-S version |
-| guard | `forgekernel.integrity.license_check`, `.notices.banner`, `.export_check` | licence gate + header + export check | header says unavailable |
-| board | `forgekernel.ext.board` | `--submit`, `sync --board`, `collection_validate` | no submission, `--from-saved` import, campaign's own self-check |
-| targethw | `forgekernel/runcontext.py`, `target/B200.json` | context files into every run | the same four `FK_*` names are built here |
-| opkb/family | `forgekernel.family.family_key`, `kernel_library/index.json` | the start column and the family grouping | the name without its `NNN_` prefix |
+| benchx | `rsi_kernel_tune.benchx.api` (`CardBench`), else `rsi_kernel_tune.ext.bench --json` | scoring every candidate | starts are unscored (the task keeps its default target); readings carry no S |
+| evolve | `rsi_kernel_tune.ext.evolve` / `rsi_kernel_tune.evolve` | multi-lineage optimization | `forge new` + `forge run` |
+| seedlib | `rsi_kernel_tune.ext.lib` | `find` / `baselines` / `adapt` / `cover` | only the reference + baselines are absent → the reference is the start; pack needs `--allow-reference-fallback` |
+| seedlib | `rsi_kernel_tune.klib.normalize.cuda_to_inline` | a `.cu` version → a single-file submission | `not exported: needs klib` |
+| shapes | `rsi_kernel_tune.ext.shapes` | per-workload winners | the best mean-S version |
+| guard | `rsi_kernel_tune.integrity.license_check`, `.notices.banner`, `.export_check` | licence gate + header + export check | header says unavailable |
+| board | `rsi_kernel_tune.ext.board` | `--submit`, `sync --board`, `collection_validate` | no submission, `--from-saved` import, campaign's own self-check |
+| targethw | `rsi_kernel_tune/runcontext.py`, `target/B200.json` | context files into every run | the same four `FK_*` names are built here |
+| opkb/family | `rsi_kernel_tune.family.family_key`, `kernel_library/index.json` | the start column and the family grouping | the name without its `NNN_` prefix |
 
-`forgekernel.campaign.solscore.score_kernel(reading, board, mean=True)` is the shared entry
-the evolve and shapes task files name; it uses `forgekernel.leaderboard.sol_score`, so no
+`rsi_kernel_tune.campaign.solscore.score_kernel(reading, board, mean=True)` is the shared entry
+the evolve and shapes task files name; it uses `rsi_kernel_tune.leaderboard.sol_score`, so no
 task re-derives the board's formula.
 
 ## Working files

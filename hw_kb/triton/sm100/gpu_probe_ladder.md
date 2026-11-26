@@ -17,7 +17,7 @@ probe can take with no launch, with one launch, or only with a measurement — s
 ## Minimal runnable example
 ```python
 # Rung 0 -- no GPU, no launch: what did the compiler emit for the target?
-#   python -m forgekernel.triton_check kernel.py --target 10.0 --kernel <name> \
+#   python -m rsi_kernel_tune.triton_check kernel.py --target 10.0 --kernel <name> \
 #       --signature '{"x_ptr": "*bf16", "n": "i32"}' --constexprs '{"BLOCK": 1024}'
 # -> a TRITON-COMPILE verdict line; a compiled kernel's PTX is readable from the same call.
 

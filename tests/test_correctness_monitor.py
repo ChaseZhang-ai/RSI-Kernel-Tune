@@ -1,4 +1,4 @@
-"""Correctness monitor (forgekernel.monitor): the job-side runner and hook driven
+"""Correctness monitor (rsi_kernel_tune.monitor): the job-side runner and hook driven
 end to end on a toy card (CPU torch; skipped without it), the harness-side
 classification, the job mode and the overlay/submit path."""
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import monitor
+from rsi_kernel_tune import monitor
 
 GPU_ENTRY = """#!/bin/bash
 set -euo pipefail
@@ -611,7 +611,7 @@ def test_a_cut_short_job_is_read_from_its_profile_blocks():
 def test_finish_monitor_records_next_to_the_confirmation(tmp_path):
     from types import SimpleNamespace
 
-    from forgekernel.loop.cli import _run_finish_monitor
+    from rsi_kernel_tune.loop.cli import _run_finish_monitor
     result = {"profiles": [_rec("base", card_pass=False)], "complete": True}
     be = _Backend(monitor.MARKER + "\n" + json.dumps(result) + "\n")
     ctx = SimpleNamespace(branch_prefix="op-run", status_path=tmp_path / "status.jsonl")
@@ -628,7 +628,7 @@ def test_finish_monitor_records_next_to_the_confirmation(tmp_path):
 def test_finish_monitor_never_raises(tmp_path):
     from types import SimpleNamespace
 
-    from forgekernel.loop.cli import _run_finish_monitor
+    from rsi_kernel_tune.loop.cli import _run_finish_monitor
 
     class Broken(_Backend):
         def submit_gpu(self, branch, mode):

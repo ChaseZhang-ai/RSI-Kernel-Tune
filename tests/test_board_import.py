@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.board import importer as bi
-from forgekernel.board.client import BoardError
+from rsi_kernel_tune.board import importer as bi
+from rsi_kernel_tune.board.client import BoardError
 
 UTC = timezone.utc
 NOW = datetime(2026, 11, 24, 12, 0, tzinfo=UTC)

@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 import campaign_helpers as H
-from forgekernel.campaign import solscore
-from forgekernel.campaign import targets as T
+from rsi_kernel_tune.campaign import solscore
+from rsi_kernel_tune.campaign import targets as T
 
 REAL_SNAPSHOT = Path("/home/zcz/bestKernel/reports/board-snapshot-2026-11-24")
 needs_real = pytest.mark.skipif(
@@ -176,7 +176,7 @@ def test_starter_situation_reads_the_reference_library(tmp_path):
     assert got[H.L1_PROBLEM][0] == T.STARTER_EXACT
     assert got[H.QUANT_PROBLEM][0] == T.STARTER_BASELINE
     # the family-only entry is ranked under a *different* problem, not this one
-    assert T.family_of(H.L1_PROBLEM) == "rmsnorm"    # forgekernel.family's key after the merge
+    assert T.family_of(H.L1_PROBLEM) == "rmsnorm"    # rsi_kernel_tune.family's key after the merge
     # with no index at all every problem is "unknown"
     assert T.starter_situation(snap, tmp_path / "empty")[H.L1_PROBLEM][0] == T.STARTER_UNKNOWN
 

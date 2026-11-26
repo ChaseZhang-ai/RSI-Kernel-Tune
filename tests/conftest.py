@@ -11,7 +11,7 @@ behavior itself opt back in with an explicit zero-sleep tuple.
 """
 import pytest
 
-import forgekernel.loop.driver as _driver
+import rsi_kernel_tune.loop.driver as _driver
 
 
 @pytest.fixture(autouse=True)

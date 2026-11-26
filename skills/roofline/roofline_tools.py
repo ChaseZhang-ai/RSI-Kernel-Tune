@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Roofline arithmetic and NCU-signal classification -- one implementation, two callers.
 
-``forge roofline`` (``forgekernel.roofline.analyze``) and this skill share the numbers:
+``forge roofline`` (``rsi_kernel_tune.roofline.analyze``) and this skill share the numbers:
 the floor arithmetic below is the single implementation of
 
     t_mem    = bytes / (peak_bandwidth x efficiency)
@@ -9,9 +9,9 @@ the floor arithmetic below is the single implementation of
     t_floor  = max(t_mem, t_tensor, t_launch)
 
 and of the bottleneck class, the headroom grade and the distance ratios.  The skill
-imports nothing from ForgeKernel, so a GPU job can run it as
+imports nothing from this project, so a GPU job can run it as
 ``python3 notes/roofline_tools.py distance ...``; ``forge roofline`` imports THIS file
-(``from forgekernel.skills import roofline_tools``, the same path the harness already
+(``from rsi_kernel_tune.skills import roofline_tools``, the same path the harness already
 uses for ``sass_tools``), so the two cannot drift apart.
 
 Three subcommands, all pure (no GPU, no network):
@@ -175,8 +175,8 @@ def distance(*, flops: float, bytes_read: float, bytes_written: float,
 # -- calibration files ----------------------------------------------------------------
 #
 # A calibration document is what `forge calibrate` writes (the JSON schema lives in
-# forgekernel.roofline.calibrate, which builds it).  Only the peaks are read here, so a
-# GPU job that has the file but not ForgeKernel can still compute a distance from it.
+# rsi_kernel_tune.roofline.calibrate, which builds it).  Only the peaks are read here, so a
+# GPU job that has the file but not this project can still compute a distance from it.
 
 # the tensor-precision name a cost model uses -> the probe entry the calibration holds
 PEAK_ENTRY = {"bf16": "bf16", "fp16": "fp16", "fp8": "fp8", "fp4": "fp4"}

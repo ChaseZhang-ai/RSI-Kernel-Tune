@@ -1,4 +1,4 @@
-"""forgekernel.opkb.record: extraction from a run directory, field by field.
+"""rsi_kernel_tune.opkb.record: extraction from a run directory, field by field.
 
 The fixture ``tests/fixtures/opkb_run`` is a synthesized run with the real layout and the
 real field names of the artifacts a run writes (``run.json``, the task snapshot, the card's
@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-import forgekernel.ext.lessons as lessons_cli
-from forgekernel.opkb import record
+import rsi_kernel_tune.ext.lessons as lessons_cli
+from rsi_kernel_tune.opkb import record
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).parent / "fixtures" / "opkb_run"
@@ -329,7 +329,7 @@ def test_forge_lessons_help_and_every_subcommands_help(capsys):
 
 
 def test_the_forge_extension_entry_point_reaches_the_command(capsys):
-    from forgekernel import __main__ as forge_main
+    from rsi_kernel_tune import __main__ as forge_main
 
     with pytest.raises(SystemExit) as e:
         forge_main.main(["lessons", "--help"])            # `forge lessons --help`

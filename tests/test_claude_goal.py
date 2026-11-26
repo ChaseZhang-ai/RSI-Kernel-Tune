@@ -112,7 +112,7 @@ def _turn_dir(ctx):
     reply = td / "reply.md"
     check = f"{_PY} {td / 'check.py'} {reply}"
     spec = {"kind": "caller", "role": "student", "reply": str(reply), "check": check,
-            "condition": (f"FORGEKERNEL TURN. Write the reply to `{reply}`, then run "
+            "condition": (f"RSI_KERNEL_TUNE TURN. Write the reply to `{reply}`, then run "
                           f"`{check}`; met when it printed TURN-DELIVERABLE-OK.")}
     (td / "spec.json").write_text(json.dumps(spec))
     return td
@@ -125,7 +125,7 @@ def test_a_met_goal_hands_back_the_reply_and_leaves_nothing_running(env):
     assert r.stderr == ""                     # the loop scans stderr for failure text
     assert _sessions() == [] and _stub_procs(env["tag"]) == []
     argv = json.loads((env["tmp"] / "argv.log").read_text().splitlines()[0])
-    assert argv[-1].startswith("/goal FORGEKERNEL TURN")       # /goal is the first prompt
+    assert argv[-1].startswith("/goal RSI_KERNEL_TUNE TURN")       # /goal is the first prompt
     assert "--append-system-prompt-file" in argv and "--session-id" in argv
     prompt_file = Path(argv[argv.index("--append-system-prompt-file") + 1])
     assert prompt_file.read_text().endswith("do the thing")
@@ -156,7 +156,7 @@ def test_a_judge_fooled_without_a_reply_gets_the_goal_resent(env):
     r = _run(env, "false_met")
     assert r.returncode == 0, r.stderr
     assert r.stdout == "EXHAUSTED: stub reply\n"
-    assert "/goal FORGEKERNEL" in (env["tmp"] / "lines.log").read_text()
+    assert "/goal RSI_KERNEL_TUNE" in (env["tmp"] / "lines.log").read_text()
 
 
 def test_a_served_model_mismatch_exits_75_with_the_reply(env):
@@ -201,7 +201,7 @@ def test_a_rate_limit_pause_is_nudged_and_the_turn_completes(env):
     r = _run(env, "pause_then_ok", FK_GOAL_RATE_WAIT_S="0.5")
     assert r.returncode == 0, r.stderr
     assert r.stdout == "EXHAUSTED: stub reply\n"
-    assert "/goal FORGEKERNEL" in (env["tmp"] / "lines.log").read_text()
+    assert "/goal RSI_KERNEL_TUNE" in (env["tmp"] / "lines.log").read_text()
 
 
 def test_the_deadline_kills_the_session_and_exits_124(env):
@@ -275,7 +275,7 @@ def test_only_the_bottom_most_goal_status_counts():
     paused = "x\nGoal paused · the request was rate limited · send a message to retry\n"
     assert m.classify_pane(paused) == ("paused", "the request was rate limited")
     # a resolved pause scrolled up: the newer "Goal set" supersedes it
-    assert m.classify_pane(paused + "❯ /goal ...\n  ⎿  Goal set: FORGEKERNEL\n") == ("", "")
+    assert m.classify_pane(paused + "❯ /goal ...\n  ⎿  Goal set: RSI_KERNEL_TUNE\n") == ("", "")
     assert m.classify_pane("Goal still active · the API was unavailable · retrying in 1 min (1/3)")[0] == "still"
     assert m.classify_pane('Goal cleared after an unrecoverable error (context limit reached): "x"')[0:2] == \
         ("cleared", "context limit reached")
@@ -348,14 +348,14 @@ def test_the_agent_scripts_pass_the_agent_policys_command_scan():
     directory before claude starts (the project settings would not load); the agent
     scripts must not trip it."""
     sys.path.insert(0, str(_ROOT / "src"))
-    from forgekernel.loop.agent_policy import command_findings
+    from rsi_kernel_tune.loop.agent_policy import command_findings
     for f in ("agent-claude.sh", "claude-goal.sh"):
         assert command_findings([f"bash {_ROOT / 'scripts' / f} m m"], {}) == [], f
 
 
 def test_goal_leg_findings():
     sys.path.insert(0, str(_ROOT / "src"))
-    from forgekernel.loop.cli import goal_leg_findings
+    from rsi_kernel_tune.loop.cli import goal_leg_findings
     scripts = _ROOT / "scripts"
     assert goal_leg_findings([f"bash {scripts / 'agent-claude.sh'} m high 600"], {}) == []
     assert goal_leg_findings([f"bash {scripts / 'claude-goal.sh'} m m"], {}) == []

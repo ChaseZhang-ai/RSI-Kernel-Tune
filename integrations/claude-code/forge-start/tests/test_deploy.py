@@ -18,7 +18,7 @@ class DeploymentTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.repo = self.root / 'repo'
         self.repo.mkdir()
-        (self.repo / 'pyproject.toml').write_text('[project]\nname="forgekernel"\n')
+        (self.repo / 'pyproject.toml').write_text('[project]\nname="rsi_kernel_tune"\n')
 
     def args(self, *extra):
         return self.m.parse_args(['--repo', str(self.repo), '--env', str(self.root / 'env'), *extra])

@@ -1,4 +1,4 @@
-"""forgekernel.submit.direct: an external GPU lock in front of a local job (FK_JOB_LOCK_CMD).
+"""rsi_kernel_tune.submit.direct: an external GPU lock in front of a local job (FK_JOB_LOCK_CMD).
 
 A lock command shared with other work on the machine is put in front of the entry. What is
 pinned here: the entry is started from inside the lock; a job that never got the lock is
@@ -16,9 +16,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from forgekernel.submit import direct
-from forgekernel.submit import jobs as ds
-from forgekernel.submit.config import load_config
+from rsi_kernel_tune.submit import direct
+from rsi_kernel_tune.submit import jobs as ds
+from rsi_kernel_tune.submit.config import load_config
 from test_direct_delivery import _FakeSsh, _locks, _op, _ssh_cfg, _ssh_run  # noqa: F401  (fixtures)
 
 LOCK = "/bin/with-lock gpu 1800 --"

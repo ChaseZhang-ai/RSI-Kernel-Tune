@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import runcontext
-from forgekernel import target_profile as tp
-from forgekernel.loop import driver
+from rsi_kernel_tune import runcontext
+from rsi_kernel_tune import target_profile as tp
+from rsi_kernel_tune.loop import driver
 from test_loop_driver import FakeBackend, _ctx
 
 REPO = Path(__file__).resolve().parents[1]
@@ -35,7 +35,7 @@ def test_the_profile_is_at_its_place_and_declares_its_schema():
     assert tp.profile_path() == REPO / "target" / "B200.json"
     assert tp.profile_path("/r") == Path("/r/target/B200.json")
     profile = tp.load()
-    assert profile["schema"] == "forgekernel.target-profile/1"
+    assert profile["schema"] == "rsi_kernel_tune.target-profile/1"
     assert set(profile) == KNOWN_KEYS
 
 
@@ -217,7 +217,7 @@ def test_a_profile_file_that_is_not_one_is_named(tmp_path):
     profile.write_text(json.dumps({"schema": "other"}), encoding="utf-8")
     with pytest.raises(tp.ProfileError, match="schema 'other'"):
         tp.load(tmp_path)
-    good = {"schema": "forgekernel.target-profile/1", "name": "X"}
+    good = {"schema": "rsi_kernel_tune.target-profile/1", "name": "X"}
     profile.write_text(json.dumps(good), encoding="utf-8")
     assert tp.load(tmp_path) == good
 

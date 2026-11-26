@@ -18,9 +18,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from forgekernel import launch                    # noqa: E402
-from forgekernel import integrity as icheck       # noqa: E402
-from forgekernel.loop.parse import parse_eval     # noqa: E402
+from rsi_kernel_tune import launch                    # noqa: E402
+from rsi_kernel_tune import integrity as icheck       # noqa: E402
+from rsi_kernel_tune.loop.parse import parse_eval     # noqa: E402
 
 CLEAN = "import torch\n\ndef run(x, out):\n    out.copy_(x)\n"
 BLOCKED = ("import os\nos.environ['TF32'] = '0'\n\n"
@@ -87,7 +87,7 @@ def test_a_board_export_records_the_override_in_the_description(export_env, monk
     (card / "eval" / "leaderboard").mkdir(parents=True)
     (card / "eval" / "leaderboard" / "problem.json").write_text(json.dumps(
         {"kernel_file": "kernel.py"}))
-    monkeypatch.setattr("forgekernel.leaderboard.export_solution",
+    monkeypatch.setattr("rsi_kernel_tune.leaderboard.export_solution",
                         lambda op_dir, **kw: {"name": kw["name"], "description": "d",
                                               "sources": [{"content": BLOCKED}]})
     assert launch.cmd_export([str(export_env.run.dir),
@@ -106,7 +106,7 @@ def test_a_clean_board_export_gets_no_integrity_line(export_env, monkeypatch, ca
     (card / "eval" / "leaderboard").mkdir(parents=True)
     (card / "eval" / "leaderboard" / "problem.json").write_text(json.dumps(
         {"kernel_file": "kernel.py"}))
-    monkeypatch.setattr("forgekernel.leaderboard.export_solution",
+    monkeypatch.setattr("rsi_kernel_tune.leaderboard.export_solution",
                         lambda op_dir, **kw: {"name": kw["name"], "description": "d",
                                               "sources": [{"content": CLEAN}]})
     assert launch.cmd_export([str(export_env.run.dir)]) == 0
@@ -150,7 +150,7 @@ def test_the_cold_start_gate_reads_a_bench_result(tmp_path) -> None:
 
 
 def test_the_cold_start_budget_is_benchx_s() -> None:
-    from forgekernel.benchx.api import COLD_START_BUDGET_S
+    from rsi_kernel_tune.benchx.api import COLD_START_BUDGET_S
     gate = icheck.cold_start_gate()
     assert gate["budget_s"] == COLD_START_BUDGET_S == 100.0
 

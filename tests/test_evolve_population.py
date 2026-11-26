@@ -15,13 +15,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from forgekernel.evolve import archive as archive_mod
-from forgekernel.evolve import lineage as lineage_mod
-from forgekernel.evolve import metric as metric_mod
-from forgekernel.evolve import population as population_mod
-from forgekernel.evolve.metric import Metric
-from forgekernel.evolve.population import Config, Population, initial_state
-from forgekernel.task import load_task
+from rsi_kernel_tune.evolve import archive as archive_mod
+from rsi_kernel_tune.evolve import lineage as lineage_mod
+from rsi_kernel_tune.evolve import metric as metric_mod
+from rsi_kernel_tune.evolve import population as population_mod
+from rsi_kernel_tune.evolve.metric import Metric
+from rsi_kernel_tune.evolve.population import Config, Population, initial_state
+from rsi_kernel_tune.task import load_task
 
 KERNEL = "import torch\n\ndef run(x, w):\n    return x * w\n"
 
@@ -415,9 +415,9 @@ def test_metric_uses_the_campaign_hook_when_installed(tmp_path, monkeypatch):
     import sys
     task = load_task(_board(tmp_path))
     run = _run_with_eval(tmp_path, sol_block=None)
-    mod = type(sys)("forgekernel.campaign.solscore")
+    mod = type(sys)("rsi_kernel_tune.campaign.solscore")
     mod.score_kernel = lambda obj: 0.42
-    monkeypatch.setitem(sys.modules, "forgekernel.campaign.solscore", mod)
+    monkeypatch.setitem(sys.modules, "rsi_kernel_tune.campaign.solscore", mod)
     monkeypatch.setattr(metric_mod.launch, "best_of", lambda run, task: _best(1.1))
     m = metric_mod.metric_of(run, task)
     assert (m.kind, m.value) == ("sol", pytest.approx(0.42))
@@ -428,12 +428,12 @@ def test_metric_uses_benchx_when_installed(tmp_path, monkeypatch):
     import sys
     task = load_task(_board(tmp_path))
     run = _run_with_eval(tmp_path, sol_block=None)
-    reader = type(sys)("forgekernel.benchx.reader")
+    reader = type(sys)("rsi_kernel_tune.benchx.reader")
     reader.read_run = lambda *a, **k: SimpleNamespace(
         mean_s=0.9, confidence=["dev-only", "fp4-bound"],
         workloads=[{"name": "w0", "t_ms": 0.7}])
-    monkeypatch.setitem(sys.modules, "forgekernel.benchx", type(sys)("forgekernel.benchx"))
-    monkeypatch.setitem(sys.modules, "forgekernel.benchx.reader", reader)
+    monkeypatch.setitem(sys.modules, "rsi_kernel_tune.benchx", type(sys)("rsi_kernel_tune.benchx"))
+    monkeypatch.setitem(sys.modules, "rsi_kernel_tune.benchx.reader", reader)
     monkeypatch.setattr(metric_mod.launch, "best_of", lambda run, task: _best(1.1))
     m = metric_mod.metric_of(run, task)
     assert (m.kind, m.value) == ("sol", pytest.approx(0.9))
@@ -455,7 +455,7 @@ def test_ordinary_metric_uses_the_confirmation_spread(tmp_path, monkeypatch):
 
 
 def test_cli_dry_run_prints_and_writes_nothing(tmp_path, monkeypatch, capsys):
-    from forgekernel.ext import evolve as evolve_cli
+    from rsi_kernel_tune.ext import evolve as evolve_cli
     repo = tmp_path / "repo"
     base = _ordinary(repo)
     monkeypatch.setattr(evolve_cli.launch, "repo_root", lambda: repo)
@@ -469,7 +469,7 @@ def test_cli_dry_run_prints_and_writes_nothing(tmp_path, monkeypatch, capsys):
 
 
 def test_cli_rejects_an_unknown_language(tmp_path, monkeypatch, capsys):
-    from forgekernel.ext import evolve as evolve_cli
+    from rsi_kernel_tune.ext import evolve as evolve_cli
     repo = tmp_path / "repo"
     base = _ordinary(repo)
     monkeypatch.setattr(evolve_cli.launch, "repo_root", lambda: repo)
@@ -479,7 +479,7 @@ def test_cli_rejects_an_unknown_language(tmp_path, monkeypatch, capsys):
 
 
 def test_cli_status_and_show_read_a_population(tmp_path, monkeypatch, capsys):
-    from forgekernel.ext import evolve as evolve_cli
+    from rsi_kernel_tune.ext import evolve as evolve_cli
     h = build(tmp_path, monkeypatch, {(0, 1): (1.30, 1.0)}, lineages=1,
               generations=1)
     assert h.run() == 0
@@ -492,6 +492,6 @@ def test_cli_status_and_show_read_a_population(tmp_path, monkeypatch, capsys):
 
 
 def test_cli_refuses_a_missing_population(capsys):
-    from forgekernel.ext import evolve as evolve_cli
+    from rsi_kernel_tune.ext import evolve as evolve_cli
     assert evolve_cli.main(["status", "/nonexistent/pop"]) == 2
     assert "does not exist" in capsys.readouterr().err

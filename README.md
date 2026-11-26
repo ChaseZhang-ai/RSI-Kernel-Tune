@@ -1,6 +1,6 @@
 <div align="center">
 
-# ForgeKernel: Self-Evolving Kernels Catching and Surpassing Experts and Agents
+# RSI-Kernel-Tune: Self-Evolving Kernels Catching and Surpassing Experts and Agents
 
 **English** | [中文](README_zh.md)
 
@@ -15,26 +15,26 @@
 
 </div>
 
-ForgeKernel is a **self-evolving GPU kernel agent** that starts from a **reference kernel**.
+this project is a **self-evolving GPU kernel agent** that starts from a **reference kernel**.
 It reads the reference's architecture by running, timing and profiling it, turns that into an
 architecture-first milestone curriculum that a coding agent implements, and **promotes every
 accepted kernel to the next reference**, so optimization keeps going past the best known
 implementation. Findings certified by a hardware probe accumulate in a
 **knowledge base shared across operators**. In the paper, across 27 operators on Hopper and
-Blackwell, ForgeKernel matches or beats **18 of 22 expert-library kernels** (FlashAttention-4,
+Blackwell, RSI-Kernel-Tune matches or beats **18 of 22 expert-library kernels** (FlashAttention-4,
 cuDNN, DeepGEMM and others) and **all 7 published kernels** of three kernel-generation systems,
 by up to **+170.6%** (+39.4% geometric mean). The kernels are released in [`kernels/`](kernels/).
 
-ForgeKernel is part of the **Forge family**, together with
+this project is part of the **Forge family**, together with
 [ForgeTrain](https://github.com/OpenBMB/ForgeTrain) and
 [ForgeStencil](https://github.com/OpenBMB/ForgeStencil).
 
 ## News
 
 - 🛠️ **[2026-11]** Claude Code skill `forge-start` released: type `/forge-start` and it sets up
-  and launches (or resumes) a ForgeKernel run for you. See
+  and launches (or resumes) a RSI-Kernel-Tune run for you. See
   [integrations/claude-code](integrations/claude-code/README.md).
-- 📄 **[2026-11]** ForgeKernel paper release: [arXiv:2611.04998](https://arxiv.org/abs/2611.04998).
+- 📄 **[2026-11]** RSI-Kernel-Tune paper release: [arXiv:2611.04998](https://arxiv.org/abs/2611.04998).
 - 📄 **[2026-10]** JustGoal paper release: [arXiv:2610.36434](https://arxiv.org/abs/2610.36434).
 - 🏆 **[2026-10]** We reached **#1** on the FlashInfer-Bench leaderboard of NVIDIA
   [SOL-ExecBench](https://research.nvidia.com/benchmarks/sol-execbench).
@@ -44,7 +44,7 @@ ForgeKernel is part of the **Forge family**, together with
 
 ## TODO
 
-Planned for **ForgeKernel v1.5**:
+Planned for **RSI-Kernel-Tune v1.5**:
 
 - [ ] **Shape clustering**: group the shapes of a task into clusters and optimize per cluster,
   so one run can cover a wide range of shapes.
@@ -78,7 +78,7 @@ Clone this repository, then paste this into Claude Code (or any coding agent tha
 commands) started in the clone:
 
 ```text
-Read README.md in this directory and set up ForgeKernel on this machine:
+Read README.md in this directory and set up RSI-Kernel-Tune on this machine:
 install it in a virtual environment, write local.env for my GPU (this
 machine, or the ssh host I name) and run `forge new tasks/rmsnorm --dry-run`.
 Show me the plan it prints.
@@ -109,14 +109,14 @@ need no GPU at all, the SOL-ExecBench campaign loop, and what is (and is not) ve
 **1. Install**
 
 ```bash
-cd ForgeKernel                   # a clone of this repository
+cd RSI-Kernel-Tune                   # a clone of this repository
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .                 # installs torch + safetensors too
 pip install nvidia-cutlass-dsl   # recommended, see below
-forge --version                  # forgekernel 0.1.0
+forge --version                  # rsi_kernel_tune 0.1.0
 ```
 
-The coding agent works offline; installing `nvidia-cutlass-dsl` next to ForgeKernel is how it
+The coding agent works offline; installing `nvidia-cutlass-dsl` next to this project is how it
 reads the CuTe DSL API it writes against.
 
 **2. Say where the GPU is**
@@ -178,8 +178,8 @@ column says what the step cannot do without.
 Every export goes through the **integrity gates**: `forge export` and the campaign's export
 refuse a file with a block-level static finding (environment writes, hidden state, absolute
 paths, architecture literals; `docs/integrity.md`), require the licence/notice banner,
-re-check the candidate on fresh inputs (`forgekernel.integrity.multiseed`) and refuse a cold
-start past `forgekernel.benchx.api.COLD_START_BUDGET_S`.
+re-check the candidate on fresh inputs (`rsi_kernel_tune.integrity.multiseed`) and refuse a cold
+start past `rsi_kernel_tune.benchx.api.COLD_START_BUDGET_S`.
 
 Run-time mechanisms the commands rely on: the four run context files
 (`{TARGET_PROFILE_PATH}`, `{ROOFLINE_PATH}`, `{LESSONS_PATH}`, `{PRIOR_PATH}`) carry measured
@@ -189,13 +189,13 @@ student; the agent backend is a plugin (`[agent.teacher] backend = "claude" | "c
 every turn's tokens and cost land in `agent_usage.jsonl` (`## Agent usage` in `report.md`).
 
 Languages: `task.toml` accepts `cutedsl`, `cuda-sol` and `triton`; a Triton card is made with
-`forge init … --language triton`, and `python -m forgekernel.triton_check <kernel.py>` is the
+`forge init … --language triton`, and `python -m rsi_kernel_tune.triton_check <kernel.py>` is the
 standalone target compile check for a Triton kernel.
 
 ## How It Works
 
 <div align="center">
-<img src="docs/assets/figure2-architecture.png" width="90%" alt="ForgeKernel architecture: the arch agent analyses the reference and writes milestones; the coding agent implements one decision row at a time; gates retry, re-analyse or ship">
+<img src="docs/assets/figure2-architecture.png" width="90%" alt="RSI-Kernel-Tune architecture: the arch agent analyses the reference and writes milestones; the coding agent implements one decision row at a time; gates retry, re-analyse or ship">
 </div>
 
 A run has two nested loops. In the **inner loop** the coding agent implements one decision row of
@@ -281,7 +281,7 @@ evaluation code. → [docs/leaderboards.md](docs/leaderboards.md)
 
 ## Kernels
 
-[`kernels/`](kernels/) releases the kernels ForgeKernel generated in the paper (24 kernels in CuTe
+[`kernels/`](kernels/) releases the kernels RSI-Kernel-Tune generated in the paper (24 kernels in CuTe
 DSL, on H100 and B200) and one generated after it (the DeepSeek-V4.1 fused sparse-attention
 prefill in CUDA C++, 1.10× FlashMLA on B200). They are grouped by operator type, then by operator
 and GPU:
@@ -322,7 +322,7 @@ comparison does not depend on which image a campaign used.
 The layout follows ForgeTrain's:
 
 ```text
-src/forgekernel/     the harness: CLI, tasks and runs, the loop, GPU jobs
+src/rsi_kernel_tune/     the harness: CLI, tasks and runs, the loop, GPU jobs
 global_config/       the bottom config layer: models.toml, loop.toml, backends.toml
 tasks/               <op>/: task.toml, description.md, shapes.json, reference/;
                      _template/ (what `forge init` copies), rmsnorm/ (ready to run)
@@ -334,7 +334,7 @@ hw_kb/               the hardware knowledge base (cutedsl/, cuda/), by GPU archi
 docs/                design notes, milestone template, leaderboards, KB
 scripts/             agent launcher, /goal driver, self-evolution
 tests/               pytest suite (CPU only)
-kernels/             kernels generated by ForgeKernel, by operator type
+kernels/             kernels generated by RSI-Kernel-Tune, by operator type
 integrations/        claude-code/forge-start/: the Claude Code launch skill (for you, not the agents)
 ```
 
@@ -348,7 +348,7 @@ entry needs a GPU probe that certifies it; see [docs/kb-harvest.md](docs/kb-harv
 ## Limitations
 
 - **A reference helps most.** Given only a PyTorch implementation and a device-time number, the
-  paper's ablation stalls on all three operators tested; ForgeKernel surpasses an implementation
+  paper's ablation stalls on all three operators tested; RSI-Kernel-Tune surpasses an implementation
   that exists more reliably than it writes the first one.
 - **A plateau is an estimate, not a proof.** Self-evolution stops at the same-job noise floor:
   the loop found nothing more, which does not mean nothing more exists.
@@ -359,14 +359,14 @@ entry needs a GPU probe that certifies it; see [docs/kb-harvest.md](docs/kb-harv
 
 ## Citation
 
-If you use ForgeKernel, please cite our paper:
+If you use RSI-Kernel-Tune, please cite our paper:
 
 <details>
 <summary>BibTeX</summary>
 
 ```bibtex
-@misc{chen2026forgekernel,
-  title  = {ForgeKernel: Self-Evolving Kernels Catching and Surpassing Experts and Agents},
+@misc{chen2026rsi_kernel_tune,
+  title  = {RSI-Kernel-Tune: Self-Evolving Kernels Catching and Surpassing Experts and Agents},
   author = {Chen, Yaojian and Peng, Dazhi and Zheng, Yiyun and Zhu, Zhui and Xiang, Shengye
             and Li, Leshan and Li, Zhen and Deng, Xianglong and Sun, Haojun and He, Qingfeng
             and Li, Shangzhan and Shen, Yifei and Gan, Lin and Li, Yuxuan and Han, Xu
@@ -387,7 +387,7 @@ FlashInfer-Bench and SOL-ExecBench (both Apache-2.0); see [NOTICE](NOTICE).
 
 ## Acknowledgments
 
-ForgeKernel builds on [CUTLASS and CuTe DSL](https://github.com/NVIDIA/cutlass),
+RSI-Kernel-Tune builds on [CUTLASS and CuTe DSL](https://github.com/NVIDIA/cutlass),
 [Nsight Compute](https://developer.nvidia.com/nsight-compute),
 [Claude Code](https://docs.claude.com/en/docs/claude-code/overview),
 [FlashInfer-Bench](https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace) and

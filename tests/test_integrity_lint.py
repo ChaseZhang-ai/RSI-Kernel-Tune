@@ -1,4 +1,4 @@
-"""tests for forgekernel.integrity.lint: every rule a positive and a negative.
+"""tests for rsi_kernel_tune.integrity.lint: every rule a positive and a negative.
 
 The rules are the board's Prohibited Behavior list in source form (docs/integrity.md), and
 they are worth only as much as their precision: a rule that fires on an ordinary kernel is
@@ -16,7 +16,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from forgekernel.integrity import lint as L   # noqa: E402
+from rsi_kernel_tune.integrity import lint as L   # noqa: E402
 
 CLEAN = '''import torch
 
@@ -284,7 +284,7 @@ def test_normal_kernels_have_no_findings(src: str) -> None:
 def test_the_repo_corpus_has_no_false_blocks_on_ordinary_code() -> None:
     """The calibration that matters: the repo's own kernels must not read as cheats.
 
-    ``kernels/`` are ForgeKernel ``kernel.py`` files (``submission=False``: their entry
+    ``kernels/`` are RSI-Kernel-Tune ``kernel.py`` files (``submission=False``: their entry
     point and tree are the loop's).  The two blocks that remain are real -- an inline-CUDA
     kernel that writes ``os.environ`` -- and are recorded in the report, not asserted away.
     """

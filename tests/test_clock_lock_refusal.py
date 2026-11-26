@@ -10,10 +10,10 @@ caller, resubmits a few times, then stops with ClockLockRefusedError (a NoRunErr
 
 import pytest
 
-from forgekernel.loop import cli
-from forgekernel.loop.driver import NoRunError
-from forgekernel.loop.parse import parse_eval
-from forgekernel.submit import jobs
+from rsi_kernel_tune.loop import cli
+from rsi_kernel_tune.loop.driver import NoRunError
+from rsi_kernel_tune.loop.parse import parse_eval
+from rsi_kernel_tune.submit import jobs
 
 REFUSED_LOG = """\
 === gpu_entry.sh (010_gemm_n6144_k4096, sol-execbench) ===

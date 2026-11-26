@@ -23,12 +23,12 @@ torch = pytest.importorskip("torch")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location(
     "fk_template_leaderboard_integrity",
-    REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval" / "leaderboard.py")
+    REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "leaderboard.py")
 lb = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(lb)
 
 sys.path.insert(0, str(REPO_ROOT / "src"))
-from forgekernel.integrity import report   # noqa: E402
+from rsi_kernel_tune.integrity import report   # noqa: E402
 
 RMS_REF = """import torch
 
@@ -240,7 +240,7 @@ def test_the_number_of_rechecked_workloads_comes_from_the_environment(
 
 
 def test_the_seed_environment_variable_changes_the_redraw(tmp_path, monkeypatch, capsys) -> None:
-    """``FK_INTEGRITY_SEED`` is what forgekernel.integrity.multiseed drives."""
+    """``FK_INTEGRITY_SEED`` is what rsi_kernel_tune.integrity.multiseed drives."""
     p = _problem()
     seen = []
     real = lb._fresh_input_set

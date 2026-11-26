@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from forgekernel.benchx import compare as compare_mod
-from forgekernel.benchx.api import BenchResult, WorkloadReading
+from rsi_kernel_tune.benchx import compare as compare_mod
+from rsi_kernel_tune.benchx.api import BenchResult, WorkloadReading
 
 
 def result(readings, *, mean_s=None, correct=True, error="") -> BenchResult:
@@ -120,7 +120,7 @@ def two_result_files(tmp_path):
 
 
 def test_the_compare_command_prints_and_writes_the_table(tmp_path, capsys):
-    from forgekernel.ext import bench as bench_cmd
+    from rsi_kernel_tune.ext import bench as bench_cmd
 
     a, b = two_result_files(tmp_path)
     out = tmp_path / "table.json"
@@ -132,7 +132,7 @@ def test_the_compare_command_prints_and_writes_the_table(tmp_path, capsys):
 
 
 def test_the_best_of_command_writes_the_routing_table(tmp_path, capsys):
-    from forgekernel.ext import bench as bench_cmd
+    from rsi_kernel_tune.ext import bench as bench_cmd
 
     a, b = two_result_files(tmp_path)
     out = tmp_path / "routes.json"
@@ -144,7 +144,7 @@ def test_the_best_of_command_writes_the_routing_table(tmp_path, capsys):
 
 
 def test_compare_needs_two_readable_results(tmp_path, capsys):
-    from forgekernel.ext import bench as bench_cmd
+    from rsi_kernel_tune.ext import bench as bench_cmd
 
     a, _ = two_result_files(tmp_path)
     assert bench_cmd.main(["compare", str(a)]) == 2

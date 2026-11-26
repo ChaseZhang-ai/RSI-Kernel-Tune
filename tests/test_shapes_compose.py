@@ -16,9 +16,9 @@ from pathlib import Path
 import pytest
 import torch
 
-from forgekernel.benchx.api import BenchResult, FakeBench, WorkloadReading
-from forgekernel.shapes import compose as CC
-from forgekernel.shapes import evalx, matrix as M, plan as P
+from rsi_kernel_tune.benchx.api import BenchResult, FakeBench, WorkloadReading
+from rsi_kernel_tune.shapes import compose as CC
+from rsi_kernel_tune.shapes import evalx, matrix as M, plan as P
 
 KERNEL = "def run(*args):\n    return None\n"
 

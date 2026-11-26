@@ -137,7 +137,7 @@ elif mode == "resume_ok":
 elif mode == "cleared":
     api_error("Please run /login · API Error: 401 OAuth access token is invalid.", "authentication_failed")
     turn_end()
-    say('Goal cleared after an unrecoverable error (authentication failed): "FORGEKERNEL". '
+    say('Goal cleared after an unrecoverable error (authentication failed): "RSI_KERNEL_TUNE". '
         'Run /goal again to continue.')
     idle()
 elif mode == "pause_then_ok":

@@ -1,4 +1,4 @@
-"""forgekernel.opkb.lint: every rule one positive and one negative case, and the sweep."""
+"""rsi_kernel_tune.opkb.lint: every rule one positive and one negative case, and the sweep."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-import forgekernel.ext.lessons as lessons_cli
-from forgekernel.opkb import lint, record, store
+import rsi_kernel_tune.ext.lessons as lessons_cli
+from rsi_kernel_tune.opkb import lint, record, store
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).parent / "fixtures" / "opkb_run"

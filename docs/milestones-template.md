@@ -1,5 +1,5 @@
 <!--
-  ForgeKernel's milestones meta-template.
+  RSI-Kernel-Tune's milestones meta-template.
 
   It started from an external blueprint specification and has since evolved in place for
   this repo (the reader is now the teacher, the free-optimization phase was removed, the L0

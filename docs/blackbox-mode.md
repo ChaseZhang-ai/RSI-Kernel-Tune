@@ -162,7 +162,7 @@ the user does nothing:
   (the student's `cmd` probes, the kernel that runs in the reference's process, the launch environment
   in a profiler report, `/proc/<pid>/environ`), so the first thing a tree's `gpu_entry.sh` does is move
   the key into `ref_bin/ref_payload.key` beside the payload (mode 600, gitignored) and re-exec itself
-  without it (`forgekernel.sealref.key_preamble`); `closed_ref.load` reads that file when the
+  without it (`rsi_kernel_tune.sealref.key_preamble`); `closed_ref.load` reads that file when the
   environment has no key. The transport never puts the key on a command line either: ssh delivery
   sends `*_REF_KEY` over ssh's stdin and reads it into the environment on the host before starting
   `gpu_entry.sh`.

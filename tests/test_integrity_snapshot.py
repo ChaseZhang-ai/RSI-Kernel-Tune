@@ -19,8 +19,8 @@ torch = pytest.importorskip("torch")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from forgekernel.integrity import fallback, license as lic, lint, multiseed, notices  # noqa: E402
-from forgekernel.integrity import report, snapshot, timers                              # noqa: E402
+from rsi_kernel_tune.integrity import fallback, license as lic, lint, multiseed, notices  # noqa: E402
+from rsi_kernel_tune.integrity import report, snapshot, timers                              # noqa: E402
 
 
 # --- check B: the state snapshot ---------------------------------------------------------

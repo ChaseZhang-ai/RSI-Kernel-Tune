@@ -353,14 +353,14 @@ def test_the_codex_launcher_does_not_retry_a_downgraded_turn(tmp_path):
 
 
 def _backend(monkeypatch, **kw):
-    from forgekernel.loop.cli import RealBackend
-    monkeypatch.setattr("forgekernel.loop.cli.time.sleep", lambda *_: None)
+    from rsi_kernel_tune.loop.cli import RealBackend
+    monkeypatch.setattr("rsi_kernel_tune.loop.cli.time.sleep", lambda *_: None)
     b = RealBackend("op", Path("/ws"), "fake-agent", "n", "e", **kw)
     return b
 
 
 def test_run_agent_does_not_retry_a_downgraded_turn(monkeypatch):
-    from forgekernel.loop.cli import AgentError
+    from rsi_kernel_tune.loop.cli import AgentError
     b = _backend(monkeypatch, agent_retries=3, agent_retry_sleep=0.0)
     calls = {"n": 0}
 
@@ -390,7 +390,7 @@ def test_run_agent_returns_the_reply_when_only_a_warning_was_written(monkeypatch
 
 
 def test_a_marker_in_stdout_is_enough(monkeypatch):
-    from forgekernel.loop.cli import AgentError
+    from rsi_kernel_tune.loop.cli import AgentError
     b = _backend(monkeypatch, agent_retries=3, agent_retry_sleep=0.0)
     calls = {"n": 0}
 

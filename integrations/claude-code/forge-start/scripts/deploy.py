@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy ForgeKernel dependencies; infrastructure and sandbox policy stay external."""
+"""Deploy RSI-Kernel-Tune dependencies; infrastructure and sandbox policy stay external."""
 import argparse
 import json
 import os
@@ -33,8 +33,8 @@ def parse_args(argv=None):
 def plan(a):
     repo, env = a.repo.resolve(), a.env.resolve()
     manifest = repo / 'pyproject.toml'
-    if not manifest.is_file() or tomllib.loads(manifest.read_text()).get('project', {}).get('name') != 'forgekernel':
-        raise ValueError(f'Not a ForgeKernel checkout: {repo}')
+    if not manifest.is_file() or tomllib.loads(manifest.read_text()).get('project', {}).get('name') != 'rsi_kernel_tune':
+        raise ValueError(f'Not a this project checkout: {repo}')
     if sys.version_info < (3, 11):
         raise ValueError('Python 3.11 or newer is required')
     if env.exists() and not (env / 'pyvenv.cfg').is_file():

@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import leaderboard as lb
-from forgekernel.loop import cli as loop_cli
-from forgekernel.scaffold import main as scaffold_main
+from rsi_kernel_tune import leaderboard as lb
+from rsi_kernel_tune.loop import cli as loop_cli
+from rsi_kernel_tune.scaffold import main as scaffold_main
 from test_binref import _guard, solution  # noqa: F401  (fixtures base / sol_root below)
 from test_binref import base, sol_root, _no_network  # noqa: F401
 
@@ -36,7 +36,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) { m.def("run", &run); }
 
 
 def cuda_card(base: Path, sol_root: Path, tmp_path: Path) -> tuple[Path, str]:
-    from forgekernel import binref
+    from rsi_kernel_tune import binref
     sp = tmp_path / "solution" / "solution.json"
     sp.parent.mkdir(exist_ok=True)
     sp.write_text(json.dumps(solution()))

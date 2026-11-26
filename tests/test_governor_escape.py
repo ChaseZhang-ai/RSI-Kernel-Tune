@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from forgekernel.loop import governor as gov
+from rsi_kernel_tune.loop import governor as gov
 
 M0 = "M0-gate"
 DIAGNOSE = "# Meta-Agent — Diagnosis step (operator-agnostic prompt)\n\nbody\n"

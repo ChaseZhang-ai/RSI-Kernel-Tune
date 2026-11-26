@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import judge as judge_mod
-from forgekernel import launch, taskcard
-from forgekernel.localenv import load_machine
-from forgekernel.runs import list_runs, new_run, open_run
-from forgekernel.task import load_task
+from rsi_kernel_tune import judge as judge_mod
+from rsi_kernel_tune import launch, taskcard
+from rsi_kernel_tune.localenv import load_machine
+from rsi_kernel_tune.runs import list_runs, new_run, open_run
+from rsi_kernel_tune.task import load_task
 
 from test_leaderboard import fib_root  # noqa: F401 -- a tiny flashinfer-trace dataset
 
@@ -57,9 +57,9 @@ GROUPS = {s["name"]: [{"name": "plain", "intent": "randn", "seed": 1},
 @pytest.fixture
 def repo(tmp_path, monkeypatch):
     """A scratch place for runs and locks; the harness itself stays the real repository."""
-    monkeypatch.setenv("FORGEKERNEL_RUNS_DIR", str(tmp_path / "runs"))
-    monkeypatch.setenv("FORGEKERNEL_LOCK_DIR", str(tmp_path / "locks"))
-    monkeypatch.delenv("FORGEKERNEL_OPERATORS_DIR", raising=False)
+    monkeypatch.setenv("RSI_KERNEL_TUNE_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("RSI_KERNEL_TUNE_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("RSI_KERNEL_TUNE_OPERATORS_DIR", raising=False)
     # this machine, whatever the developer's local.env says (the environment wins over it)
     monkeypatch.setenv("FK_DELIVERY", "local")
     monkeypatch.setenv("FK_GPU", "0")
@@ -91,12 +91,12 @@ def _start(task_dir) -> int:
 def _loop_ends(hook=None, stop="target", confirm=None):
     """A stand-in for the loop: sees its argv, ends with ``stop`` in its summary (and
     ``confirm`` as its final confirmation, when given)."""
-    from forgekernel.loop.cli import SUMMARY_FILE
+    from rsi_kernel_tune.loop.cli import SUMMARY_FILE
 
     def main(argv):
         if hook is not None:
             hook(argv)
-        d = Path(os.environ["FORGEKERNEL_OPERATORS_DIR"]) / argv[0]
+        d = Path(os.environ["RSI_KERNEL_TUNE_OPERATORS_DIR"]) / argv[0]
         (d / SUMMARY_FILE).write_text(json.dumps({"stop": stop}))
         if confirm is not None:
             (d / "best_confirmation.json").write_text(json.dumps(confirm))
@@ -189,7 +189,7 @@ def test_write_card_generates_a_committed_task_card(repo):
     op_dir = taskcard.write_card(run, task, check, load_machine(repo, environ={}))
     assert op_dir == run.operators_dir / "rmsnorm"
     problem = json.loads((op_dir / taskcard.PROBLEM).read_text())
-    assert problem["suite"] == "forgekernel" and problem["timing"] == "device"
+    assert problem["suite"] == "rsi_kernel_tune" and problem["timing"] == "device"
     assert [g["name"] for g in problem["group"]] == ["small", "large"]
     assert [g["name"] for g in problem["workload"]["input_groups"]] == ["plain", "spiky", "tiny"]
     assert problem["definition"]["reference"] == JUDGE
@@ -280,7 +280,7 @@ class _Teacher:
 
 
 def test_forge_run_drives_every_stage(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     task_dir = _task(repo)
     teacher = _Teacher()
     calls = {}
@@ -304,7 +304,7 @@ def test_forge_run_drives_every_stage(repo, monkeypatch):
 
 
 def test_a_calibration_mismatch_sends_the_judge_back(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     task_dir = _task(repo)
     teacher = _Teacher()
     outcomes = iter([{"match": False, "problems": ["small/plain output y: normalized error 0.9"]},
@@ -318,7 +318,7 @@ def test_a_calibration_mismatch_sends_the_judge_back(repo, monkeypatch):
 
 
 def test_a_task_without_a_reference_gets_the_floor_and_the_goal_session(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     task_dir = _task(repo, toml=TASK_TOML)
     calls = {}
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
@@ -335,7 +335,7 @@ def test_a_task_without_a_reference_gets_the_floor_and_the_goal_session(repo, mo
 
 
 def test_resume_skips_what_is_done(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     task_dir = _task(repo)
     teacher = _Teacher()
     seen = []
@@ -384,7 +384,7 @@ def test_forge_new_only_creates_the_run(repo, capsys):
 
 
 def test_a_stop_short_of_the_target_exits_2(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     task_dir = _task(repo)
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
@@ -407,7 +407,7 @@ def _confirmed(ratio, monitor="ok"):
     (_confirmed(8.0, monitor="alarm"), 2),   # met, but its correctness is in doubt
 ])
 def test_a_confirmed_best_at_the_target_completes_the_run(repo, monkeypatch, confirm, rc):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     task_dir = _task(repo)
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
@@ -436,7 +436,7 @@ def test_the_ncu_probe_reads_a_metric_row_or_a_refusal():
 
 
 def test_without_ncu_the_loop_runs_on_timings(repo, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     task_dir = _task(repo)
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
@@ -453,7 +453,7 @@ def test_without_ncu_the_loop_runs_on_timings(repo, monkeypatch):
 
 
 def test_an_arch_reference_without_ncu_is_accepted_only_when_ncu_is_off():
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
 
     class _Ref:
         has_ncu = False
@@ -497,7 +497,7 @@ def test_forge_new_leaderboard_freezes_the_board_problem_into_a_task(repo, fib_r
 
 
 def test_a_leaderboard_task_runs_without_a_judge_or_a_calibration(repo, fib_root, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     d = _board_task(repo, fib_root, monkeypatch)
     calls = {}
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent",
@@ -518,7 +518,7 @@ def test_a_leaderboard_task_runs_without_a_judge_or_a_calibration(repo, fib_root
 
 def test_export_writes_the_boards_solution_from_the_best_kernel(repo, fib_root, monkeypatch,
                                                                 capsys):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     d = _board_task(repo, fib_root, monkeypatch)
     monkeypatch.setattr(loop_cli, "main", _loop_ends())
     _start(d)
@@ -534,13 +534,13 @@ def test_export_writes_the_boards_solution_from_the_best_kernel(repo, fib_root, 
     capsys.readouterr()
     assert launch.cmd_export([str(run.dir)]) == 0
     sol = json.loads(capsys.readouterr().out)
-    assert sol["definition"] == "rmsnorm_h8" and sol["name"] == "rms_forgekernel"
+    assert sol["definition"] == "rmsnorm_h8" and sol["name"] == "rms_rsi_kernel_tune"
     assert sol["sources"][0]["content"] == kernel
 
 
 def test_a_task_that_is_not_a_board_problem_exports_the_kernel_source(repo, monkeypatch,
                                                                       capsys):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     task_dir = _task(repo)
     monkeypatch.setattr(loop_cli.RealBackend, "run_agent", _Teacher().method)
     monkeypatch.setattr(launch, "calibrate", lambda task, op_dir: {
@@ -614,7 +614,7 @@ def _student_dir(run, task) -> Path:
 
 
 def _ledger(d: Path, rows: list[dict]) -> Path:
-    from forgekernel.loop import governor as gov
+    from rsi_kernel_tune.loop import governor as gov
     p = d / gov.LEDGER_NAME
     p.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     return p
@@ -653,7 +653,7 @@ def test_status_text_has_no_throughput_lines_without_a_ledger(repo):
 
 
 def test_write_report_has_the_throughput_section(repo):
-    from forgekernel.loop import governor as gov
+    from rsi_kernel_tune.loop import governor as gov
     run, task, _ = _run_with_check(repo)
     student = _student_dir(run, task)
     (student / "status.jsonl").write_text(

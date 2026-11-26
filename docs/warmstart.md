@@ -1,6 +1,6 @@
 # Warmstart: start a run from the best kernel that already exists
 
-A normal ForgeKernel run starts the student from an empty stub (`run(...)` that raises
+A normal RSI-Kernel-Tune run starts the student from an empty stub (`run(...)` that raises
 `NotImplementedError`), keeps the reference sealed so nobody reads it, and runs the student
 offline. On a leaderboard that leaves the first hours of a run to re-deriving an
 implementation that is often already public and already good. Warmstart changes the four
@@ -42,7 +42,7 @@ forge new tasks/069_rms_norm
 
 ### What the init kernel must be
 
-Checked statically, before anything is written (`forgekernel/warmstart/validate.py`; nothing
+Checked statically, before anything is written (`rsi_kernel_tune/warmstart/validate.py`; nothing
 is imported or run). Every problem is listed at once; none of them is a warning.
 
 1. **It parses.** A `.py` by `ast`; a `.cu` by the shape the card builds it with
@@ -62,7 +62,7 @@ is imported or run). Every problem is listed at once; none of them is a warning.
 ### Language inference
 
 With no declared `[task].language`, the imports decide, and only languages this build's
-`forgekernel.task.LANGUAGES` accepts can be used:
+`rsi_kernel_tune.task.LANGUAGES` accepts can be used:
 
 | imports | language | how it is built |
 |---|---|---|
@@ -123,7 +123,7 @@ online = true          # the student may use the network (the project default)
   WebSearch are available. Code that is reused must be under a licence that permits it and
   must end up in the single submission file.
 - Always denied, online or not: the GPU-machine CLIs (`ssh`, `scp`, `rsync`,
-  `python -m forgekernel.submit`) -- a student's GPU work goes through the loop's ledgered
+  `python -m rsi_kernel_tune.submit`) -- a student's GPU work goes through the loop's ledgered
   eval command, never through a job of its own.
 - `online = false`: exactly the pre-warmstart policy (no network at all).
 - The teacher is online either way; `[agent.teacher] online` has no effect and is not what
@@ -133,7 +133,7 @@ online = true          # the student may use the network (the project default)
 
 The value travels: `task.toml [agent] online` -> `Task.student.online` ->
 `loop.toml [loop] student_online` (written by `forge run` from the task) ->
-`AgentPolicy.student_online` (read by `forgekernel.loop.agent_policy.from_config`). The loop
+`AgentPolicy.student_online` (read by `rsi_kernel_tune.loop.agent_policy.from_config`). The loop
 config is the only channel, so no change to `loop/cli.py` was needed.
 
 `forge new` prints it: `student claude-opus-5-5 [online]` / `[offline]`.

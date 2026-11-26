@@ -16,12 +16,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from forgekernel import leaderboard as lb
-from forgekernel import taskcard
-from forgekernel.localenv import load_machine
-from forgekernel.task import TaskError, load_task
-from forgekernel.targethw import arch_of_cc, cc_of_arch, cuda_arch, device_arch, gencode
-from forgekernel.targethw import target_sms
+from rsi_kernel_tune import leaderboard as lb
+from rsi_kernel_tune import taskcard
+from rsi_kernel_tune.localenv import load_machine
+from rsi_kernel_tune.task import TaskError, load_task
+from rsi_kernel_tune.targethw import arch_of_cc, cc_of_arch, cuda_arch, device_arch, gencode
+from rsi_kernel_tune.targethw import target_sms
 
 from test_launch import _run_with_check, repo  # noqa: F401  (repo is the fixture)
 
@@ -64,7 +64,7 @@ def test_fk_target_sms_is_an_optional_override():
 
 
 def test_device_arch_without_a_device_is_none(monkeypatch):
-    import forgekernel.targethw as th
+    import rsi_kernel_tune.targethw as th
 
     assert device_arch() is None or isinstance(device_arch(), str)
     class Boom:
@@ -222,7 +222,7 @@ def _binref_module(tmp_path: Path):
 
     work = tmp_path / "binref_load"
     work.mkdir()
-    shutil.copy2(REPO / "src" / "forgekernel" / "binref_tool.py", work / "binref.py")
+    shutil.copy2(REPO / "src" / "rsi_kernel_tune" / "binref_tool.py", work / "binref.py")
     (work / "binref.json").write_text(json.dumps({"module": "ref", "sources": []}))
     spec = importlib.util.spec_from_file_location("_test_binref_tool", work / "binref.py")
     module = importlib.util.module_from_spec(spec)
@@ -231,7 +231,7 @@ def _binref_module(tmp_path: Path):
 
 
 def _card_module():
-    path = REPO / "src" / "forgekernel" / "card_template" / "eval" / "leaderboard.py"
+    path = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "leaderboard.py"
     spec = importlib.util.spec_from_file_location("_test_card_lb_devarch", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

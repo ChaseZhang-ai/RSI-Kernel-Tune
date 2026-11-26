@@ -1,4 +1,4 @@
-"""The forgekernel task suite of src/forgekernel/card_template/eval/leaderboard.py: input groups, the
+"""The rsi_kernel_tune task suite of src/rsi_kernel_tune/card_template/eval/leaderboard.py: input groups, the
 judge, the calibrated tolerance and the calibration itself. Signature checks also run on CUDA when available."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ DEVICES = ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.i
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location(
-    "fk_template_leaderboard_task", REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval" / "leaderboard.py")
+    "fk_template_leaderboard_task", REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "leaderboard.py")
 lb = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(lb)
 

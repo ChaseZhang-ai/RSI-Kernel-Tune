@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.targethw import compile_check as cc
-from forgekernel.targethw import find_nvcc
+from rsi_kernel_tune.targethw import compile_check as cc
+from rsi_kernel_tune.targethw import find_nvcc
 
 REPO = Path(__file__).resolve().parents[1]
 

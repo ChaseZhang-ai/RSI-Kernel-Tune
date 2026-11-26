@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forgekernel import __main__ as forge_main
-from forgekernel import __version__
-from forgekernel.task import load_task
+from rsi_kernel_tune import __main__ as forge_main
+from rsi_kernel_tune import __version__
+from rsi_kernel_tune.task import load_task
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,4 +29,4 @@ def test_forge_alone_prints_its_usage_and_version(capsys):
     out = capsys.readouterr().out
     assert "forge new tasks/<op>" in out and "forge run .artifacts/<op>_<id>" in out
     assert forge_main.main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == f"forgekernel {__version__}"
+    assert capsys.readouterr().out.strip() == f"rsi_kernel_tune {__version__}"

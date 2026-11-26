@@ -1,6 +1,6 @@
 <div align="center">
 
-# ForgeKernel：自进化 GPU 算子，追上并超越专家与 Agent
+# RSI-Kernel-Tune：自进化 GPU 算子，追上并超越专家与 Agent
 
 [English](README.md) | **中文**
 
@@ -15,23 +15,23 @@
 
 </div>
 
-ForgeKernel 是一个**自进化的 GPU 算子 agent**，从一个**参照 kernel** 出发。它通过运行、计时、
+RSI-Kernel-Tune 是一个**自进化的 GPU 算子 agent**，从一个**参照 kernel** 出发。它通过运行、计时、
 剖析读出参照的架构，把它整理成一份「架构优先」的 milestone 课程
 交给 coding agent 实现，并**把每个被接受的 kernel 提升为下一轮的参照**，让优化越过目前最好的实现继续往前走。
-经硬件探针认证的结论沉淀进一个**跨算子共享的知识库**。论文中，ForgeKernel 在 Hopper 与 Blackwell
+经硬件探针认证的结论沉淀进一个**跨算子共享的知识库**。论文中，RSI-Kernel-Tune 在 Hopper 与 Blackwell
 上的 27 个算子里，追平或超过 **22 个专家库 kernel 中的 18 个**（FlashAttention-4、cuDNN、
 DeepGEMM 等），并追平或超过三个 kernel 生成系统公开的**全部 7 个 kernel**，最高 **+170.6%**
 （几何平均 +39.4%）。这些 kernel 公开在 [`kernels/`](kernels/) 中。
 
-ForgeKernel 属于 **Forge 家族**，同一家族的项目还有
+RSI-Kernel-Tune 属于 **Forge 家族**，同一家族的项目还有
 [ForgeTrain](https://github.com/OpenBMB/ForgeTrain) 和
 [ForgeStencil](https://github.com/OpenBMB/ForgeStencil)。
 
 ## 动态
 
 - 🛠️ **[2026-11]** 发布 Claude Code skill `forge-start`：输入 `/forge-start`，它就替你配好并启动
-  （或续跑）一次 ForgeKernel 运行。见 [integrations/claude-code](integrations/claude-code/README.md)。
-- 📄 **[2026-11]** ForgeKernel 论文发布：[arXiv:2611.04998](https://arxiv.org/abs/2611.04998)。
+  （或续跑）一次 RSI-Kernel-Tune 运行。见 [integrations/claude-code](integrations/claude-code/README.md)。
+- 📄 **[2026-11]** RSI-Kernel-Tune 论文发布：[arXiv:2611.04998](https://arxiv.org/abs/2611.04998)。
 - 📄 **[2026-10]** JustGoal 论文发布：[arXiv:2610.36434](https://arxiv.org/abs/2610.36434)。
 - 🏆 **[2026-10]** 我们在 NVIDIA [SOL-ExecBench](https://research.nvidia.com/benchmarks/sol-execbench)
   的 FlashInfer-Bench 榜单上取得**第一名**。
@@ -41,7 +41,7 @@ ForgeKernel 属于 **Forge 家族**，同一家族的项目还有
 
 ## TODO
 
-**ForgeKernel v1.5** 计划：
+**RSI-Kernel-Tune v1.5** 计划：
 
 - [ ] **Shape 聚类**：把任务的 shape 聚成若干类、按类优化，让一次运行覆盖更大范围的 shape。
 - [ ] **大幅简化 harness**：精简 loop 的组成部分，缩小配置面。
@@ -68,7 +68,7 @@ ForgeKernel 属于 **Forge 家族**，同一家族的项目还有
 
 ```text
 阅读当前目录下的 README_zh.md，
-在这台机器上装好 ForgeKernel：装进虚拟环境，按我的 GPU（本机，
+在这台机器上装好 RSI-Kernel-Tune：装进虚拟环境，按我的 GPU（本机，
 或我指定的 ssh 主机）写好 local.env，然后运行 `forge new tasks/rmsnorm --dry-run`，
 把它打印的计划给我看。
 ```
@@ -97,14 +97,14 @@ SOL-ExecBench 战役链路，以及目前哪些验过、哪些还没验过。
 **1. 安装**
 
 ```bash
-cd ForgeKernel                   # 本仓库的 clone
+cd RSI-Kernel-Tune                   # 本仓库的 clone
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .                 # 同时装 torch + safetensors
 pip install nvidia-cutlass-dsl   # 建议安装，见下
-forge --version                  # forgekernel 0.1.0
+forge --version                  # rsi_kernel_tune 0.1.0
 ```
 
-coding agent 离线工作；把 `nvidia-cutlass-dsl` 装在 ForgeKernel 旁边，它才能读到要用的 CuTe
+coding agent 离线工作；把 `nvidia-cutlass-dsl` 装在 RSI-Kernel-Tune 旁边，它才能读到要用的 CuTe
 DSL API。
 
 **2. 告诉它 GPU 在哪**
@@ -162,8 +162,8 @@ forge run .artifacts/rmsnorm_<id>                       # 中断后续跑
 
 每一次导出都过**完整性闸门**：`forge export` 与 campaign 的导出会拒绝带 block 级静态发现的文件
 （写环境变量、隐藏状态、绝对路径、写死架构；见 `docs/integrity.md`），要求许可证/署名 banner 在场，
-用新输入多种子复验（`forgekernel.integrity.multiseed`），并拒绝超过
-`forgekernel.benchx.api.COLD_START_BUDGET_S` 的冷启动。
+用新输入多种子复验（`rsi_kernel_tune.integrity.multiseed`），并拒绝超过
+`rsi_kernel_tune.benchx.api.COLD_START_BUDGET_S` 的冷启动。
 
 命令依赖的运行期机制：四个运行上下文文件（`{TARGET_PROFILE_PATH}`、`{ROOFLINE_PATH}`、`{LESSONS_PATH}`、
 `{PRIOR_PATH}`）把测得的数据带进每一条提示词；吞吐治理器（`task.toml` 的 `[budget]`、账本
@@ -172,12 +172,12 @@ forge run .artifacts/rmsnorm_<id>                       # 中断后续跑
 （`report.md` 的 `## Agent usage`）。
 
 语言：`task.toml` 接受 `cutedsl`、`cuda-sol`、`triton`；Triton 卡片用 `forge init … --language triton`
-生成，`python -m forgekernel.triton_check <kernel.py>` 是 Triton kernel 的独立目标编译检查。
+生成，`python -m rsi_kernel_tune.triton_check <kernel.py>` 是 Triton kernel 的独立目标编译检查。
 
 ## 工作原理
 
 <div align="center">
-<img src="docs/assets/figure2-architecture.png" width="90%" alt="ForgeKernel 架构：arch agent 分析参照、写 milestone；coding agent 一次实现一行决策；gate 决定重试、重新分析或交付">
+<img src="docs/assets/figure2-architecture.png" width="90%" alt="RSI-Kernel-Tune 架构：arch agent 分析参照、写 milestone；coding agent 一次实现一行决策；gate 决定重试、重新分析或交付">
 </div>
 
 一次运行有两层循环。**内层**里 coding agent 每次实现 milestone 的一行决策，一个 GPU 作业完成
@@ -253,7 +253,7 @@ forge export .artifacts/rms_<id> --out solution.json
 
 ## 算子代码
 
-[`kernels/`](kernels/) 公开了论文里 ForgeKernel 生成的 kernel（24 个，CuTe DSL，H100 与 B200），
+[`kernels/`](kernels/) 公开了论文里 RSI-Kernel-Tune 生成的 kernel（24 个，CuTe DSL，H100 与 B200），
 以及论文之后生成的一个（DeepSeek-V4.1 融合稀疏 attention prefill，CUDA C++，B200 上是 FlashMLA 的 1.10×）。
 先按算子类型分类，再按算子和 GPU 分目录：
 
@@ -290,7 +290,7 @@ B200 上是 CUDA 13.0、PyTorch 2.13、CuTe DSL 4.6.2，Nsight Compute 2025.3.1�
 目录结构与 ForgeTrain 一致：
 
 ```text
-src/forgekernel/     harness：CLI、任务与运行、两层循环、GPU 作业
+src/rsi_kernel_tune/     harness：CLI、任务与运行、两层循环、GPU 作业
 global_config/       配置的底层：models.toml、loop.toml、backends.toml
 tasks/               <op>/：task.toml、description.md、shapes.json、reference/；
                      _template/（`forge init` 复制的模板）、rmsnorm/（可直接运行）
@@ -302,7 +302,7 @@ hw_kb/               硬件知识库（cutedsl/、cuda/），按 GPU 架构组�
 docs/                设计说明、milestone 模板、榜单、知识库收割
 scripts/             agent 启动脚本、/goal 驱动、自进化
 tests/               pytest 测试（只需 CPU）
-kernels/             ForgeKernel 生成的 kernel，按算子类型分类
+kernels/             RSI-Kernel-Tune 生成的 kernel，按算子类型分类
 integrations/        claude-code/forge-start/：Claude Code 启动 skill（给用户用，不给 agent）
 ```
 
@@ -315,7 +315,7 @@ integrations/        claude-code/forge-start/：Claude Code 启动 skill（给�
 ## 局限
 
 - **有参照时效果最好。** 只给 PyTorch 实现和一个 device 时间数字时，论文消融里测的三个算子全部
-  停滞；ForgeKernel 更擅长超过已有的实现，而不是写出第一版实现。
+  停滞；RSI-Kernel-Tune 更擅长超过已有的实现，而不是写出第一版实现。
 - **平台是估计，不是证明。** 自进化停在同作业噪声地板：说明这个循环找不到更多，不代表没有更多。
 - **覆盖范围。** 四类算子、两代 NVIDIA GPU；与这些差异较大的稀疏模式和存储层次尚未测试。
 - **成本。** 一次运行要数小时的 GPU 时间和前沿模型用量；agent 在 driver 写好的策略内以跳过权限
@@ -323,14 +323,14 @@ integrations/        claude-code/forge-start/：Claude Code 启动 skill（给�
 
 ## 引用
 
-如果 ForgeKernel 对你有帮助，请引用我们的论文：
+如果 RSI-Kernel-Tune 对你有帮助，请引用我们的论文：
 
 <details>
 <summary>BibTeX</summary>
 
 ```bibtex
-@misc{chen2026forgekernel,
-  title  = {ForgeKernel: Self-Evolving Kernels Catching and Surpassing Experts and Agents},
+@misc{chen2026rsi_kernel_tune,
+  title  = {RSI-Kernel-Tune: Self-Evolving Kernels Catching and Surpassing Experts and Agents},
   author = {Chen, Yaojian and Peng, Dazhi and Zheng, Yiyun and Zhu, Zhui and Xiang, Shengye
             and Li, Leshan and Li, Zhen and Deng, Xianglong and Sun, Haojun and He, Qingfeng
             and Li, Shangzhan and Shen, Yifei and Gan, Lin and Li, Yuxuan and Han, Xu
@@ -351,7 +351,7 @@ Apache License 2.0，见 [LICENSE](LICENSE)。榜单评测器改编了 FlashInfe
 
 ## 致谢
 
-ForgeKernel 建立在 [CUTLASS 与 CuTe DSL](https://github.com/NVIDIA/cutlass)、
+RSI-Kernel-Tune 建立在 [CUTLASS 与 CuTe DSL](https://github.com/NVIDIA/cutlass)、
 [Nsight Compute](https://developer.nvidia.com/nsight-compute)、
 [Claude Code](https://docs.claude.com/en/docs/claude-code/overview)、
 [FlashInfer-Bench](https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace) 与

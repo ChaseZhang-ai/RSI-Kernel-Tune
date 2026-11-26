@@ -1,0 +1,66 @@
+# Manual peaks: what the vendors say these GPUs can do, and where each number comes from.
+#
+# This file is DATA, and it is deliberately not a default: `forge roofline` uses it to
+# fill in what the target profile (target/B200.json) does not carry -- the precision
+# peaks the profile leaves out -- and it always renders next to each number which source
+# produced it. Nothing here was measured on our machines; measured peaks live in a
+# calibration file (`forge calibrate`). An entry that is missing stays missing: an
+# unknown peak is never invented, and a cost model that needs it fails by name.
+#
+# Every entry is { value = <number>, source = "<where it comes from>" }; the source is
+# required (tests/test_roofline_analyze.py fails on an empty one). Units:
+#   sm_count                  SMs
+#   memory_gib                GiB (decimal in the vendor's GB, stated by the source)
+#   hbm_gb_s                  GB/s, decimal (1e9 bytes/s)
+#   l2_gb_s                   GB/s, decimal
+#   tensor_<precision>_tflops TFLOPS, decimal (1e12 FLOP/s), DENSE (no sparsity)
+#   sfu_gop_s                 Gop/s of special-function operations (one EX2-class
+#                             instruction = one op)
+#   launch_us                 microseconds: one launch's round-trip latency
+#
+# `derived` entries are arithmetic on a cited figure (the ratio is cited too), not a
+# number from a spec table; the analysis says so when it prints one.
+
+schema = "rsi_kernel_tune.roofline-peaks/1"
+
+[gpus."NVIDIA B200"]
+aliases = ["B200"]
+[gpus."NVIDIA B200".peaks]
+sm_count = { value = 148, source = "target/B200.json in this repository (device.multi_processor_count, measured by the harness); NVIDIA Blackwell B200" }
+memory_gib = { value = 192, source = "NVIDIA, Inside NVIDIA Blackwell Ultra / B200 product brief: 192 GB HBM3e" }
+hbm_gb_s = { value = 8000, source = "NVIDIA, Inside NVIDIA Blackwell Ultra: 8 TB/s HBM3e" }
+tensor_fp8_tflops = { value = 5000, source = "target/B200.json in this repository (device.dense_fp8_pflops = 5.0); NVIDIA Blackwell dense FP8" }
+tensor_fp4_tflops = { value = 10000, source = "target/B200.json in this repository (device.dense_fp4_pflops = 10.0); NVIDIA Blackwell dense NVFP4" }
+tensor_bf16_tflops = { value = 2500, source = "derived: NVIDIA Blackwell tensor-core ratios (dense FP8 = 2x dense BF16/FP16), applied to the dense FP8 figure this repository uses (target/B200.json dense_fp8_pflops = 5.0)" }
+tensor_fp16_tflops = { value = 2500, source = "derived: NVIDIA Blackwell tensor-core ratios (dense FP8 = 2x dense BF16/FP16), applied to the dense FP8 figure this repository uses (target/B200.json dense_fp8_pflops = 5.0)" }
+sfu_gop_s = { value = 5000, source = "target/B200.json in this repository (device.sfu_tera_exp_s = 5.0): 5 TeraExp/s of EX2-class special-function operations" }
+
+[gpus."NVIDIA B300"]
+aliases = ["B300"]
+[gpus."NVIDIA B300".peaks]
+sm_count = { value = 160, source = "target/B200.json in this repository development_gpu (NVIDIA: 'up to 160, model dependent'; `forge target probe` measures the real one)" }
+memory_gib = { value = 288, source = "NVIDIA, Inside NVIDIA Blackwell Ultra: 288 GB HBM3e" }
+hbm_gb_s = { value = 8000, source = "NVIDIA, Inside NVIDIA Blackwell Ultra: 8 TB/s HBM3e" }
+tensor_fp8_tflops = { value = 5000, source = "target/B200.json in this repository development_gpu: dense FP8 unchanged from B200" }
+tensor_fp4_tflops = { value = 15000, source = "target/B200.json in this repository development_gpu.dense_fp4_pflops = 15.0; NVIDIA, Inside NVIDIA Blackwell Ultra (1.5x B200)" }
+tensor_bf16_tflops = { value = 2500, source = "derived: NVIDIA Blackwell tensor-core ratios (dense FP8 = 2x dense BF16/FP16), applied to the dense FP8 figure this repository uses (5.0 PFLOPS)" }
+tensor_fp16_tflops = { value = 2500, source = "derived: NVIDIA Blackwell tensor-core ratios (dense FP8 = 2x dense BF16/FP16), applied to the dense FP8 figure this repository uses (5.0 PFLOPS)" }
+sfu_gop_s = { value = 10700, source = "target/B200.json in this repository development_gpu.sfu_tera_exp_s = 10.7; NVIDIA, Inside NVIDIA Blackwell Ultra (~2x B200)" }
+
+[gpus."NVIDIA H100 SXM5"]
+aliases = ["H100", "H100 SXM", "H100 SXM5"]
+[gpus."NVIDIA H100 SXM5".peaks]
+sm_count = { value = 132, source = "NVIDIA H100 Tensor Core GPU datasheet (H100 SXM5): 132 SMs" }
+memory_gib = { value = 80, source = "NVIDIA H100 Tensor Core GPU datasheet: 80 GB HBM3" }
+hbm_gb_s = { value = 3350, source = "NVIDIA H100 Tensor Core GPU datasheet: 3.35 TB/s" }
+tensor_bf16_tflops = { value = 989.4, source = "NVIDIA H100 Tensor Core GPU datasheet: BF16 Tensor Core 989.4 TFLOPS dense (1,978.9 with sparsity)" }
+tensor_fp16_tflops = { value = 989.4, source = "NVIDIA H100 Tensor Core GPU datasheet: FP16 Tensor Core 989.4 TFLOPS dense (1,978.9 with sparsity)" }
+tensor_fp8_tflops = { value = 1978.9, source = "NVIDIA H100 Tensor Core GPU datasheet: FP8 Tensor Core 1,978.9 TFLOPS dense (3,957.8 with sparsity)" }
+
+# No vendor figure is published for these, so they are absent on purpose:
+#   B200 / B300 / H100  l2_gb_s   (L2 bandwidth is not in any datasheet we can cite)
+#   B200 / B300 / H100  launch_us (a launch's round-trip latency is a system property;
+#                                  `forge calibrate` measures it)
+#   H100                tensor_fp4_tflops (Hopper has no FP4 tensor path)
+#   any GPU             tensor_fp32_tflops (SIMT FP32 is not a tensor-core peak and no
+#                                  datasheet states it as one)

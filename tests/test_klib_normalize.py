@@ -1,4 +1,4 @@
-"""forgekernel.klib.normalize: the pure functions that bring a source into the one-file shape."""
+"""rsi_kernel_tune.klib.normalize: the pure functions that bring a source into the one-file shape."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import ast
 
 import pytest
 
-from forgekernel.klib import normalize as nz
+from rsi_kernel_tune.klib import normalize as nz
 
 
 def _run(source: str) -> set[str]:

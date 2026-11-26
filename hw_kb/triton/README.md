@@ -3,7 +3,7 @@
 > This is the knowledge base for **Triton mode** (loop language `triton`: the student writes one
 > Python `kernel.py` whose compute is `@triton.jit` kernels and whose `run()` launches them — the
 > leaderboard's `spec.languages == ["triton"]`). The CuTe DSL mode reads `hw_kb/cutedsl/`, the
-> CUDA mode `hw_kb/cuda/`; the three trees are independent (`src/forgekernel/loop/lang_mode.py`).
+> CUDA mode `hw_kb/cuda/`; the three trees are independent (`src/rsi_kernel_tune/loop/lang_mode.py`).
 
 An **operator-agnostic** library of language-mechanics and hardware-interface entries. It is the
 **only** artifact of the loop allowed to contain code — because "how a `tl.dot` lowers / how a
@@ -27,7 +27,7 @@ actually yours (`num_warps`, `num_stages`, `BLOCK` sizes, grid shape, `tl.dot` o
   student and may cite only official docs, public-infra API symbols and this repo's probes; the
   narrated provenance (which public guide a passage was derived from, what was measured where)
   goes to `docs/kb-provenance/triton/<entry name>.md`, which is in no agent's read set. The
-  mechanical gate is `src/forgekernel/loop/kb_lint.py`.
+  mechanical gate is `src/rsi_kernel_tune/loop/kb_lint.py`.
 
 ## Certification status
 
@@ -75,7 +75,7 @@ and times there has a working call path, but its *numbers* say nothing about the
 no TMA, no clusters, no tcgen05, a different MMA family and a different SM count). The same holds
 for `sm103` in the other direction: it is the development GPU, its readings are close to but not the
 board's, and a kernel must never be compiled *for* it (see the arch-pin finding in
-`src/forgekernel/triton_check.py`).
+`src/rsi_kernel_tune/triton_check.py`).
 
 **The read set is enforced by the loop.** A run receives exactly one tree, `hw_kb/triton/<kb_arch>/`:
 `KB:<entry>` references resolve only inside it, the leak lints only scan it, and the write-side

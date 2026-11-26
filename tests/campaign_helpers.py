@@ -17,8 +17,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from forgekernel.campaign import solscore
-from forgekernel.campaign import tools as tools_mod
+from rsi_kernel_tune.campaign import solscore
+from rsi_kernel_tune.campaign import tools as tools_mod
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "campaign"
 SNAPSHOT = FIXTURES / "snapshot"
@@ -74,7 +74,7 @@ def make_board_task(root: str | Path, op: str, dataset: str | Path, definition: 
     Uses the repository's own `sol_problem` / `problem_json` so the card is the real
     thing (group entries, per-workload sol_board, definition), just built from the
     fixture dataset."""
-    from forgekernel.leaderboard import problem_json, sol_problem
+    from rsi_kernel_tune.leaderboard import problem_json, sol_problem
     root = Path(root)
     task_dir = root / "tasks" / op
     card = task_dir / "leaderboard" / "card"

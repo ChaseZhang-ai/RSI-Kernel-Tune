@@ -13,5 +13,5 @@ No reading is claimed.
 
 ## Status
 `[PENDING-CERT]`. To certify: one smoke run on the Ampere card that records "launched and passed"
-plus the same file's compile-only check for the target (`python -m forgekernel.triton_check
+plus the same file's compile-only check for the target (`python -m rsi_kernel_tune.triton_check
 --target 10.0`).

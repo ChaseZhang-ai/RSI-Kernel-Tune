@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.roofline import analyze, calibrate, costmodel
-from forgekernel.skills import roofline_tools as rt
+from rsi_kernel_tune.roofline import analyze, calibrate, costmodel
+from rsi_kernel_tune.skills import roofline_tools as rt
 
 ROOT = Path(__file__).resolve().parents[1]
 

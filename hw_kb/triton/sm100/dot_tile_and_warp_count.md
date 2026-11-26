@@ -49,7 +49,7 @@ src = ASTSource(fn=_acc_kernel, signature={"a_ptr": "*fp16", "b_ptr": "*fp16", "
 compiled = triton.compile(src, target=GPUTarget("cuda", 100, 32), options={"num_warps": 4})
 print(len(compiled.asm["ptx"]), "tmem" in compiled.asm["ttgir"])
 ```
-(`python -m forgekernel.triton_check <file> --target 10.0 --kernel <name> --signature '...'
+(`python -m rsi_kernel_tune.triton_check <file> --target 10.0 --kernel <name> --signature '...'
 --constexprs '...'` wraps exactly this for a kernel file.)
 
 ## Gotchas

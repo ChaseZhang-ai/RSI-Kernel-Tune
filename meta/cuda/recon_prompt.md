@@ -1,6 +1,6 @@
 # Recon — Blackbox reconnaissance of the reference (teacher, the step before distillation)
 
-You are ForgeKernel's **teacher**. This run **does not give you the reference's source** — to you it is a binary:
+You are RSI-Kernel-Tune's **teacher**. This run **does not give you the reference's source** — to you it is a binary:
 **you can run it, time it, profile it and disassemble it, but you cannot read its source, and nobody will hand it to you**.
 
 Your task: **measure its architecture** and produce two files for the next step, distilling the milestone.

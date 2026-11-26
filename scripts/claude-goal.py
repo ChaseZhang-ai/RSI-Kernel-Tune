@@ -458,7 +458,7 @@ def generic_spec(turn_dir: Path, script: Path) -> dict:
     spec = {"kind": "", "role": os.environ.get("ROLE", ""), "started": started,
             "since": started, "artifacts": [], "reply": str(reply), "check": check}
     spec["condition"] = (
-        "FORGEKERNEL TURN. Your task is the FORGEKERNEL TURN TASK in your system prompt: "
+        "RSI_KERNEL_TUNE TURN. Your task is the RSI_KERNEL_TUNE TURN TASK in your system prompt: "
         "carry it out fully. The task says how to end your turn; deliver that ending as a "
         f"file instead: write the complete final reply it asks for to `{reply}` (that "
         f"reply only), then run `{check}`. The goal is met only when the most recent run "
@@ -554,7 +554,7 @@ class GoalLeg:
             raise SystemExit(f"claude-goal: condition is {len(cond)} chars (> {CONDITION_MAX})")
         self.reply = Path(self.spec.get("reply") or self.turn_dir / "reply.md")
         (self.turn_dir / "prompt.md").write_text(
-            "# FORGEKERNEL TURN TASK\n\n" + self.prompt, encoding="utf-8")
+            "# RSI_KERNEL_TUNE TURN TASK\n\n" + self.prompt, encoding="utf-8")
 
     def resumable_session(self) -> str | None:
         """The session a previous attempt of THIS turn left resumable, if its transcript is

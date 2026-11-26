@@ -1,4 +1,4 @@
-"""Tests for the job-side leaderboard runtime (src/forgekernel/card_template/eval/leaderboard.py):
+"""Tests for the job-side leaderboard runtime (src/rsi_kernel_tune/card_template/eval/leaderboard.py):
 the two suites' judges, input draws, correctness protocols, the pointer-shifting pool,
 the kernel-span extraction and the eval-JSON mapping. CPU only — the clocks' GPU paths
 are exercised through a synthetic profiler trace.
@@ -22,7 +22,7 @@ torch = pytest.importorskip("torch")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location(
-    "fk_template_leaderboard", REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval" / "leaderboard.py")
+    "fk_template_leaderboard", REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "leaderboard.py")
 lb = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(lb)
 
@@ -632,7 +632,7 @@ def _group_card(tmp_path: Path, p: dict) -> Path:
 
 def test_group_bench_gates_on_the_geomean_and_keeps_every_workload(tmp_path: Path, monkeypatch,
                                                                    capsys) -> None:
-    from forgekernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.parse import parse_eval
     seen: list = []
     monkeypatch.setattr(lb, "measure", _fake_measure(seen))
     monkeypatch.setattr(lb, "_side_windows", _windows)
@@ -671,7 +671,7 @@ def test_group_bench_gates_on_the_geomean_and_keeps_every_workload(tmp_path: Pat
 
 def test_group_ref_mode_prints_one_geomean_block_the_archive_reads(tmp_path: Path, monkeypatch,
                                                                    capsys) -> None:
-    from forgekernel.baseline_cli import parse_ref_stdout
+    from rsi_kernel_tune.baseline_cli import parse_ref_stdout
     seen: list = []
     monkeypatch.setattr(lb, "measure", _fake_measure(seen))
     monkeypatch.setattr(lb, "_side_windows", _windows)
@@ -706,7 +706,7 @@ def test_group_ref_mode_times_a_sealed_reference_through_the_callable_it_loaded(
     # callable whose window does not open that loader, so a reference that reads its
     # source at call time (CuTe DSL) failed on every workload of `--mode ref`.
     spec = importlib.util.spec_from_file_location(
-        "_tmpl_closed_ref_group", REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval" / "closed_ref.py")
+        "_tmpl_closed_ref_group", REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "closed_ref.py")
     cr = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cr)
     module = "_fk_test_sealed_group_ref"
@@ -773,7 +773,7 @@ def test_group_card_scoped_to_its_representative_times_one_workload_and_is_no_ga
     pricing used to time every workload x rounds x variants and outlived the job clock): only the
     first group entry is judged and timed, the JSON says so, and the loop's gate parser
     refuses it. A single-workload card ignores the variable."""
-    from forgekernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.parse import parse_eval
     seen: list = []
     monkeypatch.setattr(lb, "measure", _fake_measure(seen))
     monkeypatch.setattr(lb, "_side_windows", _windows)
@@ -831,7 +831,7 @@ def test_workload_scope_names_one_workload_of_the_group() -> None:
 
 
 def test_named_scope_times_that_workload_and_is_no_gate(tmp_path: Path, monkeypatch, capsys) -> None:
-    from forgekernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.parse import parse_eval
     seen: list = []
     monkeypatch.setattr(lb, "measure", _fake_measure(seen))
     monkeypatch.setattr(lb, "_side_windows", _windows)
@@ -924,7 +924,7 @@ def test_one_workload_card_judges_its_correctness_only_workloads_too() -> None:
 
 def test_group_bench_fails_on_a_correctness_only_workload_before_timing_any(
         tmp_path: Path, monkeypatch, capsys) -> None:
-    from forgekernel.loop.parse import parse_eval
+    from rsi_kernel_tune.loop.parse import parse_eval
     seen: list = []
     monkeypatch.setattr(lb, "measure", _fake_measure(seen))
     monkeypatch.setattr(lb, "_side_windows", _windows)

@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import launch, taskcard
-from forgekernel.scaffold import main as scaffold_main
-from forgekernel.task import load_task
-from forgekernel.warmstart import seed
+from rsi_kernel_tune import launch, taskcard
+from rsi_kernel_tune.scaffold import main as scaffold_main
+from rsi_kernel_tune.task import load_task
+from rsi_kernel_tune.warmstart import seed
 
 from test_leaderboard import base, sol_root  # noqa: F401 -- fixtures
 

@@ -7,7 +7,7 @@ the torch-only baselines of a definition, the whole-board reference fallback, an
 which turns a same-family reference into the problem's own starting point.
 
 Command: `forge lib <build|find|show|score|baselines|cover|fetch|adapt>`
-(implementation: `src/forgekernel/ext/lib.py`, `src/forgekernel/klib/`). The library itself is
+(implementation: `src/rsi_kernel_tune/ext/lib.py`, `src/rsi_kernel_tune/klib/`). The library itself is
 `kernel_library/` — see its `README.md` for the inventory and `NOTICE` for attribution.
 
 ## 1. What it holds and where it comes from
@@ -24,7 +24,7 @@ refuses to write anything whose license is not one of the allowed ones.
 | source | extractor | entries |
 |---|---|---|
 | `_reference/Hyra-results/AI4AI/sol_execbench` | `hyra` | 10 |
-| this repository's `kernels/` | `forgekernel` | 25 |
+| this repository's `kernels/` | `rsi_kernel_tune` | 25 |
 | `_reference/AKO4X/reference/**/variants/*` | `ako4x` | 48 |
 | `_reference/KernelWiki/artifacts/**` | `kernelwiki` | 32 |
 | `_reference/SOL-ExecBench/examples/**` | `sol-example` | 10 |
@@ -48,7 +48,7 @@ same kind of operator gets the family key only.
 
 ## 2. Every entry is one file: `kernel_library/kernels/<id>/kernel.py`
 
-`forgekernel.klib.normalize` is pure text-in/text-out, with one rule per source shape:
+`rsi_kernel_tune.klib.normalize` is pure text-in/text-out, with one rule per source shape:
 
 1. **single-file Python** — kept byte for byte; if its entry is not called `run`, an alias
    `run = <entry>` is appended (`ensure_entry`; the last public function if the source does not
@@ -62,7 +62,7 @@ same kind of operator gets the family key only.
    *Deviation worth knowing:* the first implementation isolated modules with `exec` in a
    `ModuleType`; the repository's security scanner refuses `exec` of external data, and the
    prefix rewrite is what the task text asked for anyway.
-3. **Python that builds sibling CUDA files from disk** (ForgeKernel's DeepSeek-V4.1 kernel) —
+3. **Python that builds sibling CUDA files from disk** (RSI-Kernel-Tune's DeepSeek-V4.1 kernel) —
    cannot be reduced to one file mechanically. It is stored as a **reference bundle**: the
    Python entry file and its `.cu`/`.cuh` siblings embedded as string literals, `run` defined
    but refusing loudly, `meta.json` saying `runnable: false`. `adapt` is the consumer.
@@ -83,7 +83,7 @@ is applied to the wrapper only, never to an embedded kernel's own text.
 ## 3. The index and the license gate
 
 `kernel_library/index.json` is `{"version": 1, "entries": [...]}` and its schema is task step
-0's stub (`forgekernel/klib/schema.py`, unchanged): `id`, `problem_keys`, `family`, `path`,
+0's stub (`rsi_kernel_tune/klib/schema.py`, unchanged): `id`, `problem_keys`, `family`, `path`,
 `language`, `entry`, `source`, `license`, `reported`, `verified_local`,
 `usable_in_submission`. `validate()` reports every problem at once; `submittable()` is the
 gate: only Apache-2.0 / MIT / BSD-2-Clause / BSD-3-Clause entries may be merged into a
@@ -111,7 +111,7 @@ forge lib find <problem name or family> [--k N] [--json]
 ```
 
 Ranking: an exact `problem_keys` hit first, then entries of the query's family (via
-`forgekernel.family`), then substring hits; inside a rank, entries with a reported score first,
+`rsi_kernel_tune.family`), then substring hits; inside a rank, entries with a reported score first,
 descending, then the rest by id, so an unscored entry is visibly last. The output carries the
 license, the language, whether the entry is `runnable` (reference-only bundles are not), its
 `signature_check`, any trap line, and — when the metrics CSV from the board snapshot can be
@@ -120,7 +120,7 @@ what the public Cursor solutions scored on that problem under v1.0. That last nu
 about difficulty, never a target.
 
 **Metrics are not comparable across sources** (`sol_score` from the board, `speedup_vs_expert`
-from the AKO4X archives, a percentage from ForgeKernel's README). `find` prints the metric next
+from the AKO4X archives, a percentage from RSI-Kernel-Tune's README). `find` prints the metric next
 to the number and sorts by the number as recorded; do not read 1.4 (a speedup) as better than
 0.95 (a SOL score).
 
@@ -129,7 +129,7 @@ forge lib show <id> [--json]              # the entry, its meta.json, the head o
 forge lib score <problem> --dataset DIR --card DIR [--ids a,b] [--mode dev|target]
 ```
 
-`score` measures through `forgekernel.benchx` — **the only evaluator**, per the interface
+`score` measures through `rsi_kernel_tune.benchx` — **the only evaluator**, per the interface
 contract. benchx is a soft dependency: until its `CardBench` exists, `forge lib score` exits 2
 saying "benchx is not installed" rather than faking a reading. `--card` is required because the
 `Bench` protocol evaluates against a frozen leaderboard card (`tasks/<op>/leaderboard/card/`);
@@ -224,7 +224,7 @@ derived file is the seed's when the seed allows it, else `--seed-license`, else 
   and the captured file names — good enough for ranking, not a classification.
 * **The multi-file merge is syntactic.** A merged file parses and its semantics are preserved
   where the sources use normal imports; a source that loads siblings from disk at run time
-  needs `adapt` (the merge says so in `notes`, and the ForgeKernel DeepSeek-V4.1 kernel is
+  needs `adapt` (the merge says so in `notes`, and the RSI-Kernel-Tune DeepSeek-V4.1 kernel is
   bundled rather than merged).
 * **`cover` cannot rescue a reference that itself raises.** The fallback is the reference; if
   the reference fails on legal input, every submission fails there.

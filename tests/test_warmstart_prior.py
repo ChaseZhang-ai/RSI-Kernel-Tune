@@ -1,4 +1,4 @@
-"""``forge prior build``: the run-context manifest (forgekernel.warmstart.build_prior).
+"""``forge prior build``: the run-context manifest (rsi_kernel_tune.warmstart.build_prior).
 
 The manifest is the only agent-facing document this task adds, and every line of it is
 derived from files that already exist: the card's problem.json, the prior/ record the card
@@ -15,15 +15,15 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.ext import prior as prior_cli
-from forgekernel.loop.driver import render_prompt
-from forgekernel.scaffold import main as scaffold_main
-from forgekernel.warmstart import seed
+from rsi_kernel_tune.ext import prior as prior_cli
+from rsi_kernel_tune.loop.driver import render_prompt
+from rsi_kernel_tune.scaffold import main as scaffold_main
+from rsi_kernel_tune.warmstart import seed
 
 from test_leaderboard import base, sol_root  # noqa: F401 -- fixtures
 
 # The manifest builder by module (the package re-exports its build_prior function too).
-bp = importlib.import_module("forgekernel.warmstart.build_prior")
+bp = importlib.import_module("rsi_kernel_tune.warmstart.build_prior")
 
 MIT = ("MIT License\n\nCopyright (c) 2026 A\n\nPermission is hereby granted, free of "
        "charge, to any person obtaining a copy of this software\n")

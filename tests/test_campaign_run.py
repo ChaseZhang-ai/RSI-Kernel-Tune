@@ -17,11 +17,11 @@ from pathlib import Path
 import pytest
 
 import campaign_helpers as H
-from forgekernel.campaign import compose, plan as P, report as report_mod, runner
-from forgekernel.campaign import solscore, sync
-from forgekernel.campaign import tools as tools_mod
-from forgekernel.ext import campaign as cli
-from forgekernel.task import load_task
+from rsi_kernel_tune.campaign import compose, plan as P, report as report_mod, runner
+from rsi_kernel_tune.campaign import solscore, sync
+from rsi_kernel_tune.campaign import tools as tools_mod
+from rsi_kernel_tune.ext import campaign as cli
+from rsi_kernel_tune.task import load_task
 
 KERNEL_A = """import torch
 
@@ -42,7 +42,7 @@ def run(input, weight, eps, output):
 
 
 def _plan(tmp_path, *, selection="069_rms_norm", **kw) -> dict:
-    from forgekernel.campaign import targets as T
+    from rsi_kernel_tune.campaign import targets as T
     snap = T.load_snapshot(H.SNAPSHOT)
     kw.setdefault("dataset", str(H.DATASET))
     plan = P.build_plan(snap, selection=selection, work_dir=tmp_path / "work",

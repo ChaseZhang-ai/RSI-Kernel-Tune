@@ -1,4 +1,4 @@
-"""The precision gate's measure (src/forgekernel/card_template/eval/precision.py) and a leaderboard
+"""The precision gate's measure (src/rsi_kernel_tune/card_template/eval/precision.py) and a leaderboard
 card's record of it (eval/leaderboard.py). Needs torch (skipped without it)."""
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-TEMPLATE_EVAL = REPO / "src" / "forgekernel" / "card_template" / "eval"
+TEMPLATE_EVAL = REPO / "src" / "rsi_kernel_tune" / "card_template" / "eval"
 
 torch = pytest.importorskip("torch")
 

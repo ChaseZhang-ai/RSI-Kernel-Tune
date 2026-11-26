@@ -10,9 +10,9 @@ import json
 
 import pytest
 
-from forgekernel.benchx import reader
-from forgekernel.benchx.api import BenchResult, FakeBench, WorkloadReading
-from forgekernel.leaderboard import sol_score
+from rsi_kernel_tune.benchx import reader
+from rsi_kernel_tune.benchx.api import BenchResult, FakeBench, WorkloadReading
+from rsi_kernel_tune.leaderboard import sol_score
 
 
 # -- fixtures: the card's own log format ------------------------------------------------------
@@ -224,7 +224,7 @@ def test_cold_start_probe_that_never_ran_says_so():
 
 
 def test_cold_start_over_budget_is_flagged():
-    from forgekernel.benchx.api import COLD_START_BUDGET_S
+    from rsi_kernel_tune.benchx.api import COLD_START_BUDGET_S
 
     result = reader.build_result([log(correctness(), perf_single())], problem=problem(),
                                  cold_log=PROBE.format(cold=COLD_START_BUDGET_S + 0.5))
@@ -243,7 +243,7 @@ def test_parse_cold_start_reads_the_first_line_and_survives_junk():
 
 
 def test_cold_start_state_is_explicit_about_all_three_cases():
-    from forgekernel.benchx.api import COLD_START_BUDGET_S
+    from rsi_kernel_tune.benchx.api import COLD_START_BUDGET_S
 
     assert reader.cold_start_state(12.0, probe_ran=True) == {"cold_start": "ok"}
     assert reader.cold_start_state(COLD_START_BUDGET_S + 1, probe_ran=True)["cold_start"] \

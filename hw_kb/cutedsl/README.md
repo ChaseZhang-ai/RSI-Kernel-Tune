@@ -2,7 +2,7 @@
 
 > This is the knowledge base for **CuTe DSL mode**. CUDA mode (loop language `cuda-sol`, single-file
 > CUDA C++ student) reads and writes a separate, independent tree, `hw_kb/cuda/` (see its README and
-> `src/forgekernel/loop/lang_mode.py`).
+> `src/rsi_kernel_tune/loop/lang_mode.py`).
 
 An **operator-agnostic** library of hardware-interface examples. It is the **only** one of the three
 artifacts that is allowed to contain code — because "how to issue an MMA / how to write a DMA
@@ -22,7 +22,7 @@ descriptor" is a hardware mechanism, not the algorithm of some operator.
   this repo's probes. The reference implementation's (oracle's) file names, function names, line
   numbers, paraphrased content and measured footprints all go to `docs/kb-provenance/<entry name>.md`
   (for human review; never in an agent read set). The rationale and the full discipline are in
-  `docs/kb-provenance/README.md`; the mechanical gate is `src/forgekernel/loop/kb_lint.py`.
+  `docs/kb-provenance/README.md`; the mechanical gate is `src/rsi_kernel_tune/loop/kb_lint.py`.
 
 ## Layout
 

@@ -1,6 +1,6 @@
 # Triton mode (loop language `triton`)
 
-Triton is a first-class language for ForgeKernel's loop: a `[task].language = "triton"` task runs a
+Triton is a first-class language for RSI-Kernel-Tune's loop: a `[task].language = "triton"` task runs a
 student that writes a **single Python `kernel.py` of `@triton.jit` kernels**, reads its own prompt
 set, its own hardware knowledge base (`hw_kb/triton/`) and files its provenance under
 `docs/kb-provenance/triton/`. This document covers why the mode exists, how it is wired, what the
@@ -38,7 +38,7 @@ card.
 | off-line API source | `loop/dsl_source.py` `resolve(language="triton")` | the installed `triton` package's roots |
 | job env preflight | `loop/job_env.py` `import_check_flag` | `--triton` (the job's `python3` must `import triton`) |
 | self-evolution | `scripts/self_evolve.py` | a Triton kernel can seed the next generation (it is Python with a `run`) |
-| target-compile check | `src/forgekernel/triton_check.py` | `triton.compile` + an explicit `GPUTarget`, no launch |
+| target-compile check | `src/rsi_kernel_tune/triton_check.py` | `triton.compile` + an explicit `GPUTarget`, no launch |
 
 A task validates `hw_kb/triton/<arch>/` the same way the other languages validate theirs: the tree
 must exist with an `index.md`, and a run refuses to start (exit 14) when it does not.
@@ -71,7 +71,7 @@ any agent's read set). Certifying an entry means walking the ladder in
 `hw_kb/triton/sm100/gpu_probe_ladder.md` and replacing the line. The tree is fill-on-demand: each
 `index.md` keeps its own to-be-filled list.
 
-Every runnable example in the tree was compiled for CC 10.0 (`python -m forgekernel.triton_check …`,
+Every runnable example in the tree was compiled for CC 10.0 (`python -m rsi_kernel_tune.triton_check …`,
 no launch) before it was shipped; `docs/kb-provenance/triton/README.md` says what that validated.
 
 ## 4. What the harness can read out of a Triton kernel
@@ -121,10 +121,10 @@ forge new tasks/myproj && forge run .artifacts/myproj_<id>
 
 ## 6. Target-compile check (provisional)
 
-`src/forgekernel/triton_check.py` answers "does this kernel lower for the target?" without a GPU:
+`src/rsi_kernel_tune/triton_check.py` answers "does this kernel lower for the target?" without a GPU:
 
 ```bash
-python -m forgekernel.triton_check kernel.py --target 10.0
+python -m rsi_kernel_tune.triton_check kernel.py --target 10.0
 # -> TRITON-COMPILE OK|PARTIAL|FAIL|UNAVAILABLE target=10.0 kernels=N compiled=N unverified=N
 ```
 
@@ -195,7 +195,7 @@ board.
 Prerequisite: a `python3` with a CUDA build of torch **and** `triton`. On the development machine:
 
 ```bash
-/home/zcz/bestKernel/ForgeKernel/.venv/bin/python -c \
+/home/zcz/bestKernel/RSI-Kernel-Tune/.venv/bin/python -c \
   'import torch, triton; print(torch.__version__, torch.cuda.is_available(), triton.__version__)'
 # 2.15.0+cu132 True 3.9.0          (an RTX 3060 Laptop, 6 GB, is enough)
 ```
@@ -209,10 +209,10 @@ Prerequisite: a `python3` with a CUDA build of torch **and** `triton`. On the de
    # write_check.py — the judge the card times against (no agent): the task's own semantics.
    import json, sys
    from pathlib import Path
-   from forgekernel import judge as judge_mod, taskcard
-   from forgekernel.localenv import load_machine
-   from forgekernel.runs import new_run
-   from forgekernel.task import load_task
+   from rsi_kernel_tune import judge as judge_mod, taskcard
+   from rsi_kernel_tune.localenv import load_machine
+   from rsi_kernel_tune.runs import new_run
+   from rsi_kernel_tune.task import load_task
    src = load_task(Path("tasks/triton_rmsnorm"))
    run = new_run(src, machine=load_machine(Path("."), environ={}))
    d = run.dir / judge_mod.CHECK_DIR
@@ -269,7 +269,7 @@ Prerequisite: a `python3` with a CUDA build of torch **and** `triton`. On the de
        return y
    ```
    Before running anything expensive, the target-compile check reads it without a GPU:
-   `python -m forgekernel.triton_check kernel.py --target 10.0 --kernel _rmsnorm_kernel
+   `python -m rsi_kernel_tune.triton_check kernel.py --target 10.0 --kernel _rmsnorm_kernel
    --signature '{"x_ptr": "*bf16", "w_ptr": "*bf16", "out_ptr": "*bf16", "n": "i32"}'
    --constexprs '{"EPS": 1e-6, "BLOCK": 4096}'`.
 4. **The card's own job** — correctness + timing, on the local GPU (the GPU lock is this machine's
@@ -280,7 +280,7 @@ Prerequisite: a `python3` with a CUDA build of torch **and** `triton`. On the de
    # a card whose reference is sealed (step 2's run has one) needs the key the delivery layer
    # would export from submit.local.toml; gpu_entry moves it beside the payload and re-execs
    export FK_REF_KEY="$(sed -n 's/^FK_REF_KEY = "\([^"]*\)"$/\1/p' submit.local.toml)"
-   PATH=/home/zcz/bestKernel/ForgeKernel/.venv/bin:$PATH \
+   PATH=/home/zcz/bestKernel/RSI-Kernel-Tune/.venv/bin:$PATH \
      ~/tools/bin/with-lock gpu 1800 -- bash gpu_entry.sh perf
    ```
    `perf` (alias `all`) runs `eval/bench.py --mode all`: every input group of every shape is judged

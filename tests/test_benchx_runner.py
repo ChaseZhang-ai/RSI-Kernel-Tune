@@ -11,11 +11,11 @@ import subprocess
 
 import pytest
 
-from forgekernel import taskcard
-from forgekernel.benchx import runner
-from forgekernel.localenv import Machine
-from forgekernel.loop import cli as loop_cli
-from forgekernel.leaderboard import sol_score
+from rsi_kernel_tune import taskcard
+from rsi_kernel_tune.benchx import runner
+from rsi_kernel_tune.localenv import Machine
+from rsi_kernel_tune.loop import cli as loop_cli
+from rsi_kernel_tune.leaderboard import sol_score
 
 MACHINE = Machine(delivery="local", gpu="0")
 
@@ -113,7 +113,7 @@ def gpu(monkeypatch, tmp_path):
     FakeBackend.fail_on = {}
     FakeBackend.job_counter = 100
     monkeypatch.setattr(loop_cli, "RealBackend", FakeBackend)
-    monkeypatch.setenv("FORGEKERNEL_RUNS_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("RSI_KERNEL_TUNE_RUNS_DIR", str(tmp_path / "artifacts"))
     return FakeBackend
 
 
@@ -370,11 +370,11 @@ def test_a_targethw_module_is_used_when_present_and_never_required(monkeypatch):
     import sys
     import types
 
-    present = types.ModuleType("forgekernel.targethw.rules")
+    present = types.ModuleType("rsi_kernel_tune.targethw.rules")
     present.target_compile = lambda source, **kw: {"status": "ok", "arch": kw["arch"],
                                                    "compiled": True}
     present.confidence_hints = lambda source, **kw: ["fp4-bound", "sfu-bound"]
-    monkeypatch.setitem(sys.modules, "forgekernel.targethw.rules", present)
+    monkeypatch.setitem(sys.modules, "rsi_kernel_tune.targethw.rules", present)
     integrity: dict = {}
     check = runner.target_compile_check("x = 1\n", kernel_file="kernel.py",
                                         language="cutedsl", arch="sm100", problem={})
@@ -384,14 +384,14 @@ def test_a_targethw_module_is_used_when_present_and_never_required(monkeypatch):
                                    integrity=integrity) == ["dev-only", "fp4-bound",
                                                             "sfu-bound"]
 
-    broken = types.ModuleType("forgekernel.targethw.rules")
+    broken = types.ModuleType("rsi_kernel_tune.targethw.rules")
 
     def boom(source, **kw):
         raise RuntimeError("no nvcc")
 
     broken.target_compile = boom
     broken.confidence_hints = boom
-    monkeypatch.setitem(sys.modules, "forgekernel.targethw.rules", broken)
+    monkeypatch.setitem(sys.modules, "rsi_kernel_tune.targethw.rules", broken)
     check = runner.target_compile_check("x = 1\n", kernel_file="kernel.py",
                                         language="cutedsl", arch="sm100", problem={})
     assert check["external"]["status"] == "error" and "no nvcc" in check["external"]["error"]
@@ -405,7 +405,7 @@ def test_a_targethw_module_is_used_when_present_and_never_required(monkeypatch):
 
 
 def test_a_plain_task_is_refused_with_a_clear_message():
-    from forgekernel.paths import repo_root
+    from rsi_kernel_tune.paths import repo_root
 
     with pytest.raises(runner.BenchError, match="not a leaderboard task"):
         runner.load_board(repo_root() / "tasks" / "rmsnorm")
@@ -436,8 +436,8 @@ def test_target_mode_runs_nothing_and_writes_no_run(tmp_path, gpu):
 def test_the_command_help_and_refusal_routes():
     import pytest as _pytest
 
-    from forgekernel import __main__ as forge_main
-    from forgekernel.paths import repo_root
+    from rsi_kernel_tune import __main__ as forge_main
+    from rsi_kernel_tune.paths import repo_root
 
     assert forge_main.main(["bench", "--help"]) == 0
     for argv in (["bench", "compare", "--help"], ["bench", "best-of", "--help"]):

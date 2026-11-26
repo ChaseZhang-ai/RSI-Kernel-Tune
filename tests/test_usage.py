@@ -1,4 +1,4 @@
-"""The agent usage ledger (`forgekernel.usage`) and where a run shows it.
+"""The agent usage ledger (`rsi_kernel_tune.usage`) and where a run shows it.
 
 The ledger is written by the launcher scripts (scripts/agent_trailer.py) and read here;
 there is no budget and no cap anywhere in it -- the numbers are for the run's report and
@@ -11,8 +11,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from forgekernel import launch, usage
-from forgekernel import runs as runs_mod
+from rsi_kernel_tune import launch, usage
+from rsi_kernel_tune import runs as runs_mod
 
 
 def _record(**kw) -> dict:
@@ -147,7 +147,7 @@ def test_a_driven_run_points_every_agent_turn_at_its_own_ledger(tmp_path):
     the previous value comes back when the run is no longer driven."""
     import os
 
-    from forgekernel.localenv import Machine
+    from rsi_kernel_tune.localenv import Machine
     run = _run(tmp_path, None)
     machine = Machine(delivery="local", gpu="0")
     before = os.environ.get("FK_AGENT_USAGE_FILE")

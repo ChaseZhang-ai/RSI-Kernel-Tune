@@ -1,4 +1,4 @@
-"""forgekernel.benchx.api: the interface every evaluation of a candidate goes through.
+"""rsi_kernel_tune.benchx.api: the interface every evaluation of a candidate goes through.
 
 The real Bench is task benchx's; what is pinned here is what everything else codes against:
 the data classes, the protocol, ``FakeBench``, the cold-start budget and the tag strings.
@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-import forgekernel.benchx as benchx
-from forgekernel.benchx import api
-from forgekernel.benchx.api import (COLD_START_BUDGET_S, CONF_DEV_ONLY, CONF_FP4_BOUND,
+import rsi_kernel_tune.benchx as benchx
+from rsi_kernel_tune.benchx import api
+from rsi_kernel_tune.benchx.api import (COLD_START_BUDGET_S, CONF_DEV_ONLY, CONF_FP4_BOUND,
                                     CONF_SFU_BOUND, CONF_SM_COUNT_SENSITIVE, MODE_DEV,
                                     MODE_TARGET, MODES, Bench, BenchCall, BenchResult,
                                     FakeBench, WorkloadReading, cold_start_over_budget)

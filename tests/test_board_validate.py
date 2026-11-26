@@ -9,7 +9,7 @@ import zipfile
 
 import pytest
 
-from forgekernel.board import validate as bv
+from rsi_kernel_tune.board import validate as bv
 
 RUN = b"def run(x):\n    return x\n"
 

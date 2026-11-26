@@ -1,4 +1,4 @@
-"""``src/forgekernel/card_template/eval/closed_ref.py``: a single-file reference sealed into
+"""``src/rsi_kernel_tune/card_template/eval/closed_ref.py``: a single-file reference sealed into
 an opaque payload and imported IN MEMORY on the node.
 
 Copied verbatim into a card's eval/ and into the reference tree, so it is loaded
@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 CLOSED_REF_PY = (Path(__file__).resolve().parents[1]
-                 / "src" / "forgekernel" / "card_template" / "eval" / "closed_ref.py")
+                 / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "closed_ref.py")
 
 REFERENCE_SOURCE = '''"""A pretend reference kernel: the thing an earlier run produced."""
 
@@ -146,7 +146,7 @@ def test_a_keyed_payload_without_its_env_var_says_which_variable(closed_ref, tmp
 
 def test_without_the_env_var_the_key_is_read_from_the_key_file_beside_the_payload(
         closed_ref, tmp_path, monkeypatch):
-    """Where gpu_entry.sh moves the key (forgekernel.sealref.key_preamble)."""
+    """Where gpu_entry.sh moves the key (rsi_kernel_tune.sealref.key_preamble)."""
     key = closed_ref.generate_key()
     path = _payload(closed_ref, tmp_path, key)
     monkeypatch.delenv("FK_REF_KEY", raising=False)

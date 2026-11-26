@@ -79,7 +79,7 @@ correctness_monitor_profiles` (the profile list) control this step.
 
 ```bash
 # a run's trees: first point forge at the run's operators/
-export FORGEKERNEL_OPERATORS_DIR=.artifacts/<op>_<id>/operators
+export RSI_KERNEL_TUNE_OPERATORS_DIR=.artifacts/<op>_<id>/operators
 forge <op> monitor --workspace .artifacts/<op>_<id>/ws            # default: the sha in best_confirmation.json, else the workspace HEAD
 forge <op> monitor --workspace .artifacts/<op>_<id>/ws --sha ae8f882 --profiles base,seed1,zero_block
 forge <op> monitor --workspace .artifacts/<op>_<id>/ws --dry-run  # print the overlaid tree, branch and job command only
@@ -89,7 +89,7 @@ Exit codes: 0 ok, 1 warn, 2 alarm, 3 could not run.
 
 ## Mechanism
 
-- The runtime (`src/forgekernel/monitor/runtime/`) rides into the job tree's `.fk_monitor/` as an
+- The runtime (`src/rsi_kernel_tune/monitor/runtime/`) rides into the job tree's `.fk_monitor/` as an
   overlay commit (the tree under test is unchanged); the job is
   `gpu_entry.sh cmd python3 .fk_monitor/run.py ...`.
 - `run.py` uses only the standard library (the `python3` on the job's PATH may have no torch). For

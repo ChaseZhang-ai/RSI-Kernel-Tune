@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 import campaign_helpers as H
-from forgekernel.campaign import pack as K, solscore, sync
-from forgekernel.campaign import targets as T
+from rsi_kernel_tune.campaign import pack as K, solscore, sync
+from rsi_kernel_tune.campaign import targets as T
 
 SUBMISSION = '''"""a kernel."""
 
@@ -220,7 +220,7 @@ def test_pack_summary_prints_the_upload_rules(tmp_path):
 
 
 def test_the_pack_cli_exit_code_is_zero_only_for_a_complete_track(tmp_path, capsys):
-    from forgekernel.ext import campaign as cli
+    from rsi_kernel_tune.ext import campaign as cli
     work = tmp_path / "work"
     args = ["pack", "--track", "l1", "--dataset", str(H.DATASET), "--work-dir", str(work),
             "--out", str(tmp_path / "out"), "--snapshot", str(H.SNAPSHOT),

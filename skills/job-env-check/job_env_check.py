@@ -60,7 +60,7 @@ def triton_check() -> "tuple[str | None, str]":
 
     One literal probe command, no assembled source: this script is seeded into a
     tree's ``notes/`` and the same flag/value pair is what the harness expects
-    (``forgekernel/loop/job_env.py`` MODE_IMPORT_CHECK / TRITON_MODULE)."""
+    (``rsi_kernel_tune/loop/job_env.py`` MODE_IMPORT_CHECK / TRITON_MODULE)."""
     try:
         p = subprocess.run(["python3", "-c", "import triton; print(triton.__version__)"],
                            capture_output=True, text=True, timeout=600)

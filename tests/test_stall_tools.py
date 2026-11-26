@@ -1,6 +1,6 @@
 """The per-SASS stall pricing ledger: keying, coverage contract, verdict gate."""
-from forgekernel.loop.driver import _STALL_LEDGER_RE, _STALL_OK, _STALL_WAIVED
-from forgekernel.skills import stall_tools
+from rsi_kernel_tune.loop.driver import _STALL_LEDGER_RE, _STALL_OK, _STALL_WAIVED
+from rsi_kernel_tune.skills import stall_tools
 
 LS = "smsp__pcsamp_warps_issue_stalled_long_scoreboard"
 BAR = "smsp__pcsamp_warps_issue_stalled_barrier"

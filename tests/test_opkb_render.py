@@ -1,4 +1,4 @@
-"""forgekernel.opkb.render: the file a teacher reads -- record values only, stable bytes."""
+"""rsi_kernel_tune.opkb.render: the file a teacher reads -- record values only, stable bytes."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-import forgekernel.ext.lessons as lessons_cli
-from forgekernel.opkb import query, record, render, store
+import rsi_kernel_tune.ext.lessons as lessons_cli
+from rsi_kernel_tune.opkb import query, record, render, store
 
 FIXTURE = Path(__file__).parent / "fixtures" / "opkb_run"
 
@@ -172,7 +172,7 @@ def test_the_render_command_rejects_a_non_problem(tmp_path, capsys):
 
 
 def test_the_rendered_file_is_the_lessons_run_context_path(tmp_path):
-    from forgekernel import runcontext
+    from rsi_kernel_tune import runcontext
 
     path = render.write(tmp_path / "lessons.md", render.build([_own()], _target()))
     env = runcontext.env_for({"lessons": path})

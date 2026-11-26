@@ -15,11 +15,11 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.ext import calibrate as calibrate_cmd
-from forgekernel.roofline import calibrate
+from rsi_kernel_tune.ext import calibrate as calibrate_cmd
+from rsi_kernel_tune.roofline import calibrate
 
 ROOT = Path(__file__).resolve().parents[1]
-PROBES_DIR = ROOT / "src" / "forgekernel" / "roofline" / "probes"
+PROBES_DIR = ROOT / "src" / "rsi_kernel_tune" / "roofline" / "probes"
 PROBE_FILES = ("hbm.py", "l2.py", "tensor.py", "elementwise.py", "sfu.py", "launch.py",
                "run_all.py")
 
@@ -293,7 +293,7 @@ class Completed:
 
 def test_the_local_path_runs_the_entry_under_the_gpu_lock(monkeypatch):
     import contextlib
-    import forgekernel.submit.direct as direct
+    import rsi_kernel_tune.submit.direct as direct
 
     calls = {}
     monkeypatch.setattr(direct, "gpu_lock", lambda gpu: contextlib.nullcontext())
@@ -335,8 +335,8 @@ class FakeRunner:
 
 
 def test_the_remote_path_is_the_same_delivery_a_gpu_job_uses():
-    from forgekernel.localenv import Machine
-    from forgekernel.submit.jobs import STATUS_SUCCEEDED
+    from rsi_kernel_tune.localenv import Machine
+    from rsi_kernel_tune.submit.jobs import STATUS_SUCCEEDED
 
     machine = Machine(delivery="ssh", gpu="0", remote_host="devbox",
                       remote_workdir="/work/fk")
@@ -359,7 +359,7 @@ def test_the_remote_path_is_the_same_delivery_a_gpu_job_uses():
 
 
 def test_the_remote_job_carries_a_named_interpreter_when_one_is_set(monkeypatch):
-    from forgekernel.localenv import Machine
+    from rsi_kernel_tune.localenv import Machine
 
     machine = Machine(delivery="ssh", gpu="0", remote_host="devbox",
                       remote_workdir="/work/fk")
@@ -381,7 +381,7 @@ def test_the_remote_job_carries_a_named_interpreter_when_one_is_set(monkeypatch)
 
 
 def test_the_remote_path_reports_a_failed_job():
-    from forgekernel.localenv import Machine
+    from rsi_kernel_tune.localenv import Machine
 
     machine = Machine(delivery="ssh", gpu="0", remote_host="devbox",
                       remote_workdir="/work/fk")
@@ -391,7 +391,7 @@ def test_the_remote_path_reports_a_failed_job():
 
 
 def test_resolve_delivery_follows_local_env_and_the_flags(monkeypatch):
-    from forgekernel import localenv
+    from rsi_kernel_tune import localenv
 
     local = localenv.Machine(delivery="local", gpu="0")
     monkeypatch.setattr(localenv, "load_machine", lambda root=None: local)
@@ -410,7 +410,7 @@ def test_resolve_delivery_follows_local_env_and_the_flags(monkeypatch):
 
 
 def test_the_ssh_delivery_without_a_host_is_a_clear_error(monkeypatch):
-    from forgekernel import localenv
+    from rsi_kernel_tune import localenv
 
     broken = localenv.Machine(delivery="ssh", gpu="0")
     monkeypatch.setattr(localenv, "load_machine", lambda root=None: broken)

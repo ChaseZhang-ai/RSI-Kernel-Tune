@@ -45,7 +45,7 @@ A compile-only check of a kernel that takes a descriptor needs the descriptor's 
 the signature (the JIT derives it at launch from the `TensorDescriptor` object, which a probe does
 not have):
 ```bash
-python -m forgekernel.triton_check kernel.py --target 10.0 --kernel _tma_copy \
+python -m rsi_kernel_tune.triton_check kernel.py --target 10.0 --kernel _tma_copy \
     --signature '{"desc": "tensordesc<fp32[64,64]>", "out_ptr": "*fp32"}' \
     --constexprs '{"M": 256, "N": 256, "BLOCK_M": 64, "BLOCK_N": 64}'
 ```

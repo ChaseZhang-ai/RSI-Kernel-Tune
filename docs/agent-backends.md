@@ -4,8 +4,8 @@ Three separate concerns live behind one task key (`[agent] backend`):
 
 | | what it decides | where |
 |---|---|---|
-| **the backend** | which agent CLI runs a turn, and what that CLI may be asked to do | `src/forgekernel/agentbackends/` |
-| **the usage ledger** | what each turn cost (tokens, time, money), per role and per model | `scripts/agent_trailer.py` writes, `src/forgekernel/usage.py` reads |
+| **the backend** | which agent CLI runs a turn, and what that CLI may be asked to do | `src/rsi_kernel_tune/agentbackends/` |
+| **the usage ledger** | what each turn cost (tokens, time, money), per role and per model | `scripts/agent_trailer.py` writes, `src/rsi_kernel_tune/usage.py` reads |
 | **refusal / downgrade detection** | whether the turn ran on the model the task asked for | `scripts/agent_trailer.py` + `RealBackend.run_agent` |
 
 None of it changes the loop's gate, the card's clock, or the agent policy. A backend that
@@ -36,7 +36,7 @@ model   = "gpt-5.5-codex"
 effort  = "high"            # -> -c model_reasoning_effort="high"
 ```
 
-What the task file is checked for (`forgekernel/task.py:_read_agent`, all problems listed
+What the task file is checked for (`rsi_kernel_tune/task.py:_read_agent`, all problems listed
 at once):
 
 1. `backend` is a registered backend;
@@ -53,7 +53,7 @@ sealed reference are all hook-enforced.
 
 ### The commands, byte for byte
 
-`forgekernel.agents.agent_command(spec, role, env)` is what the loop runs. It is unchanged
+`rsi_kernel_tune.agents.agent_command(spec, role, env)` is what the loop runs. It is unchanged
 apart from the `FK_AGENT_ROLE` prefix (the launcher scripts need the role for the ledger and
 the refusal check):
 
@@ -89,12 +89,12 @@ python3 scripts/timeout-run.py 7200 codex exec --json --color never \
 
 ## 2. Adding a backend
 
-A backend is one module in `src/forgekernel/agentbackends/`: the module name is the backend
+A backend is one module in `src/rsi_kernel_tune/agentbackends/`: the module name is the backend
 name, and it exports one instance `BACKEND` (nothing else registers it — `task.BACKENDS` and
 `provider.grant` both read this directory).
 
 ```python
-# src/forgekernel/agentbackends/mine.py
+# src/rsi_kernel_tune/agentbackends/mine.py
 from .base import ScriptBackend
 
 class MineBackend(ScriptBackend):
@@ -134,10 +134,10 @@ reported so a run can be read).
   `FK_AGENT_USAGE_FILE` for the whole run, so judge, teacher and student turns share it.
 - **Who writes it**: `scripts/agent_trailer.py`, which every launcher calls when
   `FK_AGENT_USAGE_FILE` is set. It also writes `FK_USAGE {...}` (the same record) on stderr.
-- **Who reads it**: `forgekernel.usage.read_ledger` / `summarize` / `render_markdown`; the
+- **Who reads it**: `rsi_kernel_tune.usage.read_ledger` / `summarize` / `render_markdown`; the
   run report (`## Agent usage`: totals, per role, per model, downgraded turns) and
   `forge status` (`agent usage: 12 turn(s), 1,234,567 tokens, $3.40, 2h05m agent time`).
-  Other tasks (the throughput report) read the same file through `forgekernel.usage`.
+  Other tasks (the throughput report) read the same file through `rsi_kernel_tune.usage`.
 
 A record:
 

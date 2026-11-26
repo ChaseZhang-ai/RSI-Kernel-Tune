@@ -1,6 +1,6 @@
 """Tests for parsing GPU job output (correctness + perf) from job logs."""
 
-from forgekernel.inner import (
+from rsi_kernel_tune.inner import (
     parse_correctness,
     parse_perf,
 )

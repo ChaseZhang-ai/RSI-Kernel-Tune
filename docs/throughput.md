@@ -1,6 +1,6 @@
 # Throughput governor
 
-`forgekernel.loop.governor` wraps a loop backend (`DriverBackend`) and governs exactly
+`rsi_kernel_tune.loop.governor` wraps a loop backend (`DriverBackend`) and governs exactly
 two things that decide kernel quality. It is not a cost control: **there are no token
 limits**, by explicit user constraint.
 
@@ -49,7 +49,7 @@ backend in other launch paths (it is what the title table is tested against).
 ## Configuration
 
 `task.toml` `[budget]` (defaults in `global_config/loop.toml`; validated in
-`forgekernel/task.py`):
+`rsi_kernel_tune/task.py`):
 
 | key | default | meaning |
 |---|---|---|

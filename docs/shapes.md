@@ -6,8 +6,8 @@ was written for it". It does not touch the loop: each cluster is an ordinary boa
 driven with the ordinary `forge init` / `new` / `run` / `export`, and the composition is
 finished by a dispatcher this tool generates.
 
-- commands: `forge shapes plan | run | compose` (`src/forgekernel/ext/shapes.py`)
-- modules: `src/forgekernel/shapes/` (`cluster`, `plan`, `run`, `evalx`, `matrix`, `compose`)
+- commands: `forge shapes plan | run | compose` (`src/rsi_kernel_tune/ext/shapes.py`)
+- modules: `src/rsi_kernel_tune/shapes/` (`cluster`, `plan`, `run`, `evalx`, `matrix`, `compose`)
 - products: `tasks/<op>/shapes/` (a working directory, kept out of git via
   `.git/info/exclude`, never `.gitignore`)
 - tests: `tests/test_shapes_{cluster,matrix,compose,run}.py`, fixture card
@@ -22,7 +22,7 @@ Three reasons, in the order they matter:
    mean of its workloads' `S` (background §3.3). Every workload running its own fastest
    correct implementation is therefore *the* optimum of that formula, not an approximation
    of it.
-2. **One kernel for every size is the known failure.** ForgeKernel's own README lists
+2. **One kernel for every size is the known failure.** RSI-Kernel-Tune's own README lists
    "Shape clustering: group the shapes of a task into clusters and optimize per cluster, so
    one run can cover a wide range of shapes" as the plan for v1.5, and the reported evidence
    is stark: the same kernel reached 1.037x on Prefill and 0.289x on Decode, 0.547x overall
@@ -165,7 +165,7 @@ not re-`init`ed. `--max-hours` caps *this invocation*: unstarted clusters stay `
 exit code is 3, and running the same command again continues. `--cluster-hours` sets the
 loop's own `[budget] hours` per cluster.
 
-GPU exclusion is ForgeKernel's own (its per-GPU job lock and `FK_JOB_LOCK_CMD`, read from
+GPU exclusion is RSI-Kernel-Tune's own (its per-GPU job lock and `FK_JOB_LOCK_CMD`, read from
 `local.env` by the job path). `run` deliberately does **not** wrap `forge run` in an outer
 `with-lock`: an hours-long outer lock would be held through every acquisition the loop
 itself makes.
@@ -189,7 +189,7 @@ forge shapes compose <plan.json | tasks/<op>> [--out PATH] [--also FILE ...]
 | `version` | every KEEP with `correctness != False` in the cluster runs' `status.jsonl`, read from the run workspace's git (`git show <sha>:kernel.py`); evolve populations contribute their `variants/*/kernel.*` |
 | `overall` | `--overall`: one run's whole-card export; it also becomes the fallback |
 | `extra` | `--also` (repeatable): another agent's solution, a hand-written variant |
-| `library` | `kernel_library/index.json` entries whose `problem_keys` name this problem and whose licence is submittable (`forgekernel.klib.schema.submittable`) |
+| `library` | `kernel_library/index.json` entries whose `problem_keys` name this problem and whose licence is submittable (`rsi_kernel_tune.klib.schema.submittable`) |
 | `baseline` | `forge lib baselines`' mechanical torch candidates (soft dependency on seedlib) |
 | `eager` | the definition's own reference, wrapped as a DPS kernel |
 
@@ -204,7 +204,7 @@ then a `.cu` cannot enter a `submission.py`).
 ### 5.2 Readings: benchx, and only benchx
 
 Every candidate is written to `candidates/<label>.py` and scored **once, on the problem's
-own card, over every workload** by `forgekernel.benchx` (`Bench.bench(card, path)`). The
+own card, over every workload** by `rsi_kernel_tune.benchx` (`Bench.bench(card, path)`). The
 reading, the verdict and the per-workload `S` are the card's own. `compose` never times or
 judges anything itself: without benchx it says "needs benchx" and stops.
 

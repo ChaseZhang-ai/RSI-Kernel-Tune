@@ -1,6 +1,6 @@
 # Roofline: measured peaks, and how far a kernel is from them
 
-ForgeKernel's loop only knows two targets — a ratio against the reference, or an absolute
+RSI-Kernel-Tune's loop only knows two targets — a ratio against the reference, or an absolute
 millisecond count (`task.py`). Neither says whether the kernel is *near what the hardware
 allows*, so a teacher cannot tell "this structure has reached its limit" from "this is
 still far off", and an orchestrator cannot rank workloads by how much room they have. The
@@ -31,7 +31,7 @@ forge calibrate --remote --seconds 10             # force the ssh host
 forge calibrate --local --only hbm,launch --out /tmp/p.json
 ```
 
-Six probes, each a standalone script under `src/forgekernel/roofline/probes/`:
+Six probes, each a standalone script under `src/rsi_kernel_tune/roofline/probes/`:
 
 | probe | measures | units |
 |---|---|---|
@@ -48,7 +48,7 @@ must match the same recurrence on the host), and every entry reports the median,
 number of repeats and the coefficient of variation. A probe that cannot run (no Triton,
 no fp8 path, an OOM) is an entry with `skipped: <reason>` — never a zero.
 
-**How it reaches a GPU.** Through ForgeKernel's existing delivery, not a second one. The
+**How it reaches a GPU.** Through this project's existing delivery, not a second one. The
 calibration builds a tiny job tree (the probe files, `run_all.py`, a `gpu_entry.sh` whose
 `calibrate` task runs them), and `submit.direct` ships it: the per-GPU lock (including
 `FK_JOB_LOCK_CMD` on a shared workstation), the job timeout, the log, and — for the
@@ -66,7 +66,7 @@ sets it to the harness's own interpreter automatically, and for an ssh host it c
 **The document** (`calibration/<gpu>-<date>.json`, not committed):
 
 ```json
-{"schema": "forgekernel.calibration/1", "gpu": "NVIDIA B300", "arch": "sm_103",
+{"schema": "rsi_kernel_tune.calibration/1", "gpu": "NVIDIA B300", "arch": "sm_103",
  "sm_count": 160, "driver": "...", "cuda": "13.1", "torch": "2.9.0",
  "clocks": {"sm_mhz": 1500, "mem_mhz": 3996, "app_sm_mhz": 1500, "max_sm_mhz": 1965,
             "locked": true},
@@ -162,7 +162,7 @@ These labels are derived from the cost model and the peak sets, never guessed fr
 number, a name the card does not have: all refusals):
 
 ```json
-{"schema": "forgekernel.cost-model/1",
+{"schema": "rsi_kernel_tune.cost-model/1",
  "workloads": [{"name": "wl0", "flops": 2100000000, "bytes_read": 84000000,
                 "bytes_written": 11000000, "peak": "bf16",
                 "basis": {"flops": "…", "bytes_read": "…", "bytes_written": "…"}}]}

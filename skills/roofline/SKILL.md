@@ -29,8 +29,8 @@ heuristic with thresholds is not a certification.
 ## Running it
 
 A GPU job has the file at `notes/roofline_tools.py` (the harness seeds every skill's
-scripts there); a ForgeKernel checkout has it at `skills/roofline/roofline_tools.py`. It is
-pure stdlib Python — no GPU, no torch, no ForgeKernel import.
+scripts there); a this repository has it at `skills/roofline/roofline_tools.py`. It is
+pure stdlib Python — no GPU, no torch, no package import.
 
 ```bash
 # what is this kernel bound by? (new metric names; older spellings are accepted too)

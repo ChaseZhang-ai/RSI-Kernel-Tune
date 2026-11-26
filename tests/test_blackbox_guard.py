@@ -235,7 +235,7 @@ def test_every_driver_seeded_tool_passes_the_guard(tmp_path):
     run a sanctioned probe."""
     import importlib
 
-    from forgekernel.loop.driver import PRICING_SEEDED_MODULES, RECON_SEEDED_MODULES
+    from rsi_kernel_tune.loop.driver import PRICING_SEEDED_MODULES, RECON_SEEDED_MODULES
     notes = {}
     for name in dict.fromkeys(RECON_SEEDED_MODULES + PRICING_SEEDED_MODULES):
         path = Path(importlib.import_module(name).__file__)

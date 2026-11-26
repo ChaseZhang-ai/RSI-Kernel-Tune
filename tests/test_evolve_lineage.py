@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.evolve import lineage
-from forgekernel.evolve.lineage import LineageError, Reference, Request, make_task
-from forgekernel.task import LANGUAGES, load_task
+from rsi_kernel_tune.evolve import lineage
+from rsi_kernel_tune.evolve.lineage import LineageError, Reference, Request, make_task
+from rsi_kernel_tune.task import LANGUAGES, load_task
 
 KERNEL = "import torch\n\ndef run(x, w):\n    return x * w\n"
 DONOR = "import torch\n\ndef run(x, w):\n    return (x * w).contiguous()\n"
@@ -372,13 +372,13 @@ def test_exclude_pattern_goes_to_the_local_exclude(tmp_path, monkeypatch):
 
 
 def _fake_klib(tmp_path, monkeypatch, entries):
-    mod = type(sys)("forgekernel.klib")
+    mod = type(sys)("rsi_kernel_tune.klib")
     mod.find = lambda problem, k: entries[:k]
-    monkeypatch.setitem(sys.modules, "forgekernel.klib", mod)
-    # `import forgekernel.klib as klib` reaches the parent package's attribute when one is
+    monkeypatch.setitem(sys.modules, "rsi_kernel_tune.klib", mod)
+    # `import rsi_kernel_tune.klib as klib` reaches the parent package's attribute when one is
     # already set; patch it too, so the fake is what a test sees whatever ran before it.
-    import forgekernel
-    monkeypatch.setattr(forgekernel, "klib", mod, raising=False)
+    import rsi_kernel_tune
+    monkeypatch.setattr(rsi_kernel_tune, "klib", mod, raising=False)
 
 
 def test_find_seeds_filters_licenses_and_missing_files(tmp_path, monkeypatch):
@@ -398,8 +398,8 @@ def test_find_seeds_filters_licenses_and_missing_files(tmp_path, monkeypatch):
 
 def test_find_seeds_without_the_library_is_a_clean_fallback(monkeypatch):
     # None in sys.modules is the standard stand-in for a package that is not installed
-    # (deleting the module is not enough once forgekernel.klib exists on disk: base's stub).
-    monkeypatch.setitem(sys.modules, "forgekernel.klib", None)
+    # (deleting the module is not enough once rsi_kernel_tune.klib exists on disk: base's stub).
+    monkeypatch.setitem(sys.modules, "rsi_kernel_tune.klib", None)
     logs = []
     assert lineage.find_seeds("rmsnorm", 2, log=logs.append) == []
     assert logs and "not installed" in logs[0]

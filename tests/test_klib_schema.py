@@ -1,4 +1,4 @@
-"""forgekernel.klib.schema: the reference library's index -- entries, the license gate, the file."""
+"""rsi_kernel_tune.klib.schema: the reference library's index -- entries, the license gate, the file."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import klib
-from forgekernel.klib.schema import (ALLOWED_LICENSES, ENTRY, FIELDS, INDEX_VERSION, LANGUAGES,
+from rsi_kernel_tune import klib
+from rsi_kernel_tune.klib.schema import (ALLOWED_LICENSES, ENTRY, FIELDS, INDEX_VERSION, LANGUAGES,
                                      KernelEntry, SchemaError, license_allowed, load_index,
                                      save_index, submittable, validate)
 

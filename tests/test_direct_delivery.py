@@ -1,4 +1,4 @@
-"""forgekernel.submit.direct: local and ssh delivery of one gpu_entry task."""
+"""rsi_kernel_tune.submit.direct: local and ssh delivery of one gpu_entry task."""
 
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.submit import cli as submit_cli
-from forgekernel.submit import jobs as ds
-from forgekernel.submit import direct
-from forgekernel.submit.config import load_config
+from rsi_kernel_tune.submit import cli as submit_cli
+from rsi_kernel_tune.submit import jobs as ds
+from rsi_kernel_tune.submit import direct
+from rsi_kernel_tune.submit.config import load_config
 
 ENTRY_OK = """#!/bin/bash
 echo "entry task=$1 gpu=$CUDA_VISIBLE_DEVICES timeout=$TASK_TIMEOUT key=${FK_REF_KEY:-none}"
@@ -156,7 +156,7 @@ def test_the_gpu_lock_makes_a_second_run_wait(tmp_path, monkeypatch):
         assert not got.is_set()
     t.join(timeout=5)
     assert got.is_set()
-    assert any("in use by another forgekernel run" in c for c in calls)
+    assert any("in use by another rsi_kernel_tune run" in c for c in calls)
 
 
 # -- ssh ------------------------------------------------------------------------------------

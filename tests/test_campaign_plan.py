@@ -7,10 +7,10 @@ import json
 import pytest
 
 import campaign_helpers as H
-from forgekernel.campaign import plan as P
-from forgekernel.campaign import solscore
-from forgekernel.campaign import targets as T
-from forgekernel.ext import campaign as cli
+from rsi_kernel_tune.campaign import plan as P
+from rsi_kernel_tune.campaign import solscore
+from rsi_kernel_tune.campaign import targets as T
+from rsi_kernel_tune.ext import campaign as cli
 
 
 def _plan(tmp_path, **kw):
@@ -95,14 +95,14 @@ def test_languages_reflect_the_current_checkout(monkeypatch):
     assert langs["cuda"]["export"] == "needs klib: cuda_to_inline"
     assert langs["torch"]["available"] is True
 
-    import forgekernel.task as task_mod
+    import rsi_kernel_tune.task as task_mod
     monkeypatch.setattr(task_mod, "LANGUAGES", ("cutedsl", "cuda", "triton"))
     langs = {e["route"]: e for e in P.languages_now()}
     assert langs["triton"]["available"] is True
     monkeypatch.setattr(task_mod, "LANGUAGES", ("cutedsl",))
     langs = {e["route"]: e for e in P.languages_now()}
     assert langs["cuda"]["available"] is False
-    assert "not in forgekernel.task.LANGUAGES" in langs["cuda"]["export"]
+    assert "not in rsi_kernel_tune.task.LANGUAGES" in langs["cuda"]["export"]
 
 
 def test_op_name_disambiguates_a_repeated_problem():

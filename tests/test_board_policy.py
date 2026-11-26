@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from forgekernel.board import policy
+from rsi_kernel_tune.board import policy
 
 UTC = timezone.utc
 NOW = datetime(2026, 11, 24, 8, 30, tzinfo=UTC)

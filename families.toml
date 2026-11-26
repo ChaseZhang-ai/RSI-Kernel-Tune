@@ -1,4 +1,4 @@
-# Operator families: which problems of a board are "the same kind of kernel" (forgekernel/family.py).
+# Operator families: which problems of a board are "the same kind of kernel" (rsi_kernel_tune/family.py).
 #
 # A family is what lets one problem use what was measured on another: the lessons a teacher
 # reads (FK_LESSONS_PATH), the reference library's `problem_keys`, a campaign's lists.

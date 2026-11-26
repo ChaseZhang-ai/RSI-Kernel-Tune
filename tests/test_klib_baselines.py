@@ -1,4 +1,4 @@
-"""forgekernel.klib.baselines: the mechanical candidates, the precision guard, and --rewrite."""
+"""rsi_kernel_tune.klib.baselines: the mechanical candidates, the precision guard, and --rewrite."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.klib import baselines as bl
-from forgekernel.klib import normalize as nz
+from rsi_kernel_tune.klib import baselines as bl
+from rsi_kernel_tune.klib import normalize as nz
 
 _DEFINITION = {
     "name": "problemA",
@@ -253,9 +253,9 @@ def test_rewrite_rejects_a_nested_takeover_of_the_harness():
 
 
 def test_the_rewrite_prompt_renders_without_leftovers():
-    from forgekernel.paths import repo_root
+    from rsi_kernel_tune.paths import repo_root
     template = (repo_root() / bl.REWRITE_PROMPT_FILE).read_text(encoding="utf-8")
-    from forgekernel.klib.ingest import render_prompt
+    from rsi_kernel_tune.klib.ingest import render_prompt
     rendered = render_prompt(template, {"DEFINITION_PATH": "/d.json",
                                         "REFERENCE_PATH": "/r.py",
                                         "TARGET_PROFILE_PATH": "(none)",

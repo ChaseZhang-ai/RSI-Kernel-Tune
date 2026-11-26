@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from forgekernel.loop.parse import (
+from rsi_kernel_tune.loop.parse import (
     Exhausted,
     ProbeRequest,
     Record,
@@ -15,7 +15,7 @@ from forgekernel.loop.parse import (
     parse_student_turn,
     JOB_END_CUT, JOB_END_KILLED, JOB_END_WHOLE, JobEnd, job_abend,
 )
-from forgekernel.inner.trajectory import IterationRecord
+from rsi_kernel_tune.inner.trajectory import IterationRecord
 
 RECORD_TEXT = """\
 some reasoning prose the agent emitted first...

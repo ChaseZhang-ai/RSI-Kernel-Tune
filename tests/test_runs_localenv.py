@@ -1,4 +1,4 @@
-"""forgekernel.runs (run directories) and forgekernel.localenv (the machine)."""
+"""rsi_kernel_tune.runs (run directories) and rsi_kernel_tune.localenv (the machine)."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import json
 
 import pytest
 
-from forgekernel import paths
-from forgekernel.localenv import MachineError, load_machine, read_env_file
-from forgekernel.runs import RunError, list_runs, new_run, open_run
-from forgekernel.task import load_task
+from rsi_kernel_tune import paths
+from rsi_kernel_tune.localenv import MachineError, load_machine, read_env_file
+from rsi_kernel_tune.runs import RunError, list_runs, new_run, open_run
+from rsi_kernel_tune.task import load_task
 
 from test_task import MINIMAL, _kb, _task
 

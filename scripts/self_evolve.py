@@ -31,13 +31,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from forgekernel import launch  # noqa: E402
-from forgekernel.runs import list_runs  # noqa: E402
-from forgekernel.task import (TaskError, dump_task_toml, load_task,  # noqa: E402
+from rsi_kernel_tune import launch  # noqa: E402
+from rsi_kernel_tune.runs import list_runs  # noqa: E402
+from rsi_kernel_tune.task import (TaskError, dump_task_toml, load_task,  # noqa: E402
                               read_task_toml)
 
 REF_DIR = "reference"
-# == forgekernel.loop.parse.detect_plateau's default: below this, two readings of one
+# == rsi_kernel_tune.loop.parse.detect_plateau's default: below this, two readings of one
 # kernel are not told apart, however tight a handful of confirmation jobs happened to be
 NOISE_FLOOR_MIN = 0.015
 

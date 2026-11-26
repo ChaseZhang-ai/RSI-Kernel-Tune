@@ -58,7 +58,7 @@ A person reviews the files here and commits them together with the matching know
 - Inside an entry, a source **may be pointed to but not paraphrased**; the reference solution's symbol
   names / file names / line numbers all belong in this directory.
 - A file written here has the same name as the entry it backs.
-- Mechanical gate: `src/forgekernel/loop/kb_lint.py` scans the knowledge base for banned tokens at two
+- Mechanical gate: `src/rsi_kernel_tune/loop/kb_lint.py` scans the knowledge base for banned tokens at two
   points, loop start and recipe certification. A hit at certification goes back to the teacher to fix
   first; if it still fails, the entry is moved out of the student-readable tree (into `kb_quarantine/`
   at the repository root). A hit at start refuses the start (`tests/test_kb_lint.py` guards this too).

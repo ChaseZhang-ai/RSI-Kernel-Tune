@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from forgekernel.targethw import rules
+from rsi_kernel_tune.targethw import rules
 
 # -- the normal styles: zero findings -------------------------------------------------------
 
@@ -253,7 +253,7 @@ def test_the_source_may_be_unparseable():
 # -- the credibility labels the profile derives -------------------------------------------
 
 def test_confidence_hints_add_the_reading_labels():
-    from forgekernel import target_profile
+    from rsi_kernel_tune import target_profile
 
     assert target_profile.confidence_hints("def run(x, out):\n    pass\n") == ["dev-only"]
     fp4 = target_profile.confidence_hints('out = tl.dot_scaled(a, b, kind="mxf4")\n')

@@ -1,4 +1,4 @@
-"""forgekernel.family: the operator family of a board problem, read from families.toml."""
+"""rsi_kernel_tune.family: the operator family of a board problem, read from families.toml."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import family
-from forgekernel.family import (OTHER, FamilyError, count_by_family, family_key, families,
+from rsi_kernel_tune import family
+from rsi_kernel_tune.family import (OTHER, FamilyError, count_by_family, family_key, families,
                                 is_backward, is_family, load_rules, main, parse_rules, stem)
 
 # The 235 problems of the board snapshot of 2026-11-24, by the family the rule table gives

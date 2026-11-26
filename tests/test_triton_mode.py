@@ -13,18 +13,18 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import leaderboard as lb
-from forgekernel import taskcard
-from forgekernel import triton_check
-from forgekernel.loop import agent_policy as ap
-from forgekernel.loop import cli as loop_cli
-from forgekernel.loop import driver
-from forgekernel.loop import dsl_source as ds
-from forgekernel.loop import job_env
-from forgekernel.loop import lang_mode
-from forgekernel.scaffold import main as scaffold_main
-from forgekernel.skills import job_env_check
-from forgekernel.task import TaskError, load_task
+from rsi_kernel_tune import leaderboard as lb
+from rsi_kernel_tune import taskcard
+from rsi_kernel_tune import triton_check
+from rsi_kernel_tune.loop import agent_policy as ap
+from rsi_kernel_tune.loop import cli as loop_cli
+from rsi_kernel_tune.loop import driver
+from rsi_kernel_tune.loop import dsl_source as ds
+from rsi_kernel_tune.loop import job_env
+from rsi_kernel_tune.loop import lang_mode
+from rsi_kernel_tune.scaffold import main as scaffold_main
+from rsi_kernel_tune.skills import job_env_check
+from rsi_kernel_tune.task import TaskError, load_task
 from test_binref import base, sol_root, _no_network  # noqa: F401  (fixtures the card tests use)
 from test_launch import repo  # noqa: F401  (fixture: a scratch runs dir + local machine)
 from test_loop_driver import FakeBackend, _ctx
@@ -187,13 +187,13 @@ def test_the_shipped_triton_trees_are_launchable_and_every_index_row_resolves():
 def test_the_repo_lint_walks_the_triton_tree_like_the_other_two():
     """`test_shipped_hw_kb_tree_is_clean` walks all of hw_kb; this pins the coverage: a leak
     planted under hw_kb/triton/ is caught by the same walk."""
-    from forgekernel.loop.kb_lint import lint_kb_dir
+    from rsi_kernel_tune.loop.kb_lint import lint_kb_dir
     assert lint_kb_dir(REPO / "hw_kb") == []
     planted = REPO / "hw_kb" / "triton" / "sm100"
     leaks = "summary extracted from the oracle kernel\n"
     assert lint_kb_dir(planted) == []          # the shipped tree itself is clean
     # (a write would dirty the repo: the same text through the lint's own entry point)
-    from forgekernel.loop.kb_lint import lint_text
+    from rsi_kernel_tune.loop.kb_lint import lint_text
     assert lint_text(leaks, "sm100/x.md")
 
 
@@ -267,7 +267,7 @@ def test_scaffold_refuses_a_language_the_kernel_file_contradicts(base, sol_root)
 
 def test_a_triton_task_card_has_no_cute_arch_and_a_triton_stub(repo):
     from test_launch import _run_with_check
-    from forgekernel.localenv import load_machine
+    from rsi_kernel_tune.localenv import load_machine
     run, task, check = _run_with_check(repo, toml=(
         '[task]\nlanguage = "triton"\narch = "sm100"\n'
         '[reference]\nrun = "reference/run.py:run"\nsource = "reference"\n'))

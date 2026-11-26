@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from forgekernel.loop.harvest import (
+from rsi_kernel_tune.loop.harvest import (
     Change,
     format_report,
     git_status,

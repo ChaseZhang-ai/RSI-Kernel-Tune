@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.board import client as bc
-from forgekernel.ext import board as cli
+from rsi_kernel_tune.board import client as bc
+from rsi_kernel_tune.ext import board as cli
 
 TOKEN = "sekret-token-0123456789"
 
@@ -506,7 +506,7 @@ def test_cli_submit_collection_blocks_third_upload_of_the_day(tmp_path):
          "submitted_at": "2026-11-24T02:00:00Z", "status": "COMPLETED"},
     ]
     # Pin the clock so "today" is the fixture's day.
-    import forgekernel.board.policy as pl
+    import rsi_kernel_tune.board.policy as pl
     old = pl.now_utc
     pl.now_utc = lambda: datetime(2026, 11, 24, 12, tzinfo=timezone.utc)
     try:
@@ -564,12 +564,12 @@ def test_cli_submit_explicit_wait_beyond_timeout_submits_nothing(tmp_path):
 
 
 def test_ext_module_contract_and_discovery():
-    """The step-0 registry discovers `forgekernel.ext` modules by name and calls main()."""
+    """The step-0 registry discovers `rsi_kernel_tune.ext` modules by name and calls main()."""
 
     import pkgutil
 
-    import forgekernel.ext as ext_pkg
-    from forgekernel.ext import board as ext_board
+    import rsi_kernel_tune.ext as ext_pkg
+    from rsi_kernel_tune.ext import board as ext_board
 
     assert ext_board.COMMAND == "board"
     assert callable(ext_board.main)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy the controller, verify the selected GPU, then run or resume ForgeKernel."""
+"""Deploy the controller, verify the selected GPU, then run or resume RSI-Kernel-Tune."""
 import argparse
 import fcntl
 import json
@@ -46,14 +46,14 @@ def probe_gpu(cmd):
 
 
 def execute(args):
-    from forgekernel.task import load_task
-    from forgekernel.localenv import load_machine
-    from forgekernel.runs import new_run, open_run
-    from forgekernel.launch import cmd_new, cmd_run
-    from forgekernel.paths import repo_root
+    from rsi_kernel_tune.task import load_task
+    from rsi_kernel_tune.localenv import load_machine
+    from rsi_kernel_tune.runs import new_run, open_run
+    from rsi_kernel_tune.launch import cmd_new, cmd_run
+    from rsi_kernel_tune.paths import repo_root
 
     if repo_root().resolve() != args.repo.resolve():
-        raise ValueError('Installed ForgeKernel does not match the selected repository')
+        raise ValueError('Installed RSI-Kernel-Tune does not match the selected repository')
     os.chdir(args.repo)
     task = load_task(args.task)
     machine = load_machine()
@@ -79,8 +79,8 @@ def execute(args):
         cmd = [sys.executable, '-c', code]
     check_arch(task.arch, probe_gpu(cmd))
     if not args.session.exists() and cmd_new([str(args.task), '--dry-run']) != 0:
-        raise ValueError('ForgeKernel task validation failed')
-    # Authentication and sandbox enforcement remain owned by ForgeKernel's real agent turn.
+        raise ValueError('RSI-Kernel-Tune task validation failed')
+    # Authentication and sandbox enforcement remain owned by RSI-Kernel-Tune's real agent turn.
     return run_once(args.session, str(args.task),
                     lambda: new_run(task, machine=machine).dir,
                     lambda path: cmd_run([str(path)]))

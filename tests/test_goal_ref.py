@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.loop import goal_ref as gr
-from forgekernel.loop.parse import parse_eval
+from rsi_kernel_tune.loop import goal_ref as gr
+from rsi_kernel_tune.loop.parse import parse_eval
 
 SRC = Path(gr.__file__).resolve().parents[2]
 
@@ -75,7 +75,7 @@ class StubGPU:
 AGENT = textwrap.dedent('''\
     import json, os, pathlib, subprocess, sys, time
     sys.path.insert(0, {src!r})
-    from forgekernel.loop import goal_ref
+    from rsi_kernel_tune.loop import goal_ref
     ws = pathlib.Path.cwd()
     spec = json.loads((pathlib.Path(os.environ["FK_GOAL_TURN_DIR"]) / "spec.json").read_text())
     trace = pathlib.Path({trace!r})
@@ -402,7 +402,7 @@ def test_the_eval_record_is_the_drivers_parse(tmp_path):
 # -- the loop CLI's side ------------------------------------------------------------------
 
 def test_the_student_never_reads_a_generated_reference(tmp_path):
-    from forgekernel.loop.cli import _teacher_only_trees
+    from rsi_kernel_tune.loop.cli import _teacher_only_trees
     assert not set(gr.teacher_only_paths(tmp_path, "demo")) & set(
         _teacher_only_trees({}, tmp_path, "demo", "source", []))     # none generated here
     for p in gr.teacher_only_paths(tmp_path, "demo"):
@@ -417,7 +417,7 @@ def test_the_student_never_reads_a_generated_reference(tmp_path):
 def test_a_declared_oracle_stays_denied_when_the_generated_one_replaces_it():
     """"always" (or a reuse) drops the declared oracle from --oracle and from cfg; the
     student's deny list keeps it."""
-    from forgekernel.loop.cli import _student_denied_oracle
+    from rsi_kernel_tune.loop.cli import _student_denied_oracle
     declared = ["/refs/real/kernel.py"]
     generated = {"loop": {"oracle": ["/run/goal_ref/reference/kernel.py"]}}
     assert _student_denied_oracle("source", None, generated, declared) == [
@@ -427,7 +427,7 @@ def test_a_declared_oracle_stays_denied_when_the_generated_one_replaces_it():
 
 
 def test_a_previous_runs_generated_reference_is_contamination(tmp_path):
-    from forgekernel.loop.cli import fresh_start_contamination
+    from rsi_kernel_tune.loop.cli import fresh_start_contamination
     op_dir = tmp_path / "op"
     (op_dir / "student").mkdir(parents=True)
     st = op_dir / "student" / "status.jsonl"
@@ -440,7 +440,7 @@ def test_a_previous_runs_generated_reference_is_contamination(tmp_path):
 
 def test_the_session_needs_a_goal_capable_agent_command(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    from forgekernel.loop.cli import _goal_ref_agent_problem
+    from rsi_kernel_tune.loop.cli import _goal_ref_agent_problem
     monkeypatch.chdir(tmp_path)
     assert "no --agent-cmd" in _goal_ref_agent_problem(
         SimpleNamespace(agent_cmd=None, teacher_agent_cmd=None))
@@ -462,7 +462,7 @@ def test_an_orphaned_leg_is_ended_only_when_it_is_ours(tmp_path):
     try:
         state = {"attempts": [{"n": 1, "pgid": proc.pid}, {"n": 2, "pgid": other.pid}]}
         gr.save_state(g.op_dir, {"status": "generating"})
-        import forgekernel.loop.goal_ref as mod
+        import rsi_kernel_tune.loop.goal_ref as mod
         orig = mod.time.sleep
         mod.time.sleep = lambda s: orig(min(s, 1.0))
         try:

@@ -441,7 +441,7 @@ def cuda_sass_sha(src: str, kernel: str):
     try:
         from orch_census_run import find_cuda_build  # type: ignore  # vendored flat in notes/
     except ImportError:
-        from forgekernel.skills.orch_census_run import find_cuda_build
+        from rsi_kernel_tune.skills.orch_census_run import find_cuda_build
     so = find_cuda_build(src, os.path.basename(kernel))
     if so is None or shutil.which("cuobjdump") is None:
         return None

@@ -19,7 +19,7 @@
 # turn skips permissions: the harness's defences are the agent policy, the read-only deny
 # lists and the workspace, and no human is present to answer an approval prompt. The
 # `none` policy_support of this backend is why it may only serve the teacher, and only on
-# a task without a sealed reference (forgekernel.task._read_agent).
+# a task without a sealed reference (rsi_kernel_tune.task._read_agent).
 #
 # --skip-git-repo-check: a teacher turn runs in the operator tree and in the judge's check
 # directory as well as in the workspace clone, and only the last is a git repository;

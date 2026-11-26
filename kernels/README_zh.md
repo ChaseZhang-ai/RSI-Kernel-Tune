@@ -1,19 +1,19 @@
 <div align="center">
 
-# ForgeKernel 算子代码
+# RSI-Kernel-Tune 算子代码
 
-**ForgeKernel 在 NVIDIA H100 与 B200 上生成的 GPU 算子代码**
+**RSI-Kernel-Tune 在 NVIDIA H100 与 B200 上生成的 GPU 算子代码**
 
 [English](README.md) | **中文**
 
 </div>
 
 本目录公开论文
-[*ForgeKernel: Self-Evolving Kernels Catching and Surpassing Experts and Agents*](https://arxiv.org/abs/2611.04998)
-（[arXiv:2611.04998](https://arxiv.org/abs/2611.04998)，ICLR 2027 审稿中）里由 ForgeKernel 生成的算子（kernel）代码，以及论文投稿之后 ForgeKernel 新生成的一个算子，
+[*RSI-Kernel-Tune: Self-Evolving Kernels Catching and Surpassing Experts and Agents*](https://arxiv.org/abs/2611.04998)
+（[arXiv:2611.04998](https://arxiv.org/abs/2611.04998)，ICLR 2027 审稿中）里由 RSI-Kernel-Tune 生成的算子（kernel）代码，以及论文投稿之后 RSI-Kernel-Tune 新生成的一个算子，
 后者在下表中标为「论文之后」。
 
-ForgeKernel 是一个自进化的 kernel agent。它只通过硬件行为读出参照 kernel 的架构：对一个封装好的
+RSI-Kernel-Tune 是一个自进化的 kernel agent。它只通过硬件行为读出参照 kernel 的架构：对一个封装好的
 二进制做运行、计时和 profiling，从不读它的源码。读出的架构被整理成一份架构优先的课程，交给 coding
 agent 实现。每个被接受的 kernel 都可以封装起来，晋升为下一轮的参照，因此优化可以越过已知最好的实现继续推进。
 论文里的 kernel 都用 [CuTe DSL](https://docs.nvidia.com/cutlass/media/docs/pythonDSL/overview.html)
@@ -36,7 +36,7 @@ kernels/
 
 ## 算子
 
-数字为正表示 ForgeKernel 的 kernel 更快。「出处」指数字来自哪里：论文 Figure 3（对比专家库）、
+数字为正表示 RSI-Kernel-Tune 的 kernel 更快。「出处」指数字来自哪里：论文 Figure 3（对比专家库）、
 Figure 4（对比其他 kernel 生成系统）、Table 1（参照晋升带来的自进化），或论文之后。
 
 ### Attention
@@ -44,8 +44,8 @@ Figure 4（对比其他 kernel 生成系统）、Table 1（参照晋升带来的
 | 算子 | GPU | 对比对象 | 加速 | 出处 | 目录 |
 |-|-|-|-|-|-|
 | Attention 前向，causal，GQA 16:1，第 0 代 | H100 | FlashAttention-4 | +0.3% | Figure 3 | [`attention/attn_fwd_gqa16/h100/gen0`](attention/attn_fwd_gqa16/h100/gen0/) |
-| Attention 前向，causal，GQA 16:1，第 1 代 | H100 | ForgeKernel 第 0 代（封装） | +9.9%（比 FlashAttention-4 快 10%） | Table 1 | [`attention/attn_fwd_gqa16/h100/gen1`](attention/attn_fwd_gqa16/h100/gen1/) |
-| Attention 前向，causal，GQA 16:1，第 2 代 | H100 | ForgeKernel 第 1 代（封装） | +4.2%（比 FlashAttention-4 快 15%） | Table 1 | [`attention/attn_fwd_gqa16/h100/gen2`](attention/attn_fwd_gqa16/h100/gen2/) |
+| Attention 前向，causal，GQA 16:1，第 1 代 | H100 | RSI-Kernel-Tune 第 0 代（封装） | +9.9%（比 FlashAttention-4 快 10%） | Table 1 | [`attention/attn_fwd_gqa16/h100/gen1`](attention/attn_fwd_gqa16/h100/gen1/) |
+| Attention 前向，causal，GQA 16:1，第 2 代 | H100 | RSI-Kernel-Tune 第 1 代（封装） | +4.2%（比 FlashAttention-4 快 15%） | Table 1 | [`attention/attn_fwd_gqa16/h100/gen2`](attention/attn_fwd_gqa16/h100/gen2/) |
 | Attention 前向，causal，GQA 16:1 | H100 | /goal agent 的 kernel（封装） | +5.0%（比 FlashAttention-4 快 29%） | Table 1 | [`attention/attn_fwd_gqa16/h100/from_agent`](attention/attn_fwd_gqa16/h100/from_agent/) |
 | Attention 反向，causal，MHA | H100 | FlashAttention-4 | +5.1% | Figure 3 | [`attention/attn_bwd_mha/h100`](attention/attn_bwd_mha/h100/) |
 | Attention 反向，causal，MHA | B200 | FlashAttention-4 | +2.5% | Figure 3 | [`attention/attn_bwd_mha/b200`](attention/attn_bwd_mha/b200/) |
@@ -94,10 +94,10 @@ Figure 4（对比其他 kernel 生成系统）、Table 1（参照晋升带来的
 Table 1 的 kernel 生成时，都把当时已知最好的 kernel 封装后作为参照；加速是相对这个参照，括号里是相对专家库的累计加速。
 同一算子在同一 GPU 上有多个 kernel 时，分子目录存放：
 
-- `gen0` 是 ForgeKernel 对着专家库生成的第一个 kernel（Figure 3）。
+- `gen0` 是 RSI-Kernel-Tune 对着专家库生成的第一个 kernel（Figure 3）。
 - `gen1`、`gen2` 是连续晋升的结果：每一代生成时都把上一代封装后作为参照。论文里只有 Attention 前向这条链连续晋升了两次，
   所以只有它有 `gen1` 和 `gen2`。
-- `from_agent` 只晋升了一次，参照是 /goal agent 写的 kernel，不是 ForgeKernel 的产出，所以参照本身不在本目录里。
+- `from_agent` 只晋升了一次，参照是 /goal agent 写的 kernel，不是 RSI-Kernel-Tune 的产出，所以参照本身不在本目录里。
 
 ## 环境
 

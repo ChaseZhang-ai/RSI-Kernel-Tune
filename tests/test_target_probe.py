@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.targethw import parity, probe, probe_program, smoke_sources
+from rsi_kernel_tune.targethw import parity, probe, probe_program, smoke_sources
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -213,7 +213,7 @@ def test_the_probe_program_is_a_real_module_and_the_shipped_text_is_its_source()
     text = probe.program_source()
     assert "def collect(" in text and "def smoke_triton(" in text
     assert text == Path(probe_program.__file__).read_text(encoding="utf-8")
-    assert "forgekernel" not in text.split("import")[0]      # standalone docstring, no import
+    assert "rsi_kernel_tune" not in text.split("import")[0]      # standalone docstring, no import
 
 
 def test_the_three_smoke_sources_are_parseable():
@@ -302,7 +302,7 @@ class FakeRunner:
         log_file.write("some job output\n")
         log_file.write(self.log_text)
         log_file.flush()
-        from forgekernel.submit.jobs import STATUS_SUCCEEDED
+        from rsi_kernel_tune.submit.jobs import STATUS_SUCCEEDED
         return STATUS_SUCCEEDED
 
 
@@ -350,7 +350,7 @@ def test_remote_without_an_ssh_host_is_refused(tmp_path, monkeypatch):
 # -- parity ----------------------------------------------------------------------------
 
 def test_parity_grades_a_matching_machine_cleanly():
-    from forgekernel import target_profile
+    from rsi_kernel_tune import target_profile
 
     doc = payload()
     dev = probe.parse_report(doc)
@@ -364,7 +364,7 @@ def test_parity_grades_a_matching_machine_cleanly():
 
 
 def test_parity_blocks_a_stack_that_cannot_run(tmp_path):
-    from forgekernel import target_profile
+    from rsi_kernel_tune import target_profile
 
     doc = payload(smokes={"triton": {"compile": False, "run": False, "ms": None,
                                      "error": "launch: RuntimeError: no kernel image",
@@ -380,7 +380,7 @@ def test_parity_blocks_a_stack_that_cannot_run(tmp_path):
 
 
 def test_parity_skipped_smokes_are_info_not_blockers():
-    from forgekernel import target_profile
+    from rsi_kernel_tune import target_profile
 
     dev = probe.parse_report(payload(smokes={}))
     differences = parity.compare(dev, target_profile.load(REPO))
@@ -408,7 +408,7 @@ def test_parity_is_data_driven_over_the_profile():
 
 
 def test_parity_on_a_machine_with_no_gpu_is_a_blocker():
-    from forgekernel import target_profile
+    from rsi_kernel_tune import target_profile
 
     doc = payload()
     doc["python_info"] = {"torch": {"error": "no driver"}}
@@ -420,7 +420,7 @@ def test_parity_on_a_machine_with_no_gpu_is_a_blocker():
 # -- the profile the agents read, and how it reaches them ------------------------------
 
 def test_the_rendered_profile_has_every_rule_and_the_development_differences():
-    from forgekernel import target_profile
+    from rsi_kernel_tune import target_profile
 
     profile = target_profile.load(REPO)
     markdown = target_profile.render_markdown(profile)
@@ -433,7 +433,7 @@ def test_the_rendered_profile_has_every_rule_and_the_development_differences():
 
 
 def test_the_rendered_profile_is_stable():
-    from forgekernel import target_profile
+    from rsi_kernel_tune import target_profile
 
     profile = target_profile.load(REPO)
     dev = probe.parse_report(payload())
@@ -443,7 +443,7 @@ def test_the_rendered_profile_is_stable():
 
 
 def test_materialize_writes_the_rendered_profile(tmp_path, monkeypatch):
-    from forgekernel import target_profile
+    from rsi_kernel_tune import target_profile
 
     monkeypatch.setattr(target_profile, "DEV_REL", Path("target") / "dev.json")
     out = target_profile.materialize(REPO, out=tmp_path / "B200.md")
@@ -456,7 +456,7 @@ def test_materialize_writes_the_rendered_profile(tmp_path, monkeypatch):
 
 def test_the_profile_reaches_a_prompt_through_the_placeholder(tmp_path):
     """materialize -> env_for -> the placeholder holds the file's *text*, not its path."""
-    from forgekernel import runcontext, target_profile
+    from rsi_kernel_tune import runcontext, target_profile
 
     rendered = target_profile.render_markdown(target_profile.load(REPO),
                                               probe.parse_report(payload()))
@@ -474,14 +474,14 @@ def test_the_profile_reaches_a_prompt_through_the_placeholder(tmp_path):
 
 
 def test_an_unset_context_says_so_instead_of_leaving_a_placeholder():
-    from forgekernel import runcontext
+    from rsi_kernel_tune import runcontext
 
     text = runcontext.render("{TARGET_PROFILE_PATH}", {})
     assert "FK_TARGET_PROFILE_PATH is unset" in text
 
 
 def test_a_context_path_that_cannot_be_read_is_an_error(tmp_path):
-    from forgekernel import runcontext
+    from rsi_kernel_tune import runcontext
 
     env = runcontext.env_for({"prior": tmp_path / "missing.md"})
     with pytest.raises(runcontext.ContextError, match="FK_PRIOR_PATH"):
@@ -491,7 +491,7 @@ def test_a_context_path_that_cannot_be_read_is_an_error(tmp_path):
 
 
 def test_a_long_context_is_truncated_with_a_note(tmp_path):
-    from forgekernel import runcontext
+    from rsi_kernel_tune import runcontext
 
     path = tmp_path / "lessons.md"
     path.write_text("x" * (runcontext.MAX_CHARS + 100))
@@ -502,8 +502,8 @@ def test_a_long_context_is_truncated_with_a_note(tmp_path):
 # -- the command line ------------------------------------------------------------------
 
 def test_the_target_command_is_discovered_and_its_subcommands_answer_help(capsys):
-    from forgekernel import __main__ as cli
-    from forgekernel import ext
+    from rsi_kernel_tune import __main__ as cli
+    from rsi_kernel_tune import ext
 
     assert "target" in ext.commands()
     assert cli.main(["--help"]) == 0
@@ -517,7 +517,7 @@ def test_the_target_command_is_discovered_and_its_subcommands_answer_help(capsys
 
 
 def test_target_show_prints_the_profile(capsys):
-    from forgekernel import __main__ as cli
+    from rsi_kernel_tune import __main__ as cli
 
     assert cli.main(["target", "show"]) == 0
     out = capsys.readouterr().out
@@ -525,7 +525,7 @@ def test_target_show_prints_the_profile(capsys):
 
 
 def test_target_check_exits_two_on_a_blocked_machine(tmp_path, capsys):
-    from forgekernel import __main__ as cli
+    from rsi_kernel_tune import __main__ as cli
 
     doc = payload()
     doc["python_info"] = {"torch": {"error": "no driver"}}

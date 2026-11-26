@@ -1,4 +1,4 @@
-"""forgekernel.klib.ingest: extraction, build, the license gate, adapt, fetch, and the prompts."""
+"""rsi_kernel_tune.klib.ingest: extraction, build, the license gate, adapt, fetch, and the prompts."""
 
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.benchx.api import BenchResult, WorkloadReading
-from forgekernel.klib import ingest
-from forgekernel.klib import normalize as nz
-from forgekernel.klib.schema import KernelEntry, load_index, submittable, validate
+from rsi_kernel_tune.benchx.api import BenchResult, WorkloadReading
+from rsi_kernel_tune.klib import ingest
+from rsi_kernel_tune.klib import normalize as nz
+from rsi_kernel_tune.klib.schema import KernelEntry, load_index, submittable, validate
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 
@@ -52,12 +52,12 @@ license_file = "hyra/LICENSE"
 enabled = true
 
 [[source]]
-name = "forgekernel"
+name = "rsi_kernel_tune"
 kind = "local"
-extractor = "forgekernel"
+extractor = "rsi_kernel_tune"
 root = "repo"
 path = "kernels"
-repo = "OpenBMB/ForgeKernel"
+repo = "OpenBMB/RSI-Kernel-Tune"
 license = "Apache-2.0"
 license_file = "LICENSE"
 enabled = true
@@ -123,7 +123,7 @@ def _fixture_tree(tmp: Path) -> tuple[Path, Path, Path]:
         "sources": [{"path": "kernel.py",
                      "content": "import torch\n\n\ndef run(x):\n    return x + 1\n"}],
     }))
-    # -- ForgeKernel: one CuTe DSL kernel with a README row ----------------------------------
+    # -- RSI-Kernel-Tune: one CuTe DSL kernel with a README row ----------------------------------
     _write(repo / "LICENSE", _APACHE)
     _write(repo / "kernels" / "README.md",
            "| Operator | GPU | Compared against | Speedup | Source | Directory |\n"
@@ -186,11 +186,11 @@ def test_build_extracts_every_source_and_writes_a_valid_index(tmp_path):
     report = ingest.build(library, repo=repo)
     ids = {e.id for e in report.entries}
     assert report.counts()["by_origin"] == {
-        "ako4x": 1, "auto-gpu-kernel": 1, "forgekernel": 1, "hyra": 1,
+        "ako4x": 1, "auto-gpu-kernel": 1, "rsi_kernel_tune": 1, "hyra": 1,
         "kernelwiki": 2, "sol-example": 1}
     assert "hyra-021_rmsnorm_h128" in ids
     assert "ako4x-rmsnorm-h128-fast" in ids
-    assert "forgekernel-gemm-dense-h100" in ids
+    assert "rsi_kernel_tune-gemm-dense-h100" in ids
     assert "kernelwiki-sglang-PR-1" in ids and "kernelwiki-thing-PR-2" in ids
     assert "sol-example-pytorch-ex" in ids
     assert "autogk-case-" in " ".join(ids)
@@ -215,7 +215,7 @@ def test_reported_and_problem_keys_are_copied_from_the_source_data(tmp_path):
     assert ako.reported["score"] == 1.12 and ako.reported["metric"] == "speedup_vs_expert"
     assert "021_rmsnorm_h128" in ako.problem_keys          # the exact FlashInfer name
     assert ako.license == "MIT" and ako.language == "pytorch"
-    forge = by_id["forgekernel-gemm-dense-h100"]
+    forge = by_id["rsi_kernel_tune-gemm-dense-h100"]
     assert forge.reported and forge.reported["speedup"] == "+0.9%"
     assert forge.language == "cutedsl" and forge.family == "gemm"
 
@@ -386,7 +386,7 @@ def test_adapt_reports_a_candidate_the_card_judges_wrong_then_accepts_the_next(t
     _, repo, library = _fixture_tree(tmp_path)
     ingest.build(library, repo=repo)
     dataset = _adapt_dataset(tmp_path)
-    from forgekernel.benchx.api import FakeBench
+    from rsi_kernel_tune.benchx.api import FakeBench
     wrong = BenchResult(correct=False, workloads=[
         WorkloadReading(name="w1", t_ms=0.1, correct=False, error="mismatch")],
         mean_s=0.0, error="output mismatch: max abs error 3.0")
@@ -440,7 +440,7 @@ def _git_repo(tmp: Path) -> tuple[Path, str]:
 
 
 def test_fetch_clones_at_the_pinned_commit_and_registers_the_license(tmp_path):
-    from forgekernel.klib import fetch as fetch_mod
+    from rsi_kernel_tune.klib import fetch as fetch_mod
     repo, sha = _git_repo(tmp_path)
     library = tmp_path / "lib"
     _write(library / "sources.toml", f'''version = 1
@@ -465,7 +465,7 @@ enabled = false
 
 
 def test_fetch_refuses_an_unpinned_source_unless_told_otherwise(tmp_path):
-    from forgekernel.klib import fetch as fetch_mod
+    from rsi_kernel_tune.klib import fetch as fetch_mod
     repo, sha = _git_repo(tmp_path)
     library = tmp_path / "lib"
     _write(library / "sources.toml", f'''version = 1
@@ -500,7 +500,7 @@ _FORBIDDEN = (
 @pytest.mark.parametrize("name", ["meta/seed_adapt_prompt.md",
                                   "meta/baseline_rewrite_prompt.md"])
 def test_the_new_prompts_are_operator_agnostic_and_render_cleanly(name):
-    from forgekernel.paths import repo_root
+    from rsi_kernel_tune.paths import repo_root
     text = (repo_root() / name).read_text(encoding="utf-8")
     lowered = text.lower()
     for word in _FORBIDDEN:

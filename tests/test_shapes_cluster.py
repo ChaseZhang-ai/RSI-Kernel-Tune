@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.leaderboard import time_for_score
-from forgekernel.shapes import cluster as C
-from forgekernel.shapes import plan as P
+from rsi_kernel_tune.leaderboard import time_for_score
+from rsi_kernel_tune.shapes import cluster as C
+from rsi_kernel_tune.shapes import plan as P
 
 FIXTURE = Path(__file__).parent / "fixtures" / "shapes_card"
 

@@ -5,7 +5,7 @@
 > On this GPU, how does *this candidate* do on *this board problem*, judged and timed
 > the way the board judges and times it?
 
-It is the real implementation behind `forgekernel.benchx.api.Bench`; the kernel library,
+It is the real implementation behind `rsi_kernel_tune.benchx.api.Bench`; the kernel library,
 the campaign, evolve and the per-workload routing (`shapes`) all go through it, so there
 is one scoring path and one reading format instead of four.
 
@@ -16,7 +16,7 @@ The bench does not re-implement the evaluation. It installs the frozen card with
 workspace with `taskcard.clone_workspace`, commits the candidate and pushes it into the
 card's branch, and submits the card's own `gpu_entry.sh all` through
 `RealBackend.submit_gpu` — the same call the loop's iterations make. The log is then read
-the way the loop reads it: `forgekernel.loop.parse.parse_eval` for the verdict, and the
+the way the loop reads it: `rsi_kernel_tune.loop.parse.parse_eval` for the verdict, and the
 same JSON's `performance.leaderboard.sol_board` block for T_b / T_SOL / the SOL score.
 
 So the number `forge bench` prints and the number an iteration of `forge run` would
@@ -92,7 +92,7 @@ candidate slower than that scores zero however fast its kernel. So the bench mea
   that changes their start-up, not the timed kernel window (which is measured after
   warm-up, inside the card).
 
-`COLD_START_BUDGET_S = 100.0` (`forgekernel/benchx/api.py`): above it,
+`COLD_START_BUDGET_S = 100.0` (`rsi_kernel_tune/benchx/api.py`): above it,
 `integrity["cold_start"] = "over-budget"` and the campaign's export refuses the candidate.
 Unmeasurable is recorded as `None` with `integrity["cold_start"] = "unmeasured"` and a
 reason — never as 0. Under `--repeat`, the cold start is the first probe's reading only:
@@ -106,7 +106,7 @@ and SFU rate (~2×), fewer/more SMs per SKU, and its clock lock state. The numbe
 comparable for *screening* and for A/B of candidates on the same machine; the board is
 the only source of truth for a score.
 
-When the `targethw` task's module (`forgekernel.targethw.rules`) is importable and
+When the `targethw` task's module (`rsi_kernel_tune.targethw.rules`) is importable and
 exposes `confidence_hints(source, kernel_file=, language=, arch=) -> list[str]`, those
 `info`-level hints are appended (`"fp4-bound"`, `"sfu-bound"`,
 `"sm-count-sensitive"`, …). benchx never depends on it; absent means `["dev-only"]`.
@@ -130,14 +130,14 @@ runner) — unless `--keep`. A kept run is a bench run: it has the card, the can
 commit and the job logs under `operators/<op>/.jobs/`, but no loop configuration (a loop
 run would need `loop.toml`).
 
-Everything that runs a GPU job goes through ForgeKernel's own submission path, so the
+Everything that runs a GPU job goes through RSI-Kernel-Tune's own submission path, so the
 external GPU lock (`FK_JOB_LOCK_CMD`) applies as usual. Nothing is uploaded, the board is
 never contacted (T_b / T_SOL were frozen into the card at `forge init`), and no agent is
 started.
 
 ## compare / best-of
 
-Both are pure functions over `BenchResult` JSON files (`forgekernel/benchx/compare.py`):
+Both are pure functions over `BenchResult` JSON files (`rsi_kernel_tune/benchx/compare.py`):
 
 * `compare` — per workload: every candidate's reading, SOL score and delta against the
   fastest, who was fastest; summary per candidate: mean S, `fast1` ratio, geometric mean

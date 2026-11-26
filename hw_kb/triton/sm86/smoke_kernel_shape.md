@@ -44,7 +44,7 @@ def run(x, scale):
 - Anything the launch needs from the device (`multi_processor_count`, capability) is queried at
   call time; nothing is written down.
 - On the target, the same file is checked for compilation against CC 10.0 without running it:
-  `python -m forgekernel.triton_check <file> --target 10.0`.
+  `python -m rsi_kernel_tune.triton_check <file> --target 10.0`.
 
 ## Gotchas
 - **A capability branch that changes the algorithm makes the smoke useless**: the cheap card then

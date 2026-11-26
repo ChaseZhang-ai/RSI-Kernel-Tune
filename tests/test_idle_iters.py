@@ -24,16 +24,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 from test_loop_driver import EVAL, NCU, REC, FakeBackend, _ctx, _patching  # noqa: E402
 
-from forgekernel.inner.trajectory import IterationRecord as IR  # noqa: E402
-from forgekernel.inner.trajectory import append_record, load_records  # noqa: E402
-from forgekernel.loop.driver import (  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import IterationRecord as IR  # noqa: E402
+from rsi_kernel_tune.inner.trajectory import append_record, load_records  # noqa: E402
+from rsi_kernel_tune.loop.driver import (  # noqa: E402
     _fruitless_reopen_streak, run_inner_iteration, run_inner_loop, run_meta_step,
     run_two_layer,
 )
-from forgekernel.meta_trajectory import (  # noqa: E402
+from rsi_kernel_tune.meta_trajectory import (  # noqa: E402
     MetaRecord, append_meta_record, load_meta_records, reflect_summary,
 )
-from forgekernel.resume import Decision  # noqa: E402
+from rsi_kernel_tune.resume import Decision  # noqa: E402
 
 
 class TreeBackend(FakeBackend):
@@ -389,7 +389,7 @@ def test_reading_of_round_trips_and_old_rows_read_none(tmp_path):
 
 
 def test_loop_toml_reuse_mode_parsing():
-    from forgekernel.loop.cli import _reuse_mode
+    from rsi_kernel_tune.loop.cli import _reuse_mode
     assert _reuse_mode("all") == "all" and _reuse_mode(" Gate ") == "gate"
     assert _reuse_mode(True) == "all" and _reuse_mode(False) == "off" and _reuse_mode("off") == "off"
     with pytest.raises(SystemExit):
@@ -397,7 +397,7 @@ def test_loop_toml_reuse_mode_parsing():
 
 
 def test_real_backend_lists_a_commits_changes(tmp_path):
-    from forgekernel.loop.cli import RealBackend
+    from rsi_kernel_tune.loop.cli import RealBackend
 
     def git(*a):
         return subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c",

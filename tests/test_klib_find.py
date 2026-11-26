@@ -1,4 +1,4 @@
-"""forgekernel.klib ranking + `forge lib find/show/score` (the index-facing behavior)."""
+"""rsi_kernel_tune.klib ranking + `forge lib find/show/score` (the index-facing behavior)."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.benchx.api import BenchResult, WorkloadReading
-from forgekernel.ext import lib as lib_cli
-from forgekernel.klib import ingest
-from forgekernel.klib.schema import KernelEntry, save_index
+from rsi_kernel_tune.benchx.api import BenchResult, WorkloadReading
+from rsi_kernel_tune.ext import lib as lib_cli
+from rsi_kernel_tune.klib import ingest
+from rsi_kernel_tune.klib.schema import KernelEntry, save_index
 
 
 def _entry(id_: str, keys: list[str], *, family: str = "attention", score=None,
@@ -116,7 +116,7 @@ def test_score_reports_benchx_missing_instead_of_faking_a_reading(tmp_path, caps
 
 def test_score_writes_verified_local_back_and_flags_a_mismatch(tmp_path):
     library = _library(tmp_path, _three())
-    from forgekernel.benchx.api import FakeBench
+    from rsi_kernel_tune.benchx.api import FakeBench
     good = BenchResult(correct=True, workloads=[
         WorkloadReading(name="w0", t_ms=0.01, t_b=0.02, t_sol=0.005, s=0.9, correct=True)],
         mean_s=0.9, fast1=1, cold_start_s=3.0, confidence=["dev-only"])
@@ -143,7 +143,7 @@ def test_score_writes_verified_local_back_and_flags_a_mismatch(tmp_path):
 
 def test_score_needs_a_card(tmp_path):
     library = _library(tmp_path, _three())
-    from forgekernel.benchx.api import FakeBench
+    from rsi_kernel_tune.benchx.api import FakeBench
     with pytest.raises(ValueError, match="--card"):
         ingest.score(library, "021_rmsnorm_h128", bench=FakeBench())
 

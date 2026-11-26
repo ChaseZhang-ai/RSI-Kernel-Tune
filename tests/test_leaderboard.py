@@ -1,4 +1,4 @@
-"""Tests for leaderboard cards (src/forgekernel/leaderboard.py + ``forge new
+"""Tests for leaderboard cards (src/rsi_kernel_tune/leaderboard.py + ``forge new
 --leaderboard``): dataset readers, card generation, the preflight exemption and the
 solution export. Pure file I/O — no torch, no GPU, no network; the datasets are tiny
 fakes laid out like flashinfer-trace and SOL-ExecBench's download tree.
@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import leaderboard as lb
-from forgekernel.scaffold import main as scaffold_main
-from forgekernel.window_contract import (
+from rsi_kernel_tune import leaderboard as lb
+from rsi_kernel_tune.scaffold import main as scaffold_main
+from rsi_kernel_tune.window_contract import (
     bench_workloads_findings,
     parse_window_contract,
     window_findings,
@@ -112,8 +112,8 @@ def _no_network(monkeypatch) -> None:
 @pytest.fixture
 def base(tmp_path: Path) -> Path:
     shutil.copytree(REPO_ROOT / "meta", tmp_path / "repo" / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "forgekernel" / "card_template",
-                    tmp_path / "repo" / "src" / "forgekernel" / "card_template")
+    shutil.copytree(REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template",
+                    tmp_path / "repo" / "src" / "rsi_kernel_tune" / "card_template")
     return tmp_path / "repo"
 
 
@@ -207,7 +207,7 @@ def test_forge_new_leaderboard_writes_a_complete_card(base: Path, fib_root: Path
                 "eval/leaderboard/baseline/main.py"):
         assert (card / rel).is_file(), rel
     assert (card / "eval" / "leaderboard.py").read_text() == (
-        REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval" / "leaderboard.py").read_text()
+        REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template" / "eval" / "leaderboard.py").read_text()
     # the generated kernel stub carries the definition's DPS signature
     assert "def run(hidden_states, weight, output):" in (card / "kernel.py").read_text()
     assert lb.signature_findings((card / "kernel.py").read_text(), problem) == []
@@ -389,7 +389,7 @@ def test_sol_score_and_its_inverse_are_the_boards_formula() -> None:
 
 def test_forge_new_sol_fetches_the_board_and_the_loop_targets_T_b(
         base: Path, sol_root: Path, monkeypatch) -> None:
-    from forgekernel.loop.cli import (_declared_arch_baseline, _resolve_ref_in_job,
+    from rsi_kernel_tune.loop.cli import (_declared_arch_baseline, _resolve_ref_in_job,
                                       _resolve_ref_spec, _resolve_target_ms)
     _fake_api(monkeypatch)
     assert scaffold_main(["rms", "--base-dir", str(base), "--no-git", "--leaderboard",
@@ -535,11 +535,11 @@ def test_sol_entry_refuses_to_time_without_the_boards_lock(base, sol_root, tmp_p
         assert "REFUSED" not in again.stdout
 
 
-def test_sol_entry_refusal_is_the_line_forgekernel_reads(base, sol_root, tmp_path) -> None:
+def test_sol_entry_refusal_is_the_line_rsi_kernel_tune_reads(base, sol_root, tmp_path) -> None:
     """The node read SM 1155 MHz under an accepted -lgc 1500: the
     refusal must print the exact line loop.cli recognises, at the start of a line, and
     the banner says what the driver reported about the GPU right after."""
-    from forgekernel.submit.jobs import CLOCK_LOCK_REFUSED_MARKER, clock_lock_refusal
+    from rsi_kernel_tune.submit.jobs import CLOCK_LOCK_REFUSED_MARKER, clock_lock_refusal
     proc, calls = _entry(base, sol_root, "sol-execbench", "L1/001_rms", tmp_path, "all",
                          FAKE_READ="1155, 3996")
     assert proc.returncode == 3
@@ -619,8 +619,8 @@ def test_sol_group_problem_carries_every_workload_and_its_board_row(sol_root: Pa
 def test_forge_new_sol_group_card_targets_the_geomean_of_T_b(base: Path, sol_root: Path,
                                                              monkeypatch) -> None:
     import math
-    from forgekernel.loop.cli import _declared_arch_baseline
-    from forgekernel.window_contract import bench_times_workloads
+    from rsi_kernel_tune.loop.cli import _declared_arch_baseline
+    from rsi_kernel_tune.window_contract import bench_times_workloads
     _fake_api(monkeypatch)
     assert scaffold_main(["rms", "--base-dir", str(base), "--no-git", "--leaderboard",
                           "sol-execbench", "--dataset", str(sol_root), "--definition",
@@ -648,7 +648,7 @@ def test_forge_new_sol_group_card_targets_the_geomean_of_T_b(base: Path, sol_roo
 
 def test_single_workload_leaderboard_card_is_not_a_multi_workload_gate(base: Path,
                                                                        sol_root: Path) -> None:
-    from forgekernel.window_contract import bench_times_workloads
+    from rsi_kernel_tune.window_contract import bench_times_workloads
     scaffold_main(["rms", "--base-dir", str(base), "--no-git", "--leaderboard",
                    "sol-execbench", "--dataset", str(sol_root), "--definition",
                    "L1/001_rms", "--workload", "0", "--no-sol-board"])
@@ -752,7 +752,7 @@ def test_check_workloads_ride_the_card_judged_never_timed(tmp_path: Path, base: 
     readme = (card / "README.md").read_text()
     assert "Correctness-only workloads, not timed" in readme and "`wl4`" in readme
     assert "Correctness-only workloads (wl0, wl3, wl4)" in (card / "eval" / "bench.py").read_text()
-    from forgekernel.loop import meta_shapes
+    from rsi_kernel_tune.loop import meta_shapes
     assert meta_shapes.card_meta_workloads(card) == ["wl1", "wl0", "wl4"]
     assert meta_shapes.card_workload_axes(card)["wl4"] == {"batch_size": 128}
 

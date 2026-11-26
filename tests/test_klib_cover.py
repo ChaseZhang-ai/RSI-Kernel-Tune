@@ -1,4 +1,4 @@
-"""forgekernel.klib.cover: the per-problem reference fallback and the collection layout."""
+"""rsi_kernel_tune.klib.cover: the per-problem reference fallback and the collection layout."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import ast
 import json
 from pathlib import Path
 
-from forgekernel.ext import lib as lib_cli
-from forgekernel.klib import cover as cover_mod
-from forgekernel.klib import normalize as nz
+from rsi_kernel_tune.ext import lib as lib_cli
+from rsi_kernel_tune.klib import cover as cover_mod
+from rsi_kernel_tune.klib import normalize as nz
 
 _REF_TWO_IN = ("import torch\n\n\n"
                "def run(x, y):\n"

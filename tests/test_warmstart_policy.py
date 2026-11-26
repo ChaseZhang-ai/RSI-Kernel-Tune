@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import launch, taskcard
-from forgekernel.loop import agent_policy as ap
-from forgekernel.task import TaskError, load_task
+from rsi_kernel_tune import launch, taskcard
+from rsi_kernel_tune.loop import agent_policy as ap
+from rsi_kernel_tune.task import TaskError, load_task
 
 
 def _cfg(tmp_path: Path, **loop) -> dict:
@@ -88,7 +88,7 @@ def test_an_online_student_loses_the_network_denials_but_not_the_gpu_machine(tmp
     assert "Bash(curl:*)" not in deny and "Bash(pip install:*)" not in deny
     assert "network" not in s["sandbox"]
     assert "Bash(ssh:*)" in deny and "Bash(scp:*)" in deny
-    assert "Bash(python -m forgekernel.submit:*)" in deny
+    assert "Bash(python -m rsi_kernel_tune.submit:*)" in deny
     assert pol.policy_document("student")["no_cluster"] is True
     note = pol.notice("student")
     assert "You may go online" in note and "No network" not in note

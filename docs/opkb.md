@@ -51,7 +51,7 @@ op_kb/README.md               what the directory is (written by the first harves
 op_kb/_quarantine/            records that failed lint, file name preserved (plus .reason.txt)
 ```
 
-`family` is `forgekernel.family.family_key` of the board definition name (else of the task
+`family` is `rsi_kernel_tune.family.family_key` of the board definition name (else of the task
 name) -- the same keys `families.toml` declares. `id` is `<problem>-<run id>`, so re-harvesting
 the same run writes the same bytes.
 
@@ -62,7 +62,7 @@ the same run writes the same bytes.
 | `schema` | the constant `1` this build reads |
 | `id` | `run.json`'s `id` + the problem label |
 | `created` | `run.json`'s `updated` (else `created`, else the file's mtime) |
-| `family` | `problem.definition` (else `problem.name`) through `forgekernel.family` |
+| `family` | `problem.definition` (else `problem.name`) through `rsi_kernel_tune.family` |
 | `problem.suite` | the card's `eval/leaderboard/problem.json` → `suite` |
 | `problem.name` | `run.json` → `task` (the task/operator name) |
 | `problem.definition` | the card's `problem.json` → `definition.name` (the board's name) |
@@ -160,7 +160,7 @@ forge lessons render tasks/069_rms_norm --out lessons.md
 # prints: hand it to a run with: FK_LESSONS_PATH=/abs/path/lessons.md
 ```
 
-or in code: `forgekernel.runcontext.env_for({"lessons": "<file>"})`. `campaign` and `evolve`
+or in code: `rsi_kernel_tune.runcontext.env_for({"lessons": "<file>"})`. `campaign` and `evolve`
 call `render` and set that variable themselves; nothing in this task changes their code.
 
 ## 5. Lint

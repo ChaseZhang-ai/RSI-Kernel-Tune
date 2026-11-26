@@ -1,4 +1,4 @@
-"""forgekernel.task: reading and validating tasks/<op>/."""
+"""rsi_kernel_tune.task: reading and validating tasks/<op>/."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import task as task_mod
-from forgekernel.task import TaskError, dump_task_toml, load_task, read_task_toml
+from rsi_kernel_tune import task as task_mod
+from rsi_kernel_tune.task import TaskError, dump_task_toml, load_task, read_task_toml
 
 SHAPES = [{"name": "small", "axes": {"m": 128, "n": 256}},
           {"name": "large", "axes": {"m": 4096, "n": 256}}]
@@ -75,7 +75,7 @@ def test_the_task_overrides_global_config_key_by_key(tmp_path):
 
 
 def test_a_provider_must_be_declared_and_its_key_set(tmp_path, monkeypatch):
-    from forgekernel import agents, provider
+    from rsi_kernel_tune import agents, provider
     gc = tmp_path / "gc"
     gc.mkdir()
     (gc / "backends.toml").write_text('[gw]\nbase_url = "https://gw.example/anthropic"\n'

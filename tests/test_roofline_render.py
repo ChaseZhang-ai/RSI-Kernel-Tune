@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.ext import roofline as roofline_cmd
-from forgekernel.roofline import analyze, calibrate, costmodel, render
+from rsi_kernel_tune.ext import roofline as roofline_cmd
+from rsi_kernel_tune.roofline import analyze, calibrate, costmodel, render
 
 # T_SOL: 0.2 .. 0.0005 ms -- one order of magnitude apart is enough that the medians in
 # the summary are meaningful.
@@ -200,7 +200,7 @@ def test_rendering_is_deterministic(tmp_path):
 def test_json_carries_the_same_numbers_as_the_file(tmp_path):
     result = analysis(tmp_path, current={"wl0": 2.0, "wl2": 0.05})
     payload = json.loads(render.to_json(result))
-    assert payload["schema"] == "forgekernel.roofline/1"
+    assert payload["schema"] == "rsi_kernel_tune.roofline/1"
     assert payload["problem"] == "demo_op"
     assert payload["target"]["gpu"] == "NVIDIA B200"
     assert payload["development"]["gpu"] == "NVIDIA B300"

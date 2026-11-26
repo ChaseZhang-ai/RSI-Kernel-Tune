@@ -8,7 +8,7 @@
 ## Invariant: the student records NCU every round (no more `profiler={}`)
 
 In every round's GPU eval the inner driver **must, besides correctness/perf, also run one NCU profile**
-(the operator's `gpu_entry.sh ncu` task) and parse it with `forgekernel.inner.ncu.profiler_from_ncu(csv)` into a
+(the operator's `gpu_entry.sh ncu` task) and parse it with `rsi_kernel_tune.inner.ncu.profiler_from_ncu(csv)` into a
 compact key-metrics dict written to that round's `IterationRecord.profiler`. **Without this step the meta agent
 can only aggregate student prose — the root cause of past diagnoses leaning too heavily on student signals.**
 

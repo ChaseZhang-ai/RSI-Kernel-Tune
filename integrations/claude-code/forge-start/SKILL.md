@@ -1,15 +1,15 @@
 ---
 name: forge-start
-description: Configure and launch a ForgeKernel operator optimization - pick a local or ssh GPU, pick the reference, check the environment, and resume existing runs. Use for "launch ForgeKernel", "optimize this operator with ForgeKernel", "continue my ForgeKernel run"; a request for a design or a preflight only does not start an optimization.
+description: Configure and launch a RSI-Kernel-Tune operator optimization - pick a local or ssh GPU, pick the reference, check the environment, and resume existing runs. Use for "launch RSI-Kernel-Tune", "optimize this operator with RSI-Kernel-Tune", "continue my RSI-Kernel-Tune run"; a request for a design or a preflight only does not start an optimization.
 ---
 
-# ForgeKernel one-step launch
+# RSI-Kernel-Tune one-step launch
 
 Turn the user's operator goal into a runnable task and drive it through the repository's own `forge` lifecycle. When the user has asked to launch and everything needed is known, go ahead; ask for whatever is missing in one batch, and never ask again for an authorization already given.
 
 ## Locate the repository and the authoritative configuration
 
-Find ForgeKernel in the directory the user names, or the current directory; check its git status, commit and remote. With no checkout, clone https://github.com/OpenBMB/ForgeKernel.git. Never overwrite existing changes, and never switch the version an existing run uses.
+Find RSI-Kernel-Tune in the directory the user names, or the current directory; check its git status, commit and remote. With no checkout, clone https://github.com/OpenBMB/RSI-Kernel-Tune.git. Never overwrite existing changes, and never switch the version an existing run uses.
 
 Read that version's README.md (README_zh.md for Chinese), local.env.example, the task's task.toml and global_config/ first; docs/design/v1-launch.md when needed. They are the authority on configuration: this skill fixes no model, budget or dependency version, with one exception - the loop's wall-clock `hours` defaults to 24 (item 4 below).
 
@@ -24,7 +24,7 @@ Read the existing task, the machine configuration and this conversation first; a
 3. Whom to beat: the user's implementation, an expert library, a PyTorch implementation, or no reference at all? Get the source path and the callable entry point; a performance number alone is not a runnable reference.
 4. How long: use the budget the user gives for this launch; otherwise `hours = 24`, overriding the `hours` the task's task.toml sets (the rmsnorm example included) and the global_config value. Write it into the task.toml of a task this launch creates; for an existing task directory, leave the original untouched and write it into a task variant. Do not change global_config. `max_meta` and `reference_hours` keep their merged values. Show the final `hours` and `max_meta` (plus `reference_hours` when there is no reference) with where each comes from, and ask the user to confirm or change them; if the user gives nothing, use the defaults above, but say so in the summary, and say that the loop also stops before 24 hours once the teacher rounds reach `max_meta`.
 
-When no operator is named and the user only wants to try ForgeKernel, use the repository's rmsnorm example. When an operator is named but its semantics, shapes or dtypes are missing, keep asking: never substitute the example, and never assume typical shapes.
+When no operator is named and the user only wants to try RSI-Kernel-Tune, use the repository's rmsnorm example. When an operator is named but its semantics, shapes or dtypes are missing, keep asking: never substitute the example, and never assume typical shapes.
 
 ## Resource discovery
 
@@ -58,9 +58,9 @@ python3 "$SKILL_DIR/scripts/start.py" \
   --task "$TASK" --session "$SESSION_FILE" --claude "$CLAUDE_BIN"
 ```
 
-With the GPU on the same machine use `--role both`; the other install options are the same as deploy.py's. For an ssh GPU host, deploy the remote side first: wait until the source transfer and the deploy command have exited successfully before running start.py, never concurrently with it; the user installs nothing by hand. The entry point deploys the controller environment, checks the real GPU architecture against the task, validates the configuration, creates the run and calls the real `forge run`. Authentication and the sandbox are verified and enforced by ForgeKernel's real agent turns; build no separate policy.
+With the GPU on the same machine use `--role both`; the other install options are the same as deploy.py's. For an ssh GPU host, deploy the remote side first: wait until the source transfer and the deploy command have exited successfully before running start.py, never concurrently with it; the user installs nothing by hand. The entry point deploys the controller environment, checks the real GPU architecture against the task, validates the configuration, creates the run and calls the real `forge run`. Authentication and the sandbox are verified and enforced by RSI-Kernel-Tune's real agent turns; build no separate policy.
 
-The session file holds only a task-to-run pointer; the run's state is whatever ForgeKernel says. Repeating the same command resumes the same run directory; a file lock stops two launches of one session. On failure, follow the real error, fix the environment or configuration and retry; a successful install or a `FORGE_RUN` line is no proof of acceptance. Report a full launch as passed only after observing artifacts of the actual optimization phase and evidence of GPU execution; while model networking, a hardware mismatch or the like is unresolved, label it explicitly as not accepted.
+The session file holds only a task-to-run pointer; the run's state is whatever RSI-Kernel-Tune says. Repeating the same command resumes the same run directory; a file lock stops two launches of one session. On failure, follow the real error, fix the environment or configuration and retry; a successful install or a `FORGE_RUN` line is no proof of acceptance. Report a full launch as passed only after observing artifacts of the actual optimization phase and evidence of GPU execution; while model networking, a hardware mismatch or the like is unresolved, label it explicitly as not accepted.
 
 ## One-step dependency deployment
 
@@ -74,7 +74,7 @@ python3 "$DEPLOY_SCRIPT" \
   --dsl-version "$DSL_VERSION"
 ```
 
-For ssh deployment, transfer the script and the source first, then run it on the remote; all paths come from this launch's discovery. The script reuses a valid virtual environment. A new controller environment is installed standalone; a GPU environment inherits the CUDA packages already in the image, and gets ForgeKernel plus the dependencies of its role; the GPU role installs no agent. If CUDA PyTorch is missing, choose `--torch-spec` and the package index from the real driver; never blindly install the default CPU build. The CuTe DSL version comes from the task's environment; do not pass it for CUDA C++ tasks.
+For ssh deployment, transfer the script and the source first, then run it on the remote; all paths come from this launch's discovery. The script reuses a valid virtual environment. A new controller environment is installed standalone; a GPU environment inherits the CUDA packages already in the image, and gets RSI-Kernel-Tune plus the dependencies of its role; the GPU role installs no agent. If CUDA PyTorch is missing, choose `--torch-spec` and the package index from the real driver; never blindly install the default CPU build. The CuTe DSL version comes from the task's environment; do not pass it for CUDA C++ tasks.
 
 - Online: detect a reachable `--index-url` and `--npm-registry`. With Claude Code already installed, pass `--claude`; without it, the script installs it with npm into a dedicated directory, and installs Node/npm into the dedicated virtual environment when they are missing.
 - Offline: on a networked machine, prepare wheels for the target OS, architecture and Python ABI (build and transitive dependencies included), bring them to the target and pass `--wheelhouse`. The controller also needs `--claude` pointing at an executable for its platform; nothing is downloaded online and no login cache is copied.
@@ -83,7 +83,7 @@ For ssh deployment, transfer the script and the source first, then run it on the
 
 ## Runtime environment and sandbox boundary
 
-The sandbox belongs to the agent runtime, ForgeKernel's policy and the host platform. The skill and the deploy script implement no sandbox, and neither install nor change isolation policies, container permissions or kernel settings.
+The sandbox belongs to the agent runtime, RSI-Kernel-Tune's policy and the host platform. The skill and the deploy script implement no sandbox, and neither install nor change isolation policies, container permissions or kernel settings.
 
 After deployment, verify separately the model authentication, real GPU computation and the sandbox capabilities the runtime requires. Read the agent CLI's current help before using it. Report authentication status only, never credentials. If the runtime sandbox is unavailable, report the exact missing tool or platform limit and hand it to the environment setup, or choose a compatible controller with an ssh GPU; never disable or loosen the sandbox to claim a successful launch.
 

@@ -10,11 +10,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from forgekernel import launch
-from forgekernel.loop import cli as cli_mod
-from forgekernel.loop import governor as gov
-from forgekernel.loop.driver import AGENT_ROLE_TEACHER
-from forgekernel.task import Budget
+from rsi_kernel_tune import launch
+from rsi_kernel_tune.loop import cli as cli_mod
+from rsi_kernel_tune.loop import governor as gov
+from rsi_kernel_tune.loop.driver import AGENT_ROLE_TEACHER
+from rsi_kernel_tune.task import Budget
 
 
 class Inner:
@@ -71,7 +71,7 @@ def _task(**budget) -> SimpleNamespace:
 
 def test_run_loop_hands_the_policy_to_the_loop_and_restores_the_environment(
         tmp_path, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
     seen = {}
 
     def fake_main(argv):
@@ -98,7 +98,7 @@ def test_run_loop_hands_the_policy_to_the_loop_and_restores_the_environment(
 
 def test_run_loop_restores_the_environment_even_when_the_loop_raises(
         tmp_path, monkeypatch):
-    from forgekernel.loop import cli as loop_cli
+    from rsi_kernel_tune.loop import cli as loop_cli
 
     def boom(argv):
         raise RuntimeError("loop blew up")

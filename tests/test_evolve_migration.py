@@ -14,10 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.evolve import metric as metric_mod
-from forgekernel.evolve import migration
-from forgekernel.evolve.metric import Metric
-from forgekernel.evolve.migration import View, plan
+from rsi_kernel_tune.evolve import metric as metric_mod
+from rsi_kernel_tune.evolve import migration
+from rsi_kernel_tune.evolve.metric import Metric
+from rsi_kernel_tune.evolve.migration import View, plan
 
 REPO = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location("self_evolve", REPO / "scripts" / "self_evolve.py")
@@ -49,7 +49,7 @@ def test_noise_floor_matches_self_evolve():
 
 def test_one_lineage_names_match_the_old_chain():
     # the old script: the input directory for generation 1, <base>-g<k> after it
-    from forgekernel.evolve.lineage import task_name
+    from rsi_kernel_tune.evolve.lineage import task_name
     assert task_name("rmsnorm", 0, 1, 1) == "rmsnorm"
     assert [task_name("rmsnorm", 0, g, 1) for g in range(2, 5)] == \
         ["rmsnorm-g2", "rmsnorm-g3", "rmsnorm-g4"]

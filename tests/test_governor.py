@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.loop import governor as gov
-from forgekernel.loop.driver import AGENT_ROLE_STUDENT, AGENT_ROLE_TEACHER, AgentError
+from rsi_kernel_tune.loop import governor as gov
+from rsi_kernel_tune.loop.driver import AGENT_ROLE_STUDENT, AGENT_ROLE_TEACHER, AgentError
 
 REPO = Path(__file__).resolve().parents[1]
 

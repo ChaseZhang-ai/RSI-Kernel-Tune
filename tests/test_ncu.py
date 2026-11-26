@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from forgekernel.inner.ncu import (
+from rsi_kernel_tune.inner.ncu import (
     KEY_METRICS,
     NCU_METRICS_ARG,
     _coerce_dims,
@@ -25,7 +25,7 @@ from forgekernel.inner.ncu import (
     select_dominant_kernel,
     summarize_metrics,
 )
-from forgekernel.inner.trajectory import IterationRecord
+from rsi_kernel_tune.inner.trajectory import IterationRecord
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ncu_sample.csv"
 

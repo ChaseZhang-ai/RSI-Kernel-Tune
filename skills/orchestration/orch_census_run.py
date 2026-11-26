@@ -49,12 +49,12 @@ try:  # vendored flat in a job tree (notes/ on sys.path)
     import orch_tools  # type: ignore
     import sass_tools  # type: ignore
 except ImportError:  # harness-side import path (tests)
-    from forgekernel.skills import orch_tools, sass_tools
+    from rsi_kernel_tune.skills import orch_tools, sass_tools
 try:
     import sass_census  # type: ignore
 except ImportError:
     try:
-        from forgekernel.skills import sass_census  # type: ignore
+        from rsi_kernel_tune.skills import sass_census  # type: ignore
     except ImportError:  # a tree seeded before the census module rode along
         sass_census = None  # type: ignore
 

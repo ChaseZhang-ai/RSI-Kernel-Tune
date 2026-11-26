@@ -102,7 +102,7 @@ then land the full decision** — do not bet directly on the full implementation
 
 Two cheap readings that need no launch, when the question is "what did the compiler do": set `TRITON_ALWAYS_COMPILE=1` and a pinned `TRITON_CACHE_DIR` in the
 probe's environment and read the artefacts it writes (`.ptx` / `.ttgir` next to the kernel — which `mma` / `wgmma` / `tcgen05` mnemonic, whether `tmem` appears),
-or hand a kernel file to `python -m forgekernel.triton_check <file> --target <cc>` for a compile-only verdict. The kernel file itself must never name that cache
+or hand a kernel file to `python -m rsi_kernel_tune.triton_check <file> --target <cc>` for a compile-only verdict. The kernel file itself must never name that cache
 (the operator tree's fence refuses it).
 
 probe = a **standalone small script** (written to `WORKSPACE/notes/<name>.py`) that verifies **one** low-level contract only:

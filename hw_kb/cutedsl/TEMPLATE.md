@@ -38,6 +38,6 @@ keeps only one line:
 - Detailed provenance archive: docs/kb-provenance/<entry>.md (for human review; not in any agent read set).
 ```
 
-The mechanical gate `src/forgekernel/loop/kb_lint.py` scans for banned tokens at three points — loop
+The mechanical gate `src/rsi_kernel_tune/loop/kb_lint.py` scans for banned tokens at three points — loop
 start, recipe certification into the KB, and publish: on a hit at certification the entry is first
 bounced back for revision and quarantined if it still fails; a hit at harvest refuses the publish.

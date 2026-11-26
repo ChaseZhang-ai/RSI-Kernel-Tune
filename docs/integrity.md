@@ -1,7 +1,7 @@
 # Evaluation integrity (task guard)
 
 The loop is rewarded by a reading, and a reading can be gamed. This document says what
-`forgekernel.integrity` and the card's own `integrity` block check, where each check sits
+`rsi_kernel_tune.integrity` and the card's own `integrity` block check, where each check sits
 in an evaluation, what a failure costs, how to tune it, and what is deliberately **not**
 covered.
 
@@ -9,7 +9,7 @@ Two places need this:
 
 | where | what runs | why it has to live there |
 |---|---|---|
-| the card (`eval/leaderboard.py`, copied into a task at `forge init`) | the **runtime** checks A–D, after the timed window | the card runs in a job image where the `forgekernel` package may not exist; it is a standalone module by design (like `eval/timing.py`) |
+| the card (`eval/leaderboard.py`, copied into a task at `forge init`) | the **runtime** checks A–D, after the timed window | the card runs in a job image where the `rsi_kernel_tune` package may not exist; it is a standalone module by design (like `eval/timing.py`) |
 | `forge export` / `campaign.compose.export` | the **static** checks E (lint), the licence gate, targethw's target rules, the cold-start gate | the file about to be uploaded is on the host, and this is the last place to stop it |
 
 The package is the host-side door to the same rules (`snapshot.py`, `timers.py` load the
@@ -118,7 +118,7 @@ cheat can sit there. `implausible_speedup = true` in the block and a printed war
 never fails the run — a plausible-on-its-face reading is still checked by A–C and at the
 board.
 
-## E. Static review (`forgekernel.integrity.lint`)
+## E. Static review (`rsi_kernel_tune.integrity.lint`)
 
 Input: a submission's source (`lint_source`, `lint_texts` for several files, `lint_paths`
 for a tree). Output: `Finding{rule, severity, file, line, snippet, detail}` with
@@ -170,7 +170,7 @@ Deliberate calibrations (each has a negative test):
   A/C read `skipped` with that reason.
 * `loop/parse.py` carries the block as `EvalResult.integrity` (verbatim, no gate reading
   touched). A card without the block parses to `None`.
-* `forgekernel.integrity.report.validate` is the schema both sides are held to;
+* `rsi_kernel_tune.integrity.report.validate` is the schema both sides are held to;
   `report.failures` reproduces the `INTEGRITY:` lines the card writes.
 
 ## Export gates
@@ -178,8 +178,8 @@ Deliberate calibrations (each has a negative test):
 `forge export <run>` and `campaign.compose.export` both review the file that is about to
 leave the harness:
 
-1. `forgekernel.integrity.export_check(source)` — E's lint rules, plus
-   `forgekernel.targethw.rules.check_submission` (a **soft dependency**: imported if
+1. `rsi_kernel_tune.integrity.export_check(source)` — E's lint rules, plus
+   `rsi_kernel_tune.targethw.rules.check_submission` (a **soft dependency**: imported if
    installed, skipped with an `info` finding otherwise), plus the licence gate when
    `origins` are given. `forge export` prints every finding and **refuses** (exit 2) on any
    `block` unless `--allow-integrity-findings` is passed; then the leaderboard solution's
@@ -194,7 +194,7 @@ leave the harness:
 3. **Cold start** (`cold_start_gate`): reads `cold_start_s` from a benchx result
    (`--bench-result`, or `bench.json` / `bench_result.json` / `bench/last.json` /
    `bench/result.json` beside the run) and refuses over
-   `forgekernel.benchx.api.COLD_START_BUDGET_S` (100 s). No result → `unmeasured`, printed
+   `rsi_kernel_tune.benchx.api.COLD_START_BUDGET_S` (100 s). No result → `unmeasured`, printed
    as "not measured", not treated as fast. `--allow-slow-cold-start` overrides, like
    campaign's.
 4. `fallback.wrap_with_fallback(kernel_src, reference_src)` — the optional final wrapper:
@@ -205,7 +205,7 @@ leave the harness:
    hides a broken kernel — it scores 0.5 instead of 0 — so it is applied only at the final
    export, never during development, and the first fallback prints the exception.
 
-## Multi-seed (`forgekernel.integrity.multiseed`)
+## Multi-seed (`rsi_kernel_tune.integrity.multiseed`)
 
 A kernel that lowers precision (TF32, bf16 accumulation, FP8) can pass one draw and fail
 the next. `multiseed.check(card_dir, candidate)` runs the card once per seed with

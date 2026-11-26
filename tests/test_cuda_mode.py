@@ -16,12 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.loop import agent_policy as ap
-from forgekernel.loop import cli as loop_cli
-from forgekernel.loop import driver
-from forgekernel.loop import lang_mode
-from forgekernel.skills import job_env_check, lever_pricing_run, orch_census_run
-from forgekernel.skills import timeline_probe as tp
+from rsi_kernel_tune.loop import agent_policy as ap
+from rsi_kernel_tune.loop import cli as loop_cli
+from rsi_kernel_tune.loop import driver
+from rsi_kernel_tune.loop import lang_mode
+from rsi_kernel_tune.skills import job_env_check, lever_pricing_run, orch_census_run
+from rsi_kernel_tune.skills import timeline_probe as tp
 from test_loop_driver import FakeBackend, _ctx
 from test_leaderboard_cuda_student import STUDENT, card_lb  # noqa: F401  (fixture)
 from test_binref import base, sol_root, _no_network  # noqa: F401  (fixtures card_lb needs)
@@ -138,7 +138,7 @@ def test_the_cuda_prompts_teach_cuda_not_the_dsl():
 
 
 def test_the_cuda_kb_is_its_own_launchable_lint_clean_tree():
-    from forgekernel.loop.kb_lint import lint_kb_dir
+    from rsi_kernel_tune.loop.kb_lint import lint_kb_dir
     kb = REPO / "hw_kb/cuda"
     assert (kb / "TEMPLATE.md").is_file() and (kb / "README.md").is_file()
     assert loop_cli._kb_arch_problem(kb, "sm100") is None
@@ -322,7 +322,7 @@ def test_a_comment_only_variant_reads_the_same_sass():
                 f"\t\tFunction : _ZN41_GLOBAL__N__{ns}_9_kernel_cu_d698c71f5k_bigE14CUtensorMap_st\n"
                 f"        /*0000*/                   LDC R1, c[0x0][0x37c] ;  /* 0x0000df00ff017b82 */\n"
                 f"        /*0010*/                   {op} R2, R2, 0x1, RZ ;  /* 0x0000000102027810 */\n")
-    from forgekernel.skills.lever_pricing_run import sass_code_text
+    from rsi_kernel_tune.skills.lever_pricing_run import sass_code_text
     a = sass_code_text(dump("c5a99a67", "/tmp/fk_kernel_build/fk_kernel_aaa/kernel.cu"))
     b = sass_code_text(dump("0f3e9b21", "/tmp/fk_kernel_build/fk_kernel_bbb/kernel.cu"))
     assert a == b and "identifier" not in a and "LDC R1" in a
@@ -356,9 +356,9 @@ def test_a_cuda_census_without_a_build_skips_on_one_line(tmp_path, monkeypatch, 
 
 
 def test_the_seeded_tools_never_name_a_cpp_source_the_recon_guard_refuses():
-    from forgekernel import binref
+    from rsi_kernel_tune import binref
     rx = re.compile("|".join(binref.REF_TREE_FORBID))
-    from forgekernel.skills import stall_price_run
+    from rsi_kernel_tune.skills import stall_price_run
     for mod in (tp, lever_pricing_run, orch_census_run, job_env_check, stall_price_run):
         hits = [ln for ln in Path(mod.__file__).read_text().splitlines() if rx.search(ln)]
         assert not hits, (mod.__name__, hits[:3])
@@ -392,7 +392,7 @@ def test_the_cuda_students_notice_names_headers_not_the_dsl(tmp_path):
 
 
 def test_a_cuda_card_suggests_the_cuda_mode():
-    from forgekernel import leaderboard as lb
+    from rsi_kernel_tune import leaderboard as lb
     prob = types.SimpleNamespace(reference_impl={"kind": "baseline_solution", "name": "r"},
                                  workload={"uuid": "u", "axes": {}}, name="n", group=None,
                                  suite="other", board=None)
@@ -448,7 +448,7 @@ def test_a_lineinfo_build_is_its_own_and_the_timed_build_never_carries_it(card_l
 
 
 def test_the_stall_run_asks_for_lineinfo_and_the_role_pass_does_not(monkeypatch):
-    from forgekernel.skills import stall_price_run
+    from rsi_kernel_tune.skills import stall_price_run
     src = Path(stall_price_run.__file__).read_text()
     assert 'os.environ.setdefault("FK_CUDA_LINEINFO", "1")' in src
     calls = []

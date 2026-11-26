@@ -11,9 +11,9 @@ import json
 
 import pytest
 
-from forgekernel.benchx.api import BenchResult, WorkloadReading
-from forgekernel.shapes import cluster as C
-from forgekernel.shapes import evalx, matrix as M
+from rsi_kernel_tune.benchx.api import BenchResult, WorkloadReading
+from rsi_kernel_tune.shapes import cluster as C
+from rsi_kernel_tune.shapes import evalx, matrix as M
 
 
 def _workloads() -> list[C.Workload]:
@@ -209,7 +209,7 @@ def test_reading_cache_is_keyed_by_the_candidate_and_the_card(tmp_path):
 
 
 def test_bench_all_benches_every_candidate_on_the_whole_card_and_caches(tmp_path):
-    from forgekernel.benchx.api import FakeBench
+    from rsi_kernel_tune.benchx.api import FakeBench
 
     cands = [evalx.Candidate(label="c0", kind=evalx.KIND_CLUSTER,
                              source="def run(*args):\n    pass\n",

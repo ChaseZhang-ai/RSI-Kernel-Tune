@@ -1,4 +1,4 @@
-"""forgekernel.opkb.query: which records a problem reads -- same family, self rules, order."""
+"""rsi_kernel_tune.opkb.query: which records a problem reads -- same family, self rules, order."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-import forgekernel.ext.lessons as lessons_cli
-from forgekernel.opkb import query, store
+import rsi_kernel_tune.ext.lessons as lessons_cli
+from rsi_kernel_tune.opkb import query, store
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -194,7 +194,7 @@ def test_the_query_command_says_so_when_the_family_has_no_records(tmp_path, caps
 
 
 def test_the_query_command_accepts_a_run_directory(tmp_path, capsys):
-    from forgekernel.opkb import record
+    from rsi_kernel_tune.opkb import record
 
     fixture = Path(__file__).parent / "fixtures" / "opkb_run"
     root = tmp_path / "op_kb"

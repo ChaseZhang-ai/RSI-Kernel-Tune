@@ -35,5 +35,5 @@ measured footprints, and the words "oracle / teacher / reference implementation"
 - Detailed provenance: docs/kb-provenance/cuda/<entry>.md (for human review, not in the agent read set).
 ```
 
-The mechanical gate `src/forgekernel/loop/kb_lint.py` scans for banned tokens at three points: loop start, recipe
+The mechanical gate `src/rsi_kernel_tune/loop/kb_lint.py` scans for banned tokens at three points: loop start, recipe
 certification into the KB, and publish. A hit at certification is bounced back for revision first and the entry is quarantined if it still fails; a hit at harvest refuses the publish.

@@ -2,7 +2,7 @@
 import sys
 import types
 
-from forgekernel.skills import stall_price_run as spr
+from rsi_kernel_tune.skills import stall_price_run as spr
 
 
 def test_build_cmd_adds_pm_sections_only_on_demand():
@@ -187,7 +187,7 @@ def test_role_exposure_failure_never_costs_the_ledger(monkeypatch, tmp_path, cap
 
 
 def test_bundle_restores_a_head_clipped_log():
-    from forgekernel.skills import stall_price_run as SP
+    from rsi_kernel_tune.skills import stall_price_run as SP
     head = "=== STALL LEDGER BEGIN ===\nrow 1\n=== STALL LEDGER END ===\n"
     tail = "=== ROLE EXPOSURE BEGIN ===\nROLE label=x\n=== ROLE EXPOSURE END ===\nROLE-OK roles=1\n"
     full = head + tail
@@ -207,7 +207,7 @@ def test_bundle_restores_a_head_clipped_log():
 
 
 def test_main_emits_the_bundle_after_the_analysis(monkeypatch, tmp_path, capsys):
-    from forgekernel.skills import stall_price_run as SP
+    from rsi_kernel_tune.skills import stall_price_run as SP
     monkeypatch.setattr(SP, "_collect", lambda pm, pm_interval=SP.PM_INTERVAL: True)
     monkeypatch.setattr(SP, "_analyze", lambda st, pm, pmc, *rest: print("=== STALL LEDGER BEGIN ===\nrow\n=== STALL LEDGER END ==="))
     monkeypatch.setattr(SP, "IR_DIR", str(tmp_path / "ir"))

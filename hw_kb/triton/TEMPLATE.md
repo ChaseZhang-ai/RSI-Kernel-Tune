@@ -46,6 +46,6 @@ and the entry keeps only one line:
 
 Every entry opens with a **`Certification source`** line: `✅ Verified` plus the probe verdict, or
 `[PENDING-CERT]` plus where the mechanism was written from (see `hw_kb/triton/README.md`).
-The mechanical gate `src/forgekernel/loop/kb_lint.py` scans for banned tokens at three points — loop
+The mechanical gate `src/rsi_kernel_tune/loop/kb_lint.py` scans for banned tokens at three points — loop
 start, recipe certification into the KB, and publish: on a hit at certification the entry is first
 bounced back for revision and quarantined if it still fails; a hit at harvest refuses the publish.

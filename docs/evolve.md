@@ -33,7 +33,7 @@ forge evolve show   <population dir>
 ```
 
 While the step-0 extension dispatcher is not installed in a build, the same command runs
-as `python -m forgekernel.ext.evolve …` (`PYTHONPATH=<repo>/src`). The module defines
+as `python -m rsi_kernel_tune.ext.evolve …` (`PYTHONPATH=<repo>/src`). The module defines
 `COMMAND = "evolve"` and `main(argv)`, which is what the dispatcher routes to.
 
 | Option | Default | Meaning |
@@ -111,7 +111,7 @@ when an absolute median is known.
 
 | Kind | Where it comes from | Floor |
 |---|---|---|
-| `sol` | mean SOL score: `forgekernel.benchx.reader.read_run(run_dir, task_dir)` (task benchx) → `forgekernel.campaign.solscore.score_kernel(eval_json)` (task campaign) → the card's own `performance.leaderboard.sol_board` in the confirmation jobs' eval JSON (`sol_score_mean`, or per-workload `sol_score`) | `--s-floor` |
+| `sol` | mean SOL score: `rsi_kernel_tune.benchx.reader.read_run(run_dir, task_dir)` (task benchx) → `rsi_kernel_tune.campaign.solscore.score_kernel(eval_json)` (task campaign) → the card's own `performance.leaderboard.sol_board` in the confirmation jobs' eval JSON (`sol_score_mean`, or per-workload `sol_score`) | `--s-floor` |
 | `speedup` | `launch.best_of()["speedup"]` — the confirmed kernel's same-job ratio | ordinary: the confirmation ratio spread, min 1.5 % (identical to `scripts/self_evolve.py`); board fallback: `--s-floor` |
 | `ms` | the confirmed absolute median, only when no ratio exists | 1.5 % |
 
@@ -177,16 +177,16 @@ working products: their paths are appended to the repository's **local**
 ## Diversity
 
 * **Language** — `--langs` rotates over lineages. A language is accepted only when
-  `forgekernel.task.LANGUAGES` accepts it at runtime; otherwise the command exits 2 listing
+  `rsi_kernel_tune.task.LANGUAGES` accepts it at runtime; otherwise the command exits 2 listing
   the accepted languages. (The `triton` task may extend that tuple later.)
 * **Architecture hypotheses** — `--hypotheses dir/` reads `lineage-<i>.md` per lineage, or
   `--hypotheses file.md` for all. The path is injected through
-  `forgekernel.runcontext.env_for({"hypotheses": …})` (`FK_HYPOTHESES_PATH`) into every
+  `rsi_kernel_tune.runcontext.env_for({"hypotheses": …})` (`FK_HYPOTHESES_PATH`) into every
   `forge run` subprocess. The harness does not constrain the file's content beyond the
   standing rules: it is **runtime data**, and it must not contain the reference kernel's
   implementation body (the operator-agnostic prompt invariant). This task never asks an LLM
   to write hypotheses.
-* **Library seeds** — `--from-lib` calls `forgekernel.klib.find/find_kernels/search(problem, k)`
+* **Library seeds** — `--from-lib` calls `rsi_kernel_tune.klib.find/find_kernels/search(problem, k)`
   (task seedlib, soft dependency), keeps only merge-allowed licenses
   (Apache-2.0 / MIT / BSD) and existing files, and gives each lineage its own seed. With no
   library available it logs the fallback and starts every lineage from the base reference,
@@ -203,7 +203,7 @@ working products: their paths are appended to the repository's **local**
 
 `--parallel P` caps how many `forge run` child processes are in flight. Task creation and
 `forge new` stay serial (they write into `.artifacts/`); only the runs fan out. The GPU work
-*inside* a run is serialised by ForgeKernel's own per-GPU lock (`FK_JOB_LOCK_CMD` included),
+*inside* a run is serialised by RSI-Kernel-Tune's own per-GPU lock (`FK_JOB_LOCK_CMD` included),
 so parallel lineages mean parallel agent thinking, not concurrent benchmarking. `forge run`
 itself is never wrapped in `with-lock`.
 
@@ -249,17 +249,17 @@ block (`# Variant:`, `# Lineage / generation:`, `# Language:`, `# Reference:`, `
 
 | Package / task | Used for | Without it |
 |---|---|---|
-| `forgekernel.runcontext` (step 0) | `env_for()` for target / hypotheses / lessons | the documented env names (`FK_<NAME>_PATH`) are set directly |
-| `forgekernel.klib` (seedlib) | `--from-lib` seeds | log + language rotation from the base reference |
-| `forgekernel.warmstart` (warmstart) | board `--init-kernel` (readable handoff) | sealed `--sealed-ref` handoff (black box) |
-| `forgekernel.benchx.reader` (benchx) | mean SOL score of a run | campaign hook, then the card's own `sol_board`, then `speedup` |
-| `forgekernel.campaign.solscore` (campaign) | `score_kernel(eval_json)` | card's own `sol_board`, then `speedup` |
-| `forgekernel.targethw` | not called directly; confidence hints come with benchx readings | only `dev-only` |
+| `rsi_kernel_tune.runcontext` (step 0) | `env_for()` for target / hypotheses / lessons | the documented env names (`FK_<NAME>_PATH`) are set directly |
+| `rsi_kernel_tune.klib` (seedlib) | `--from-lib` seeds | log + language rotation from the base reference |
+| `rsi_kernel_tune.warmstart` (warmstart) | board `--init-kernel` (readable handoff) | sealed `--sealed-ref` handoff (black box) |
+| `rsi_kernel_tune.benchx.reader` (benchx) | mean SOL score of a run | campaign hook, then the card's own `sol_board`, then `speedup` |
+| `rsi_kernel_tune.campaign.solscore` (campaign) | `score_kernel(eval_json)` | card's own `sol_board`, then `speedup` |
+| `rsi_kernel_tune.targethw` | not called directly; confidence hints come with benchx readings | only `dev-only` |
 
 The `forge evolve` dispatch itself belongs to step 0's extension dispatcher
-(`forgekernel/__main__.py`); this task adds `src/forgekernel/ext/evolve.py` with the
+(`rsi_kernel_tune/__main__.py`); this task adds `src/rsi_kernel_tune/ext/evolve.py` with the
 `COMMAND`/`main` contract and an `ext/__init__.py` so the module imports as
-`forgekernel.ext.evolve` (`python -m forgekernel.ext.evolve --help` works today).
+`rsi_kernel_tune.ext.evolve` (`python -m rsi_kernel_tune.ext.evolve --help` works today).
 
 ---
 
@@ -299,13 +299,13 @@ The `forge evolve` dispatch itself belongs to step 0's extension dispatcher
 ## Files
 
 ```
-src/forgekernel/ext/evolve.py        the command (COMMAND = "evolve")
-src/forgekernel/ext/__init__.py      makes the extension package importable
-src/forgekernel/evolve/population.py state machine, resume, scheduling, archive writing
-src/forgekernel/evolve/lineage.py    task directories, handoff, library seeds
-src/forgekernel/evolve/migration.py  elites/stall/migration/refuge/retirement (pure)
-src/forgekernel/evolve/metric.py     a generation's reading from its run's evidence
-src/forgekernel/evolve/archive.py    variants, per-version history, archive.md
+src/rsi_kernel_tune/ext/evolve.py        the command (COMMAND = "evolve")
+src/rsi_kernel_tune/ext/__init__.py      makes the extension package importable
+src/rsi_kernel_tune/evolve/population.py state machine, resume, scheduling, archive writing
+src/rsi_kernel_tune/evolve/lineage.py    task directories, handoff, library seeds
+src/rsi_kernel_tune/evolve/migration.py  elites/stall/migration/refuge/retirement (pure)
+src/rsi_kernel_tune/evolve/metric.py     a generation's reading from its run's evidence
+src/rsi_kernel_tune/evolve/archive.py    variants, per-version history, archive.md
 tests/test_evolve_migration.py       pure selection rules + the local-optimum scenario
 tests/test_evolve_lineage.py         ordinary/board task generation, argv contracts
 tests/test_evolve_population.py      run, resume, concurrency, archive, metric, CLI

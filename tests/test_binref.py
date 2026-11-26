@@ -1,5 +1,5 @@
 """forge init --binary-ref: a compiled solution as a leaderboard card's sealed in-job
-reference (forgekernel.binref) — the card, the recon tree, the guards, install."""
+reference (rsi_kernel_tune.binref) — the card, the recon tree, the guards, install."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import binref
-from forgekernel import leaderboard as lb
-from forgekernel.scaffold import main as scaffold_main
+from rsi_kernel_tune import binref
+from rsi_kernel_tune import leaderboard as lb
+from rsi_kernel_tune.scaffold import main as scaffold_main
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEF = {
@@ -61,7 +61,7 @@ def sol_root(tmp_path: Path) -> Path:
 @pytest.fixture
 def base(tmp_path: Path) -> Path:
     shutil.copytree(REPO_ROOT / "meta", tmp_path / "repo" / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "forgekernel" / "card_template", tmp_path / "repo" / "src" / "forgekernel" / "card_template")
+    shutil.copytree(REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template", tmp_path / "repo" / "src" / "rsi_kernel_tune" / "card_template")
     return tmp_path / "repo"
 
 
@@ -106,7 +106,7 @@ def test_recon_tree_holds_the_sources_and_a_copy_of_the_judge(base: Path, sol_ro
     for tree in (card, ref):
         assert subprocess.run(["bash", "-n", str(tree / "gpu_entry.sh")]).returncode == 0
         assert (tree / "gpu_entry.sh").read_text().count("BLACKBOX_FORBID=") == 1
-    from forgekernel.loop.cli import fresh_start_contamination
+    from rsi_kernel_tune.loop.cli import fresh_start_contamination
     assert fresh_start_contamination(card, card / "milestone.md", card / "student" / "status.jsonl",
                                      card / "meta_status.jsonl", ref, evidence_dir=card / "evidence") == []
 
@@ -114,8 +114,8 @@ def test_recon_tree_holds_the_sources_and_a_copy_of_the_judge(base: Path, sol_ro
 def test_recon_tree_refuses_every_task_where_the_clock_lock_does_not_hold(
         base: Path, sol_root: Path, tmp_path: Path) -> None:
     """The recon tree inherits the card's clock lock and its refusal: its build / binref /
-    ncu / cmd jobs on a node at SM 1155 MHz print the line ForgeKernel withholds."""
-    from forgekernel.submit.jobs import clock_lock_refusal
+    ncu / cmd jobs on a node at SM 1155 MHz print the line RSI-Kernel-Tune withholds."""
+    from rsi_kernel_tune.submit.jobs import clock_lock_refusal
     card, ref, _ = new_card(base, sol_root, tmp_path)
     smi = tmp_path / "fake-smi"
     smi.write_text('#!/bin/bash\ncase "$*" in *clocks.current.graphics*) echo "1155, 3996";; '
@@ -343,7 +343,7 @@ def test_the_loops_own_jobs_pass_both_guards_with_notes_seeded_as_the_loop_seeds
     tree), the recon toolkit and the shared blackbox-guard.sh into the recon tree. Every job the
     loop itself sends must pass; a probe that reaches for the reference must not."""
     from types import SimpleNamespace
-    from forgekernel.loop import driver
+    from rsi_kernel_tune.loop import driver
     card, ref, module = new_card(base, sol_root, tmp_path)
     stub = SimpleNamespace(commit=lambda *a, **k: None)
     driver._seed_pricing_toolkits(card, stub)

@@ -25,9 +25,9 @@ arch     = "sm103"          # the development GPU; switch to "sm100" for the tar
 ```
 ```bash
 # Back to the target, without running anything: does the file compile for CC 10.0?
-python -m forgekernel.triton_check kernel.py --target 10.0
+python -m rsi_kernel_tune.triton_check kernel.py --target 10.0
 # ... and for the development GPU, when the question is "does it run here at all":
-python -m forgekernel.triton_check kernel.py --target 10.3
+python -m rsi_kernel_tune.triton_check kernel.py --target 10.3
 ```
 - The same source must lower for both; that is what "not arch-pinned" buys.
 - The kernel's launch parameters may be chosen from queried device properties (SM count), never from

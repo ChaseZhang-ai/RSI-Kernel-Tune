@@ -3,7 +3,7 @@
 # turn may run. task.toml writes only the keys it changes; [agent.teacher] / [agent.student]
 # override one agent, at either layer. Absent `effort` leaves the choice to the CLI.
 #
-# `backend` names an agent CLI: one module each under src/forgekernel/agentbackends/
+# `backend` names an agent CLI: one module each under src/rsi_kernel_tune/agentbackends/
 # (docs/agent-backends.md). The two that ship:
 #
 #   claude   both roles. The agent policy (offline student, no ssh, no reference reads) is
@@ -29,7 +29,7 @@ timeout_s = 7200            # one student turn is one iteration
 # and reused (a run hands it the local ones in prior/ and lists the rest in prior.md). A
 # task that wants a self-contained student sets [agent] online = false. Either way the GPU
 # machine is reachable only through the loop's eval commands (ssh and
-# `python -m forgekernel.submit` stay denied), and the teacher is online as it always was.
+# `python -m rsi_kernel_tune.submit` stay denied), and the teacher is online as it always was.
 online    = true
 
 [agent.teacher]

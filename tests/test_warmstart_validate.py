@@ -1,4 +1,4 @@
-"""``--init-kernel``'s static check (forgekernel.warmstart.validate): a pure function over
+"""``--init-kernel``'s static check (rsi_kernel_tune.warmstart.validate): a pure function over
 source text -- no torch, no GPU, nothing executed.
 
 The card calls ``run`` by position with the definition's inputs and (DPS) its pre-allocated
@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from forgekernel.warmstart import validate as v
+from rsi_kernel_tune.warmstart import validate as v
 
 DEFN = {"inputs": {"a": {"shape": ["n"], "dtype": "float32"},
                    "b": {"shape": ["n"], "dtype": "float32"}},

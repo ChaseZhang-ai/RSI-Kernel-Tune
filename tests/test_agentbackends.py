@@ -22,9 +22,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import agentbackends, agents, provider
-from forgekernel import task as task_mod
-from forgekernel.task import AgentSpec, TaskError, load_task
+from rsi_kernel_tune import agentbackends, agents, provider
+from rsi_kernel_tune import task as task_mod
+from rsi_kernel_tune.task import AgentSpec, TaskError, load_task
 from test_task import MINIMAL, _kb, _task
 
 ROOT = Path(__file__).resolve().parents[1]

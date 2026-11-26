@@ -7,7 +7,7 @@
 >
 > **Normative source**: how a milestone is written is governed by `docs/milestones-template.md`
 > (the milestones meta-template). **Read that template first, then this file.** This file projects
-> the template's A.1–A.7 onto ForgeKernel's machine-read skeleton (§9) and adds the mechanisms
+> the template's A.1–A.7 onto RSI-Kernel-Tune's machine-read skeleton (§9) and adds the mechanisms
 > specific to this repo that the template lacks (decision five-tuple / DAG prefix reuse /
 > trajectory harvest / L0 disclosure boundary). Where the two conflict, this file wins.
 
@@ -649,7 +649,7 @@ Every `operators/<op>/milestone.md` should contain the following sections (fixed
   twice the reference — compliant line by line, over budget in total; this number is what catches
   the total. It is a sass-derived static quantity and adds no NCU line.
 
-**What the machine check rejects** (`src/forgekernel/milestone.py`): a missing section, a §3
+**What the machine check rejects** (`src/rsi_kernel_tune/milestone.py`): a missing section, a §3
 decision missing its five-tuple, no `D<x>.<y>`, no `[MEASURED]`/`[ESTIMATE]` mark, §3 without a
 "mechanism-verification line", a `[SOURCE: RS]` row missing the `[VERIFY: sass-derived]` line or the
 paired spill line, an RS ruling that exists only in prose without `[SOURCE:]` tags,

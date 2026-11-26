@@ -1,5 +1,5 @@
 """forge init --sealed-ref: a Python solution (one file or many) as a leaderboard card's
-sealed in-job SOURCE reference (forgekernel.sealref) — the card, the recon tree, the key,
+sealed in-job SOURCE reference (rsi_kernel_tune.sealref) — the card, the recon tree, the key,
 the fence, the guards."""
 
 from __future__ import annotations
@@ -16,12 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import leaderboard as lb
-from forgekernel import sealref
-from forgekernel.scaffold import main as scaffold_main
+from rsi_kernel_tune import leaderboard as lb
+from rsi_kernel_tune import sealref
+from rsi_kernel_tune.scaffold import main as scaffold_main
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE_EVAL = REPO_ROOT / "src" / "forgekernel" / "card_template" / "eval"
+TEMPLATE_EVAL = REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template" / "eval"
 DEF = {
     "name": "001_rms", "description": "rmsnorm",
     "axes": {"batch_size": {"type": "var"}, "hidden_size": {"type": "const", "value": 64}},
@@ -67,7 +67,7 @@ def sol_root(tmp_path: Path) -> Path:
 @pytest.fixture
 def base(tmp_path: Path) -> Path:
     shutil.copytree(REPO_ROOT / "meta", tmp_path / "repo" / "meta")
-    shutil.copytree(REPO_ROOT / "src" / "forgekernel" / "card_template", tmp_path / "repo" / "src" / "forgekernel" / "card_template")
+    shutil.copytree(REPO_ROOT / "src" / "rsi_kernel_tune" / "card_template", tmp_path / "repo" / "src" / "rsi_kernel_tune" / "card_template")
     return tmp_path / "repo"
 
 
@@ -146,7 +146,7 @@ def test_the_key_is_gitignored_in_both_trees_and_the_payload_committed(
                                check=True).stdout.split()
         assert "ref_bin/ref_payload.bin" in files and "submit.local.toml" not in files
         assert (tree / "submit.local.toml").is_file()
-    from forgekernel.submit.config import load_config
+    from rsi_kernel_tune.submit.config import load_config
     for name in ("rms", "_rmsref"):
         (base / "operators" / name / "submit.toml").write_text(
             (base / "operators" / name / "submit.toml").read_text().replace(
@@ -155,7 +155,7 @@ def test_the_key_is_gitignored_in_both_trees_and_the_payload_committed(
 
 
 def test_the_agent_policy_denies_both_keys(base: Path, sol_root: Path, tmp_path: Path) -> None:
-    from forgekernel.loop import agent_policy
+    from rsi_kernel_tune.loop import agent_policy
     card, ref, _ = new_card(base, sol_root, tmp_path)
     secrets = agent_policy.secret_files_for(base, "rms", [ref])
     assert card / "submit.local.toml" in secrets and ref / "submit.local.toml" in secrets
@@ -172,7 +172,7 @@ def test_recon_tree_gpu_entry_and_fresh_start(base: Path, sol_root: Path, tmp_pa
     for task in ("check)", "crosscheck)", "bench|ref)", "ncu)", "sealref)", "cmd)"):
         assert f"    {task}" in entry
     assert "binref" not in entry.split('case "$TASK" in')[-1]
-    from forgekernel.loop.cli import fresh_start_contamination
+    from rsi_kernel_tune.loop.cli import fresh_start_contamination
     assert fresh_start_contamination(card, card / "milestone.md", card / "student" / "status.jsonl",
                                      card / "meta_status.jsonl", ref, evidence_dir=card / "evidence") == []
 
@@ -215,8 +215,8 @@ def test_the_loops_own_jobs_pass_both_guards_with_notes_seeded_as_the_loop_seeds
     recon tree, the recon toolkit and blackbox-guard.sh into the recon tree; every job
     the loop itself sends must pass, a probe reaching for the reference must not."""
     from types import SimpleNamespace
-    from forgekernel import binref
-    from forgekernel.loop import driver
+    from rsi_kernel_tune import binref
+    from rsi_kernel_tune.loop import driver
     card, ref, module = new_card(base, sol_root, tmp_path)
     stub = SimpleNamespace(commit=lambda *a, **k: None)
     driver._seed_pricing_toolkits(card, stub)
@@ -379,7 +379,7 @@ def test_the_fence(card_lb, src, fenced) -> None:
 
 def test_the_timeline_probes_preamble_passes_the_sealed_fence(card_lb) -> None:
     lbm, problem, card, module = card_lb
-    from forgekernel.skills import timeline_probe
+    from rsi_kernel_tune.skills import timeline_probe
     pre = timeline_probe.stamped_preamble()
     (card / "kernel.py").write_text(pre + "\n\ndef run(*a):\n    pass\n")
     assert lbm.kernel_fence(problem) is None

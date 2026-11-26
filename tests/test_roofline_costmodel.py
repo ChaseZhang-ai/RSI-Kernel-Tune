@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel.roofline import costmodel
+from rsi_kernel_tune.roofline import costmodel
 
 ROOT = Path(__file__).resolve().parents[1]
 

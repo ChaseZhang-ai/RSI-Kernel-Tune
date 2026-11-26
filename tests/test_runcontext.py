@@ -1,6 +1,6 @@
 """Run context files: the four files a run can hand its agents reach every prompt.
 
-What is pinned here: ``forgekernel.runcontext`` (the four names and their variables, read from
+What is pinned here: ``rsi_kernel_tune.runcontext`` (the four names and their variables, read from
 the environment as absolute paths, ``(none)`` when a run sets none), the section each prompt
 ends with, and -- end to end, through the driver's own entry points -- that a prompt sent to an
 agent names the files the run set, in both language modes.
@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import runcontext
-from forgekernel.loop import driver
-from forgekernel.runcontext import (CONTEXT_FILES, NONE_BINDING, binding, env_for, path_for,
+from rsi_kernel_tune import runcontext
+from rsi_kernel_tune.loop import driver
+from rsi_kernel_tune.runcontext import (CONTEXT_FILES, NONE_BINDING, binding, env_for, path_for,
                                     paths)
 from test_loop_driver import EVAL, NCU, REC, REPO, FakeBackend, _E2EFake, _MILESTONE, _ctx, \
     _patching
@@ -55,7 +55,7 @@ def _section(text: str, heading: str) -> str:
     return text[text.index(heading):]
 
 
-# --- forgekernel.runcontext ----------------------------------------------------------------
+# --- rsi_kernel_tune.runcontext ----------------------------------------------------------------
 
 
 def test_the_four_files_and_their_variables():

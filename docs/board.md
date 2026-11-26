@@ -4,11 +4,11 @@
 结果导回 campaign 的台账。**它只做网页界面能做的同样操作，并在客户端遵守榜单限速**；令牌只从
 环境变量 `SOL_EXECBENCH_TOKEN` 读，任何输出、日志、异常里都不会出现令牌。
 
-实现：`src/forgekernel/ext/board.py`（命令）＋ `src/forgekernel/board/{client,policy,validate,importer}.py`。
+实现：`src/rsi_kernel_tune/ext/board.py`（命令）＋ `src/rsi_kernel_tune/board/{client,policy,validate,importer}.py`。
 只用标准库（`urllib`），不引入 `requests`。
 
-> 工作区提示：本分支的基线提交 `b2c8ae8` 里 `forgekernel/ext/` 的自动发现（第 0 步扩展点）尚未落地，
-> 所以当前在 worktree 里用 `python -m forgekernel.ext.board …`（或 `PYTHONPATH=src` 后同样）
+> 工作区提示：本分支的基线提交 `b2c8ae8` 里 `rsi_kernel_tune/ext/` 的自动发现（第 0 步扩展点）尚未落地，
+> 所以当前在 worktree 里用 `python -m rsi_kernel_tune.ext.board …`（或 `PYTHONPATH=src` 后同样）
 > 运行；集成第 0 步后 `forge board …` 直接可用。两种入口是同一个 `main()`。
 
 ---
@@ -148,7 +148,7 @@ blog_submission-guide.json`），以及 `GET /api/me` 的 `submission_access`。
 
 ---
 
-## 5. 上传前自检（`forgekernel/board/validate.py`）
+## 5. 上传前自检（`rsi_kernel_tune/board/validate.py`）
 
 单题（`validate_kernel_file`）：`.py` 扩展名；≤ 10 MB；UTF-8；能 `ast.parse`；顶层有 `def run(...)`
 （`async def run` 报错——评测器同步调用；`run = …` 赋值给警告）；非空。
@@ -182,7 +182,7 @@ blog_submission-guide.json`），以及 `GET /api/me` 的 `submission_access`。
   "evaluation_stack_version"}`。
   `local_s` 取台账里同题目名已有本地分数的最好值（字段 `local_s` / `mean_s` / `est_s` / 非 board 行的 `s`）；
   `ratio = sol_score / local_s`。按 `submission_id` 去重，可重复运行。
-* 若 `forgekernel.campaign.sync` 暴露 `record_board_readback(campaign_dir, records)`，`import` 改为调用它，
+* 若 `rsi_kernel_tune.campaign.sync` 暴露 `record_board_readback(campaign_dir, records)`，`import` 改为调用它，
   campaign 自己落账（board 不写文件）。接口约定写在 `reports/board-report.md` 的集成备注里。
 * 只导入 `status == "COMPLETED"` 的单题提交；赛道父提交与其子提交跳过（赛道分由 campaign 从子提交算）。
 

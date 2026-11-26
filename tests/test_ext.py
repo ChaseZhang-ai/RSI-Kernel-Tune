@@ -1,4 +1,4 @@
-"""forgekernel.ext: command extensions -- found, dispatched, kept apart, and reserved.
+"""rsi_kernel_tune.ext: command extensions -- found, dispatched, kept apart, and reserved.
 
 The fake extensions live in ``tmp_path`` and are added to the package's path; the real
 ones are the first wave's own modules (one per task; ``FIRST_WAVE`` below).
@@ -12,11 +12,11 @@ from pathlib import Path
 
 import pytest
 
-import forgekernel.loop.cli
-import forgekernel.submit.cli
-from forgekernel import __main__ as forge_main
-from forgekernel import ext, launch
-from forgekernel.task import TaskError, load_task
+import rsi_kernel_tune.loop.cli
+import rsi_kernel_tune.submit.cli
+from rsi_kernel_tune import __main__ as forge_main
+from rsi_kernel_tune import ext, launch
+from rsi_kernel_tune.task import TaskError, load_task
 from test_task import MINIMAL, _kb, _task
 
 REPO = Path(__file__).resolve().parents[1]
@@ -42,9 +42,9 @@ def _plug(monkeypatch, tmp_path, **modules) -> None:
 @pytest.fixture(autouse=True)
 def _no_fake_extension_stays_imported():
     """A module imported by one test must not answer for another."""
-    before = {k for k in sys.modules if k.startswith("forgekernel.ext.")}
+    before = {k for k in sys.modules if k.startswith("rsi_kernel_tune.ext.")}
     yield
-    for name in [k for k in sys.modules if k.startswith("forgekernel.ext.") and k not in before]:
+    for name in [k for k in sys.modules if k.startswith("rsi_kernel_tune.ext.") and k not in before]:
         del sys.modules[name]
 
 
@@ -65,7 +65,7 @@ FIRST_WAVE = PLANNED          # the name the first wave's tests know
 
 def test_the_package_ships_only_first_wave_commands():
     found = ext.commands()
-    shipped = {p.stem for p in (REPO / "src" / "forgekernel" / "ext").iterdir()
+    shipped = {p.stem for p in (REPO / "src" / "rsi_kernel_tune" / "ext").iterdir()
                if p.suffix == ".py" and not p.name.startswith("_")}
     assert set(found) == shipped          # discovery finds exactly the modules that are there
     assert set(found) <= PLANNED
@@ -80,9 +80,9 @@ def test_a_module_in_the_directory_is_a_command_before_anything_imports_it(tmp_p
     found = ext.commands()
     # `_helper` is a helper, not a command; the shipped modules stay listed too
     assert [n for n in found if n in {"hello", "zeta", "_helper"}] == ["hello", "zeta"]
-    assert found["hello"] == ext.Extension("hello", "forgekernel.ext.hello")
+    assert found["hello"] == ext.Extension("hello", "rsi_kernel_tune.ext.hello")
     assert found["hello"].module == found["hello"].load().__name__
-    assert "forgekernel.ext._helper" not in sys.modules
+    assert "rsi_kernel_tune.ext._helper" not in sys.modules
     assert ext.command_names() == frozenset(found)
     # listed again on each call: a module added later is a command the moment it is there
     _plug(monkeypatch, tmp_path, late=_with("late"))
@@ -107,10 +107,10 @@ def test_what_cannot_be_listed_is_no_command_and_breaks_nothing_that_asks(tmp_pa
 
 def test_forge_runs_the_command_with_what_follows_it(tmp_path, monkeypatch, capsys):
     _plug(monkeypatch, tmp_path, hello=HELLO)
-    assert "forgekernel.ext.hello" not in sys.modules
+    assert "rsi_kernel_tune.ext.hello" not in sys.modules
     assert forge_main.main(["hello", "a", "b"]) == 7
     assert capsys.readouterr().out == "hello a b\n"
-    assert sys.modules["forgekernel.ext.hello"].COMMAND == "hello"     # imported by the call
+    assert sys.modules["rsi_kernel_tune.ext.hello"].COMMAND == "hello"     # imported by the call
     assert forge_main.main(["hello"]) == 7 and capsys.readouterr().out == "hello\n"
 
 
@@ -133,7 +133,7 @@ def test_the_usage_text_names_the_commands_without_importing_them(tmp_path, monk
     out = capsys.readouterr().out
     # the built-in usage as it was, then one line per extension command, in name order
     assert "forge new tasks/<op>" in out and "forge run .artifacts/<op>_<id>" in out
-    tail = out.split("Extension commands (src/forgekernel/ext/, one module each):", 1)[1]
+    tail = out.split("Extension commands (src/rsi_kernel_tune/ext/, one module each):", 1)[1]
     lines = [line.split()[1] for line in tail.splitlines() if line.startswith("  forge ")]
     assert lines == sorted(lines)                     # one line per command, by name
     assert {"hello", "zeta"} <= set(lines)
@@ -141,7 +141,7 @@ def test_the_usage_text_names_the_commands_without_importing_them(tmp_path, monk
     for name in ("hello", "zeta"):
         assert f"(`forge {name} --help`)" in out
     assert out == forge_main._usage() + "\n"
-    assert "forgekernel.ext.hello" not in sys.modules and "forgekernel.ext.zeta" not in sys.modules
+    assert "rsi_kernel_tune.ext.hello" not in sys.modules and "rsi_kernel_tune.ext.zeta" not in sys.modules
     for word in ([], ["help"], ["-h"], ["--help"]):
         assert forge_main.main(word) == 0
         assert "forge hello ..." in capsys.readouterr().out
@@ -162,15 +162,15 @@ def test_a_broken_extension_breaks_nothing_else_and_says_what_is_wrong_with_it(
     capsys.readouterr()
     for name, why in (("broken", "ModuleNotFoundError: No module named 'no_such_module_for_a_test'"),
                       ("syntax", "SyntaxError: "),
-                      ("misnamed", "TypeError: COMMAND is 'other' in forgekernel.ext.misnamed"),
-                      ("silent", "AttributeError: module 'forgekernel.ext.silent' has no attribute 'main'"),
+                      ("misnamed", "TypeError: COMMAND is 'other' in rsi_kernel_tune.ext.misnamed"),
+                      ("silent", "AttributeError: module 'rsi_kernel_tune.ext.silent' has no attribute 'main'"),
                       ("stiff", "TypeError: main is not callable")):
         assert forge_main.main([name, "arg"]) == 2, name
         err = capsys.readouterr()
         assert err.err.startswith(f"[forge] extension command '{name}' failed to load: {why}"), name
         assert err.err.count("\n") == 1 and err.out == ""
     assert forge_main.main(["hello"]) == 7                    # still fine after the failures
-    assert "forgekernel.ext.broken" not in sys.modules        # nothing half-imported is left behind
+    assert "rsi_kernel_tune.ext.broken" not in sys.modules        # nothing half-imported is left behind
 
 
 def test_a_built_in_command_wins_over_an_extension_of_the_same_name(tmp_path, monkeypatch, capsys):
@@ -188,16 +188,16 @@ def test_a_built_in_command_wins_over_an_extension_of_the_same_name(tmp_path, mo
 def test_the_operators_own_commands_win_as_the_second_word(tmp_path, monkeypatch):
     _plug(monkeypatch, tmp_path, hello=HELLO)
     seen: list = []
-    monkeypatch.setattr(forgekernel.loop.cli, "main", lambda argv: seen.append(argv) or 3)
+    monkeypatch.setattr(rsi_kernel_tune.loop.cli, "main", lambda argv: seen.append(argv) or 3)
     assert forge_main.main(["hello", "loop", "--x"]) == 3     # `forge <op> loop`: a built-in
     assert seen == [["hello", "--x"]]                         # handed on without the word
-    assert "forgekernel.ext.hello" not in sys.modules
+    assert "rsi_kernel_tune.ext.hello" not in sys.modules
 
 
 def test_an_unknown_first_word_still_goes_to_the_operator_commands(tmp_path, monkeypatch):
     _plug(monkeypatch, tmp_path, hello=HELLO)
     seen: list = []
-    monkeypatch.setattr(forgekernel.submit.cli, "main", lambda argv: seen.append(argv) or 5)
+    monkeypatch.setattr(rsi_kernel_tune.submit.cli, "main", lambda argv: seen.append(argv) or 5)
     assert forge_main.main(["someop", "submit", "--mode", "all"]) == 5
     assert seen == [["someop", "submit", "--mode", "all"]]
 
@@ -210,8 +210,8 @@ def test_a_task_may_not_take_an_extensions_name(tmp_path, monkeypatch):
     with pytest.raises(TaskError) as e:
         load_task(_task(tmp_path, MINIMAL, name="hello"), kb_root=_kb(tmp_path))
     assert e.value.problems == [
-        "'hello' is a forge extension command (src/forgekernel/ext/hello.py); name the task otherwise"]
-    assert "forgekernel.ext.hello" not in sys.modules       # refused by name alone
+        "'hello' is a forge extension command (src/rsi_kernel_tune/ext/hello.py); name the task otherwise"]
+    assert "rsi_kernel_tune.ext.hello" not in sys.modules       # refused by name alone
     # a task may still be named anything else, and forge's own commands are refused as before
     assert load_task(_task(tmp_path, MINIMAL, name="hell"), kb_root=_kb(tmp_path)).name == "hell"
     with pytest.raises(TaskError, match="one of forge's own commands"):

@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from forgekernel import skills
-from forgekernel.roofline import analyze, costmodel
-from forgekernel.skills import roofline_tools as rt
+from rsi_kernel_tune import skills
+from rsi_kernel_tune.roofline import analyze, costmodel
+from rsi_kernel_tune.skills import roofline_tools as rt
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / "skills" / "roofline" / "roofline_tools.py"
@@ -52,11 +52,11 @@ def test_the_skill_is_registered_importable_and_mirrored(tmp_path):
     assert (tmp_path / ".claude" / "skills" / "roofline" / "roofline_tools.py").is_file()
 
 
-def test_the_tool_imports_nothing_from_forgekernel_at_module_level():
+def test_the_tool_imports_nothing_from_rsi_kernel_tune_at_module_level():
     text = TOOL.read_text(encoding="utf-8")
     body = "\n".join(line for line in text.splitlines()
                      if line.startswith(("import ", "from ")))
-    assert "forgekernel" not in body
+    assert "rsi_kernel_tune" not in body
     assert "torch" not in body and "triton" not in body
 
 
@@ -198,7 +198,7 @@ def test_suggest_returns_one_row_or_refuses_an_unknown_signal():
 
 def calibration_doc():
     return {
-        "schema": "forgekernel.calibration/1", "gpu": "NVIDIA B300", "arch": "sm_103",
+        "schema": "rsi_kernel_tune.calibration/1", "gpu": "NVIDIA B300", "arch": "sm_103",
         "sm_count": 160, "ts": "2026-11-24T10:00:00+00:00", "delivery": "ssh dev",
         "probes": {
             "hbm": {"probe": "hbm", "entries": {

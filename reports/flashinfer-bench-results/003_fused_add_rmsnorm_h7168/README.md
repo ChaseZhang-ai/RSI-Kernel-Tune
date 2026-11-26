@@ -20,3 +20,22 @@ The exact DPS submission passed all eight official workloads with numerical chec
 | 539 | `38786469-9a12-4525-b284-865d5a37f856` | PASSED | 7.5680 |
 | 11,949 | `ac1479c4-cfb0-4f86-a92d-47e7ad8e21cb` | PASSED | 79.8720 |
 | 14,521 | `d9c27791-1f27-4feb-adb6-aa8a8c20556f` | PASSED | 95.3755 |
+
+## Layout and cache-policy screen · 2026-11-26 18:37–18:43 UTC
+
+Each screen paired its variants with the direct Triton control on physical GPU 3 at 1500/3996 MHz. The evaluator generated inputs with seed 200 and checked numerical tolerance and input preservation. Every measurement used cloned inputs, preallocated outputs, 10 warmups, 50 cold-L2 iterations and CUPTI first-to-last kernel timing. [Triton screen](gb300-triton-screen.jsonl) · [Native screen](gb300-native-screen.jsonl)
+
+| Batch | Padded Triton (µs) | Exact 256-thread retain (µs) | Exact 256-thread reload (µs) | Native leader in screen (µs) |
+|---:|---:|---:|---:|---|
+| 1 | 4.512 | 6.752 | 6.784 | 3.200, 224 threads and seven output stripes |
+| 7 | 4.192 | 6.304 | 6.272 | 3.040, 224 threads and seven output stripes |
+| 18 | 4.144 | 6.048 | 5.984 | 3.152, 448 threads and two output stripes |
+| 32 | 4.256 | 6.016 | 6.016 | 3.296, 448 threads and two or four output stripes |
+| 64 | 4.352 | 6.400 | 6.400 | 3.520, 448 threads and two output stripes |
+| 539 | 7.584 | 8.576 | — | 7.264, 224 threads and one whole row |
+| 11,949 | 79.776 | 79.552 | — | 76.656, 224 threads and one whole row |
+| 14,521 | 95.232 | 94.832 | — | 91.856, 224 threads and one whole row with a non-allocating store |
+
+One native whole-row CTA used 32-byte loads and stores per thread and retained the FP32 sums. At B=539, 11,949, and 14,521, changes in the L1 load and store policies were within 0.3 µs of the ordinary store with L1 evict-last loads. At the two largest sizes, packing two rows per CTA or keeping 2, 4 or 8 resident CTAs per 148-SM grid-sizing proxy was slower. The physical count was 152 SMs.
+
+All native trials passed. The Triton cache sweep had 24 build failures because PTXAS rejects the .cg load modifier paired with Triton's .evict_first policy. The measured large-workload cache and residency comparisons use the valid CUDA variants. Successful records contained all 50 CUPTI samples. [CompoundingKernel source, which inspired the replicated reduction and wide memory operations](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/main/kernels/FlashInfer/003_fused_add_rmsnorm_h7168)

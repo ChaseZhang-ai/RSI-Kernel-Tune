@@ -1,0 +1,58 @@
+{
+  "profiler": "NVIDIA Nsight Compute",
+  "cache_control": "all",
+  "clock_control": "none",
+  "gpu_clock_record": "profile-gpu.json",
+  "units": {
+    "dram__bytes_read.sum": "byte",
+    "lts__t_sectors_op_read.sum": "sector",
+    "sm__warps_active.avg.pct_of_peak_sustained_active": "%"
+  },
+  "launches": [
+    {
+      "implementation": "one_cta_64x64",
+      "M": 176,
+      "grid": "(152, 1, 1)",
+      "block": "(256, 1, 1)",
+      "metrics": {
+        "dram__bytes_read.sum": 178374144.0,
+        "lts__t_sectors_op_read.sum": 21721360.0,
+        "sm__warps_active.avg.pct_of_peak_sustained_active": 12.46
+      }
+    },
+    {
+      "implementation": "multicast_128x64",
+      "M": 176,
+      "grid": "(152, 1, 1)",
+      "block": "(256, 1, 1)",
+      "metrics": {
+        "dram__bytes_read.sum": 207358464.0,
+        "lts__t_sectors_op_read.sum": 22410536.0,
+        "sm__warps_active.avg.pct_of_peak_sustained_active": 12.48
+      }
+    },
+    {
+      "implementation": "first_tma",
+      "M": 8192,
+      "grid": "(152, 1, 1)",
+      "block": "(256, 1, 1)",
+      "metrics": {
+        "dram__bytes_read.sum": 1066071040.0,
+        "lts__t_sectors_op_read.sum": 314684380.0,
+        "sm__warps_active.avg.pct_of_peak_sustained_active": 12.5
+      }
+    },
+    {
+      "implementation": "refined",
+      "M": 8192,
+      "grid": "(152, 1, 1)",
+      "block": "(256, 1, 1)",
+      "metrics": {
+        "dram__bytes_read.sum": 1144736000.0,
+        "lts__t_sectors_op_read.sum": 199517249.0,
+        "sm__warps_active.avg.pct_of_peak_sustained_active": 12.5
+      }
+    }
+  ],
+  "profiler_version": "2026.1.1.0"
+}

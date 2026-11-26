@@ -23,3 +23,9 @@ The kernel uses the resident tile loop and grouped rasterization from the reposi
 ## Refined candidate
 
 The exact archive candidate passed all **43/43** official evaluator workloads and CUPTI timing at **50.653 µs** geometric mean. The 972, 2,053, 2,379 and 8,192 row workloads measured 98.082, 182.774, 185.781 and 613.233 µs. The evaluator ran on physical GB300 0 with 152 SMs, CUDA capability 10.3 and 1500/3996 MHz sampled clocks. The DPS solution bundle embeds the archived Python source verbatim. [Official refined workload traces](refined-gb300.jsonl) · [Device attributes](refined-evaluator-device.json) · [Clock record](refined-gpu.json)
+
+## Operand traffic and occupancy
+
+A cold-cache Nsight Compute replay measured 314.7 million L2 read sectors for the first TMA pipeline at M=8192 and 199.5 million for the refined pipeline, a 36.6% decrease. DRAM reads increased from 1.066 GB to 1.145 GB. Both used a 152-CTA launch and averaged 12.50% of peak active warps per SM, consistent with one resident 256-thread CTA per SM for these shared-memory allocations. At M=176 the tested multicast schedule read 207.4 MB from DRAM compared with 178.4 MB for the one-CTA schedule. The diagnostic ran on physical GB300 2 at 1500/3996 MHz. The replay counters describe total kernel traffic. Latency comes from the dedicated CUPTI runs. [Nsight Compute counters](profile-reloads.json) · [GPU record](profile-gpu.json)
+
+The local DPS bundle is `.artifacts/gemm008/008_gemm_n4096_k14336/refined/`. It was materialized from the staged Parquet with all official UUIDs and no external trace tensors. The source SHA-256 is `880169a983300e288e9a08676e9e6afbc56b36afbce2465e954ecb48e44c99dc`. From the bundle directory, under the GB300 lock with its UUID selected, the replay command is `sol-execbench . --solution solution.json --output results.jsonl`.

@@ -46,4 +46,8 @@ All official inputs are generated from the staged Parquet workloads. The evaluat
 - For batches 11,949 and 14,521, the 7 × 1024 retained Triton path with 4 warps and `.cg` loads and `.cs` stores ran in 54.800 and 64.864 µs. With default cache modifiers, retaining activations took 54.944 and 65.408 µs. Reloading them took 59.872 and 70.256 µs. The fastest coalesced native reload path ran in 54.240 and 64.416 µs with 224 threads. Persistent CTA caps of 4, 8, and 12 times the 148-SM proxy were slower on both large cases.
 - The raw results record each trial status and latency. [Triton sweep](sweep.csv) · [Native sweep](native-sweep.csv)
 
-The public B200 leader on v1.1 was June at 0.937995 SOL when checked at 2026-11-26 18:37 UTC. [Public B200 board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/235/B200)
+The public B200 leader on v1.1 was June at 0.937995 SOL when checked at 2026-11-26 18:48:08 UTC. [Public B200 board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/235/B200)
+
+## Bounded follow-up sweep
+
+The final sweep compared Triton v1 with 32-warp CTAs, a different address wrap for replicated reductions, reverse row order, and CTAs handling two or four rows. All 118 benchmark rows passed. Triton v1 was fastest on seven workloads. The best alternate at batch 11,949 gained 0.032 µs in one trial and was 0.560 µs slower at batch 14,521. The archive entry retains v1. [Follow-up sweep](round2.csv) · [Follow-up device](round2-device.json)

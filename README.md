@@ -52,7 +52,7 @@ Contributors should push their **best candidate so far** to `flashinfer-bench/<o
 | [009_gemm_n5120_k2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/218/B200) | 1.000000 | — | — | — | Pending | — |
 | [010_gemm_n6144_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/219/B200) | 1.000000 | — | — | — | Pending | — |
 | [011_gemm_n28672_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/220/B200) | 1.000000 | — | — | — | Pending | — |
-| [012_gqa_paged_decode_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/221/B200) | 0.992633 | — | — | — | Pending | — |
+| [012_gqa_paged_decode_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/221/B200) | 0.992633 | — | — | — | GB300 only · 48/48 CLI pass · 14.815 µs geomean · [evidence](reports/flashinfer-bench-results/012_gqa_paged_decode_h32_kv4_d128_ps1/README.md) | [Provisional](flashinfer-bench/012_gqa_paged_decode_h32_kv4_d128_ps1/submission.py) |
 | [013_gqa_paged_decode_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/222/B200) | 0.979799 | — | — | — | Pending | — |
 | [014_gqa_paged_prefill_causal_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/223/B200) | 0.995919 | — | — | — | Pending | — |
 | [015_gqa_paged_prefill_causal_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/224/B200) | 0.996676 | — | — | — | Pending | — |

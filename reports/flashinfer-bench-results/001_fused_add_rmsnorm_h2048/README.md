@@ -19,6 +19,20 @@ The selected archive entry passed 7/7 workloads and timed CUPTI records in the o
 | 12383 | `5ede385e-9b04-4b49-903f-375a5180d815` | PASSED | 22.337 | 22.336 | 22.817 |
 | 64 | `1602b8db-16e2-4d3f-b63d-68d4ee32e2cc` | PASSED | 2.705 | 2.688 | 2.752 |
 
+### Re-pair against the original direct-launch baseline
+
+The selected artifact was **1.206×** faster by geometric mean on physical GB300 GPU 1, `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, with 152 SMs at 1500/3996 MHz. Both implementations passed the seven paired correctness and timing checks. Timing used the same 10 warmups, 50 CUPTI iterations and cold-L2 setup.
+
+| Batch | Direct baseline (µs) | Selected candidate (µs) | Status |
+|---:|---:|---:|---|
+| 1 | 3.648 | 2.720 | Passed |
+| 6 | 3.296 | 2.528 | Passed |
+| 34 | 3.168 | 2.656 | Passed |
+| 64 | 3.232 | 2.752 | Passed |
+| 79 | 3.200 | 2.816 | Passed |
+| 12383 | 25.984 | 22.225 | Passed |
+| 16254 | 32.752 | 28.736 | Passed |
+
 ## 2026-11-26 17:42 UTC · Packed CUDA candidate on GB300
 
 The exact standalone Python file passed all seven workloads, including CUPTI timing, via the open SOL-ExecBench CLI. The candidate loads and stores 32-byte BF16 vectors, adds in FP32, uses packed FP32 square accumulation, and rounds after the final multiply. Small batches replicate the reduction across CTAs with disjoint stores. The large path reuses the loaded weight for two rows per CTA. [Archive entry at this trial](https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/7c4f84be36cd20e7645b5a26436361447d8c4a15/flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)

@@ -35,36 +35,38 @@ this project is part of the **Forge family**, together with
 
 Contributors should push their **best candidate so far** to `flashinfer-bench/<operator>/submission.py` and sanitized benchmark evidence to `reports/flashinfer-bench-results/<operator>/`. The collection coordinator can then archive the `flashinfer-bench/` tree for the final bulk submission. [Submission format](https://research.nvidia.com/benchmarks/sol-execbench/blog/submission-guide)
 
-**Push an update when each benchmark result is ready.** Update only your operator’s row in this README section. Include the device, outcome, passed/total workloads, and submission ID or evidence link. Keep the best complete B200 result in the best-score column. Use the latest-run column for GB300 results, pending submissions, and build, numerical or timing failures. A dash means no verified B200 result has been entered for this campaign. Use a branch and PR if you lack direct write access.
+**Push an update when each benchmark result is ready.** Update only your operator’s row in this README section. Include the device, outcome, passed/total workloads, and submission ID or evidence link. For your best complete B200 result, refresh the public operator board and record the leader’s SOL score, your candidate’s current public rank, the signed gap, and the UTC check time. Calculate the gap as leader SOL minus candidate SOL. A positive gap means the candidate is behind. Use `Unranked (private)` for a private candidate. For GB300, pending, or invalid runs, use the latest-run column and preserve the previous best. Use a branch and PR if you lack direct write access.
 
-| Operator | Public B200 best | Campaign best B200 SOL | Latest run and evidence | Best candidate |
-|---|---:|---:|---|---|
-| [001_fused_add_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/210/B200) | 0.721444 | — | Pending | — |
-| [002_fused_add_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/211/B200) | 0.975342 | — | Pending | — |
-| [003_fused_add_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/212/B200) | 0.863498 | — | Pending | — |
-| [004_gemm_n128_k2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/213/B200) | 0.894803 | — | Pending | — |
-| [005_gemm_n256_k7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/214/B200) | 0.915728 | — | Pending | — |
-| [006_gemm_n2048_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/215/B200) | 1.000000 | — | Pending | — |
-| [007_gemm_n4096_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/216/B200) | 1.000000 | — | Pending | — |
-| [008_gemm_n4096_k14336](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/217/B200) | 1.000000 | — | Pending | — |
-| [009_gemm_n5120_k2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/218/B200) | 1.000000 | — | Pending | — |
-| [010_gemm_n6144_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/219/B200) | 1.000000 | — | Pending | — |
-| [011_gemm_n28672_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/220/B200) | 1.000000 | — | Pending | — |
-| [012_gqa_paged_decode_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/221/B200) | 0.992633 | — | Pending | — |
-| [013_gqa_paged_decode_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/222/B200) | 0.979799 | — | Pending | — |
-| [014_gqa_paged_prefill_causal_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/223/B200) | 0.995919 | — | Pending | — |
-| [015_gqa_paged_prefill_causal_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/224/B200) | 0.996676 | — | Pending | — |
-| [016_gqa_ragged_prefill_causal_h32_kv4_d128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/225/B200) | 0.965848 | — | Pending | — |
-| [017_gqa_ragged_prefill_causal_h32_kv8_d128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/226/B200) | 0.959860 | — | Pending | — |
-| [018_mla_paged_decode_h16_ckv512_kpe64_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/227/B200) | 0.994987 | — | Pending | — |
-| [019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/228/B200) | 0.998735 | — | Pending | — |
-| [020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/229/B200) | 1.000000 | — | Pending | — |
-| [021_rmsnorm_h128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/230/B200) | 0.799820 | — | Pending | — |
-| [022_rmsnorm_h512](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/231/B200) | 0.818143 | — | Pending | — |
-| [023_rmsnorm_h1536](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/232/B200) | 0.929768 | — | Pending | — |
-| [024_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/233/B200) | 0.815575 | — | Pending | — |
-| [025_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/234/B200) | 0.904060 | — | Pending | — |
-| [026_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/235/B200) | 0.937995 | — | Pending | — |
+**Shared GPU** · Acquire the common GPU lock and check for other compute jobs before running. Wait when another agent is using the device and recheck before starting. Repeat timings affected by contention.
+
+| Operator | B200 leader SOL | Campaign best B200 SOL | Public rank | SOL gap to leader | Latest run and evidence | Best candidate |
+|---|---:|---:|---:|---:|---|---|
+| [001_fused_add_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/210/B200) | 0.721444 | — | — | — | Pending | — |
+| [002_fused_add_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/211/B200) | 0.975342 | — | — | — | Pending | — |
+| [003_fused_add_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/212/B200) | 0.863498 | — | — | — | Pending | — |
+| [004_gemm_n128_k2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/213/B200) | 0.894803 | — | — | — | Pending | — |
+| [005_gemm_n256_k7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/214/B200) | 0.915728 | — | — | — | Pending | — |
+| [006_gemm_n2048_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/215/B200) | 1.000000 | — | — | — | Pending | — |
+| [007_gemm_n4096_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/216/B200) | 1.000000 | — | — | — | Pending | — |
+| [008_gemm_n4096_k14336](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/217/B200) | 1.000000 | — | — | — | Pending | — |
+| [009_gemm_n5120_k2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/218/B200) | 1.000000 | — | — | — | Pending | — |
+| [010_gemm_n6144_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/219/B200) | 1.000000 | — | — | — | Pending | — |
+| [011_gemm_n28672_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/220/B200) | 1.000000 | — | — | — | Pending | — |
+| [012_gqa_paged_decode_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/221/B200) | 0.992633 | — | — | — | Pending | — |
+| [013_gqa_paged_decode_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/222/B200) | 0.979799 | — | — | — | Pending | — |
+| [014_gqa_paged_prefill_causal_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/223/B200) | 0.995919 | — | — | — | Pending | — |
+| [015_gqa_paged_prefill_causal_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/224/B200) | 0.996676 | — | — | — | Pending | — |
+| [016_gqa_ragged_prefill_causal_h32_kv4_d128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/225/B200) | 0.965848 | — | — | — | Pending | — |
+| [017_gqa_ragged_prefill_causal_h32_kv8_d128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/226/B200) | 0.959860 | — | — | — | Pending | — |
+| [018_mla_paged_decode_h16_ckv512_kpe64_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/227/B200) | 0.994987 | — | — | — | Pending | — |
+| [019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/228/B200) | 0.998735 | — | — | — | Pending | — |
+| [020_moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/229/B200) | 1.000000 | — | — | — | Pending | — |
+| [021_rmsnorm_h128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/230/B200) | 0.799820 | — | — | — | Pending | — |
+| [022_rmsnorm_h512](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/231/B200) | 0.818143 | — | — | — | Pending | — |
+| [023_rmsnorm_h1536](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/232/B200) | 0.929768 | — | — | — | Pending | — |
+| [024_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/233/B200) | 0.815575 | — | — | — | Pending | — |
+| [025_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/234/B200) | 0.904060 | — | — | — | Pending | — |
+| [026_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/235/B200) | 0.937995 | — | — | — | Pending | — |
 
 ## News
 

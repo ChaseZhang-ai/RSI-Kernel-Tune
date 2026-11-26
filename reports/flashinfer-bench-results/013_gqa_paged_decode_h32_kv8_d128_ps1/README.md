@@ -95,3 +95,7 @@ The same-GPU v3 rerun measured 16.971 µs overall, 13.822 µs at B=16 and 61.944
 The exact v4 DPS bundle also passed 48/48 on physical GB300 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, using Torch 2.9.0+cu130, Triton 3.5.0, and the CUDA 13.1 `ptxas` for the queried capability 10.3. GPU 3 has 152 queried SMs and was locked at 1500/3996 MHz. An earlier alternate-stack v3 trial hit a build error because the bundled assembler lacked `sm_103a` support. The build error is recorded separately from timing and numerical outcomes. [Alternate stack pass](gb300-v4-torch29-triton35.jsonl) · [Legacy assembler error](gb300-v3-legacy-assembler-build.jsonl)
 
 Materialization preserved the official axes, reference and per-workload tolerances. The Parquet row’s empty optional `hf_id` field was omitted to satisfy the local evaluator’s definition schema.
+
+The DPS adaptation of the AKO4X seed passed the full standalone evaluator rerun, including correctness and CUPTI timing for all 48 workloads. This run used physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, capability 10.3, 152 queried SMs and 1500/3996 MHz. [Standalone seed results](gb300-seed-official.jsonl)
+
+The v4 candidate passed two-stream tests for B=16 and B=64 with dependent-launch query producers and output consumers on each stream. These tests used physical GB300 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, at 1500/3996 MHz. [Stream dependency checks](gb300-v4-stream-dependencies.jsonl)

@@ -1,5 +1,5 @@
 {
-  "schema": "forgekernel.target-profile/1",
+  "schema": "rsi_kernel_tune.target-profile/1",
   "name": "B200",
   "summary": "Kernels are written on the development GPU and graded on an NVIDIA B200. Only bytes that compile and run on the graded machine count.",
   "device": {

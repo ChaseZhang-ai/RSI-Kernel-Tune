@@ -1,0 +1,10 @@
+{
+  "submission_id": 105896,
+  "device": "B200",
+  "mode": "private",
+  "stack": "v1.1",
+  "submitted_utc": "2026-11-26T18:19:39.687220Z",
+  "status": "RUNNING",
+  "expected_workloads": 48,
+  "source_sha256": "b293696f31b3959a16556349f9b51a1e653877a4c526c15ab9bba7bfad0cf70e"
+}

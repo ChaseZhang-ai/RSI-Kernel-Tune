@@ -93,3 +93,7 @@ Both sides passed 48/48 in a paired repeat with PyTorch 2.9.0+cu130 and Triton 3
 | 16 | 46.324 | 14.307 |
 | 64 | 108.422 | 38.073 |
 | All | 32.214 | 13.785 |
+
+## Private B200 trial
+
+The board accepted the exact v5 artifact as private submission **105896** at 2026-11-26 18:19:39 UTC. The evaluation stack is v1.1. The result is pending. [Submission evidence](b200-submission-105896.json)

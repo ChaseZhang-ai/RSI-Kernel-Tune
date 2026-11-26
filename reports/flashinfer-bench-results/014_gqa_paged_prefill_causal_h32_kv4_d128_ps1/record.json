@@ -47,6 +47,29 @@
         "evaluator": "sol-execbench 1.0.2 (a9fa080)",
         "reference_rounds_per_workload": 10,
         "timing_failures": 0
+      },
+      "v2": {
+        "sha256": "c5784c0db482f4cfa5e4c13ec370e317d2a411fd31b4ddf38975f8a0f656b1e1",
+        "official_workloads_passed": 30,
+        "median_latency_us": 14.176,
+        "result_timestamp_utc": "2026-11-26T17:57:28.727226Z",
+        "gpu": {
+          "physical_index": 0,
+          "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+          "sm_count": 152,
+          "sm_mhz": 1500,
+          "memory_mhz": 3996,
+          "capability": [
+            10,
+            3
+          ],
+          "model": "NVIDIA GB300"
+        },
+        "torch": "2.10.0+cu130",
+        "triton": "3.6.0",
+        "evaluator": "sol-execbench 1.0.2 (a9fa080)",
+        "reference_rounds_per_workload": 10,
+        "timing_failures": 0
       }
     },
     "paired_screen_v1": {
@@ -129,7 +152,8 @@
         "cold_first_calls_total_s": 11.2483,
         "cold_first_calls_max_s": 1.1469,
         "geomean_speedup_vs_baseline": 2.074263756060224
-      }
+      },
+      "cold_compile_measurement": "Sum and maximum of first launch plus device synchronization per workload in an empty Triton cache. Includes execution and Python overhead."
     },
     "synthetic": {
       "scope": "Independent FP32 reference and explicit output/LSE checks",
@@ -174,12 +198,63 @@
     },
     "b200_private": {
       "evaluation_stack_requested": "v1.1",
-      "submitted_candidate_sha256": {
+      "status": "HTTP 429 during upload",
+      "submission_id": null,
+      "slot": 10,
+      "partner": "016_gqa_ragged_prefill_causal_h32_kv4_d128",
+      "max_concurrent_submissions": 5,
+      "active_submissions_at_checks": 0,
+      "attempted_candidate_sha256": {
         "v1": "e21dc318b4a65344e72e36ff173c1dcc9d4ded8b57d042ca07cb20cc0fb7a8e6",
         "v2": "c5784c0db482f4cfa5e4c13ec370e317d2a411fd31b4ddf38975f8a0f656b1e1"
+      }
+    },
+    "public_boards": {
+      "checked_at_utc": "2026-11-26 17:54:54 UTC",
+      "kernel": {
+        "source": "https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/223/B200",
+        "stack": "v1.1",
+        "leader": "June",
+        "leader_sol": 0.995919
       },
-      "status": "HTTP 429 during upload",
-      "submission_id": null
+      "collection": {
+        "source": "https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/collection/4/B200",
+        "stack": "v1.1",
+        "leader": "June",
+        "leader_sol": 0.940633
+      }
+    },
+    "paired_fbtriton": {
+      "gpu": {
+        "model": "GB300",
+        "physical_index": 3,
+        "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+        "sm_count": 152,
+        "sm_mhz": 1500,
+        "memory_mhz": 3996,
+        "capability": [
+          10,
+          3
+        ]
+      },
+      "evaluator": "sol-execbench 1.0.2 CUPTI and tolerance helpers",
+      "triton": "fbtriton wheel 3.7.1 (triton.__version__ reports 3.7.0+fb.beta)",
+      "local_wheel_setup": "Linked the wheel\u2019s packaged runtime launch.h into its NVIDIA backend so the wheel could find the header. Submission source and evaluator were unchanged.",
+      "torch": "2.10.0+cu130",
+      "reference_rounds": 1,
+      "evidence": "gb300-paired-fbtriton.jsonl",
+      "trials": {
+        "packed_sparse_v1": {
+          "passed": 30,
+          "median_latency_us": 17.0405,
+          "cold_first_calls_total_s": 17.814
+        },
+        "packed_sparse_v2": {
+          "passed": 30,
+          "median_latency_us": 14.175999999999998,
+          "cold_first_calls_total_s": 12.9896
+        }
+      }
     }
   },
   "experiments": [
@@ -197,11 +272,6 @@
       "outcome": "numerical_failure",
       "case": "single-query page histogram",
       "details": "Incorrect output and LSE with unmasked padding. Plain gather passed."
-    },
-    {
-      "outcome": "numerical_failure",
-      "case": "Gluon warp-specialized experiment",
-      "details": "The shared-probability variant failed correctness before timing."
     },
     {
       "outcome": "submission_rate_limited",
@@ -222,7 +292,13 @@
       "details": "Upload returned HTTP 429 before receiving a submission ID."
     },
     {
-      "outcome": "build_or_runtime_error",
+      "outcome": "submission_rate_limited",
+      "gpu": "B200",
+      "timestamp_utc": "2026-11-26T17:57:53Z",
+      "details": "Upload returned HTTP 429 before receiving a submission ID."
+    },
+    {
+      "outcome": "build_error",
       "case": "multi-CTA Triton TMA",
       "details": "Triton CTA planning failed. One CTA per tile passed."
     },
@@ -233,15 +309,15 @@
     }
   ],
   "selected_candidate": {
-    "version": "v1",
+    "version": "v2",
     "scope": "GB300 only",
-    "sha256": "e21dc318b4a65344e72e36ff173c1dcc9d4ded8b57d042ca07cb20cc0fb7a8e6",
+    "sha256": "c5784c0db482f4cfa5e4c13ec370e317d2a411fd31b4ddf38975f8a0f656b1e1",
     "official_workloads_passed": 30,
-    "median_latency_us": 16.5205,
-    "result_timestamp_utc": "2026-11-26T17:49:52.837727Z",
+    "median_latency_us": 14.176,
+    "result_timestamp_utc": "2026-11-26T17:57:28.727226Z",
     "gpu": {
-      "physical_index": 2,
-      "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+      "physical_index": 0,
+      "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
       "sm_count": 152,
       "sm_mhz": 1500,
       "memory_mhz": 3996,
@@ -255,6 +331,15 @@
     "triton": "3.6.0",
     "evaluator": "sol-execbench 1.0.2 (a9fa080)",
     "reference_rounds_per_workload": 10,
-    "timing_failures": 0
+    "timing_failures": 0,
+    "peak_workspace_bytes_at_official_axes": 33593344,
+    "cold_first_calls_total_s": 11.2483,
+    "cold_first_calls_max_s": 1.1469
+  },
+  "official_dataset": {
+    "parquet": "https://huggingface.co/datasets/nvidia/SOL-ExecBench/resolve/main/data/FlashInfer-Bench.parquet",
+    "row": "014_gqa_paged_prefill_causal_h32_kv4_d128_ps1",
+    "safetensors_revision": "flashinfer-ai/flashinfer-trace@1.0",
+    "unique_workload_ids": 30
   }
 }

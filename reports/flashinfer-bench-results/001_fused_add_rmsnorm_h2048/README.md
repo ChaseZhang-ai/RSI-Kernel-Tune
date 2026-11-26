@@ -1,5 +1,40 @@
 # 001_fused_add_rmsnorm_h2048
 
+## 2026-11-26 17:35 UTC · Standard Triton retry passed on GB300
+
+The exact archive entry passed 7/7 workloads, including timed CUPTI records. The paired trial also passed input preservation and near-cancellation checks, including calls with changed inputs and output pointers. The candidate uses standard Triton for all dispatch paths.
+
+Private B200 attempt 105846 exposed a runtime compiler error in the five Gluon small workloads. Two large workloads were marked failed without a detailed status while the result was pending. The original file passed on GB300 with both compiler stacks. The standard Triton retry was rejected at upload with HTTP 429 and received no submission ID. The submission list showed five pending results on the shared account. The candidate remains GB300 only.
+
+- Physical GPU 3, `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, 152 SMs, CUDA capability 10.3. SM clock locked to 1500 MHz and memory observed at its sole supported 3996 MHz. The lock was held throughout correctness and timing, with compute-job monitoring.
+- SOL-ExecBench 1.0.2 commit `a9fa080` and its v1.1 timing methodology. PyTorch 2.9.0+cu130, Triton 3.5.0, CUDA toolkit 13.1 PTX assembler for GB300, CUPTI Python 13.5.0. Warmup and timing used 10 and 50 iterations with cold L2, cloned inputs, and preallocated outputs.
+- Cold JIT and first launch took 0.643 s in a fresh Triton cache across the specialized kernels. The paired baseline and candidate below ran on the same physical GPU.
+- Candidate SHA-256 `1015bbfd8395cebabf28c26cbef55d402f265c32ad9d1944972b40883396f097`. [Archive entry](../../../flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)
+
+| Batch | Workload UUID | GB300 status | Paired baseline (µs) | Paired candidate (µs) | Official CLI candidate (µs) |
+|---:|---|---|---:|---:|---:|
+| 6 | `906efdc6-aa3b-4b4f-a291-3a2be509d354` | PASSED | 3.328 | 2.800 | 2.865 |
+| 1 | `1526086b-0c06-41a1-b7b9-47b5cfc830d7` | PASSED | 3.696 | 3.104 | 3.072 |
+| 34 | `78c9b621-e151-4fb2-9162-f1b39afe573a` | PASSED | 3.200 | 2.912 | 2.912 |
+| 79 | `7fd454c3-9611-4376-a920-3d1c30639790` | PASSED | 3.200 | 3.057 | 3.072 |
+| 16254 | `724a6dfa-06ff-45b7-9972-d174a0e23737` | PASSED | 32.848 | 33.040 | 33.216 |
+| 12383 | `5ede385e-9b04-4b49-903f-375a5180d815` | PASSED | 26.113 | 25.856 | 27.296 |
+| 64 | `1602b8db-16e2-4d3f-b63d-68d4ee32e2cc` | PASSED | 3.232 | 3.040 | 3.024 |
+
+### Archived native diagnostic
+
+The prescribed local seed was absent. A destination-passing adaptation of the archived public source passed the paired correctness, input-preservation, cancellation and CUPTI checks for 7/7 workloads. This diagnostic was built for CUDA capability 10.3 in 30.20 s, on physical GPU 1 (`GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, 152 SMs, 1500/3996 MHz). It ran on PyTorch 2.10.0+cu130 and Triton 3.6.0 using the same evaluator timing routine. [Archived source](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/main/kernels/FlashInfer/001_fused_add_rmsnorm_h2048)
+
+| Batch | Paired baseline (µs) | Archived native (µs) | Status |
+|---:|---:|---:|---|
+| 6 | 3.296 | 2.144 | passed |
+| 1 | 3.648 | 2.112 | passed |
+| 34 | 3.168 | 2.528 | passed |
+| 79 | 3.232 | 2.624 | passed |
+| 16254 | 32.864 | 28.096 | passed |
+| 12383 | 26.176 | 21.584 | passed |
+| 64 | 3.200 | 2.592 | passed |
+
 ## 2026-11-26 17:23 UTC · B200 submission pending
 
 Private v1.1 submission `105846` contains the candidate SHA-256 recorded below. The board lists 18:23:46 UTC as its scheduled result availability. [NVIDIA submission](https://research.nvidia.com/benchmarks/sol-execbench/submission/105846)

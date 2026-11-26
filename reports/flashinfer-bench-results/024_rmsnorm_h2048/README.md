@@ -17,3 +17,11 @@ Baseline SHA-256 `4912b590fa90f14e3582f4936db0c484c6bb4aba0a4d3c8972ff46996464a2
 | 79 | `7fd55dbb-7371-4b46-99d1-84d1e3f16f06` | PASSED | 3.472 |
 | 12383 | `68e79061-ffd0-4733-958a-3415321da93b` | PASSED | 19.568 |
 | 16254 | `932f75f9-e29a-4502-8794-68347b591fd5` | PASSED | 24.272 |
+
+## Triton layout screen · 2026-11-26 18:39 UTC
+
+The paired screen used physical GB300 GPU 1 (`GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`), 152 queried SMs, capability 10.3, and 1500/3996 MHz. All trials used cloned inputs, preallocated BF16 destinations and the same evaluator CUPTI timing function with 10 warmups and 50 cold-L2 iterations.
+
+102/158 workload/configuration trials passed correctness and timing, including every small-batch layout. 56 streaming and persistent cases failed at build time because PTXAS rejects `.cg` combined with `.evict_first`. The retry uses compatible cache modifiers. No numerical or CUPTI failures occurred in this screen.
+
+Partitioned output stores with replicated FP32 statistics reduced the five small workloads to 2.720–2.848 µs in this screen. The best single- and multirow variants reached 19.616 µs at batch 12,383 and 23.776 µs at batch 16,254. The sweep records actual register counts and scratch usage for each compiled Triton kernel. [Triton sweep results](gb300-triton-sweep.csv)

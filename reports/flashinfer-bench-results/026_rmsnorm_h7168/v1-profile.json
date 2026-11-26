@@ -1,0 +1,115 @@
+{
+  "status": "passed",
+  "sha256": "af64ac654c0a531ce5c063159c40061e61f335edfdc5e6747c17f648bd21b27d",
+  "device": {
+    "index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "device": "NVIDIA GB300",
+    "physical_index": 0,
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "l2_bytes": 135528448,
+    "total_memory_bytes": 297013411840,
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "evaluator": "1.0.2",
+    "cupti": "13.5.0"
+  },
+  "profiler": "Nsight Compute CLI 2026.1.1",
+  "cache_control": "all",
+  "clock_control": "none (external clock lock)",
+  "samples": [
+    {
+      "batch_size": 539,
+      "kernel": "_medium",
+      "block_size": "(256, 1, 1)",
+      "grid_size": "(539, 1, 1)",
+      "metrics": {
+        "dram__bytes_read.sum": {
+          "value": 7748096.0,
+          "unit": "byte"
+        },
+        "dram__bytes_write.sum": {
+          "value": 256.0,
+          "unit": "byte"
+        },
+        "gpu__time_duration.sum": {
+          "value": 8032.0,
+          "unit": "ns"
+        },
+        "lts__t_sector_hit_rate.pct": {
+          "value": 3.28,
+          "unit": "%"
+        },
+        "sm__warps_active.avg.pct_of_peak_sustained_active": {
+          "value": 40.01,
+          "unit": "%"
+        }
+      }
+    },
+    {
+      "batch_size": 11949,
+      "kernel": "_large",
+      "block_size": "(128, 1, 1)",
+      "grid_size": "(11949, 1, 1)",
+      "metrics": {
+        "dram__bytes_read.sum": {
+          "value": 171337984.0,
+          "unit": "byte"
+        },
+        "dram__bytes_write.sum": {
+          "value": 113987584.0,
+          "unit": "byte"
+        },
+        "gpu__time_duration.sum": {
+          "value": 51872.0,
+          "unit": "ns"
+        },
+        "lts__t_sector_hit_rate.pct": {
+          "value": 0.26,
+          "unit": "%"
+        },
+        "sm__warps_active.avg.pct_of_peak_sustained_active": {
+          "value": 39.33,
+          "unit": "%"
+        }
+      }
+    },
+    {
+      "batch_size": 14521,
+      "kernel": "_large",
+      "block_size": "(128, 1, 1)",
+      "grid_size": "(14521, 1, 1)",
+      "metrics": {
+        "dram__bytes_read.sum": {
+          "value": 208231680.0,
+          "unit": "byte"
+        },
+        "dram__bytes_write.sum": {
+          "value": 151801600.0,
+          "unit": "byte"
+        },
+        "gpu__time_duration.sum": {
+          "value": 64672.0,
+          "unit": "ns"
+        },
+        "lts__t_sector_hit_rate.pct": {
+          "value": 0.22,
+          "unit": "%"
+        },
+        "sm__warps_active.avg.pct_of_peak_sustained_active": {
+          "value": 39.75,
+          "unit": "%"
+        }
+      }
+    }
+  ]
+}

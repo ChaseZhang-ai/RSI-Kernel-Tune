@@ -59,3 +59,15 @@ The final sweep compared Triton v1 with 32-warp CTAs, a different address wrap f
 ## B200 compilation check
 
 The exact archive source compiled all six official launch specializations for `sm_100a` with no GPU visible. B200 verification is pending with the coordinator. [Offline compiler record](b200-offline-compile.json)
+
+## Cold-L2 hardware profile
+
+Nsight Compute ran on locked GB300 GPU 0 with cache flushing enabled. For the large batches, DRAM reads closely tracked the activation size, and the measured L2 sector hit rate was below 0.3%. The large kernel used 128 threads per CTA, 72 registers per thread and coalesced 128-bit loads and stores. The paired CUPTI results correspond to 6.25 and 6.40 TB/s of effective activation-plus-output payload for the two large batches.
+
+| Batch | DRAM read bytes | DRAM write bytes during kernel | L2 sector hit rate | Active warps |
+|---:|---:|---:|---:|---:|
+| 539 | 7,748,096 | 256 | 3.28% | 40.01% |
+| 11,949 | 171,337,984 | 113,987,584 | 0.26% | 39.33% |
+| 14,521 | 208,231,680 | 151,801,600 | 0.22% | 39.75% |
+
+[Cold-L2 profiler record](v1-profile.json)

@@ -30,3 +30,22 @@ The screening compared two and four query heads per CTA and swept each batch siz
 All used 1500/3996 MHz, capability 10.3, 152 queried SMs, and SOL-ExecBench 1.0.2 cold-L2 CUPTI timing with 10 warmups and 50 timed calls. [Workload IDs, configurations and measurements](gb300-tuning.csv)
 
 The synthetic v1 checks used randomized page permutations, empty rows, and highly imbalanced batches. The largest synthetic sequence had 51,000 tokens. Each case was repeated with different pointers, query and cache contents, page order, row order and scale. The checks passed independently for BF16 output and FP32 base-2 LSE. [Synthetic correctness results](gb300-v1-edge-cases.jsonl)
+
+## GB300 paired and standalone trial v2
+
+The selected direct launch uses four query heads per CTA for B=16, BF16 K/V tensor-core products, and two-head merge CTAs for split paths. B=1 chooses its own crossover and uses a SIMD kernel for the smallest rows.
+
+The AKO4X seed, v1, and the new candidate each passed 48/48 paired checks and timings. The exact bundled DPS source passed 48/48 in the standalone evaluator, including all ten numerical rounds and CUPTI timing. All 18 synthetic invocations passed separately for output and base-2 LSE.
+
+| Batch | AKO4X seed | v1 | New candidate |
+| ---: | ---: | ---: | ---: |
+| 1 | 6.771 µs | 6.082 µs | 5.724 µs |
+| 16 | 32.241 µs | 19.268 µs | 14.097 µs |
+| 64 | 69.190 µs | 68.688 µs | 65.319 µs |
+| All | 24.719 µs | 20.042 µs | 17.403 µs |
+
+Geometric means are from cold-L2 CUPTI first-to-last kernel timing with 10 warmups, 50 timed calls, cloned inputs at shifted addresses, and preallocated outputs. All runs in this trial used physical GB300 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, capability 10.3, 152 queried SMs, 1500/3996 MHz, SOL-ExecBench 1.0.2, Torch 2.10.0+cu130, and Triton 3.6.0.
+
+The fresh Triton cache trial took 3.145 seconds summed across synchronized candidate first calls, with a maximum of 0.501 seconds per call. The maximum paired absolute errors were 0.0078125 for BF16 output and 1.90735e-06 for base-2 LSE. The submission SHA-256 is `f58b79e9768a6294cac27755b311e5d71fc546465447a43a9a8f2be8b8654091`.
+
+[Paired timings](gb300-v2-paired.jsonl) · [Official evaluator timings](gb300-v2-official.jsonl) · [Synthetic checks](gb300-v2-edge-cases.jsonl)

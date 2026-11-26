@@ -14,7 +14,7 @@ import triton.language as tl
 @triton.jit
 def _small(
     Q, K, V, Indptr, Indices, Out, Lse, scale,
-    PAGES: tl.constexpr, N: tl.constexpr,
+    N: tl.constexpr,
 ):
     head = tl.program_id(0)
     start = tl.load(Indptr)
@@ -42,7 +42,7 @@ def _decode(
     Q, K, V, Indptr, Indices, Out, Lse, Partial, PartialLse, scale,
     H: tl.constexpr, N: tl.constexpr, SPLITS: tl.constexpr,
     MIN_CHUNK: tl.constexpr, SINGLE_TILE: tl.constexpr,
-    ORDER: tl.constexpr, PV_FP16: tl.constexpr,
+    ORDER: tl.constexpr,
 ):
     if ORDER == 0:
         batch = tl.program_id(0)
@@ -86,10 +86,7 @@ def _decode(
         weights = tl.exp2(score - safe_max[:, None])
         denominator = denominator * rescale + tl.sum(weights, 1)
         scaled = numerator * rescale[:, None]
-        if PV_FP16:
-            numerator = tl.dot(weights.to(tl.float16), value.to(tl.float16), scaled)
-        else:
-            numerator = tl.dot(weights.to(tl.bfloat16), value, scaled)
+        numerator = tl.dot(weights.to(tl.bfloat16), value, scaled)
         max_score = next_max
 
     logsum = max_score + tl.log2(denominator)
@@ -104,35 +101,44 @@ def _decode(
 
 
 @triton.jit
-def _merge(Partial, PartialLse, Out, Lse, SPLITS: tl.constexpr):
-    head = tl.program_id(0)
+def _merge(Partial, PartialLse, Out, Lse, SPLITS: tl.constexpr, G: tl.constexpr):
+    head = tl.program_id(0) * G + tl.arange(0, G)
     split = tl.arange(0, triton.next_power_of_2(SPLITS))
     dim = tl.arange(0, 128)
-    slot = head * SPLITS + split
-    logsum = tl.load(PartialLse + slot, split < SPLITS, -float("inf"))
-    largest = tl.max(logsum, 0)
-    weights = tl.exp2(logsum - tl.where(largest == -float("inf"), 0.0, largest))
-    denominator = tl.sum(weights, 0)
-    values = tl.load(Partial + slot[:, None] * 128 + dim[None, :], split[:, None] < SPLITS, 0)
-    result = tl.sum(values * weights[:, None], 0) / tl.maximum(denominator, 1.0)
-    tl.store(Out + head * 128 + dim, result)
+    slot = head[:, None] * SPLITS + split[None, :]
+    logsum = tl.load(PartialLse + slot, split[None, :] < SPLITS, -float("inf"))
+    largest = tl.max(logsum, 1)
+    safe_max = tl.where(largest == -float("inf"), 0.0, largest)
+    weights = tl.exp2(logsum - safe_max[:, None])
+    denominator = tl.sum(weights, 1)
+    values = tl.load(
+        Partial + slot[:, :, None] * 128 + dim[None, None, :],
+        split[None, :, None] < SPLITS, 0,
+    )
+    result = tl.sum(values * weights[:, :, None], 1)
+    result /= tl.maximum(denominator, 1.0)[:, None]
+    tl.store(Out + head[:, None] * 128 + dim[None, :], result)
     tl.store(Lse + head, largest + tl.log2(denominator))
 
-
 def _config(batch, count):
+    # Choose CTA density using only tensor shapes. The device reads the actual
+    # row lengths for the split boundaries and makes every split cover its row.
     if batch == 1:
         if count <= 128:
             return 2, max(16, triton.next_power_of_2(count)), 1, 1, 4, 1, 1
-        return 2, 64, 4, 64, 4, 2, 1
+        if count <= 512:
+            return 2, 64, 8, 64, 4, 2, 1
+        return 4, 64, 12, 32, 4, 2, 1
     if batch <= 16:
-        if count <= 4500:
-            return 2, 64, 1, 1, 4, 3, 0
-        return 4, 64, 8, 128, 4, 3, 0
+        if count <= batch * 281:
+            return 4, 128, 1, 1, 4, 3, 0
+        if count <= batch * 1024:
+            return 4, 128, 8, 128, 4, 3, 0
+        return 4, 64, 8, 256, 4, 3, 0
     return 4, 64, 8, 128, 4, 3, 1
 
-
 def _launch(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse,
-            config, *, fp16=True):
+            config):
     batch = q.shape[0]
     heads, tile, splits, min_chunk, warps, stages, order = config
     if splits == 1:
@@ -146,19 +152,19 @@ def _launch(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse,
     _decode[grid](
         q, k_cache, v_cache, kv_indptr, kv_indices, output, lse, partial, partial_lse,
         float(sm_scale) * 1.4426950408889634, heads, tile, splits, min_chunk, one_tile,
-        order, fp16, num_warps=warps, num_stages=stages, enable_fp_fusion=True,
+        order, num_warps=warps, num_stages=stages, enable_fp_fusion=True,
     )
     if splits > 1:
-        _merge[(batch * 32,)](partial, partial_lse, output, lse, splits, num_warps=2)
+        _merge[(batch * 16,)](partial, partial_lse, output, lse, splits, 2, num_warps=2)
 
 
 def run(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse):
     batch, count = q.shape[0], kv_indices.numel()
-    if batch == 1 and count <= 16:
+    if batch == 1 and count <= 4:
         _small[(32,)](
             q, k_cache, v_cache, kv_indptr, kv_indices, output, lse,
-            float(sm_scale) * 1.4426950408889634, k_cache.shape[0],
-            max(1, triton.next_power_of_2(count)), num_warps=4,
+            float(sm_scale) * 1.4426950408889634,
+            max(1, triton.next_power_of_2(count)), num_warps=1,
         )
     else:
         _launch(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse,

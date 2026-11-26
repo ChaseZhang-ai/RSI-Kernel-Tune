@@ -1,5 +1,5 @@
 {
-  "checked_at_utc": "2026-11-26T18:40:27+00:00",
+  "checked_at_utc": "2026-11-26T18:58:24Z",
   "evaluation_stack_version": "v1.1",
   "gpu_type": "B200",
   "kernel_id": 216,
@@ -20,5 +20,6 @@
       "fast_1_count": 43,
       "fast_1_total": 43
     }
-  ]
+  ],
+  "public_collection_4_leader_sol": 0.940633
 }

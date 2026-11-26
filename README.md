@@ -65,7 +65,7 @@ Contributors should push their **best candidate so far** to `flashinfer-bench/<o
 | [022_rmsnorm_h512](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/231/B200) | 0.818143 | — | — | — | Pending | — |
 | [023_rmsnorm_h1536](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/232/B200) | 0.929768 | — | — | — | Pending | — |
 | [024_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/233/B200) | 0.815575 | — | — | — | Pending | — |
-| [025_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/234/B200) | 0.904060 | — | — | — | GB300 CUDA tuning screen covered 6 workloads · baseline passed 14/14 · [evidence](reports/flashinfer-bench-results/025_rmsnorm_h4096/) | [Provisional GB300 only](flashinfer-bench/025_rmsnorm_h4096/submission.py) |
+| [025_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/234/B200) | 0.904060 | — | — | — | GB300 tuned candidate passed paired 14/14 at 7.152 µs · baseline passed CLI 14/14 · [evidence](reports/flashinfer-bench-results/025_rmsnorm_h4096/) | [Provisional GB300 only](flashinfer-bench/025_rmsnorm_h4096/submission.py) |
 | [026_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/235/B200) | 0.937995 | — | — | — | Pending | — |
 
 ## News

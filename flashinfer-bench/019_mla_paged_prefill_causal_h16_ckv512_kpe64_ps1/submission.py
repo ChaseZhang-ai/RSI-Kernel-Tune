@@ -1,0 +1,109 @@
+"""Destination-passing causal paged MLA for the FlashInfer-Bench 019 contract."""
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def _sequence(QO, tile, BATCH: tl.constexpr, BT: tl.constexpr, BS: tl.constexpr):
+    if BATCH == 1:
+        return 0, tile * BT, tl.load(QO + 1), tl.load(QO)
+    r = tl.arange(0, BS)
+    start = tl.load(QO + r, r < BATCH, 0)
+    end = tl.load(QO + r + 1, r < BATCH, 0)
+    count = tl.cdiv(end - start, BT)
+    after = tl.cumsum(count, 0)
+    owns = (tile < after) & (tile >= after - count)
+    seq = tl.sum(tl.where(owns, r, 0), 0)
+    first = tl.sum(tl.where(owns, after - count, 0), 0)
+    q0 = tl.sum(tl.where(owns, start, 0), 0)
+    q1 = tl.sum(tl.where(owns, end, 0), 0)
+    return seq, q0 + (tile - first) * BT, q1, q0
+
+
+@triton.jit
+def _direct(Q, R, C, E, QO, KO, Page, O, L, scale, BATCH: tl.constexpr,
+            BS: tl.constexpr, BN: tl.constexpr):
+    token = tl.program_id(0)
+    head = tl.program_id(1)
+    seq, _, end, _ = _sequence(QO, token, BATCH, 1, BS)
+    k0 = tl.load(KO + seq)
+    k1 = tl.load(KO + seq + 1)
+    row = token * 16 + head
+    n = tl.arange(0, BN)
+    d = tl.arange(0, 512)
+    e = tl.arange(0, 64)
+    valid = n < k1 - k0 - (end - token) + 1
+    page = tl.load(Page + k0 + n, valid, 0)
+    q = tl.load(Q + row * 512 + d).to(tl.float32)
+    r = tl.load(R + row * 64 + e).to(tl.float32)
+    ck = tl.load(C + page[:, None] * 512 + d[None, :], valid[:, None], 0).to(tl.float32)
+    kp = tl.load(E + page[:, None] * 64 + e[None, :], valid[:, None], 0).to(tl.float32)
+    s = (tl.sum(ck * q[None, :], 1) + tl.sum(kp * r[None, :], 1)) * scale
+    s = tl.where(valid, s, -float("inf"))
+    m = tl.max(s, 0)
+    p = tl.exp2(s - tl.where(m == -float("inf"), 0.0, m))
+    z = tl.sum(p, 0)
+    o = tl.sum(p[:, None] * ck, 0) / tl.where(z > 0, z, 1.0)
+    o = tl.where((z == 0) & (k0 < k1), float("nan"), o)
+    tl.store(O + row * 512 + d, o)
+    tl.store(L + row, m + tl.log2(z))
+
+
+@triton.jit
+def _prefill(Q, R, C, E, QO, KO, Page, O, L, scale, BATCH: tl.constexpr,
+             BS: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr):
+    seq, first, end, _ = _sequence(QO, tl.program_id(0), BATCH, BM // 16, BS)
+    if first < end:
+        k0 = tl.load(KO + seq)
+        k1 = tl.load(KO + seq + 1)
+        kv_len = k1 - k0
+        m = tl.arange(0, BM)
+        n = tl.arange(0, BN)
+        d = tl.arange(0, 512)
+        e = tl.arange(0, 64)
+        row = first * 16 + m
+        token = first + m // 16
+        q = tl.load(Q + row[:, None] * 512 + d[None, :], token[:, None] < end, 0)
+        r = tl.load(R + row[:, None] * 64 + e[None, :], token[:, None] < end, 0)
+        mx = tl.full((BM,), -float("inf"), tl.float32)
+        z = tl.full((BM,), 0, tl.float32)
+        acc = tl.full((BM, 512), 0, tl.float32)
+        limit = tl.maximum(0, kv_len - end + tl.minimum(first + BM // 16, end))
+        for t in range(tl.cdiv(limit, BN)):
+            pos = t * BN + n
+            page = tl.load(Page + k0 + pos, pos < limit, 0)
+            ck = tl.load(C + page[:, None] * 512 + d[None, :], pos[:, None] < limit, 0)
+            kp = tl.load(E + page[:, None] * 64 + e[None, :], pos[:, None] < limit, 0)
+            qk = tl.dot(q, tl.trans(ck))
+            qr = tl.dot(r, tl.trans(kp))
+            logits = (qk + qr) * scale
+            logits = tl.where(pos[None, :] <= (kv_len - end + token[:, None]), logits, -float("inf"))
+            new_mx = tl.maximum(mx, tl.max(logits, 1))
+            pivot = tl.where(new_mx == -float("inf"), 0.0, new_mx)
+            alpha = tl.exp2(mx - pivot)
+            p = tl.exp2(logits - pivot[:, None])
+            z = z * alpha + tl.sum(p, 1)
+            acc = tl.dot(p.to(tl.bfloat16), ck, acc * alpha[:, None])
+            mx = new_mx
+        acc = acc / tl.where(z > 0, z, 1.0)[:, None]
+        acc = tl.where(((z == 0) & (kv_len > 0))[:, None], float("nan"), acc)
+        tl.store(O + row[:, None] * 512 + d[None, :], acc, token[:, None] < end)
+        tl.store(L + row, mx + tl.log2(z), token < end)
+
+
+def run(q_nope, q_pe, ckv_cache, kpe_cache, qo_indptr, kv_indptr, kv_indices,
+        sm_scale, output, lse):
+    total = q_nope.size(0)
+    if total == 0:
+        return
+    batch = qo_indptr.numel() - 1
+    scale = sm_scale * 1.4426950408889634
+    args = (q_nope, q_pe, ckv_cache, kpe_cache, qo_indptr, kv_indptr, kv_indices,
+            output, lse, scale, batch, triton.next_power_of_2(batch))
+    if kv_indices.numel() <= 128:
+        _direct[(total, 16)](*args, max(4, triton.next_power_of_2(kv_indices.numel())),
+                             num_warps=4)
+    else:
+        bm, bn = 32, 32
+        _prefill[(triton.cdiv(total, bm // 16) + (batch - 1 if batch > 1 else 0),)](
+            *args, bm, bn, num_warps=8, num_stages=1)

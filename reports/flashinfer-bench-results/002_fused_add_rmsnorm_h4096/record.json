@@ -1,0 +1,163 @@
+{
+  "operator": "002_fused_add_rmsnorm_h4096",
+  "verification_scope": "GB300 only",
+  "source_sha256": "c6ed164c7847f4451b420d5ea346b31ca954dc5f3231b833f1d020126d45d837",
+  "official_parquet_sha256": "89d1feacf02b6f8c07ec8d67a9dbb2c531652251095a7f762f2bc296f6a1fe74",
+  "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+  "workloads_passed": 14,
+  "cli_device": {
+    "kind": "device",
+    "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+    "device": "NVIDIA GB300",
+    "index": 2,
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.9.0+cu130",
+    "triton": "3.5.0",
+    "evaluator": "1.0.2",
+    "cuda_bindings": "13.1.1",
+    "cupti_python": "13.5.0",
+    "sm_mhz": 1500,
+    "memory_mhz": 3996,
+    "driver": "595.71.05"
+  },
+  "paired_device": {
+    "kind": "device",
+    "device": "NVIDIA GB300",
+    "index": 2,
+    "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.9.0+cu130",
+    "triton": "3.5.0",
+    "cupti_python": "13.5.0",
+    "evaluator": "1.0.2",
+    "cuda_bindings": "13.1.1",
+    "sm_mhz": 1500,
+    "memory_mhz": 3996,
+    "driver": "595.71.05"
+  },
+  "sweep_devices": {
+    "small": {
+      "kind": "device",
+      "device": "NVIDIA GB300",
+      "index": 1,
+      "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+      "sm_count": 152,
+      "capability": [
+        10,
+        3
+      ],
+      "torch": "2.10.0+cu130",
+      "triton": "3.6.0",
+      "cupti_python": "13.5.0",
+      "evaluator": "1.0.2",
+      "sm_mhz": 1500,
+      "memory_mhz": 3996,
+      "driver": "595.71.05"
+    },
+    "large": {
+      "kind": "device",
+      "device": "NVIDIA GB300",
+      "index": 1,
+      "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+      "sm_count": 152,
+      "capability": [
+        10,
+        3
+      ],
+      "torch": "2.10.0+cu130",
+      "triton": "3.6.0",
+      "cupti_python": "13.5.0",
+      "evaluator": "1.0.2",
+      "sm_mhz": 1500,
+      "memory_mhz": 3996,
+      "driver": "595.71.05"
+    }
+  },
+  "timing": {
+    "warmups": 10,
+    "timed_iterations": 50,
+    "cold_l2": true,
+    "inputs": "cloned",
+    "outputs": "preallocated",
+    "method": "CUPTI first-to-last kernel",
+    "latency_statistic": "median"
+  },
+  "cold_compile_and_first_launch_s": {
+    "native_module": 0.09183459402993321,
+    "triton_strided_fallback": 0.6925992108881474,
+    "candidate_total": 0.7844338049180806,
+    "baseline": 0.22962342808023095
+  },
+  "ptxas": {
+    "sm_103": {
+      "streaming_rows": {
+        "registers": 64,
+        "spill_store_bytes": 0,
+        "spill_load_bytes": 0
+      },
+      "half_rows": {
+        "registers": 40,
+        "spill_store_bytes": 0,
+        "spill_load_bytes": 0
+      },
+      "quartile_rows": {
+        "registers": 40,
+        "spill_store_bytes": 0,
+        "spill_load_bytes": 0
+      }
+    },
+    "sm_100_compile_only": {
+      "streaming_rows": {
+        "registers": 62,
+        "spill_store_bytes": 0,
+        "spill_load_bytes": 0
+      },
+      "half_rows": {
+        "registers": 40,
+        "spill_store_bytes": 0,
+        "spill_load_bytes": 0
+      },
+      "quartile_rows": {
+        "registers": 40,
+        "spill_store_bytes": 0,
+        "spill_load_bytes": 0
+      }
+    }
+  },
+  "pair_geomean_speedup": {
+    "1": 1.3433423191081193,
+    "2": 1.3413315850828373
+  },
+  "end_to_end_checks": {
+    "low_magnitude_rows": 14,
+    "changed_contents_and_pointers": 14,
+    "strided_and_unaligned_fallback": "passed"
+  },
+  "sweep_status_counts": {
+    "passed": 569
+  },
+  "exact_verification_status_counts": {
+    "passed": 56
+  },
+  "b200_v1_1_public_leader": {
+    "sol": 0.975342,
+    "rank": 1,
+    "utc": "2026-11-26 18:50:08 UTC",
+    "submission_id": 104625
+  },
+  "initial_setup_failure": "CLI subprocess could not find python on PATH; corrected to include the existing evaluator venv.",
+  "timing_or_correctness_failures": {
+    "build_or_launch": 0,
+    "numerical_or_contract": 0,
+    "missing_or_invalid_cupti": 0,
+    "other_timing": 0
+  }
+}

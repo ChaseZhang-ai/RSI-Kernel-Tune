@@ -1,5 +1,48 @@
 # 025_rmsnorm_h4096
 
+## GB300 candidate for the coordinator
+
+The exact standalone DPS bundle passed **14/14 official workloads**, including CUPTI timing, at **7.190 µs** geometric mean in SOL-ExecBench. Official B200 verification is pending. [Submission source](../../../flashinfer-bench/025_rmsnorm_h4096/submission.py) · [Evaluator results with official UUIDs and tolerances](gb300-final-evaluator.jsonl)
+
+- Standalone check on physical GB300 2, `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, with 152 queried SMs and CUDA capability 10.3. The driver denied unprivileged clock changes and sampled clocks stayed at 1500/3996 MHz. The memory clock was the sole supported setting.
+- SOL-ExecBench 1.0.2 (`a9fa0804c793d438e70850c33fe34426e66d53dd`), PyTorch 2.9.0+cu130, Triton 3.5.0, CUDA 13.2 NVRTC and PTXAS, and CUPTI Python 13.5.0. CUDA compilation targets the active device's queried capability.
+- 48 supplementary calls covered tiny inputs, mixed signed and zero weights, changed input contents and addresses, strided and unaligned buffers, and the 1/2 and 256/257 dispatch boundaries on a non-default CUDA stream. Input tensors were preserved. [Supplementary correctness record](gb300-final-synthetic.jsonl)
+- The selected path for an aligned B=1 uses eight CTAs with disjoint output slices and a full FP32 reduction in each CTA. Aligned batches through 256 use one 256-thread CTA per row. Larger and strided or unaligned inputs use four-warp Triton. Each path uses epsilon 1e-5 and a final BF16 cast. The replication idea came from the archived CompoundingKernel implementation, and the packed FP32 operations build on the repository's fused-add implementation. [CompoundingKernel source](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/092577af37b8431d8dc16f6e90ec3d2ba1451aaa/kernels/FlashInfer/025_rmsnorm_h4096)
+- Candidate SHA-256 `2686d9d2a4cf13114fd6f47d63c36952398dbeed2ecde12d55e12f742fdfbd00`. Staged Parquet SHA-256 `89d1feacf02b6f8c07ec8d67a9dbb2c531652251095a7f762f2bc296f6a1fe74`.
+- On the public B200 v1.1 board, June led at 0.904060 SOL at 2026-11-26 18:49:29 UTC. [Public operator board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/234/B200)
+
+| Batch size | Paired baseline (µs) | Paired candidate (µs) | Standalone candidate (µs) | Standalone outcome |
+|---:|---:|---:|---:|---|
+| 1 | 4.384 | 2.752 | 2.784 | Pass |
+| 7 | 3.696 | 3.040 | 3.025 | Pass |
+| 15 | 3.760 | 3.008 | 3.040 | Pass |
+| 16 | 3.744 | 2.976 | 3.056 | Pass |
+| 34 | 3.744 | 3.040 | 3.040 | Pass |
+| 63 | 3.712 | 3.056 | 3.072 | Pass |
+| 64 | 3.744 | 3.056 | 3.168 | Pass |
+| 79 | 3.760 | 3.104 | 3.104 | Pass |
+| 170 | 3.856 | 3.392 | 3.392 | Pass |
+| 8,804 | 25.840 | 26.112 | 26.161 | Pass |
+| 10,827 | 30.592 | 30.944 | 30.689 | Pass |
+| 11,832 | 32.800 | 33.088 | 32.865 | Pass |
+| 14,418 | 38.816 | 39.008 | 39.041 | Pass |
+| 14,509 | 38.960 | 39.264 | 39.329 | Pass |
+
+### Reproduction
+
+From the repository root, materialize the staged definition, the original workload records, and the exact submission source. Run the evaluator on the locked, idle physical GPU selected by UUID. The 14 workloads use generated inputs.
+
+```sh
+python reports/flashinfer-bench-results/025_rmsnorm_h4096/materialize.py \
+  .artifacts/sol-data/FlashInfer-Bench.parquet \
+  flashinfer-bench/025_rmsnorm_h4096/submission.py .artifacts/rmsnorm-025/recheck
+sol-execbench .artifacts/rmsnorm-025/recheck/problem \
+  --solution .artifacts/rmsnorm-025/recheck/solution.json \
+  --output .artifacts/rmsnorm-025/recheck/results.jsonl
+```
+
+## Baseline and tuning
+
 The direct-launch Triton baseline passed correctness and CUPTI timing for all 14 official workloads on GB300 at 8.059 µs geometric mean. This is a provisional GB300 candidate. [Per-workload evaluator results](gb300-baseline.jsonl)
 
 The baseline used physical GPU 0 (`GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`). The sampled SM and memory clocks were 1500 and 3996 MHz throughout. The driver denied new unprivileged clock lock requests. The device reported 3996 MHz for both its deferred memory setting and its sole supported memory clock.

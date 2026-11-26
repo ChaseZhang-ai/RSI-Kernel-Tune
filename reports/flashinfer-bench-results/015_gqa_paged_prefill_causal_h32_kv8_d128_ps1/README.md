@@ -18,3 +18,16 @@ Both screening trials passed all nine tested workloads per variant, including th
 - [Fused-prefix screen](gb300-fused-screen.jsonl). The one-launch path reduced the 34-query, one-key row from 6.896 to 3.968 µs and the 10,447-query, one-key row from 20.064 to 16.800 µs.
 - [Dispatch and split-KV screen](gb300-dispatch-screen.jsonl). The tuned split-KV path reduced the 2,560-index row from 97.521 to 22.688 µs. The fused tensor-core path was faster than the wider SIMD path on the screened irregular medium batches. The `first_call_s` fields record cold-cache first-call wall times, including JIT when a specialization is first used.
 - The private B200 upload of candidate v1 (SHA-256 `f0ddfe404fda64aecc1d11178dea50c9b1cc2a9957f5497d17f2c8a34ff3d3cc`) returned HTTP 429 before issuing a submission ID. Slot 09 reported 0 active submissions against a limit of 5.
+
+## Candidate v1 on GB300
+
+The exact DPS bundle passed all 38 official workloads on physical GPU 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`. The independent full paired run also passed all 38 workloads per variant on physical GPU 2, UUID `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, and improved geometric-mean latency from 12.647 to 8.396 µs (1.51×). Both devices reported 152 SMs and CUDA capability 10.3 at 1500/3996 MHz SM/memory.
+
+- [Exact DPS evaluator results](gb300-v1-evaluator.jsonl)
+- [Paired timings, checks and first-call times](gb300-v1-paired.jsonl)
+- Cold Triton compile-and-launch wall-time bound from an isolated cache was 10.309 s summed across the 38 first calls, with a 1.097 s maximum. The baseline bounds were 7.596 s total and 1.120 s maximum.
+- The full paired run measured 3.888 µs for the 34-query, one-index row, 16.576 µs for the 10,447-query, one-index row, and 22.816 µs for the 2,560-index row.
+
+## Candidate v2 screening on GB300
+
+The [paired v2 screen](gb300-v2-screen.jsonl) used physical GPU 1 at the same clocks. All tested variants passed nine official workloads. A bounded grid reduced the 2,560-index row from 22.688 to 18.784 µs. TMA zero writes improved the screened 16,384-query row from 24.113 to 23.392 µs and the screened 2,002-query row from 8.209 to 7.376 µs. One-warp and grouped-head variants showed higher latency for most screened short windows, so v2 retains four warps and one query head per CTA on the smallest windows.

@@ -6,6 +6,7 @@ The exact destination-passing submission passed all 38 official workloads in the
 
 - Completed 2026-11-26 18:45:52 UTC on physical GPU 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`. The device queried as 152 SMs and CUDA capability 10.3, at 1500 MHz SM and 3996 MHz memory.
 - SOL-ExecBench 1.0.2 at commit `a9fa0804c793d438e70850c33fe34426e66d53dd`, PyTorch 2.10.0+cu130, Triton 3.6.0 and v1.1 timing. The evaluator used 10 warmups, 50 timed iterations, cold L2, cloned pointer-shifted inputs, preallocated outputs and first-to-last CUPTI activity. The run started with an empty Triton cache.
+- In a separate empty-cache compiler-only run targeting the queried SM 10.3, compiling the 22 baseline specializations took 13.031 s total, with a 1.218 s maximum. [Cold compiler measurements](gb300-baseline-cold-compile.jsonl)
 - Exact Python source SHA-256 `e757a8cd97780daa71f6b089bd2bb16aed027630da43e2a3f08671d6d7525a8f`. The local DPS solution embedded this file as `submission.py::run`.
 - The definition, 38 workload IDs and tolerances came from the staged official Parquet (SHA-256 `89d1feacf02b6f8c07ec8d67a9dbb2c531652251095a7f762f2bc296f6a1fe74`). Safetensors metadata was resolved from FlashInfer trace 1.0. [SOL-ExecBench evaluator](https://github.com/NVIDIA/SOL-ExecBench/tree/a9fa0804c793d438e70850c33fe34426e66d53dd) · [Official Parquet](https://huggingface.co/datasets/nvidia/SOL-ExecBench/resolve/main/data/FlashInfer-Bench.parquet) · [FlashInfer trace](https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace/tree/1.0)
 

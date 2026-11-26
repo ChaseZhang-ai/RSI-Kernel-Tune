@@ -2,6 +2,37 @@
 
 The direct-launch Triton baseline passed correctness and CUPTI timing for all eight official workloads on GB300. The workspace started from `origin/main` at `dc3ccce2`.
 
+## Triton v1
+
+The exact direct-launch DPS archive entry passed all eight workloads.
+The paired geometric mean fell from 8.896 to 7.067 µs, a 20.6% reduction.
+The paired results average three 50-sample trial medians. The evaluator column uses the median of the CLI's 50 timed samples.
+
+| Batch | Official UUID | Baseline paired µs | Candidate paired µs | Exact CLI µs | Status |
+|---:|---|---:|---:|---:|---|
+| 1 | `f1133b8c-5ab3-4cf5-b753-84a32d9e3661` | 4.843 | 3.109 | 3.120 | PASSED |
+| 7 | `98773f58-2d55-497d-a79d-df0bca20e369` | 4.117 | 2.976 | 2.976 | PASSED |
+| 18 | `00b8ce81-3357-41ea-b7ec-731439bc51ad` | 4.139 | 3.019 | 3.040 | PASSED |
+| 32 | `08ca44b8-2c3a-407d-87a7-85454ef4d748` | 4.160 | 3.072 | 3.104 | PASSED |
+| 64 | `d1ebd937-923e-44b2-8e4e-3e9194aa8d09` | 4.235 | 3.296 | 3.280 | PASSED |
+| 539 | `e8073f61-7ae6-44d0-9b13-29199e6c5595` | 6.507 | 6.165 | 6.208 | PASSED |
+| 11,949 | `75e6d0e3-a957-47fe-84ff-d3e492f505ae` | 59.061 | 54.837 | 54.720 | PASSED |
+| 14,521 | `5b601f70-1495-4c70-9870-e05dc771f1c1` | 70.229 | 65.088 | 64.576 | PASSED |
+
+Cold compilation and first launches across the eight workloads totaled 0.623 s in an empty candidate cache.
+The exact submission SHA-256 is `af64ac654c0a531ce5c063159c40061e61f335edfdc5e6747c17f648bd21b27d`.
+
+[Exact evaluator output](v1-evaluator.jsonl) · [Paired trials](v1-paired.jsonl) · [Device and artifact metadata](v1-device.json)
+
+## Reproduce the DPS evaluation
+
+Generate the bundle from the collection entry and the staged Parquet. Run the evaluator under the fleet lock with the selected GB300 UUID set in `CUDA_VISIBLE_DEVICES` and the clocks set to 1500/3996 MHz.
+
+```sh
+python reports/flashinfer-bench-results/026_rmsnorm_h7168/prepare_bundle.py .artifacts/026-repro
+sol-execbench .artifacts/026-repro --solution .artifacts/026-repro/solution.json --output .artifacts/026-repro/results.jsonl
+```
+
 ## Benchmark conditions
 
 SOL-ExecBench 1.0.2 at `a9fa0804` used the open CUPTI evaluator with PyTorch 2.10.0+cu130, Triton 3.6.0, CUDA 13.1 PTXAS and CUPTI Python 13.5.0. Runs held the fleet lock, pinned the worker to the physical GPU UUID, and checked for other compute jobs. The 1500 MHz SM lock and the sole supported 3996 MHz memory clock were verified before and after each run. The GB300s queried 152 SMs and capability 10.3. Native experiments compiled for the queried capability using NVRTC. The 148-SM proxy was used for the persistent CTA grid experiments.

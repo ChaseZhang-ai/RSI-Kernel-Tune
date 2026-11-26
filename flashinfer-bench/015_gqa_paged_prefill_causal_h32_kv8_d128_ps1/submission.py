@@ -13,6 +13,7 @@ import math
 import torch
 import triton
 import triton.language as tl
+from triton.tools.tensor_descriptor import TensorDescriptor
 
 
 @triton.jit
@@ -88,7 +89,7 @@ def _store(O, L, query, qe, h, accum, peak, denom, M: tl.constexpr):
 
 
 @triton.jit
-def _zeros(QO, KO, O, L, tile, q_count,
+def _zeros(QO, KO, O, L, Desc, tile, q_count,
            REQUESTS: tl.constexpr, R: tl.constexpr, ZQ: tl.constexpr):
     row = tile * ZQ + tl.arange(0, ZQ)
     if REQUESTS == 1:
@@ -107,7 +108,13 @@ def _zeros(QO, KO, O, L, tile, q_count,
     empty = empty & (row < q_count)
     d = tl.arange(0, 4096)
     h = tl.arange(0, 32)
-    tl.store(O + row[:, None] * 4096 + d[None, :], 0, empty[:, None], cache_modifier=".cs")
+    if ZQ >= 4:
+        if tl.sum(empty.to(tl.int32), 0) == ZQ:
+            Desc.store([tile * ZQ * 32, 0], tl.full((ZQ * 32, 128), 0, tl.bfloat16))
+        else:
+            tl.store(O + row[:, None] * 4096 + d[None, :], 0, empty[:, None])
+    else:
+        tl.store(O + row[:, None] * 4096 + d[None, :], 0, empty[:, None])
     tl.store(L + row[:, None] * 32 + h[None, :], -float("inf"), empty[:, None])
 
 
@@ -136,15 +143,15 @@ def _short(Q, K, V, Pages, O, L, row, qe, ks, ke, head_group, scale,
 
 
 @triton.jit
-def _fused(Q, K, V, QO, KO, Pages, O, L, scale, active_ctas, q_count,
+def _fused(Q, K, V, QO, KO, Pages, O, L, Desc, scale, active_ctas, q_count,
            REQUESTS: tl.constexpr, R: tl.constexpr, N: tl.constexpr, ZQ: tl.constexpr,
-           SHORT: tl.constexpr):
+           SHORT: tl.constexpr, HEADS: tl.constexpr):
     pid = tl.program_id(0)
     if pid < active_ctas:
         if SHORT:
-            query, qe, ks, ke = _active_tile(QO, KO, pid // 32, REQUESTS, R, 1)
+            query, qe, ks, ke = _active_tile(QO, KO, pid // (32 // HEADS), REQUESTS, R, 1)
             if (query < qe) & (ks < ke):
-                _short(Q, K, V, Pages, O, L, query, qe, ks, ke, pid % 32, scale, 1, SHORT)
+                _short(Q, K, V, Pages, O, L, query, qe, ks, ke, pid % (32 // HEADS), scale, HEADS, SHORT)
         else:
             query, qe, ks, ke = _active_tile(QO, KO, pid // 8, REQUESTS, R, 4)
             if (query < qe) & (ks < ke):
@@ -152,7 +159,7 @@ def _fused(Q, K, V, QO, KO, Pages, O, L, scale, active_ctas, q_count,
                 acc, peak, denom = _online(Q, K, V, Pages, query, qe, ks, ke, ke, group, scale, 16, N)
                 _store(O, L, query, qe, group, acc, peak, denom, 16)
     else:
-        _zeros(QO, KO, O, L, pid - active_ctas, q_count, REQUESTS, R, ZQ)
+        _zeros(QO, KO, O, L, Desc, pid - active_ctas, q_count, REQUESTS, R, ZQ)
 
 
 @triton.jit
@@ -170,17 +177,16 @@ def _long_tasks(QO, KO, REQUESTS: tl.constexpr, R: tl.constexpr, SPLIT: tl.const
 
 
 @triton.jit
-def _long(Q, K, V, QO, KO, Pages, O, L, Partials, scale, active_ctas, q_count,
+def _long(Q, K, V, QO, KO, Pages, O, L, Desc, Partials, scale, active_ctas, q_count,
           REQUESTS: tl.constexpr, R: tl.constexpr, ZQ: tl.constexpr,
           SPLIT: tl.constexpr, N: tl.constexpr):
     pid = tl.program_id(0)
     if pid < active_ctas:
-        tile = pid // 8
         h = pid % 8
         r, active_vec, part_vec, tasks = _long_tasks(QO, KO, REQUESTS, R, SPLIT)
         ends = tl.cumsum(tasks)
-        req = tl.sum((ends <= tile).to(tl.int32), 0)
-        if req < REQUESTS:
+        for tile in range(pid // 8, tl.sum(tasks, 0), active_ctas // 8):
+            req = tl.sum((ends <= tile).to(tl.int32), 0)
             relative = tile - tl.sum(tl.where(r == req, ends - tasks, 0), 0)
             parts = tl.sum(tl.where(r == req, part_vec, 0), 0)
             active = tl.sum(tl.where(r == req, active_vec, 0), 0)
@@ -208,7 +214,7 @@ def _long(Q, K, V, QO, KO, Pages, O, L, Partials, scale, active_ctas, q_count,
                                             ks, ke, ke, h, scale, 16, 32)
                 _store(O, L, query, qe, h, acc, peak, denom, 16)
     else:
-        _zeros(QO, KO, O, L, pid - active_ctas, q_count, REQUESTS, R, ZQ)
+        _zeros(QO, KO, O, L, Desc, pid - active_ctas, q_count, REQUESTS, R, ZQ)
 
 
 @triton.jit
@@ -251,25 +257,29 @@ def run(q, k_cache, v_cache, qo_indptr, kv_indptr, kv_indices, sm_scale, output,
     scale = float(sm_scale) * math.log2(math.e)
     zq = 4 if total_q >= 512 else 1
     empty_ctas = triton.cdiv(total_q, zq)
+    desc = TensorDescriptor(output, [total_q * 32, 128], [128, 1], [zq * 32, 128]) if zq >= 4 else None
     if keys >= 512:
         split, n = 128, 64
         max_parts = triton.cdiv(keys, split)
         partials = torch.empty((max_parts, requests, 16, 32, 132),
                                dtype=torch.float32, device=q.device)
-        tiles = triton.cdiv(min(total_q, keys), 4) + requests - 1 + 4 * max_parts
+        tiles = min(triton.cdiv(min(total_q, keys), 4) + requests - 1 + 4 * max_parts,
+                    max(37, max_parts + requests + 8))
         active_ctas = 8 * tiles
         _long[(active_ctas + empty_ctas,)](
-            q, k_cache, v_cache, qo_indptr, kv_indptr, kv_indices, output, lse, partials,
+            q, k_cache, v_cache, qo_indptr, kv_indptr, kv_indices, output, lse, desc, partials,
             scale, active_ctas, total_q, requests, request_block, zq, split, n, num_warps=4)
         _join[(requests, 32)](qo_indptr, kv_indptr, partials, output, lse,
                               requests, split, triton.next_power_of_2(max_parts), num_warps=4)
     else:
         short = triton.next_power_of_2(max(keys, 1)) if keys <= 4 else 0
         n = 64 if total_q <= 2 else 32
+        warps = 4
+        heads = 1
         if short:
-            active_ctas = min(total_q, keys) * 32
+            active_ctas = min(total_q, keys) * (32 // heads)
         else:
             active_ctas = (triton.cdiv(min(total_q, keys), 4) + requests - 1) * 8
         _fused[(active_ctas + empty_ctas,)](
-            q, k_cache, v_cache, qo_indptr, kv_indptr, kv_indices, output, lse,
-            scale, active_ctas, total_q, requests, request_block, n, zq, short, num_warps=4)
+            q, k_cache, v_cache, qo_indptr, kv_indptr, kv_indices, output, lse, desc,
+            scale, active_ctas, total_q, requests, request_block, n, zq, short, heads, num_warps=warps)

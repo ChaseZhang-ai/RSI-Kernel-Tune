@@ -9,7 +9,7 @@ The exact DPS bundle passed 38/38 official workloads, including CUPTI timing, on
 - Physical GPU 1, UUID `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, 152 queried SMs, CUDA capability 10.3, 1500 MHz SM and 3996 MHz memory
 - SOL-ExecBench commit `a9fa0804c793d438e70850c33fe34426e66d53dd` with v1.1 timing, Torch 2.10.0+cu130, Triton 3.6.0
 - 10 warmups, 50 timed calls, cloned inputs, preallocated destinations, cold L2, and CUPTI first-to-last GPU activity
-- The evaluator started with an empty Triton cache. The cold JIT measurement is pending the paired run.
+- The evaluator started with an empty Triton cache. The paired v1 record includes the baseline cold first-call measurements.
 
 ## Paired scheduling screens on GB300
 
@@ -31,3 +31,16 @@ The exact DPS bundle passed all 38 official workloads on physical GPU 3, UUID `G
 ## Candidate v2 screening on GB300
 
 The [paired v2 screen](gb300-v2-screen.jsonl) used physical GPU 1 at the same clocks. All tested variants passed nine official workloads. A bounded grid reduced the 2,560-index row from 22.688 to 18.784 µs. TMA zero writes improved the screened 16,384-query row from 24.113 to 23.392 µs and the screened 2,002-query row from 8.209 to 7.376 µs. One-warp and grouped-head variants showed higher latency for most screened short windows, so v2 retains four warps and one query head per CTA on the smallest windows.
+
+## Candidate v2 on GB300
+
+The provisional submission is the exact v2 DPS source. SOL-ExecBench passed 38/38 official workloads with a geometric-mean latency of 8.294 µs on physical GPU 2, UUID `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, 152 queried SMs, CUDA capability 10.3 and 1500/3996 MHz SM/memory. The 34-query one-index, 10,447-query one-index and 2,560-index workloads took 4.000, 16.448 and 18.832 µs.
+
+- [Exact DPS evaluator timings](gb300-v2-evaluator.jsonl)
+- Source SHA-256 `a0add67d61e67c3d1b69dcd541d3d1db5a367e37586bd707f15c9b26dccf3d6b`
+- The largest official K/V pair occupies 2.733 GiB. The split-KV workspace is bounded at 87.66 MiB across the official workloads.
+- The v3 screen on physical GPU 2 found comparable or higher latencies with preloaded single-request SIMT and single-tile split-KV alternatives. [Per-workload measurements](gb300-v3-screen.jsonl)
+- The v4 screen on physical GPU 3 found that wider zero tiles regressed an irregular batch and that earlier dispatch to TMA mainly benefited the 398-query case. Both screens used the same locked clocks and v1.1 timing protocol. [Per-workload measurements](gb300-v4-screen.jsonl)
+- The private v2 upload returned HTTP 429 at 17:53:46 UTC on 2026-11-26. The board issued no submission ID and supplied no retry interval.
+
+The local definition, 38 workload IDs and tolerances came from the named Parquet row. The dataset SHA-256 was `89d1feacf02b6f8c07ec8d67a9dbb2c531652251095a7f762f2bc296f6a1fe74`. The evaluator resolved the workload metadata from FlashInfer trace version 1.0. [Official Parquet](https://huggingface.co/datasets/nvidia/SOL-ExecBench/resolve/main/data/FlashInfer-Bench.parquet) · [FlashInfer trace](https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace/tree/1.0)

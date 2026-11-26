@@ -19,6 +19,23 @@ The exact destination-passing bundle passed all **47 official workloads** in the
 | All | 47/47 | 29.149 |
 
 - The CLI ran on physical GPU 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`. Clocks were locked at 1500/3996 MHz and PyTorch queried 152 SMs, capability 10.3. The lock covered the evaluator. The first CLI attempt stopped before evaluation because the subprocess could not find `python`. The successful retry added the evaluator environment to `PATH`.
-- Local evaluator 1.0.2 at commit `a9fa0804c793d438e70850c33fe34426e66d53dd`, PyTorch 2.10.0+cu130 and Triton 3.6.0. The official CLI used 10 warmups, 50 iterations, cold L2, cloned inputs and preallocated outputs. The cold paired screen took approximately 2.42 seconds for the first calls of the five v1 kernel specializations, including JIT, launch and synchronization. The eight-page kernel compiled on the baseline call because both variants use the same kernel.
+- Local evaluator 1.0.2 at commit `a9fa0804c793d438e70850c33fe34426e66d53dd`, PyTorch 2.10.0+cu130 and Triton 3.6.0. The official CLI used 10 warmups, 50 iterations, cold L2, cloned inputs and preallocated outputs. The cold paired screen took approximately 2.42 seconds for the first calls of the six v1 kernel specializations, including JIT, launch and synchronization. The eight-page kernel compiled on the baseline call because both variants use the same kernel.
 - The bundle embeds submission SHA-256 `16d52f3ee123e6164d8a119a226688544a9847827227ee090451c2022c4efa6b`. A separate CPU-only compile check also emitted SM 10.0 cubins with Triton 3.5.0. The runtime verification was on GB300. The 75,145-index case requires about 20.5 MiB of split workspace.
 - The v1.1 public B200 boards showed 0.994987 SOL for the operator leader and 0.940633 SOL for the collection leader at 2026-11-26 18:39 UTC. Candidate verification is provisional GB300 only. [Kernel board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/227/B200) · [Collection board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/collection/4/B200)
+
+## GB300 Blackwell tuning screen
+
+The largest v1 case read about 86.6 MB of cache data and took 90.866 µs. The tuning screen compared asynchronous staging and tensor-core execution, tile sizes, and scratch bandwidth. Every variant passed correctness and timing on the six screened official workloads, including batch 1 with 8, 108 and 2,708 references. [Paired timings](gb300-tuning-screen.jsonl)
+
+| Batch | Index count | Split-KV v1 (µs) | Fastest screened variant (µs) |
+|---:|---:|---:|---:|
+| 1 | 8 | 6.528 | 6.160 |
+| 1 | 108 | 14.176 | 9.841 |
+| 1 | 2,708 | 20.497 | 17.504 |
+| 16 | 457 | 22.992 | 12.337 |
+| 64 | 30,745 | 46.113 | 33.233 |
+| 64 | 75,145 | 90.770 | 70.530 |
+
+- The screen ran on physical GPU 3 at 1500/3996 MHz SM/memory and completed at 18:55:11 UTC. It used the same software, workload tolerances, and paired protocol as the earlier comparison. The trace records cold first-call times including JIT and synchronization for each variant.
+- A TMA gather and one tensor-core tile performed best at 108 references. The long single-row case favored asynchronous copy with FP32 split values, and the batched cases favored asynchronous copy with narrower BF16 partial storage and an FP32 merge. The all-SIMT one-launch 108-reference trial took 22.913 µs.
+- A 28-call synthetic suite also passed on v1 after correcting a test fixture whose requested number of pages exceeded its backing allocation. The suite exercised randomized and repeated page IDs, empty rows, independent positional changes in place, a different scale, and changed destination and input pointers with reordered row lengths. [Synthetic results](gb300-v1-edge.json)

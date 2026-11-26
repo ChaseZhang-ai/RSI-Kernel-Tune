@@ -72,11 +72,12 @@ def _plan(Counts, Plan, Tiles, M: tl.constexpr, PER_EXPERT: tl.constexpr):
 @triton.jit
 def _gemm(A, AS, B, BS, Counts, Plan, Tiles, Tokens, Mixture, Out,
           T, CAP, M: tl.constexpr, N: tl.constexpr, K: tl.constexpr,
-          DOWN: tl.constexpr, STAGES: tl.constexpr):
-    tile = tl.program_id(0)
+          DOWN: tl.constexpr, STAGES: tl.constexpr, SWAP: tl.constexpr):
+    flat = tl.program_id(0)
+    tile = flat // (N // 128)
     if tile >= tl.load(Plan + 64):
         return
-    col_tile = tl.program_id(1)
+    col_tile = flat % (N // 128)
     expert = tl.load(Tiles + tile)
     tile_start = tl.load(Plan + 32 + expert)
     count = tl.load(Counts + expert)
@@ -100,14 +101,22 @@ def _gemm(A, AS, B, BS, Counts, Plan, Tiles, Tokens, Mixture, Out,
             a0 = tl.load(a, valid[:, None], 0.0)
             a1 = tl.load(a + 128, valid[:, None], 0.0)
             a2 = tl.load(a + 256, valid[:, None], 0.0)
-            partial = tl.dot(a0, tl.trans(w))
-            partial = tl.dot(a1, tl.trans(w), partial)
-            partial = tl.dot(a2, tl.trans(w), partial)
+            if SWAP:
+                product = tl.dot(w, tl.trans(a0))
+                product = tl.dot(w, tl.trans(a1), product)
+                partial = tl.trans(tl.dot(w, tl.trans(a2), product))
+            else:
+                partial = tl.dot(a0, tl.trans(w))
+                partial = tl.dot(a1, tl.trans(w), partial)
+                partial = tl.dot(a2, tl.trans(w), partial)
             a_scale = tl.load(AS + block * CAP + row, valid, 0.0)
         else:
             a0 = tl.load(A + token[:, None] * K + block * 128 + k[None, :],
                          valid[:, None], 0.0)
-            partial = tl.dot(a0, tl.trans(w))
+            if SWAP:
+                partial = tl.trans(tl.dot(w, tl.trans(a0)))
+            else:
+                partial = tl.dot(a0, tl.trans(w))
             a_scale = tl.load(AS + block * T + token, valid, 0.0)
         acc += partial * (a_scale[:, None] * ws)
 
@@ -121,6 +130,8 @@ def _gemm(A, AS, B, BS, Counts, Plan, Tiles, Tokens, Mixture, Out,
 
 @triton.jit
 def _quantize_e4m3(value):
+    # In biased FP32 exponent units, 121 is 2**-6, the first normal
+    # E4M3 bin. Clamping the exponent there gives the subnormal step 2**-9.
     bits = value.to(tl.uint32, bitcast=True)
     magnitude = tl.minimum(tl.abs(value), 448.0)
     exponent = tl.maximum(magnitude.to(tl.uint32, bitcast=True) >> 23, 121)
@@ -137,13 +148,9 @@ def _quantize_e4m3(value):
 
 
 @triton.jit
-def _swiglu(GateUp, Activation, Scale, Plan, CAP, ROWS: tl.constexpr):
-    first = tl.program_id(0) * ROWS
-    count = tl.load(Plan + 65)
-    if first >= count:
-        return
+def _swiglu_tile(GateUp, Activation, Scale, CAP, count, first, block,
+                 ROWS: tl.constexpr):
     row = first + tl.arange(0, ROWS)
-    block = tl.program_id(1)
     lane = tl.arange(0, 128)
     col = block * 128 + lane
     x1 = tl.load(GateUp + row[:, None] * 4096 + col[None, :],
@@ -151,12 +158,14 @@ def _swiglu(GateUp, Activation, Scale, Plan, CAP, ROWS: tl.constexpr):
     x2 = tl.load(GateUp + row[:, None] * 4096 + col[None, :] + 2048,
                  row[:, None] < count, 0.0)
     # Evaluate the logistic with an exponent in [0, 1] even for large
-    # negative projections. Keep the FP8 normalization in the same range.
+    # negative projections.
     exp_neg_abs = tl.exp(-tl.abs(x2))
     sigmoid = tl.div_rn(tl.where(x2 >= 0, 1.0, exp_neg_abs), 1.0 + exp_neg_abs)
     value = x1 * (x2 * sigmoid)
     scale = tl.maximum(tl.max(tl.abs(value), 1) * (1.0 / 448.0), 1.0e-30)
     scaled = value * tl.div_rn(1.0, scale[:, None])
+    # Construct the residuals from the rounded values directly. This also
+    # avoids a packed FP8-to-FP16 conversion in the residual chain.
     first_fp8, first_value = _quantize_e4m3(scaled)
     rest = scaled - first_value
     second_fp8, second_value = _quantize_e4m3(rest)
@@ -166,6 +175,22 @@ def _swiglu(GateUp, Activation, Scale, Plan, CAP, ROWS: tl.constexpr):
     tl.store(destination + 128, second_fp8, row[:, None] < count)
     tl.store(destination + 256, third_fp8, row[:, None] < count)
     tl.store(Scale + block * CAP + row, scale, row < count)
+
+
+@triton.jit
+def _swiglu(GateUp, Activation, Scale, Plan, CAP, ROWS: tl.constexpr,
+            PERSISTENT: tl.constexpr):
+    count = tl.load(Plan + 65)
+    if PERSISTENT:
+        jobs = tl.cdiv(count, ROWS) * 16
+        for task in range(tl.program_id(0), jobs, tl.num_programs(0)):
+            _swiglu_tile(GateUp, Activation, Scale, CAP, count,
+                         task // 16 * ROWS, task % 16, ROWS)
+    else:
+        first = tl.program_id(0) * ROWS
+        if first < count:
+            _swiglu_tile(GateUp, Activation, Scale, CAP, count,
+                         first, tl.program_id(1), ROWS)
 
 
 @triton.jit
@@ -183,8 +208,18 @@ def run(routing_logits, routing_bias, hidden_states, hidden_states_scale,
         return
     device = hidden_states.device
     capacity = 8 * t
-    block_m = 32
-    stages = 3
+    # Long sequences use persistent SwiGLU over the actual routed rows.
+    # Short sequences keep the sparse expert tiles in a direct grid.
+    sparse = t <= 80
+    long_sequence = t >= 2048
+    block_m = 16 if sparse else 32
+    stages = 1 if sparse else 3
+    if long_sequence:
+        gate_rows = 8
+        gate_grid = (8 * torch.cuda.get_device_properties(device).multi_processor_count,)
+    else:
+        gate_rows = 4
+        gate_grid = (triton.cdiv(capacity, gate_rows), 16)
     tile_capacity = triton.cdiv(capacity, block_m) + 32
     counts = torch.empty((32,), device=device, dtype=torch.int32)
     plan = torch.empty((66,), device=device, dtype=torch.int32)
@@ -203,14 +238,15 @@ def run(routing_logits, routing_bias, hidden_states, hidden_states_scale,
                  int(local_expert_offset), float(routed_scaling_factor), num_warps=4)
     _plan[(32,)](counts, plan, tiles, block_m,
                  triton.next_power_of_2(triton.cdiv(t, block_m)), num_warps=1)
-    _gemm[(tile_capacity, 32)](
+    _gemm[(tile_capacity * 32,)](
         hidden_states, hidden_states_scale, gemm1_weights, gemm1_weights_scale,
         counts, plan, tiles, tokens, mixture, gate_up, t, capacity,
-        block_m, 4096, 7168, False, stages, num_warps=4)
-    _swiglu[(triton.cdiv(capacity, 4), 16)](
-        gate_up, activation, scale, plan, capacity, 4, num_warps=4)
-    _gemm[(tile_capacity, 56)](
+        block_m, 4096, 7168, False, stages, sparse, num_warps=4)
+    _swiglu[gate_grid](
+        gate_up, activation, scale, plan, capacity, gate_rows,
+        long_sequence, num_warps=4)
+    _gemm[(tile_capacity * 56,)](
         activation, scale, gemm2_weights, gemm2_weights_scale,
         counts, plan, tiles, tokens, mixture, acc, t, capacity,
-        block_m, 7168, 2048, True, stages, num_warps=4)
+        block_m, 7168, 2048, True, stages, sparse, num_warps=4)
     _finish[output_grid](acc, output, flat_size, 2048)

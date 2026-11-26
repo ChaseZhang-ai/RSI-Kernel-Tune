@@ -97,3 +97,7 @@ Both sides passed 48/48 in a paired repeat with PyTorch 2.9.0+cu130 and Triton 3
 ## Private B200 trial
 
 The board accepted the exact v5 artifact as private submission **105896** at 2026-11-26 18:19:39 UTC. The evaluation stack is v1.1. The result is pending. [Submission evidence](b200-submission-105896.json)
+
+While 105896 is pending, the board exposes 10 Gluon compilation diagnostics and five missing-CUPTI timing failures. Its result is scheduled for 19:20:57 UTC. The other failed rows carry a generic status in this preliminary log. [Sanitized workload diagnostics](b200-diagnostics-105896.jsonl)
+
+The board accepted a standard-Triton retry as private submission **105900**. This version uses ordinary Triton kernels for the B=1 direct route and compact split-KV kernels for the larger batches. Its SHA-256 is `0a956bf31d3d5de95944f9fe99579973dc5dbf2772c9464886050de6e1b7b70e`. [Retry evidence](b200-submission-105900.json)

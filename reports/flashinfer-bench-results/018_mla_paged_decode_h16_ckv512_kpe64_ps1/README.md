@@ -39,3 +39,10 @@ The largest v1 case read about 86.6 MB of cache data and took 90.866 µs. The tu
 - The screen ran on physical GPU 3 at 1500/3996 MHz SM/memory and completed at 18:55:11 UTC. It used the same software, workload tolerances, and paired protocol as the earlier comparison. The trace records cold first-call times including JIT and synchronization for each variant.
 - A TMA gather and one tensor-core tile performed best at 108 references. The long single-row case favored asynchronous copy with FP32 split values, and the batched cases favored asynchronous copy with narrower BF16 partial storage and an FP32 merge. The all-SIMT one-launch 108-reference trial took 22.913 µs.
 - A 28-call synthetic suite also passed on v1 after correcting a test fixture whose requested number of pages exceeded its backing allocation. The suite exercised randomized and repeated page IDs, empty rows, independent positional changes in place, a different scale, and changed destination and input pointers with reordered row lengths. [Synthetic results](gb300-v1-edge.json)
+
+## GB300 hybrid v2 paired evaluation
+
+The assembled hybrid and v1 both passed the eight-workload follow-up. On the same physical GB300, geomean latency fell from 22.575 to 16.656 µs, a 26.2% reduction. The 108-reference case took 10.064 µs and the 75,145-reference case took 69.1375 µs. [Paired timings](gb300-v2-pair.jsonl)
+
+- Physical GPU 2, UUID `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, with 1500/3996 MHz clocks, 152 queried SMs and CUDA capability 10.3. The pair completed at 2026-11-26 18:56:37 UTC under the shared lock.
+- Exact hybrid v2 passed all 28 synthetic calls, including the direct TMA route with permuted pages, independent positional changes, and replaced input and output pointers. The cold first calls for the paired sample summed to 2.050 seconds, including Triton JIT and run synchronization. [Synthetic results](gb300-v2-edge.json)

@@ -6,8 +6,9 @@ What these tests pin down:
   ones there are, and the interface module is not a backend;
 - the Claude command is what it always was, plus ``FK_AGENT_ROLE`` in front (the loop
   gained a role for the usage ledger and the refusal check, not a new invocation);
-- the Codex launcher carries every flag the CLI needs, and codex never serves the student,
-  a sealed reference, or a /goal session;
+- the Codex launcher carries every flag the CLI needs; codex serves the student role
+  (agent policy prompt-level there, loudly so), and still never serves a sealed
+  reference or a /goal session;
 - provider.grant picks the endpoint variable from the *wire*, so a table that speaks the
   wrong protocol is refused before a run exists.
 """
@@ -102,9 +103,9 @@ def test_the_claude_backend_serves_both_roles_through_the_hook_policy():
     assert backend.script_path() == Path(CLAUDE_SCRIPT)
 
 
-def test_the_codex_backend_serves_only_the_teacher_and_has_no_policy_hooks():
+def test_the_codex_backend_serves_both_roles_and_has_no_policy_hooks():
     backend = agentbackends.load("codex")
-    assert backend.roles == ("teacher",)
+    assert backend.roles == ("teacher", "student")
     assert backend.wire == "openai" and backend.policy_support == "none"
     assert backend.script == "scripts/agent-codex.sh"
     assert backend.script_path() == Path(CODEX_SCRIPT)
@@ -127,9 +128,9 @@ def test_the_codex_command_is_the_same_script_contract():
     assert cmd == (f"env FK_AGENT_ROLE=teacher bash {CODEX_SCRIPT} gpt-5.5-codex high 7200")
 
 
-def test_a_codex_student_is_refused_by_agent_command():
-    with pytest.raises(ValueError, match=r"codex backend cannot serve the student role"):
-        agents.agent_command(_spec("codex", model="gpt-5.5-codex"), "student")
+def test_a_codex_student_is_allowed_and_uses_the_same_contract():
+    cmd = agents.agent_command(_spec("codex", model="gpt-5.5-codex"), "student")
+    assert cmd == (f"env FK_AGENT_ROLE=student bash {CODEX_SCRIPT} gpt-5.5-codex high 7200")
 
 
 def test_a_codex_goal_session_is_refused_with_a_reason():
@@ -238,9 +239,13 @@ def _codex(role: str) -> str:
     return f'[agent.{role}]\nbackend = "codex"\nmodel = "gpt-5.5-codex"\n'
 
 
-def test_codex_as_the_student_is_a_task_problem(tmp_path):
-    with pytest.raises(TaskError, match=r"cannot serve the student role \(it serves: \['teacher'\]\)"):
-        load_task(_task(tmp_path, MINIMAL + _codex("student")), kb_root=_kb(tmp_path))
+def test_codex_as_the_student_on_a_readable_reference_task_is_fine(tmp_path):
+    toml = (MINIMAL + '[reference]\nrun = "reference/run.py:run"\nsource = "reference"\n'
+            + _codex("student"))
+    t = load_task(_task(tmp_path, toml,
+                        files={"reference/run.py": "def run(x, w):\n    return x\n"}),
+                  kb_root=_kb(tmp_path))
+    assert t.mode == task_mod.MODE_SOURCE and t.student.backend == "codex"
 
 
 def test_codex_as_the_teacher_on_a_source_task_is_fine(tmp_path):

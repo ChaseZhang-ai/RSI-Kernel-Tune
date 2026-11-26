@@ -168,7 +168,7 @@ forge run .artifacts/rmsnorm_<id>                       # 中断后续跑
 命令依赖的运行期机制：四个运行上下文文件（`{TARGET_PROFILE_PATH}`、`{ROOFLINE_PATH}`、`{LESSONS_PATH}`、
 `{PRIOR_PATH}`）把测得的数据带进每一条提示词；吞吐治理器（`task.toml` 的 `[budget]`、账本
 `governor_ledger.jsonl`、`forge status` / `report.md`）不让 teacher 把 student 挤没；agent 后端是插件
-（默认 teacher = Codex、student = Claude），每个回合的 token 与花费落在 `agent_usage.jsonl`
+（默认 teacher = Codex、student = Codex），每个回合的 token 与花费落在 `agent_usage.jsonl`
 （`report.md` 的 `## Agent usage`）。
 
 语言：`task.toml` 接受 `cutedsl`、`cuda-sol`、`triton`；Triton 卡片用 `forge init … --language triton`
@@ -220,7 +220,7 @@ forge run .artifacts/rmsnorm_<id>                       # 中断后续跑
 `models.toml` 定 `[agent]`（`backend`、`provider`、`model`、`effort`、`timeout_s`；`[agent.teacher]` /
 `[agent.student]` 只改一个 agent），`loop.toml` 定 `[target]` 与 `[budget]`，`backends.toml` 列出
 `provider` 不是 `native` 时可以指定的 API 端点，key 从 `local.env` 读。默认目标是 device 时间达到参照的
-1.2 倍，内层循环 4 小时，teacher 3 轮，**默认优先 Codex 跑 teacher**（`sol6.2`，思考深度 `high`），student 仍保留 Claude
+1.2 倍，内层循环 4 小时，teacher 3 轮，**默认 teacher、student 都用 Codex**（`sol6.2`，思考深度 `high`）
 （`claude-opus-5-5`），任务可以再覆盖。
 
 ## 自进化

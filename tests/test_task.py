@@ -53,7 +53,7 @@ def test_minimal_task_takes_every_default(tmp_path):
     assert t.reference is None and t.mode == task_mod.MODE_GENERATE
     assert t.target.ratio == 1.2 and t.target.ms is None and t.target.timing == "device"
     assert t.teacher.backend == "codex" and t.teacher.model == "sol6.2"
-    assert t.student.backend == "claude" and t.student.model == "claude-opus-5-5"
+    assert t.student.backend == "codex" and t.student.model == "sol6.2"
     assert t.student.effort == "high"
     assert (t.budget.hours, t.budget.max_meta, t.budget.reference_hours) == (4.0, 3, 8.0)
     assert [s.name for s in t.shapes] == ["small", "large"]
@@ -79,8 +79,9 @@ def test_a_provider_must_be_declared_and_its_key_set(tmp_path, monkeypatch):
     from rsi_kernel_tune import agents, provider
     gc = tmp_path / "gc"
     gc.mkdir()
-    (gc / "backends.toml").write_text('[gw]\nbase_url = "https://gw.example/anthropic"\n'
-                                      'wire = "anthropic"\nkey_env = "GW_KEY"\n')
+    # the default student is codex (openai wire), so the provider table must speak openai
+    (gc / "backends.toml").write_text('[gw]\nbase_url = "https://gw.example/openai"\n'
+                                      'wire = "openai"\nkey_env = "GW_KEY"\n')
     monkeypatch.setattr(provider, "global_config_dir", lambda: gc)
     with pytest.raises(TaskError, match="provider must be one of"):
         load_task(_task(tmp_path, MINIMAL + '[agent]\nprovider = "nope"\n'), kb_root=_kb(tmp_path))
@@ -90,7 +91,7 @@ def test_a_provider_must_be_declared_and_its_key_set(tmp_path, monkeypatch):
         agents.agent_command(t.student, "student", env={})
     cmd = agents.agent_command(t.student, "student", env={"GW_KEY": "secret"})
     assert cmd.startswith("env FK_AGENT_ROLE=student "
-                          "ANTHROPIC_BASE_URL=https://gw.example/anthropic "
+                          "OPENAI_BASE_URL=https://gw.example/openai "
                           "FK_PROVIDER_KEY_ENV=GW_KEY bash ")
     assert "secret" not in cmd and cmd.endswith(" 7200")
     native = load_task(_task(tmp_path, MINIMAL, name="nat"), kb_root=_kb(tmp_path))

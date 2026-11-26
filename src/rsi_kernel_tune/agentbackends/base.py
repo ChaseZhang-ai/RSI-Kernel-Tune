@@ -8,11 +8,10 @@ points its CLI at another endpoint.
 
 What a backend may and may not do is **declared, not inferred**:
 
-- ``roles``: the roles of the two-agent loop it can serve. The student is the tighter
-  role -- the agent policy's offline turns, no ssh, no self-submission and no reads of a
-  sealed reference are enforced through Claude Code's own settings and hooks -- so a
-  backend with ``policy_support == "none"`` serves only the teacher, and only on a task
-  without a sealed reference (``rsi_kernel_tune.task._read_agent`` refuses the rest).
+- ``roles``: the roles of the two-agent loop it can serve. A backend with
+  ``policy_support == "none"`` (nothing but the prompt behind the agent policy)
+  may serve either role, but ``rsi_kernel_tune.task._read_agent`` refuses it on a
+  task with a sealed reference.
 - ``policy_support``: ``"hooks"`` when ``scripts/agent_policy_hook.py`` can be wired into
   the CLI's settings so a denied read is *refused*; ``"none"`` when nothing but the prompt
   stands behind the policy.

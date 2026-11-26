@@ -107,9 +107,9 @@ endpoints). The "Default" column below is what `global_config/` holds.
 | | `deny` | no | `[]` | extra paths no agent may read |
 | `[target]` | `ratio` / `ms` | no | `ratio = 1.2` | one or the other; by default 20% faster than the reference; without a reference and without `ms`, see §3.3 |
 | | `timing` | no | `device` | the timing basis |
-| `[agent]` (both agents), `[agent.teacher]`, `[agent.student]` (one) | `backend` | no | `codex` (teacher) / `claude` (student) | the agent CLI; V1 supports `claude` and `codex` |
+| `[agent]` (both agents), `[agent.teacher]`, `[agent.student]` (one) | `backend` | no | `codex` (both) | the agent CLI; V1 supports `claude` and `codex` |
 | | `provider` | no | `native` | where the tokens go: `native` = the CLI's own login state and environment; or a name from `backends.toml` |
-| | `model` | no | teacher `sol6.2`; student `claude-opus-5-5` | the model actually used is written into the run's snapshot |
+| | `model` | no | `sol6.2` (both) | the model actually used is written into the run's snapshot |
 | | `effort` | no | `high` for both | reasoning effort |
 | | `timeout_s` | no | student 7200; teacher 14400 | one turn's wall-clock limit |
 | `[budget]` | `hours` | no | `4` | the inner loop's wall clock |

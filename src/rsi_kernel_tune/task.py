@@ -29,7 +29,7 @@
     timing = "device"               # device | e2e
 
     [agent]                         # both agents; [agent.teacher] / [agent.student] for one
-    backend   = "codex"              # preferred teacher; student stays claude by default
+    backend   = "codex"              # default for both roles
     provider  = "native"            # or a table of global_config/backends.toml
     model     = "sol6.2"
     effort    = "high"

@@ -17,15 +17,16 @@ cannot be held to the policy is restricted instead (see §2).
 |---|---|---|
 | launcher | `scripts/agent-claude.sh` | `scripts/agent-codex.sh` |
 | wire | `anthropic` (`ANTHROPIC_BASE_URL`) | `openai` (`OPENAI_BASE_URL`) |
-| roles | teacher **and** student | **teacher only** |
+| roles | teacher **and** student | teacher **and** student (default) |
 | policy enforcement | `hooks` — `.claude/settings.json` + `scripts/agent_policy_hook.py` | `none` |
 | may serve a task with a sealed reference | yes | **no** (refused at task load) |
 | /goal session (`FK_AGENT_DRIVER=goal`) | yes (`scripts/claude-goal.sh`) | **no** (refused with a reason) |
 | exercised on this machine | yes | **no** — codex is not installed |
 
-`global_config/models.toml` names the default; it is Codex-first: the teacher defaults to
-`codex` / `sol6.2`, while the student remains `claude` / `claude-opus-5-5` unless a task
-overrides it. A task overrides the teacher or the student:
+`global_config/models.toml` names the default; it is Codex for both roles: the teacher
+and the student default to `codex` / `sol6.2` (effort `high`), unless a task overrides
+one of them (e.g. `backend = "claude"` when hook enforcement or a /goal session is
+needed). A task overrides the teacher or the student:
 
 ```toml
 [task]
@@ -42,16 +43,17 @@ What the task file is checked for (`rsi_kernel_tune/task.py:_read_agent`, all pr
 at once):
 
 1. `backend` is a registered backend;
-2. the role is in that backend's `roles` (`codex` + `[agent.student]` is refused);
+2. the role is in that backend's `roles`;
 3. a backend with `policy_support == "none"` cannot serve a task with a **sealed
    reference** — blackbox mode (`[reference]` without `source`, or `blackbox = true`), or a
    leaderboard task whose `[leaderboard] ref` recon tree exists.
 
 Why (3): the only thing that keeps an agent out of a sealed reference is the policy's read
 deny lists, and those are enforced by Claude Code's settings and hook. A Codex turn would
-have the same instruction in its prompt and nothing behind it. The same reason is why the
-student role is Claude-only: offline turns, no ssh, no self-submitted jobs and no reads of a
-sealed reference are all hook-enforced.
+have the same instruction in its prompt and nothing behind it. This holds for both roles
+and is the real reason a codex student on a sealed-reference task is refused, even though
+the student role itself is codex-allowed. Hook enforcement (`.claude/settings.json` plus
+the policy hook) therefore only protects claude turns; codex turns rely on the prompt.
 
 ### The commands, byte for byte
 

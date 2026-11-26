@@ -185,7 +185,7 @@ Run-time mechanisms the commands rely on: the four run context files
 (`{TARGET_PROFILE_PATH}`, `{ROOFLINE_PATH}`, `{LESSONS_PATH}`, `{PRIOR_PATH}`) carry measured
 data into every prompt; the throughput governor (`[budget]` in `task.toml`, the ledger
 `governor_ledger.jsonl`, `forge status` / `report.md`) keeps the teacher from starving the
-student; the agent backend is a plugin (default: teacher = Codex, student = Claude) and
+student; the agent backend is a plugin (default: teacher = Codex, student = Codex) and
 every turn's tokens and cost land in `agent_usage.jsonl` (`## Agent usage` in `report.md`).
 
 Languages: `task.toml` accepts `cutedsl`, `cuda-sol` and `triton`; a Triton card is made with
@@ -245,9 +245,9 @@ onto, as in ForgeTrain: `models.toml` sets `[agent]` (`backend`, `provider`, `mo
 `timeout_s`; `[agent.teacher]` / `[agent.student]` for one agent), `loop.toml` sets `[target]`
 and `[budget]`, and `backends.toml` lists the API endpoints a `provider` other than `native`
 can name, with the key read from `local.env`. The defaults are a 1.2× target in device time,
-4 hours of loop, 3 teacher rounds, and **Codex preferred for the teacher** (`sol6.2`, reasoning
-effort `high`) with
-Claude kept for the student (`claude-opus-5-5`) unless a task overrides it.
+4 hours of loop, 3 teacher rounds, and **Codex for both roles** (`sol6.2`, reasoning
+effort `high`) unless a task overrides one of them (e.g. Claude when hook enforcement or
+a /goal session is needed).
 
 ## Self-Evolution
 

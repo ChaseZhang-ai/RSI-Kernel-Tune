@@ -1,13 +1,15 @@
-"""The Codex backend (teacher only): ``codex exec`` under ``scripts/agent-codex.sh``.
+"""The Codex backend (both roles, by default): ``codex exec`` under
+``scripts/agent-codex.sh``.
 
-Why only the teacher
---------------------
-Codex has no equivalent of the Claude Code hooks the agent policy is enforced with, so
-``policy_support = "none"``: an offline student, no ssh, no self-submitted jobs and no
-reads of a sealed reference would all be prompt-level requests rather than refusals.
-``rsi_kernel_tune.task._read_agent`` therefore refuses ``backend = "codex"`` for the student
-role and for any task whose reference is sealed (blackbox mode, or a leaderboard task
-whose ``[leaderboard] ref`` recon tree exists).
+Why ``policy_support = "none"`` sits with both roles now
+--------------------------------------------------------
+Codex has no equivalent of the Claude Code hooks the agent policy is enforced with:
+an offline student, no ssh, no self-submitted jobs and no reads of a sealed reference
+would all be prompt-level requests rather than refusals. The default configuration
+accepts that trade-off for both roles, but ``rsi_kernel_tune.task._read_agent``
+still refuses ``backend = "codex"`` on any task whose reference is sealed (blackbox
+mode, or a leaderboard task whose ``[leaderboard] ref`` recon tree exists) -- the one
+case where only a refusal actually keeps the agent out.
 
 ``FK_AGENT_DRIVER=goal`` (a /goal session, used when a task has no reference) is a Claude
 Code feature (``scripts/claude-goal.sh``); this backend refuses it instead of silently
@@ -32,7 +34,7 @@ class CodexBackend(ScriptBackend):
     name = "codex"
     wire = "openai"
     script = "scripts/agent-codex.sh"
-    roles = ("teacher",)
+    roles = ("teacher", "student")
     policy_support = "none"
 
     def goal_problem(self, env: dict | None = None) -> str | None:

@@ -296,7 +296,7 @@ def test_forge_run_drives_every_stage(repo, monkeypatch):
     argv = calls["loop"]
     assert argv[0] == "rmsnorm" and argv[argv.index("--workspace") + 1] == str(run.ws)
     assert argv[argv.index("--equivalence-ratio") + 1] == "1.2"
-    assert "scripts/agent-claude.sh" in argv[argv.index("--agent-cmd") + 1]
+    assert "scripts/agent-codex.sh" in argv[argv.index("--agent-cmd") + 1]
     assert (run.ws / ".git").exists() and (run.dir / "report.md").is_file()
     assert json.loads((run.operators_dir / "rmsnorm" / taskcard.PROBLEM).read_text())[
         "tolerance"]["outputs"] == {"y": 2e-6}

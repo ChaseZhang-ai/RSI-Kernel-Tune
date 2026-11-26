@@ -136,8 +136,8 @@ The value travels: `task.toml [agent] online` -> `Task.student.online` ->
 `AgentPolicy.student_online` (read by `rsi_kernel_tune.loop.agent_policy.from_config`). The loop
 config is the only channel, so no change to `loop/cli.py` was needed.
 
-`forge new` prints it: `student claude-opus-5-5 (high) [online]` / `[offline]` (with the default global
-config, the teacher is Codex on `sol6.2`; the student remains Claude unless a task overrides it).
+`forge new` prints it: `student sol6.2 (high) [online]` / `[offline]` (with the default global
+config, both roles run Codex on `sol6.2` unless a task overrides one of them).
 
 ## 4. `forge prior build`: the manifest the loop reads as `{PRIOR_PATH}`
 

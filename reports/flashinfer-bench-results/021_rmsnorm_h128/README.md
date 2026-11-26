@@ -9,3 +9,5 @@ The public v1.1 leader was **0.799820 SOL** at **2026-11-26T18:37:20Z**. The coo
 ## Paired layout screen
 
 Physical GB300 1 ran the cold-L2 comparisons. Four-row CTAs with eight lanes per row reduced B=32 timing from 2.752 to 2.528 µs. Half-warp layouts reached 6.752 µs at B=49,532 and 40.848 µs at B=520,128, compared with 7.248 and 43.296 µs for the tiered baseline. Streaming stores and programmatic dependent launch produced mixed results. The screen used the archive's wide row-layout and launch-policy ideas. [Tuning traces](gb300-tuning-screen.jsonl) · [CompoundingKernel archive](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/resolve/main/kernels/FlashInfer/021_rmsnorm_h128/README.md)
+
+A separate fbtriton 3.7.1 probe hit a Gluon distributed-type build error on 14/14 workloads. The tiered control passed the paired trials. Identity layout permutations after the loads restored compilation in an offline smoke check. [Build probe](gb300-fbtriton-build-probe.json)

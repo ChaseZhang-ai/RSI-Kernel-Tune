@@ -1,4 +1,4 @@
-# ForgeKernel V1 launch design
+# RSI-Kernel-Tune V1 launch design
 
 > This is the design record of V1's launch surface: what the user writes, what the harness generates,
 > where it runs, and how a run is resumed. §0–§12 are the design decisions, §13 the changes to the

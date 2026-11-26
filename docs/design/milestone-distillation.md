@@ -1,4 +1,4 @@
-# ForgeKernel: distilling operator milestones (design rationale)
+# RSI-Kernel-Tune: distilling operator milestones (design rationale)
 
 > **This is the original design rationale**: why the system has the structure it has, and where its
 > invariants come from. The implementation differs in details, marked "In the implementation" below;

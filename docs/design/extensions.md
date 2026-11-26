@@ -293,7 +293,7 @@ PYTHONPATH=src .venv/bin/python -m rsi_kernel_tune --help
 **Tests** are run in the root of the worktree, with the one environment:
 
 ```bash
-/home/zcz/bestKernel/ForgeKernel/.venv/bin/python -m pytest -q
+.venv/bin/python -m pytest -q
 ```
 
 The suite touches the GPU: `tests/test_task_suite.py` also runs on the `cuda` device when torch
@@ -301,7 +301,7 @@ finds one, which it does on the machine this was written on. So that a run of th
 distort someone's measurement, the full suite is run as one job under the machine's GPU lock:
 
 ```bash
-~/tools/bin/with-lock gpu 1800 -- /home/zcz/bestKernel/ForgeKernel/.venv/bin/python -m pytest -q
+~/tools/bin/with-lock gpu 1800 -- .venv/bin/python -m pytest -q
 ```
 
 A single file that does not reach the GPU needs no lock. The baseline of `b2c8ae8` -- its

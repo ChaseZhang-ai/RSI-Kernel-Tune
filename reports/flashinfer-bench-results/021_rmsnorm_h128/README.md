@@ -5,3 +5,7 @@ The direct-launch Triton candidate is provisional GB300 only. The exact DPS bund
 The staged Parquet row supplied the original 14 workload UUIDs, all with random inputs and default tolerances. SOL-ExecBench used 10 warmups, 50 timed iterations, cold L2, shifted copies of inputs and preallocated outputs. The candidate adapts the repository's tiered-rows RMSNorm to the exact BF16 DPS signature. [Tiered Triton source](../../../kernel_library/kernels/ako4x-rmsnorm-h128-triton_tiered_rows/kernel.py) · [Submission](../../../flashinfer-bench/021_rmsnorm_h128/submission.py)
 
 The public v1.1 leader was **0.799820 SOL** at **2026-11-26T18:37:20Z**. The coordinator owns B200 verification. [B200 operator board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/230/B200)
+
+## Paired layout screen
+
+Physical GB300 1 ran the cold-L2 comparisons. Four-row CTAs with eight lanes per row reduced B=32 timing from 2.752 to 2.528 µs. Half-warp layouts reached 6.752 µs at B=49,532 and 40.848 µs at B=520,128, compared with 7.248 and 43.296 µs for the tiered baseline. Streaming stores and programmatic dependent launch produced mixed results. The screen used the archive's wide row-layout and launch-policy ideas. [Tuning traces](gb300-tuning-screen.jsonl) · [CompoundingKernel archive](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/resolve/main/kernels/FlashInfer/021_rmsnorm_h128/README.md)

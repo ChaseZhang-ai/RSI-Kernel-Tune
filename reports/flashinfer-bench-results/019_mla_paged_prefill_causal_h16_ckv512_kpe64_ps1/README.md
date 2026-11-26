@@ -32,3 +32,18 @@ All 52 variant/workload pairs passed numerical checks and timing across 11 offic
 | 16,384 queries, 16,387 referenced pages | 59,003.474 µs | Double-buffered 64-key tile with conditional rescaling | 14,714.611 µs |
 
 The 128-key scalar specializations used approximately 6.9 KiB of CUDA stack per thread. The selected one-query tensor-core schedule shares CKV across heads for the short requests with more than 16 keys. For large prefills, the selected Gluon tile packs four tokens and 16 heads, overlaps the next paged gather with the current tile’s computation, and reuses the CKV panels for both the non-positional dot and the value epilogue. The positional dot has its own accumulator before the combined score is scaled.
+
+## Tuned candidate, full paired GB300 run
+
+Both the baseline and tuned candidate passed all 38 official workloads with 50 valid CUPTI samples per workload. Candidate latencies include both launches for split-KV and all preprocessing and output writes. The paired run ended at 2026-11-26 19:01:48 UTC. Physical GPU 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, reported CUDA capability 10.3 and 152 SMs and ran at 1500 MHz SM and 3996 MHz memory. The timing stack and seed matched the baseline configuration. [Paired timings and both output comparisons](gb300-tuned-paired.jsonl)
+
+| Official workloads | Count | Baseline geomean | Tuned geomean | Speedup |
+|---|---:|---:|---:|---:|
+| All | 38 | 136.649 µs | 43.932 µs | 3.11× |
+| 1–69 queries | 19 | 35.451 µs | 11.733 µs | 3.02× |
+| 8,987–16,384 queries | 5 | 10,110.875 µs | 2,584.778 µs | 3.91× |
+
+- The 22-query long-prefix workload measured 54.001 µs, down from 878.139 µs. The largest single-request workload measured 14.717 ms, down from 59.015 ms.
+- The exact candidate compiled 25 specializations in 16.619 s total on an empty Triton cache. The slowest compile took 0.881 s and the longest first call including launch and synchronization took 0.930 s. The paired evaluator peaked at 7,089,917,440 bytes of PyTorch allocations. The largest candidate tile uses 229,520 bytes of shared memory per CTA. [Compiler measurements](gb300-tuned-cold-compile.jsonl)
+- Fifteen synthetic calls passed across the four dispatch paths. They used changed contents at the same addresses, independent input and output allocations, permuted and repeated page IDs, NaNs in unreferenced pages, empty requests, and nondefault positive and negative scales. For a fully masked query with a nonempty KV request, the reference returns NaN output and negative-infinite LSE. Empty KV requests return zero output and negative-infinite LSE. [Synthetic results](gb300-tuned-synthetic.jsonl)
+- Exact candidate SHA-256 `c64fc642f781aee4d09b888fa5163536cc996f69b28b3cdb725ee07575a95a0c`. The local DPS bundle contains the identical `submission.py`. The exact-bundle CLI trial is running.

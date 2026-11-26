@@ -31,6 +31,20 @@ def _gemv(A, B, C):
 
 
 @triton.jit
+def _small_mma(A, B, C, M):
+    n = tl.program_id(0) * 64 + tl.arange(0, 64)
+    m = tl.arange(0, 16)
+    k = tl.arange(0, 128)
+    acc = tl.zeros((16, 64), tl.float32)
+    for step in range(4096 // 128):
+        columns = step * 128 + k
+        a = tl.load(A + m[:, None] * 4096 + columns[None, :], m[:, None] < M, 0)
+        b = tl.load(B + n[:, None] * 4096 + columns[None, :], cache_modifier=".cg")
+        acc = tl.dot(a, b.T, acc)
+    tl.store(C + m[:, None] * 28672 + n[None, :], acc.to(tl.float16), m[:, None] < M)
+
+
+@triton.jit
 def _weight_first(A, B, C, M, BM: tl.constexpr, BN: tl.constexpr,
                   BK: tl.constexpr):
     n = tl.program_id(0) * BN
@@ -167,6 +181,8 @@ def run(A, B, C):
     m = A.shape[0]
     if m == 1:
         _gemv[(28672 // 4,)](A, B, C, num_warps=4)
+    elif m <= 16:
+        _small_mma[(28672 // 64,)](A, B, C, m, num_warps=2, num_stages=4)
     elif m <= 64:
         bm = max(16, triton.next_power_of_2(m))
         bk, stages = (128, 3) if bm <= 32 else (64, 4)

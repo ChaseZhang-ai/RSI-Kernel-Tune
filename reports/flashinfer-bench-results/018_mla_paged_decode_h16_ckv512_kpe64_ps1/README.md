@@ -46,3 +46,7 @@ The assembled hybrid and v1 both passed the eight-workload follow-up. On the sam
 
 - Physical GPU 2, UUID `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, with 1500/3996 MHz clocks, 152 queried SMs and CUDA capability 10.3. The pair completed at 2026-11-26 18:56:37 UTC under the shared lock.
 - Exact hybrid v2 passed all 28 synthetic calls, including the direct TMA route with permuted pages, independent positional changes, and replaced input and output pointers. The cold first calls for the paired sample summed to 2.050 seconds, including Triton JIT and run synchronization. [Synthetic results](gb300-v2-edge.json)
+
+Hybrid v2 also passed all **47** official CLI workloads on physical GPU 1 at 1500/3996 MHz, finishing at 2026-11-26 18:59:21 UTC. Geomean was 21.250 µs across all workloads. Forty-six workloads were faster than in the v1 CLI run. The 1,908-reference workload measured 35.184 µs in v2 and 17.952 µs in v1. The paired results above control for physical GPU. [Per-workload results](gb300-v2-evaluator.jsonl) · [Device and summary](gb300-v2-summary.json)
+
+An offline Triton 3.5.0 check caught a compiler error in v2's direct kernel when broadcasting scalar constants in the empty-row epilogue. The fix gives those constants explicit distributed layouts. The v1 source remains staged pending full evaluation of the compatibility fix.

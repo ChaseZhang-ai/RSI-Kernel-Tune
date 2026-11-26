@@ -10,8 +10,10 @@ The final official and paired runs used physical GPU 0, UUID `GPU-abbc4299-8500-
 
 Each sweep paired a candidate with the direct baseline under one GPU lock. The trial logs cover N tiles of 64, 128 and 256, clustered middle-size tiles, the 148-SM local proxy versus 152 queried SMs, and segmented TMA epilogues. The explicit Gluon sweep also compared one versus two resident waves, one versus two accumulator slots, and grouped raster orders at cold L2. [Initial sweep](sweep-gb300.csv) · [Deeper K and cluster sweep](refine-gb300.csv) · [Fused split-K and wide tiles](fused-gb300.csv) · [Explicit Gluon sweep](manual-sweep-gb300.csv)
 
+A subsequent two-CTA Gluon prototype failed to complete its initial launch at M=8. Its process was terminated under the GPU lock, and the prototype produced no candidate timing.
+
 The earlier automatic-warp-specialization candidate passed 43/43 on GB300 at 24.64 µs, and a portable Triton fallback passed 43/43 at 27.46 µs on the grader compiler. Installing the grader wheel locally required exposing its packaged launcher header at the path expected by the driver. [Automatic dispatch summary](tuned-gb300-summary.json) · [Portable dispatch summary](portable-fixed-gb300-summary.json)
 
-Private B200 v1.1 trial 105828 reported six workloads with missing CUPTI activity. Trial 105840 reported 40 Triton partition-lowering build errors and one missing CUPTI sequence. The board reported no complete passing result for either trial. The shared account also held five pending results, and it rejected a later upload with HTTP 429. The final artifact is queued locally for a private upload when capacity opens. [Baseline B200 result](baseline-b200.json) · [Tuned B200 result](tuned-b200.json)
+Private B200 v1.1 trial 105828 completed with six missing CUPTI activity sequences and no qualifying score. Trial 105840 reported 40 Triton partition-lowering build errors and one missing CUPTI sequence. The shared account held five pending results and rejected a later upload with HTTP 429. The final artifact is queued locally for a private upload when capacity opens. [Baseline B200 result](baseline-b200.json) · [Tuned B200 result](tuned-b200.json)
 
 The public v1.1 board reports a B200 leader SOL of 1.000000. [Public operator board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/219/B200)

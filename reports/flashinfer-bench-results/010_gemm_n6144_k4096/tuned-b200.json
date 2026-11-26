@@ -13,7 +13,9 @@
   "fast_1_count": null,
   "fast_1_total": null,
   "avg_speedup": null,
-  "benchmark_results": null,
+  "verified_timed_workloads": 0,
+  "complete_b200_pass": false,
+  "benchmark_results": [],
   "reported_failures": [
     {
       "M": 256,

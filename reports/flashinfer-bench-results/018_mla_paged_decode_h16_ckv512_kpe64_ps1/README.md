@@ -49,4 +49,23 @@ The assembled hybrid and v1 both passed the eight-workload follow-up. On the sam
 
 Hybrid v2 also passed all **47** official CLI workloads on physical GPU 1 at 1500/3996 MHz, finishing at 2026-11-26 18:59:21 UTC. Geomean was 21.250 µs across all workloads. Forty-six workloads were faster than in the v1 CLI run. The 1,908-reference workload measured 35.184 µs in v2 and 17.952 µs in v1. The paired results above control for physical GPU. [Per-workload results](gb300-v2-evaluator.jsonl) · [Device and summary](gb300-v2-summary.json)
 
-An offline Triton 3.5.0 check caught a compiler error in v2's direct kernel when broadcasting scalar constants in the empty-row epilogue. The fix gives those constants explicit distributed layouts. The v1 source remains staged pending full evaluation of the compatibility fix.
+An offline Triton 3.5.0 check caught a compiler error in v2's direct kernel when broadcasting scalar constants in the empty-row epilogue. The fix gives those constants explicit distributed layouts. The v1 source stayed staged while the compatibility fix was evaluated.
+
+## Selected submission · Hybrid v3 · GB300 only
+
+**47/47 official workloads passed correctness and CUPTI timing, with a 20.880 µs geomean and a 6.176–69.665 µs range.** The exact artifact also passed all 28 synthetic calls. The 8-, 108- and 2,708-reference single-row cases took 6.176, 9.920 and 17.440 µs, respectively. [Per-workload results](gb300-v3-evaluator.jsonl) · [Synthetic results](gb300-v3-edge.json) · [Device, timing and compile record](gb300-v3-summary.json)
+
+| Batch size | Workloads passed | CLI geomean (µs) |
+|---:|---:|---:|
+| 1 | 15/15 | 12.326 |
+| 16 | 16/16 | 16.765 |
+| 64 | 16/16 | 42.622 |
+| All | 47/47 | 20.880 |
+
+- Physical GPU 1, UUID `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, locked at 1500/3996 MHz SM/memory, with 152 queried SMs and CUDA capability 10.3. The lock covered the whole evaluation and the synthetic checks. The run finished at 2026-11-26 19:01:59 UTC.
+- The hybrid uses one SIMT launch for very small rows and one TMA-gather tensor-core launch for other short single rows. Larger inputs use asynchronous copies, shared CKV for both tensor-core products, and an FP32 merge. Slot allocation is bounded by the page-index count and batch size. The largest official workload requires 10.25 MiB of split workspace.
+- Nine official kernel specializations compiled cold in 2.178 seconds for the queried SM 10.3 target with Triton 3.6.0. They also compiled offline for SM 10.0 in 2.184 seconds with Triton 3.5.0. The separate Triton 3.5.0 runtime attempt on GB300 stopped during compilation with LLVM's `Cannot select: intrinsic %llvm.nvvm.tcgen05.wait.ld`. The complete local run used Triton 3.6.0 and PyTorch 2.10.0+cu130.
+- The staged source SHA-256 is `6f737fd76f1dc0bde6fdd8d59a1f62123b320dbfbed144bafea5b66537f928a4`. The local DPS solution bundle embeds those exact bytes. Materialize the named Parquet row as `definition.json` and `workload.jsonl`, set `FLASHINFER_TRACE_DIR` to the trace data root, and invoke `sol-execbench <problem_dir> --solution solution.json --output results.jsonl` with evaluator 1.0.2.
+- At 2026-11-26 19:01:56 UTC, the public v1.1 B200 leaders were 0.994987 SOL for kernel 227 and 0.940633 SOL for collection 4. The candidate is provisional GB300 only, with B200 evaluation pending coordinator submission. [Board check](public-b200-v1.1.json) · [Kernel board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/227/B200)
+
+The H100 seed and CompoundingKernel Explorer's FlashInfer 018 source informed tile reuse, length-based routing and asynchronous staging. [H100 seed](../../../kernels/attention/mla_paged_decode/h100/kernel.py) · [CompoundingKernel archive](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/resolve/main/kernels/FlashInfer/018_mla_paged_decode_h16_ckv512_kpe64_ps1/README.md)

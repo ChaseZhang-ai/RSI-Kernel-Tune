@@ -1,0 +1,274 @@
+{
+  "passed": 47,
+  "workloads": 47,
+  "statuses": {
+    "PASSED": 47
+  },
+  "sha256": "6f737fd76f1dc0bde6fdd8d59a1f62123b320dbfbed144bafea5b66537f928a4",
+  "stats": {
+    "1": {
+      "count": 15,
+      "geomean_us": 12.326088553403302,
+      "min_us": 6.176,
+      "max_us": 17.44
+    },
+    "16": {
+      "count": 16,
+      "geomean_us": 16.765229193962394,
+      "min_us": 12.4005,
+      "max_us": 21.472
+    },
+    "64": {
+      "count": 16,
+      "geomean_us": 42.62164655570496,
+      "min_us": 21.968500000000002,
+      "max_us": 69.665
+    },
+    "all": {
+      "count": 47,
+      "geomean_us": 20.879674208932748,
+      "min_us": 6.176,
+      "max_us": 69.665
+    }
+  },
+  "device": {
+    "start_utc": "2026-11-26T19:00:15.557491+00:00",
+    "index": 1,
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "compute_capability": [
+      10,
+      3
+    ],
+    "memory_bytes": 297013411840,
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "evaluator": "1.0.2",
+    "end_utc": "2026-11-26T19:01:59.518634+00:00",
+    "clocks_mhz": "1500, 3996"
+  },
+  "verification": {
+    "official_cli_correctness_and_timing": 47,
+    "synthetic_correctness": 28,
+    "scope": "GB300 only"
+  },
+  "timing": {
+    "warmups": 10,
+    "iterations": 50,
+    "cold_l2": true,
+    "cloned_inputs": true,
+    "preallocated_outputs": true,
+    "method": "CUPTI first-to-last kernel median"
+  },
+  "cold_offline_compile": [
+    {
+      "triton": "3.6.0",
+      "source_sha256": "6f737fd76f1dc0bde6fdd8d59a1f62123b320dbfbed144bafea5b66537f928a4",
+      "wall_compile_s": 2.177747274748981,
+      "specializations": [
+        {
+          "kernel": "_small",
+          "args": {
+            "T": 8,
+            "N": 8
+          },
+          "arch": "sm103",
+          "compile_s": 0.4364593969658017
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 1,
+            "N": 128,
+            "DIRECT": true,
+            "GATHER": true
+          },
+          "arch": "sm103",
+          "compile_s": 0.29503389121964574
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 1,
+            "N": 64,
+            "DIRECT": false,
+            "GATHER": false
+          },
+          "arch": "sm103",
+          "compile_s": 0.23507800977677107
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 16,
+            "N": 64,
+            "DIRECT": false,
+            "GATHER": false
+          },
+          "arch": "sm103",
+          "compile_s": 0.24055079137906432
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 16,
+            "N": 128,
+            "DIRECT": false,
+            "GATHER": false
+          },
+          "arch": "sm103",
+          "compile_s": 0.2816057330928743
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 64,
+            "N": 128,
+            "DIRECT": false,
+            "GATHER": false
+          },
+          "arch": "sm103",
+          "compile_s": 0.2955817962065339
+        },
+        {
+          "kernel": "_merge",
+          "args": {
+            "CHUNK": 64,
+            "M": 8,
+            "D": 128
+          },
+          "arch": "sm103",
+          "compile_s": 0.12268699379637837
+        },
+        {
+          "kernel": "_merge",
+          "args": {
+            "CHUNK": 64,
+            "M": 8,
+            "D": 512
+          },
+          "arch": "sm103",
+          "compile_s": 0.13624231982976198
+        },
+        {
+          "kernel": "_merge",
+          "args": {
+            "CHUNK": 128,
+            "M": 8,
+            "D": 512
+          },
+          "arch": "sm103",
+          "compile_s": 0.13422626024112105
+        }
+      ]
+    },
+    {
+      "triton": "3.5.0",
+      "source_sha256": "6f737fd76f1dc0bde6fdd8d59a1f62123b320dbfbed144bafea5b66537f928a4",
+      "wall_compile_s": 2.183687670622021,
+      "specializations": [
+        {
+          "kernel": "_small",
+          "args": {
+            "T": 8,
+            "N": 8
+          },
+          "arch": "sm100",
+          "compile_s": 0.4145333240740001
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 1,
+            "N": 128,
+            "DIRECT": true,
+            "GATHER": true
+          },
+          "arch": "sm100",
+          "compile_s": 0.30408335104584694
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 1,
+            "N": 64,
+            "DIRECT": false,
+            "GATHER": false
+          },
+          "arch": "sm100",
+          "compile_s": 0.2384139788337052
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 16,
+            "N": 64,
+            "DIRECT": false,
+            "GATHER": false
+          },
+          "arch": "sm100",
+          "compile_s": 0.25054579600691795
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 16,
+            "N": 128,
+            "DIRECT": false,
+            "GATHER": false
+          },
+          "arch": "sm100",
+          "compile_s": 0.29233415564522147
+        },
+        {
+          "kernel": "_tc_decode",
+          "args": {
+            "B": 64,
+            "N": 128,
+            "DIRECT": false,
+            "GATHER": false
+          },
+          "arch": "sm100",
+          "compile_s": 0.30163495894521475
+        },
+        {
+          "kernel": "_merge",
+          "args": {
+            "CHUNK": 64,
+            "M": 8,
+            "D": 128
+          },
+          "arch": "sm100",
+          "compile_s": 0.11493915086612105
+        },
+        {
+          "kernel": "_merge",
+          "args": {
+            "CHUNK": 64,
+            "M": 8,
+            "D": 512
+          },
+          "arch": "sm100",
+          "compile_s": 0.134404256939888
+        },
+        {
+          "kernel": "_merge",
+          "args": {
+            "CHUNK": 128,
+            "M": 8,
+            "D": 512
+          },
+          "arch": "sm100",
+          "compile_s": 0.1324901171028614
+        }
+      ]
+    }
+  ],
+  "offline_target_note": "SM 10.0 compilation checked with Triton 3.5.0. Runtime evaluation used SM 10.3 and Triton 3.6.0."
+}

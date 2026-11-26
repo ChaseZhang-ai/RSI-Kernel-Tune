@@ -1,0 +1,15 @@
+{
+  "observed_at_utc": "2026-11-26T19:01:56.022901+00:00",
+  "stack": "v1.1",
+  "gpu": "B200",
+  "kernel": {
+    "id": 227,
+    "first_place_sol": 0.994987,
+    "url": "https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/227/B200"
+  },
+  "collection": {
+    "id": 4,
+    "first_place_sol": 0.940633,
+    "url": "https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/collection/4/B200"
+  }
+}

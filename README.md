@@ -46,7 +46,7 @@ Contributors should push their **best candidate so far** to `flashinfer-bench/<o
 | [003_fused_add_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/212/B200) | 0.863498 | — | — | — | Pending | — |
 | [004_gemm_n128_k2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/213/B200) | 0.894803 | — | — | — | Pending | — |
 | [005_gemm_n256_k7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/214/B200) | 0.915728 | — | — | — | Pending | — |
-| [006_gemm_n2048_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/215/B200) | 1.000000 | — | — | — | Pending | — |
+| [006_gemm_n2048_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/215/B200) | 1.000000 | — | — | — | GB300 direct Triton seed passed 29/29 · 44.016 µs GM · [evidence](reports/flashinfer-bench-results/006_gemm_n2048_k4096/README.md) | [GB300 provisional](flashinfer-bench/006_gemm_n2048_k4096/submission.py) |
 | [007_gemm_n4096_k4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/216/B200) | 1.000000 | — | — | — | Pending | — |
 | [008_gemm_n4096_k14336](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/217/B200) | 1.000000 | — | — | — | Pending | — |
 | [009_gemm_n5120_k2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/218/B200) | 1.000000 | — | — | — | Pending | — |

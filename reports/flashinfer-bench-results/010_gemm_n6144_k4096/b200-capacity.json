@@ -1,0 +1,14 @@
+{
+  "kernel_id": 219,
+  "gpu": "B200",
+  "mode": "private",
+  "slot": "05",
+  "candidate_sha256": "db4f7ec81aa274a8599c401635d2904b09e744dfcaa7719df6e84ff9f9e66206",
+  "last_upload_attempt_utc": "2026-11-26T18:23:50Z",
+  "outcome": "HTTP_429_RATE_LIMIT",
+  "verified_workloads": 0,
+  "submission_id": null,
+  "slots_reserved": 5,
+  "slot_limit": 5,
+  "next_scheduled_release_utc": "2026-11-26T19:10:52Z"
+}

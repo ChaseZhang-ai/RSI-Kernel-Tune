@@ -1,0 +1,87 @@
+{
+  "official_workload_status": {
+    "PASSED": 43
+  },
+  "official_geomean_latency_us": 27.46385683529993,
+  "official_selected_latency_us": {
+    "1": 13.184,
+    "8": 19.136,
+    "15": 18.976,
+    "35": 20.576,
+    "70": 20.224,
+    "128": 22.432000000000002,
+    "256": 31.664499999999997,
+    "972": 71.80799999999999,
+    "2053": 121.1525,
+    "2379": 136.2245,
+    "8192": 402.6415
+  },
+  "official_gpu": {
+    "physical_index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "initial_query": "0, GPU-abbc4299-8500-54d7-2a37-3ccac762f30d, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+    "sm_lock": [
+      1500,
+      1500
+    ],
+    "memory_lock": null,
+    "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000008:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+    "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+    "samples": [
+      "1500 MHz, 3996 MHz"
+    ]
+  },
+  "runtime_libraries": {
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta",
+    "cuda": "13.0"
+  },
+  "source_sha256": "f5239eb3ec6a105e4b1504c9a207696473818b73c217f033e002ec7fed3b3199",
+  "paired_gpu": {
+    "physical_index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "initial_query": "0, GPU-abbc4299-8500-54d7-2a37-3ccac762f30d, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+    "sm_lock": [
+      1500,
+      1500
+    ],
+    "memory_lock": null,
+    "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000008:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+    "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+    "samples": [
+      "1500 MHz, 3996 MHz"
+    ]
+  },
+  "paired_runtime": {
+    "device": "NVIDIA GB300",
+    "capability": [
+      10,
+      3
+    ],
+    "multiprocessor_count": 152,
+    "torch": "2.10.0+cu130",
+    "cuda": "13.0",
+    "sum_of_first_call_and_sync_seconds_from_empty_triton_cache": {
+      "baseline": 2.339032125659287,
+      "submission": 3.230360111221671
+    },
+    "peak_allocated_bytes": 830603264
+  },
+  "paired_status": {
+    "PASSED": 172
+  },
+  "paired": {
+    "0": {
+      "both_timed": 43,
+      "baseline_geomean_latency_us": 45.949034227093534,
+      "candidate_geomean_latency_us": 27.38464756317871,
+      "baseline_over_candidate_geomean": 1.6779121995667532
+    },
+    "1": {
+      "both_timed": 43,
+      "baseline_geomean_latency_us": 45.9414687193418,
+      "candidate_geomean_latency_us": 27.376022138152244,
+      "baseline_over_candidate_geomean": 1.678164507885755
+    }
+  }
+}

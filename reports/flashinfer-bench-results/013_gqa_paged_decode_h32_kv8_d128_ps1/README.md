@@ -124,3 +124,7 @@ The paired v4 retest measured 16.687 µs overall. v5 improved on that by 1.6% an
 The exact v5 DPS bundle also passed 48/48 in the alternate Torch 2.9.0+cu130 and Triton 3.5.0 stack with the CUDA 13.1 assembler on physical GB300 2, UUID `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, capability 10.3, 152 queried SMs and 1500/3996 MHz. [Alternate stack workload results](gb300-v5-torch29-triton35.jsonl)
 
 A separate run with an empty Triton cache and only the selected candidate measured 4.539 seconds summed across all 48 synchronized first calls. The longest first call took 0.988 seconds. It used physical GB300 1, UUID `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, capability 10.3, 152 queried SMs and 1500/3996 MHz. [Cold compilation record](gb300-v5-cold-compile.json)
+
+## Private B200 submission 105886
+
+The board accepted the exact v5 artifact on 2026-11-26 at 18:09 UTC. It reported evaluation stack v1.1 and began running. The shared account had four visible pending submissions before upload against a five-submission limit. [Submission receipt](b200-105886.json)

@@ -1,0 +1,22 @@
+{
+  "submission_sha256": "c46e52f4c079774cfaa1a938d1387c693aed5d991535315e05683eef82bdab02",
+  "upload": {
+    "ok": true,
+    "submission_id": 105886,
+    "problem": "013_gqa_paged_decode_h32_kv8_d128_ps1",
+    "gpu_type": "B200",
+    "mode": "private",
+    "waited": false,
+    "estimated_delay_minutes": 0
+  },
+  "id": 105886,
+  "status": "RUNNING",
+  "gpu_type": "B200",
+  "submitted_at": "2026-11-26T18:09:39.679959",
+  "evaluation_stack_version": "v1.1",
+  "result_available_at": null,
+  "is_correct": null,
+  "is_disqualified": false,
+  "sol_score": null,
+  "latency_ms": null
+}

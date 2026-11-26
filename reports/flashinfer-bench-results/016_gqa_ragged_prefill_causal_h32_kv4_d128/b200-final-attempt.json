@@ -1,0 +1,20 @@
+{
+  "timestamp_utc": "2026-11-26T18:09:44+00:00",
+  "gpu_type": "B200",
+  "mode": "private",
+  "evaluation_stack_target": "v1.1",
+  "source_sha256": "09f4ce9659ad79abb8e80fb7e6272f0ddaf5233460906e894970374396ecfc14",
+  "slot": 10,
+  "active_at_whoami": 0,
+  "active_limit": 5,
+  "outcome": "upload_rate_limited_http_429",
+  "submission_id": null,
+  "workloads_passed": 0,
+  "workloads_evaluated": 0,
+  "public_board": {
+    "checked_utc": "2026-11-26T18:10:12Z",
+    "url": "https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/225/B200",
+    "evaluation_stack": "v1.1",
+    "leader_sol": 0.965848
+  }
+}

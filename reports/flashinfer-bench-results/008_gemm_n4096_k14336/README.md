@@ -1,5 +1,19 @@
 # 008_gemm_n4096_k14336
 
+## Collection candidate
+
+The exact archive candidate passed all **43/43** official evaluator workloads and CUPTI timing at **50.653 µs** geometric mean. The 972, 2,053, 2,379 and 8,192 row workloads measured 98.082, 182.774, 185.781 and 613.233 µs. The evaluator ran on physical GB300 0 with 152 SMs, CUDA capability 10.3 and 1500/3996 MHz sampled clocks. The DPS solution bundle embeds the archived Python source verbatim. [Official refined workload traces](refined-gb300.jsonl) · [Device attributes](refined-evaluator-device.json) · [Clock record](refined-gpu.json)
+
+Two paired repeats measured **51.562 µs** and **51.518 µs** for the refined candidate against **53.215 µs** and **53.193 µs** for the first TMA version. All 172 workload-arm measurements passed on physical GB300 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, with 152 SMs and 1500/3996 MHz sampled clocks. M=2 and M=8 were slower in both paired repeats. Cold compilation plus synchronized first calls across all 43 shapes totaled **1.202 s**, and the paired process peaked at 1.212 GiB of PyTorch allocations. [Paired traces](refined-pair.jsonl) · [Paired device record](refined-pair-gpu.json) · [Compile metadata](refined-pair-meta.json)
+
+Fifteen shapes passed exact tests with cancellation between the early and late K tiles, input preservation, changed contents at the same pointers, fresh destinations, fresh input pointers, and a non-default stream. A sixteenth test passed the unaligned and noncontiguous fallback. [Additional correctness checks](verification.json)
+
+The public B200 v1.1 board listed June first at **1.000000 SOL** when checked on 2026-11-26 at 18:54:26 UTC. The collection artifact is provisional GB300 only and ready for the coordinator's B200 evaluation. [Public board snapshot](public-board-verified.json) · [NVIDIA operator board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/217/B200)
+
+The local DPS bundle is `.artifacts/gemm008/008_gemm_n4096_k14336/refined/`. It was materialized from the staged Parquet with all official UUIDs and no external trace tensors. The source SHA-256 is `880169a983300e288e9a08676e9e6afbc56b36afbce2465e954ecb48e44c99dc`. From the bundle directory, under the GB300 lock with its UUID selected, the replay command is `sol-execbench . --solution solution.json --output results.jsonl`.
+
+## Earlier GB300 runs
+
 The direct-launch Triton baseline passed correctness and CUPTI timing on all 43 official workloads at **167.305 µs** geometric-mean latency on GB300. The source implements tiled FP16 GEMM against physical row-major B[N,K], accumulates in FP32 and stores the result to the provided FP16 C. A separate attempt on physical GPU 2 was discarded after the contention monitor detected another process. [Official workload traces](baseline-gb300.jsonl)
 
 The accepted run used physical GB300 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`. SMs were locked at 1500 MHz and the job sampled 1500/3996 MHz. Immediate memory clock locking was unsupported. The driver accepted the deferred 3996 MHz request, and 3996 MHz was the only supported memory clock reported. The evaluator was SOL-ExecBench 1.0.2 at `a9fa0804c793d438e70850c33fe34426e66d53dd`, with PyTorch 2.10.0+cu130, fbtriton 3.7.1 (`triton.__version__` reported 3.7.0+fb.beta), and CUPTI Python 13.5.0. [GPU record](baseline-gpu.json)
@@ -10,8 +24,6 @@ An initial warp-specialized TMA implementation with split-K for M=2–16 passed 
 
 Two paired trials on physical GPU 2 and the same inputs measured **166.879 / 53.013 µs** and **166.883 / 52.961 µs** for direct baseline / first TMA, a 3.148× and 3.151× speedup. Each of the 172 measurements passed. Each arm uses 10 warmups, 50 iterations, cold L2, cloned and pointer-shifted inputs, preallocated outputs, and evaluator CUPTI timing from first to last activity, including the split-K merge. PyTorch queried 152 SMs and CUDA capability 10.3, and the compiled cubins targeted SM103. Cold JIT plus a synchronized first call for all 43 shapes took 1.363 s in total for the TMA candidate and 1.748 s for the baseline. Peak PyTorch allocations during pairing were 1.212 GiB. [Paired traces](first-tma-pair.jsonl) · [GPU record](first-tma-pair-gpu.json) · [Timing metadata](first-tma-pair-meta.json) · [Cubin resources](first-tma-resources.json)
 
-NVIDIA's public v1.1 B200 board listed June in first place at 1.000000 SOL when checked at 18:45:10 UTC on 2026-11-26. The campaign candidate has GB300 verification. [Public board snapshot](public-board-verified.json) · [NVIDIA operator board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/217/B200)
-
 ## Tuning screen
 
 The one-CTA screen passed 112 configurations across 11 representative official workloads. The independent two-CTA multicast screen passed eight configurations across four workloads, and the cubin metadata confirmed multicast PTX. Both screens used physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, 152 queried SMs and 1500/3996 MHz sampled clocks. Each arm used 10 warmups and 50 cold-L2 CUPTI samples with cloned inputs and preallocated destinations. The screen records per-configuration latency, register count, shared-memory usage and spills. The compiled kernels reported zero spills for all 120 configurations. [One-CTA screen](sweep-one-cta.jsonl) · [One-CTA GPU record](sweep-one-cta-gpu.json) · [Multicast screen](sweep-cluster.jsonl) · [Multicast GPU record](sweep-cluster-gpu.json)
@@ -20,12 +32,6 @@ At M=8, increasing a two-split TMA pipeline from three to four to five stages me
 
 The kernel uses the resident tile loop and grouped rasterization from the repository's H100 GEMM, with a row-major FP16 B[N,K] descriptor. The small dispatch follows the archived CompoundingKernel strategy of swapping operands so the weight tile supplies the tensor core's wider operand dimension. The staged producer, MMA and epilogue partitions are adapted from the repository's GEMM 010 with a wider K loop, and the epilogue subtile layout follows Triton's Gluon example. [Repository H100 GEMM](../../../kernels/gemm/gemm_fp16/h100/kernel.py) · [Archived CompoundingKernel](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/resolve/main/kernels/FlashInfer/008_gemm_n4096_k14336/README.md) · [Triton Gluon example](https://github.com/triton-lang/triton/blob/main/python/examples/gluon/03-matmul-multicta.py)
 
-## Refined candidate
-
-The exact archive candidate passed all **43/43** official evaluator workloads and CUPTI timing at **50.653 µs** geometric mean. The 972, 2,053, 2,379 and 8,192 row workloads measured 98.082, 182.774, 185.781 and 613.233 µs. The evaluator ran on physical GB300 0 with 152 SMs, CUDA capability 10.3 and 1500/3996 MHz sampled clocks. The DPS solution bundle embeds the archived Python source verbatim. [Official refined workload traces](refined-gb300.jsonl) · [Device attributes](refined-evaluator-device.json) · [Clock record](refined-gpu.json)
-
 ## Operand traffic and occupancy
 
 A cold-cache Nsight Compute replay measured 314.7 million L2 read sectors for the first TMA pipeline at M=8192 and 199.5 million for the refined pipeline, a 36.6% decrease. DRAM reads increased from 1.066 GB to 1.145 GB. Both used a 152-CTA launch and averaged 12.50% of peak active warps per SM, consistent with one resident 256-thread CTA per SM for these shared-memory allocations. At M=176 the tested multicast schedule read 207.4 MB from DRAM compared with 178.4 MB for the one-CTA schedule. The diagnostic ran on physical GB300 2 at 1500/3996 MHz. The replay counters describe total kernel traffic. Latency comes from the dedicated CUPTI runs. [Nsight Compute counters](profile-reloads.json) · [GPU record](profile-gpu.json)
-
-The local DPS bundle is `.artifacts/gemm008/008_gemm_n4096_k14336/refined/`. It was materialized from the staged Parquet with all official UUIDs and no external trace tensors. The source SHA-256 is `880169a983300e288e9a08676e9e6afbc56b36afbce2465e954ecb48e44c99dc`. From the bundle directory, under the GB300 lock with its UUID selected, the replay command is `sol-execbench . --solution solution.json --output results.jsonl`.

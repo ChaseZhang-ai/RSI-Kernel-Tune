@@ -33,3 +33,7 @@ All 119 workload/configuration trials passed correctness and timing. This screen
 The 256-thread cooperative reduction with one L2 prefetch CTA and two compute CTAs per row won all five small workloads at 2.608–2.816 µs. It used 24 registers per thread, 32 bytes of shared memory and zero local memory. The 128-thread counterpart used 38 registers and 16 bytes of shared memory. The stat calculation uses packed FP32 math, two FP32 multiplies per output and a final BF16 conversion.
 
 At batch 12,383, two rows sharing the cached weight vector reached 18.992 µs with 55 registers per thread. At batch 16,254, two parallel row groups with an L2 prefetch for an upcoming tile reached 23.296 µs with 33 registers per thread. These medians correspond to 5.34 and 5.72 TB/s of input-plus-output payload, respectively. The largest workload moves about 127 MiB of activation and output per call. [Native sweep results](gb300-native-sweep.csv) · [CompoundingKernel Explorer](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/092577af37b8431d8dc16f6e90ec3d2ba1451aaa/kernels/FlashInfer/024_rmsnorm_h2048)
+
+## Streaming-policy retry · 2026-11-26 18:47 UTC
+
+All 46 trials passed with compatible cache policies on physical GB300 GPU 1 at 1500/3996 MHz. The best Triton streaming medians were 19.424 µs and 24.368 µs for batches 12,383 and 16,254. The best persistent medians were 21.248 µs and 27.072 µs. This screen used the same 10/50 cold-L2 CUPTI timing method. [Cache-policy retry](gb300-triton-stream-retry.csv)

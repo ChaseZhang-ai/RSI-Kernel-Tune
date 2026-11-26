@@ -8,6 +8,8 @@ These are exploratory paired measurements under the same evaluator CUPTI protoco
 | Gluon layouts and absolute-index reduction | 236 | 0 | 0 | 0 |
 | CUDA TMA contiguous and gather4 | 100 | 0 | 0 | 0 |
 | CUDA split-KV final-CTA merge | 80 | 0 | 0 | 0 |
+| CUDA 32-token TMA stage | 100 | 0 | 0 | 0 |
+| Native two-kernel split-KV and merge | 80 | 0 | 0 | 0 |
 
 The first sweep compared split chunks of 32, 64, 128, 256, and 512 tokens, two to eight warps, and both MMA orientations. Oversized one-shot tiles or split chunks exceeded register or shared-memory limits in 17 configurations. The TMA screen compared separately encoded contiguous and gather4 paths with current input pointers. The final-CTA route included the counter clear and merge in the measured call.
 

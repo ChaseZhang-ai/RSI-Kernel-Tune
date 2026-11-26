@@ -49,3 +49,19 @@ Completed 2026-11-26 17:51:08 UTC on physical GPU 1, UUID `GPU-87e04b70-e9c6-0c5
 - The CLI geomean was 14.815 µs. The sum of cold first-call wall times, including the native build, Triton JIT and synchronization, was 4.638 s. Native compilation used the capability queried from PyTorch.
 - The hybrid uses an asynchronous gather and a thread-block-cluster merge on the selected shapes. The Triton routes apply the same scaling, CSR traversal and destination-passing contract. Native partials live in shared memory, and global scratch on the remaining split route is bounded by the number of populated tiles plus one slot per row.
 - Exact submission SHA-256 `b77763759a56fcab9cd1838dd46ced5d31a2c76c811264c3759d9e2281f4914d`. Provisional GB300 verification.
+
+## GB300 hybrid v4
+
+Completed 2026-11-26 17:58:28 UTC on physical GPU 1, UUID `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, with the same locks, SM count, capability and timing options as v3. Both sides of the pair passed 48/48. The exact v4 bundle passed 48/48 with the full CLI. [Paired timings](gb300-pair-v4.jsonl) · [CLI results](gb300-evaluator-v4.jsonl)
+
+| Batch size | Workloads | Hybrid v3 geomean (µs) | Hybrid v4 geomean (µs) |
+|---:|---:|---:|---:|
+| 1 | 16 | 5.094 | 5.055 |
+| 16 | 16 | 15.355 | 14.338 |
+| 64 | 16 | 41.524 | 38.612 |
+| All | 48 | 14.809 | 14.092 |
+
+- The CLI geomean was 14.114 µs on evaluator 1.0.2. Cold first calls including native compilation, Triton JIT, execution and synchronization took 3.483 s in total.
+- The exact file passed 20 synthetic calls with revised row boundaries, duplicate and shuffled indices, changed inputs and destinations, unreferenced NaN pages, non-default scale, and empty rows. The cases exercised all three native variants and both B=1 Triton paths.
+- Cluster dispatch now covers all B=64 workloads. Its partials stay in distributed shared memory. The largest official K/V input pair occupies about 120.2 MiB.
+- Submission SHA-256 `4670427cd5b87fd4047f36e2d644e11e94555f3eef2d47f16fc1be982f72be64`. Provisional GB300 verification.

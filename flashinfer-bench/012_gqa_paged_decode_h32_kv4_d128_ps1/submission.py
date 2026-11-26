@@ -551,11 +551,17 @@ def _run_cluster(q, k, v, indptr, indices, sm_scale, output, lse, variant):
 def run(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse):
     batch, tokens = q.shape[0], kv_indices.numel()
     args = q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output, lse
-    if tokens > 256 and batch == 1:
-        _run_cluster(*args, 1)
+    if batch == 1 and tokens > 128:
+        _run_cluster(*args, 0 if tokens <= 256 else 1)
     elif 1 < batch <= 16:
-        _run_cluster(*args, 0 if tokens < 768 * batch else 1)
-    elif batch == 64 and tokens >= 819 * batch:
+        if tokens < 256 * batch:
+            variant = 0
+        elif tokens < 768 * batch:
+            variant = 2
+        else:
+            variant = 1
+        _run_cluster(*args, variant)
+    elif batch == 64:
         _run_cluster(*args, 2)
     else:
         _run_triton(*args)

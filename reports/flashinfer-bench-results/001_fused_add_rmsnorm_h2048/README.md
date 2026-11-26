@@ -1,5 +1,21 @@
 # 001_fused_add_rmsnorm_h2048
 
+## 2026-11-26 18:25 UTC · First B200 result and retry status
+
+Private B200 submission 105846 finished under evaluation stack v1.1 with an overall correctness failure. The worker emitted runtime compilation errors for the Gluon path on five small workloads. The two large workloads returned timings and per-workload scores even though the aggregate error summary called them failed. This attempt supplies no qualifying B200 score. [NVIDIA submission](https://research.nvidia.com/benchmarks/sol-execbench/submission/105846)
+
+The exact selected artifact passed 7/7 on GB300. Its B200 uploads were rejected with HTTP 429 as other jobs filled the openings on the shared account. The rejected uploads generated no submission IDs. The next listed opening was 19:10:52 UTC.
+
+| Batch | Workload UUID | First B200 attempt outcome | Latency (µs) |
+|---:|---|---|---:|
+| 6 | `906efdc6-aa3b-4b4f-a291-3a2be509d354` | Runtime compilation error | — |
+| 1 | `1526086b-0c06-41a1-b7b9-47b5cfc830d7` | Runtime compilation error | — |
+| 34 | `78c9b621-e151-4fb2-9162-f1b39afe573a` | Runtime compilation error | — |
+| 79 | `7fd454c3-9611-4376-a920-3d1c30639790` | Runtime compilation error | — |
+| 64 | `1602b8db-16e2-4d3f-b63d-68d4ee32e2cc` | Runtime compilation error | — |
+| 16254 | `724a6dfa-06ff-45b7-9972-d174a0e23737` | Timing returned | 34.192 |
+| 12383 | `5ede385e-9b04-4b49-903f-375a5180d815` | Timing returned | 27.456 |
+
 ## 2026-11-26 17:54 UTC · Packed CUDA with partial warp reductions
 
 The selected archive entry passed 7/7 workloads and timed CUPTI records in the open evaluator. The small path publishes four FP32 partial sums per warp and completes the reduction after the CTA barrier. The large path retains the two-row tile with reusable weight loads. The exact file passed aligned native and unaligned Triton fallback checks on a non-default stream, changed-input tests, input preservation, and near cancellation.

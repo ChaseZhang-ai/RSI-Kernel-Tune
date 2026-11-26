@@ -17,6 +17,10 @@ The selected three-stage 128×256×64 pipeline uses 213,236 bytes of shared memo
 | 2379 | 70.242 | 304 | 2 | 100.0% | 1.136 |
 | 8192 | 216.612 | 1024 | 7 | 96.2% | 1.269 |
 
+Nsight Compute measured SM active cycles of **74.85%, 84.14%, 91.84% and 90.71%** at the four M values in table order. Tensor-pipe active cycles were **48.39%, 61.41%, 67.15% and 72.86%**. These are separate replay-based counters from physical GB300 2 at 1500/3996 MHz. [Profiler record](large-workloads-ncu.json)
+
+The explicit four-CTA retry compiled, then timed out on the first M=32 launch. The PTX contains two-CTA MMA and a multicast completion barrier. Its TMA load instructions have no multicast modifier. The paired one-CTA staged route completed at 14.48 µs. [Cluster retry](multicast-retry-gb300.json)
+
 ## Verification history
 
 The direct-launch Tensor Core baseline passed all 43 official workloads on GB300 with a 44.31 µs geometric mean. This is a provisional GB300 result. The coordinator owns B200 evaluation and collection submission. [Official evaluator traces](baseline-gb300.jsonl)

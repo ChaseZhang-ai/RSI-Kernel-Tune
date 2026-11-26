@@ -110,8 +110,14 @@ def _launch_pointer(A, B, C, tm, tn, tk, warps=4, stages=3):
 
 
 def _raster_config(m):
+    if m <= 16:
+        return 16, 32, 256, 3, True, 2
+    if m <= 32:
+        return 32, 32, 256, 3, True, 4
     if m <= 64:
-        return max(16, triton.next_power_of_2(m)), 64, 256, 3, True, 4
+        return 64, 64, 256, 3, True, 4
+    if m <= 128:
+        return 128, 64, 128, 4, True, 4
     if m <= 192:
         return 64, 64, 128, 3, True, 4
     return 128, 128, 64, 3, False, 4

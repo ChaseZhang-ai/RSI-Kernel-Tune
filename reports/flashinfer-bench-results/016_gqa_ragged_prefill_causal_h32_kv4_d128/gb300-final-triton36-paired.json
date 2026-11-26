@@ -10,7 +10,12 @@
       3
     ],
     "torch": "2.10.0+cu130",
-    "triton": "3.6.0"
+    "triton": "3.6.0",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ]
   },
   "evaluator_version": "sol-execbench 1.0.2",
   "timing": {

@@ -24,6 +24,10 @@ The exact submission SHA-256 is `af64ac654c0a531ce5c063159c40061e61f335edfdc5e67
 
 [Exact evaluator output](v1-evaluator.jsonl) · [Paired trials](v1-paired.jsonl) · [Device and artifact metadata](v1-device.json)
 
+## Destination and epsilon checks
+
+The exact candidate passed 24 synthetic checks across the eight official shapes on locked GB300 GPU 3. The checks isolated columns 6,144–7,167, changed both inputs at the same addresses, and wrote a fresh NaN-filled destination after shifting all three addresses by one BF16 element. Near-zero inputs used zero absolute tolerance and 0.008 relative tolerance to verify the epsilon-dominated result. The maximum absolute error across the three checks was 0. The test's peak PyTorch allocation was 3.49 GiB. [Edge checks](v1-edges.json)
+
 ## Reproduce the DPS evaluation
 
 Generate the bundle from the collection entry and the staged Parquet. Run the evaluator under the fleet lock with the selected GB300 UUID set in `CUDA_VISIBLE_DEVICES` and the clocks set to 1500/3996 MHz.

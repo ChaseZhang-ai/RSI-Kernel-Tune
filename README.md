@@ -55,7 +55,7 @@ Contributors should push their **best candidate so far** to `flashinfer-bench/<o
 | [012_gqa_paged_decode_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/221/B200) | 0.992633 | — | — | — | Pending | — |
 | [013_gqa_paged_decode_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/222/B200) | 0.979799 | — | — | — | Pending | — |
 | [014_gqa_paged_prefill_causal_h32_kv4_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/223/B200) | 0.995919 | — | — | — | Pending | — |
-| [015_gqa_paged_prefill_causal_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/224/B200) | 0.996676 | — | — | — | Pending | — |
+| [015_gqa_paged_prefill_causal_h32_kv8_d128_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/224/B200) | 0.996676 | — | — | — | GB300 pass 38/38 · [evidence](reports/flashinfer-bench-results/015_gqa_paged_prefill_causal_h32_kv8_d128_ps1/gb300-baseline.jsonl) | [Provisional GB300 only](flashinfer-bench/015_gqa_paged_prefill_causal_h32_kv8_d128_ps1/submission.py) |
 | [016_gqa_ragged_prefill_causal_h32_kv4_d128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/225/B200) | 0.965848 | — | — | — | Pending | — |
 | [017_gqa_ragged_prefill_causal_h32_kv8_d128](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/226/B200) | 0.959860 | — | — | — | Pending | — |
 | [018_mla_paged_decode_h16_ckv512_kpe64_ps1](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/227/B200) | 0.994987 | — | — | — | Pending | — |

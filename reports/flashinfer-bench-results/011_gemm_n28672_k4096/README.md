@@ -1,6 +1,6 @@
 # FlashInfer 011 FP16 GEMM
 
-The selected explicit TMA/MMA dispatch passed all 43 official workloads on GB300. Its paired mean was **101.95 µs**, compared with **104.72 µs** for the earlier explicit dispatch on the same GPU. The software-pipelined version averaged **117.21 µs** in the preceding pair. The initial direct-launch baseline averaged **187.44 µs** in its own paired run. The current candidate is provisional. [Selected dispatch pair](gb300-staged.json) · [Software and explicit pipeline pair](gb300-manual.json) · [Direct and tuned pair](gb300-tuned.json) · [Private job 105838](b200-105838.json) · [Private job 105844](b200-105844.json)
+The selected explicit TMA/MMA dispatch passed all 43 official workloads on GB300. Its paired mean was **101.95 µs**, compared with **104.72 µs** for the earlier explicit dispatch on the same GPU. The software-pipelined version averaged **117.21 µs** in the preceding pair. The initial direct-launch baseline averaged **187.44 µs** in its own paired run. The current candidate is provisional. Its first B200 run reported missing CUPTI records at M=4 and M=7. [Private job 105895](b200-105895.json) [Selected dispatch pair](gb300-staged.json) · [Software and explicit pipeline pair](gb300-manual.json) · [Direct and tuned pair](gb300-tuned.json) · [Private job 105838](b200-105838.json) · [Private job 105844](b200-105844.json)
 
 ## Local verification
 

@@ -130,3 +130,18 @@ A separate run with an empty Triton cache and only the selected candidate measur
 The board accepted the exact v5 artifact on 2026-11-26 at 18:09 UTC. It reported evaluation stack v1.1 and began running. The shared account had four visible pending submissions before upload against a five-submission limit. [Submission receipt](b200-105886.json)
 
 The B200 worker finished at 18:10:52 UTC. The pending payload reported missing CUPTI activity on eight workloads, including single-launch B=1 and split B=16/64 paths. It marked the other 40 workload rows as failed without a detailed diagnostic. The pending payload confirmed zero completed passes and the board scheduled the final payload for 19:10:52 UTC. This timing failure leaves the source provisional on GB300. [Pending workload diagnostics](b200-105886-pending-workloads.jsonl)
+
+## Direct stream-order retry candidate v6
+
+v6 disables programmatic launch dependencies for the chunk producer and merge. Both variants execute the same grouped-query math. In submission 105886, missing CUPTI activity affected direct B=1 launches and the PDL split path. This retry isolates the launch change.
+
+| Batch | AKO4X seed | v5 retest | v6 |
+| ---: | ---: | ---: | ---: |
+| 1 | 6.255 µs | 5.580 µs | 5.605 µs |
+| 16 | 36.077 µs | 12.566 µs | 12.713 µs |
+| 64 | 69.382 µs | 58.301 µs | 59.078 µs |
+| All | 25.017 µs | 15.989 µs | 16.146 µs |
+
+All three passed 48/48 paired checks and timings on physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`. The same physical GPU ran an isolated v6 cold-cache trial in 4.519 seconds across all first calls. The standalone DPS evaluator passed 48/48 for v6 on both compiler stacks. The alternate Torch 2.9.0+cu130 and Triton 3.5.0 run used physical GPU 1, UUID `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, and the CUDA 13.1 assembler. Both devices used capability 10.3, 152 queried SMs, and 1500/3996 MHz. All 22 synthetic output and LSE checks passed. v5 remains the GB300 candidate based on the paired timing result. The v6 submission SHA-256 is `91e3cecd3eda2a0c68e44f21f6ab0350a7c97f042f970dddc74c15f83a8ae7e4`.
+
+[Paired checks and timing](gb300-v6-paired.jsonl) · [Standalone results](gb300-v6-official.jsonl) · [Alternate stack results](gb300-v6-torch29-triton35.jsonl) · [Cold compilation](gb300-v6-cold-compile.json) · [Synthetic correctness](gb300-v6-edge-cases.jsonl)

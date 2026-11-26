@@ -4,7 +4,7 @@ The direct-launch Triton baseline passed correctness and CUPTI timing for all ei
 
 ## Triton v1
 
-The exact direct-launch DPS archive entry passed all eight workloads.
+The provisional GB300 archive entry passed correctness and CUPTI timing on all eight official workloads. It launches directly and writes the supplied destination.
 The paired geometric mean fell from 8.896 to 7.067 µs, a 20.6% reduction.
 The paired results average three 50-sample trial medians. The evaluator column uses the median of the CLI's 50 timed samples.
 
@@ -44,10 +44,14 @@ All official inputs are generated from the staged Parquet workloads. The evaluat
 - The small-batch sweep tested CTA replication, disjoint output sections, and 2 to 16 warps. At batches 1 and 7 the fastest trial was 2.880 and 2.912 µs with packed CUDA, versus 3.040 and 2.976 µs with Triton. The comparison used the archived CompoundingKernel implementation's CTA replication and vector layout as ideas. [QianQu archive](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/main/kernels/FlashInfer/026_rmsnorm_h7168)
 - At batch 539 the retained 8192-padded Triton path at 8 warps ran in 6.208 µs. The best native trial ran in 5.984 µs. Both two-CTA Triton candidates failed during compilation in `TritonGPUPlanCTAPass`.
 - For batches 11,949 and 14,521, the 7 × 1024 retained Triton path with 4 warps and `.cg` loads and `.cs` stores ran in 54.800 and 64.864 µs. With default cache modifiers, retaining activations took 54.944 and 65.408 µs. Reloading them took 59.872 and 70.256 µs. The fastest coalesced native reload path ran in 54.240 and 64.416 µs with 224 threads. Persistent CTA caps of 4, 8, and 12 times the 148-SM proxy were slower on both large cases.
-- The raw results record each trial status and latency. [Triton sweep](sweep.csv) · [Native sweep](native-sweep.csv)
+- The raw results record each trial status and latency. Native method tuples give threads per CTA, BF16 pairs per vector, input reload, warp-contiguous layout, streaming cache policy, and persistence in that order. Small native tuples give threads per CTA and BF16 pairs per vector. [Triton sweep](sweep.csv) · [Native sweep](native-sweep.csv)
 
 The public B200 leader on v1.1 was June at 0.937995 SOL when checked at 2026-11-26 18:48:08 UTC. [Public B200 board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/235/B200)
 
 ## Bounded follow-up sweep
 
 The final sweep compared Triton v1 with 32-warp CTAs, a different address wrap for replicated reductions, reverse row order, and CTAs handling two or four rows. All 118 benchmark rows passed. Triton v1 was fastest on seven workloads. The best alternate at batch 11,949 gained 0.032 µs in one trial and was 0.560 µs slower at batch 14,521. The archive entry retains v1. [Follow-up sweep](round2.csv) · [Follow-up device](round2-device.json)
+
+## B200 compilation check
+
+The exact archive source compiled all six official launch specializations for `sm_100a` with no GPU visible. B200 verification is pending with the coordinator. [Offline compiler record](b200-offline-compile.json)

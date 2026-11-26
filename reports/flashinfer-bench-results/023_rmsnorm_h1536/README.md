@@ -7,3 +7,9 @@ The SOL-ExecBench CLI 1.0.2 (`a9fa0804c793d438e70850c33fe34426e66d53dd`) evaluat
 The initial attempt failed at build with the bundled PTX assembler (`Value 'sm_103a' is not defined for option 'gpu-name'`). The passing attempt used the installed CUDA 13.1 assembler through `TRITON_PTXAS_PATH`. Per-workload status, latency, and numerical error are in the evaluator traces. Cold first-launch timing is collected separately in the paired trials.
 
 The public B200 v1.1 leader at 2026-11-26 18:37:21 UTC was rank 1 submission 104773 with 0.929768 SOL. [NVIDIA B200 operator board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/232/B200)
+
+## Local layout comparisons
+
+Paired CUPTI screens retained the padded direct-launch baseline on each physical GPU. The Triton screen compared padded 2048-column and exact 3×512-column reductions with several warp counts. Its best exact layout timed at 14.752 and 17.104 µs for 11,949 and 14,521 rows. The packed CUDA screen tested 96- and 192-thread CTA layouts, 16- and 32-byte vector stores, and warp-per-row grids including persistent grids sized with a 148-SM proxy. The strongest native small-batch layouts took 2.656–2.784 µs. The native large layouts were slower than the exact Triton layout. [Per-trial data](gb300-screen.csv) · [Screen devices](gb300-screen-devices.json)
+
+The archived CompoundingKernel implementation was adapted locally to write the supplied output. It passed all eight paired correctness and timing checks, with a 13.759 s first call covering its eager launcher compilation. It multiplies input by weight before applying the inverse RMS. The implementation with the requested FP32 multiplication order was developed independently using its work-distribution and prefetch ideas. [Attributed archive](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/main/kernels/FlashInfer/023_rmsnorm_h1536)

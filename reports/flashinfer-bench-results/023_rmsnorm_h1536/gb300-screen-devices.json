@@ -1,0 +1,65 @@
+{
+  "triton": {
+    "device": "NVIDIA GB300",
+    "physical_index": 2,
+    "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+    "sms": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.9.0+cu130",
+    "triton": "3.5.0",
+    "cupti_python": "13.5.0",
+    "warmup": 10,
+    "timed": 50,
+    "seed": 200,
+    "locked_sm_mhz": 1500,
+    "memory_mhz": 3996,
+    "outcomes": {
+      "passed": 144
+    }
+  },
+  "packed_cuda": {
+    "device": "NVIDIA GB300",
+    "physical_index": 3,
+    "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+    "sms": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.9.0+cu130",
+    "triton": "3.5.0",
+    "cupti_python": "13.5.0",
+    "warmup": 10,
+    "timed": 50,
+    "seed": 200,
+    "locked_sm_mhz": 1500,
+    "memory_mhz": 3996,
+    "outcomes": {
+      "passed": 209
+    }
+  },
+  "archived_cute_dps": {
+    "device": "NVIDIA GB300",
+    "physical_index": 3,
+    "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+    "sms": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.9.0+cu130",
+    "triton": "3.5.0",
+    "cupti_python": "13.5.0",
+    "warmup": 10,
+    "timed": 50,
+    "seed": 200,
+    "locked_sm_mhz": 1500,
+    "memory_mhz": 3996,
+    "outcomes": {
+      "passed": 16
+    }
+  }
+}

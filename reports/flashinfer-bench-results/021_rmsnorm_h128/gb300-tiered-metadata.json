@@ -6,7 +6,7 @@
   "memory_mhz": 3996,
   "evaluator_version": "1.0.2",
   "evaluator_revision": "a9fa0804c793d438e70850c33fe34426e66d53dd",
-  "cold_compile_seconds": null,
+  "cold_compile_seconds": 0.634617,
   "warmups": 10,
   "timed_iterations": 50,
   "l2": "cold",
@@ -21,5 +21,17 @@
     "stack": "v1.1",
     "leader_sol": 0.79982,
     "read_utc": "2026-11-26T18:37:20Z"
-  }
+  },
+  "cold_compile_device": {
+    "index": 1,
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "sm_mhz": 1500,
+    "memory_mhz": 3996
+  },
+  "cold_compile_specializations": 5
 }

@@ -31,20 +31,20 @@
 
 | Extension point | Where | What is here | What is a task's |
 |---|---|---|---|
-| A. Command extensions | `src/forgekernel/ext/` | the registry, the dispatch in `__main__.py`, reserved task names | every command (bench, lib, target, prior, campaign, evolve, board) |
-| B. Run context files | `src/forgekernel/runcontext.py`, `loop/driver.py`, `meta/*.md` | four names and variables, four prompt bindings, the prompt sections | writing the files (targethw, roofline, opkb, warmstart, seedlib) |
-| C. Operator families | `src/forgekernel/family.py`, `families.toml` | the rule table, `family_key`, `is_backward` | corrections, reported rather than worked around |
+| A. Command extensions | `src/rsi_kernel_tune/ext/` | the registry, the dispatch in `__main__.py`, reserved task names | every command (bench, lib, target, prior, campaign, evolve, board) |
+| B. Run context files | `src/rsi_kernel_tune/runcontext.py`, `loop/driver.py`, `meta/*.md` | four names and variables, four prompt bindings, the prompt sections | writing the files (targethw, roofline, opkb, warmstart, seedlib) |
+| C. Operator families | `src/rsi_kernel_tune/family.py`, `families.toml` | the rule table, `family_key`, `is_backward` | corrections, reported rather than worked around |
 | D. External GPU lock | `submit/direct.py`, `FK_JOB_LOCK_CMD` | complete | — |
-| The target profile | `target/B200.json`, `src/forgekernel/target_profile.py` | a draft of verified facts; the Markdown rendering | the final profile and how it reaches a run (targethw) |
-| The `benchx` stub | `src/forgekernel/benchx/` | the protocol, the data classes, `FakeBench` | `CardBench`, the reader, compare (benchx) |
-| The `klib` stub | `src/forgekernel/klib/` | the index schema, its checks | building, finding and scoring entries (seedlib) |
+| The target profile | `target/B200.json`, `src/rsi_kernel_tune/target_profile.py` | a draft of verified facts; the Markdown rendering | the final profile and how it reaches a run (targethw) |
+| The `benchx` stub | `src/rsi_kernel_tune/benchx/` | the protocol, the data classes, `FakeBench` | `CardBench`, the reader, compare (benchx) |
+| The `klib` stub | `src/rsi_kernel_tune/klib/` | the index schema, its checks | building, finding and scoring entries (seedlib) |
 
 ---
 
 ## 2. Extension point A: command extensions
 
 ```
-src/forgekernel/ext/
+src/rsi_kernel_tune/ext/
   __init__.py      the registry (adds no command)
   <name>.py        one command each: COMMAND = "<name>" and main(argv) -> int
 ```
@@ -68,7 +68,7 @@ status (`None` is 0). Nothing is registered anywhere.
   `window`, `leaderboard`, `monitor`, `ncu-trace` and `ncu-report` are built-in operator
   commands -- **an extension must not have a subcommand of one of those names.**
 - **`forge --help`** ends with the extension commands found, by name:
-  `Extension commands (src/forgekernel/ext/, one module each): ...`.
+  `Extension commands (src/rsi_kernel_tune/ext/, one module each): ...`.
 - **A task may not take an extension's name** (`task.load_task`): `forge <name>` would never reach
   that task's operator commands. The names refused are whatever is in the directory when the task
   is read.
@@ -86,7 +86,7 @@ Tests: `tests/test_ext.py`.
 | `lessons` | `FK_LESSONS_PATH` | `{LESSONS_PATH}` | what was measured before on other operators of the same class | opkb |
 | `prior` | `FK_PRIOR_PATH` | `{PRIOR_PATH}` | kernels that already exist for this operator or its family | warmstart, seedlib |
 
-`forgekernel.runcontext`:
+`rsi_kernel_tune.runcontext`:
 
 ```python
 path_for(name, env=None) -> Path | None     # absolute, ~ expanded; None when not set or blank
@@ -128,7 +128,7 @@ measured when it was written -- the B300's SM count and clock lock, the board's 
 and image, whether the evaluation image's stack runs on CC 10.3 -- is marked so and given no
 number.
 
-`forgekernel.target_profile.render_markdown(profile)` renders it to the Markdown an agent reads,
+`rsi_kernel_tune.target_profile.render_markdown(profile)` renders it to the Markdown an agent reads,
 data-driven: the target and its facts first, then how the board evaluates, what a submission must
 be, how the development machine differs, the rules. A key added to the profile appears with no
 change to the code. `load_profile(path)` and `render_file(path)` read the repository's file by
@@ -148,13 +148,13 @@ prefix and without a trailing `backward` -- a backward kernel is the same family
 and `is_backward(name)` says which it is.
 
 ```python
-from forgekernel.family import family_key, is_backward, families
+from rsi_kernel_tune.family import family_key, is_backward, families
 family_key("069_rms_norm")                                            # "rmsnorm"
 family_key("060_fused_attention_qk_matmul_scale_mask_softmax_backward")  # "attention"
 is_backward("060_fused_attention_qk_matmul_scale_mask_softmax_backward")  # True
 
-python -m forgekernel.family 069_rms_norm 001_fp8_attention_output_projection
-python -m forgekernel.family --counts < leaderboards.json     # a board snapshot, or names
+python -m rsi_kernel_tune.family 069_rms_norm 001_fp8_attention_output_projection
+python -m rsi_kernel_tune.family --counts < leaderboards.json     # a board snapshot, or names
 ```
 
 The rules were induced from the 235 problem names of the board snapshot of 2026-11-24, where they
@@ -187,7 +187,7 @@ families.
 
 ## 6. The two stubs
 
-### 6.1 `benchx`: the one way to evaluate a candidate (`src/forgekernel/benchx/api.py`)
+### 6.1 `benchx`: the one way to evaluate a candidate (`src/rsi_kernel_tune/benchx/api.py`)
 
 ```python
 bench.bench(card_dir, candidate, workloads=None, mode="dev") -> BenchResult
@@ -213,7 +213,7 @@ them, `mode="target"` only checks that the candidate compiles for the board's GP
 for benchx. The reference library's scoring, campaign's choice of a starting point, evolve's
 selection and the per-workload dispatch of shapes all go through `Bench.bench`.
 
-### 6.2 `klib`: the reference library's index (`src/forgekernel/klib/schema.py`)
+### 6.2 `klib`: the reference library's index (`src/rsi_kernel_tune/klib/schema.py`)
 
 ```python
 validate(entry) -> list[str]               # every reason the entry is off the schema; [] when it is not
@@ -229,7 +229,7 @@ file), `language` (`triton` / `cutedsl` / `pytorch` / `cuda-inline`), `entry` (a
 `usable_in_submission`.
 
 Two checks are the project's rules and not the schema's taste: `family` must be one
-`forgekernel.family` knows and be among the entry's `problem_keys` (an entry is found through its
+`rsi_kernel_tune.family` knows and be among the entry's `problem_keys` (an entry is found through its
 family); and **a license other than Apache-2.0, MIT or BSD may stay in the library only with
 `usable_in_submission: false`** -- such an entry can be read and adapted from, and
 `submittable()` says it cannot be merged.
@@ -248,7 +248,7 @@ FK_JOB_LOCK_CMD=/home/<user>/tools/bin/with-lock gpu 1800 --
 ```
 
 The value is split like a shell would (`shlex.split`) and ends with `--`; the job then runs
-`<lock command> -- <entry command>` inside forgekernel's own GPU lock. It is for `local` delivery
+`<lock command> -- <entry command>` inside this project's own GPU lock. It is for `local` delivery
 only; over ssh the host's lock is used, as before. A run that sets no lock command behaves exactly
 as it did.
 
@@ -287,7 +287,7 @@ uv pip install --python .venv/bin/python pytest torch safetensors \
 Do not `pip install -e .`. To run `forge` from a checkout without installing it:
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m forgekernel --help
+PYTHONPATH=src .venv/bin/python -m rsi_kernel_tune --help
 ```
 
 **Tests** are run in the root of the worktree, with the one environment:
@@ -317,7 +317,7 @@ is the project's to align with the evaluation image (the prompt files say how).
 
 ## 9. What a task that builds on this must keep
 
-- **A new command** is `src/forgekernel/ext/<name>.py` with `COMMAND = "<name>"` and
+- **A new command** is `src/rsi_kernel_tune/ext/<name>.py` with `COMMAND = "<name>"` and
   `main(argv) -> int`; its subcommands are not named after a built-in operator command (§2). It
   has `--help` and exits cleanly from it.
 - **A new prompt overlay directory** (`meta/triton/`, say) gets the two sections of §3 at the end
@@ -343,7 +343,7 @@ Trade-offs made in implementation, and where the result departs from the plan.
    checked to agree when the command is called. Every extension the first wave plans has the two
    equal. The cost: an extension cannot be renamed independently of its file.
 2. **No extension was added.** The registry, the dispatch and the reserved-name check are
-   complete, and `src/forgekernel/ext/` holds only its `__init__.py`, as the plan asks. The
+   complete, and `src/rsi_kernel_tune/ext/` holds only its `__init__.py`, as the plan asks. The
    second-word rule (§2) is a consequence of the plan's lookup order, not a new restriction.
 3. **Context files are bound as absolute paths.** The agents run with the student's workspace as
    their working directory, so a relative path would be read from the wrong place. A fourth
@@ -391,7 +391,7 @@ Trade-offs made in implementation, and where the result departs from the plan.
     the ssh alias and the host"; for a lock that was not acquired the detail in the same message
     says what happened, but the first half misleads. The wording is in `loop/cli.py`, which step
     0 had no reason to touch; it is left for the integration.
-11. **Measured with the machine's own lock.** One local job was run through `forgekernel.submit`
+11. **Measured with the machine's own lock.** One local job was run through `rsi_kernel_tune.submit`
     under the real `with-lock`: the lock was taken, the begin marker printed, the entry ran
     inside the lock, the lock released. The paths a lock contention takes were measured with a
     stand-in lock in the tests, not with the real one: holding the machine's lock to make it

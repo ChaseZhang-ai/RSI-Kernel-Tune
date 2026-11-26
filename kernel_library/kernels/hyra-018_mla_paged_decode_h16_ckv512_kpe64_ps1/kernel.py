@@ -1,4 +1,4 @@
-"""Merged by forgekernel.klib.normalize — do not edit; edit the original sources.
+"""Merged by rsi_kernel_tune.klib.normalize — do not edit; edit the original sources.
 
 Inlined, in dependency order: cuda_mla.py, cuda_mma.py
 Entry file (verbatim last): kernel.py

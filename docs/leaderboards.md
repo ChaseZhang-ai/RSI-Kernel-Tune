@@ -288,7 +288,7 @@ forge init <op> --leaderboard sol-execbench ... --kernel-file kernel.cu
 ```
 
 It and the CuTe DSL mode are **two independent sets of inputs**, decided in one place,
-`src/forgekernel/loop/lang_mode.py`:
+`src/rsi_kernel_tune/loop/lang_mode.py`:
 
 | | CuTe DSL mode (`cutedsl` etc.) | CUDA mode (`cuda-sol`) |
 |---|---|---|

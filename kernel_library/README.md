@@ -10,7 +10,7 @@ what no kernel can be found for.
 ```
 kernel_library/
   sources.toml            # where kernels come from (local reference trees + opt-in git sources)
-  index.json              # the index: one entry per kernel (forgekernel.klib.schema)
+  index.json              # the index: one entry per kernel (rsi_kernel_tune.klib.schema)
   kernels/<id>/kernel.py  # ONE Python file, top-level `run(*args)`, positional, outputs last
   kernels/<id>/meta.json  # origin, original files, license + where it was read, notes, signature_check
   _sources/<name>/        # `forge lib fetch` clones (git-ignored); never committed

@@ -337,7 +337,7 @@ definition:
 FK_DELIVERY=ssh             # local | ssh
 FK_GPU=0                    # which GPU
 REMOTE_HOST=gpu-box         # an ssh alias that logs in non-interactively
-REMOTE_WORKDIR=/data/fk     # a directory on the host used only by forgekernel
+REMOTE_WORKDIR=/data/fk     # a directory on the host used only by this project
 REMOTE_ENV_FILE=            # optional: a script sourced before every command
 ANTHROPIC_API_KEY=...
 ```
@@ -438,8 +438,8 @@ harness's job (§3.4), not the script's.
 
 Trade-offs made in implementation, and where the result departs from the text above:
 
-1. **Judging reuses the leaderboard path**: a third suite, `forgekernel`, sits beside FlashInfer-Bench
-   and SOL-ExecBench (`src/forgekernel/card_template/eval/leaderboard.py`); bench generation,
+1. **Judging reuses the leaderboard path**: a third suite, `rsi_kernel_tune`, sits beside FlashInfer-Bench
+   and SOL-ExecBench (`src/rsi_kernel_tune/card_template/eval/leaderboard.py`); bench generation,
    `gpu_entry.sh`, the timed-window contract, reference sealing and tamper checks are all reused. The
    error is the "normalised max error" `max|y − j| / max|j|` (over finite positions); NaN / Inf must sit
    at the same positions as the judge's, and integer and bool outputs must match exactly.
@@ -499,7 +499,7 @@ Trade-offs made in implementation, and where the result departs from the text ab
     by file path never reached the hook) — both fixed. Still open: without CuTe DSL installed on the
     machine that runs `forge`, the student cannot read the DSL source (this did not stop it from writing
     a working kernel here).
-14. **The execution layer**: jobs are recorded by `forgekernel.submit.jobs` (one detached runner per
+14. **The execution layer**: jobs are recorded by `rsi_kernel_tune.submit.jobs` (one detached runner per
     job, the log and the verdict under `operators/<op>/.jobs/<id>/`); a lost runner is resubmitted, and
     a transport failure or a clock lock that does not hold is reported as "did not run" and never
     charged to the kernel; stopping a job ends its whole process tree on this machine or the ssh host

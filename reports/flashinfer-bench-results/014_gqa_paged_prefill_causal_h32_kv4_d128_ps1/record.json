@@ -24,6 +24,29 @@
         "total": 30,
         "sha256": "d4731b603d2acbc6138d80d482e37330ad4b0f2b9961cac1e707da5b526f2a7a",
         "median_latency_us": 34.28
+      },
+      "v1": {
+        "sha256": "e21dc318b4a65344e72e36ff173c1dcc9d4ded8b57d042ca07cb20cc0fb7a8e6",
+        "official_workloads_passed": 30,
+        "median_latency_us": 16.5205,
+        "result_timestamp_utc": "2026-11-26T17:49:52.837727Z",
+        "gpu": {
+          "physical_index": 2,
+          "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+          "sm_count": 152,
+          "sm_mhz": 1500,
+          "memory_mhz": 3996,
+          "capability": [
+            10,
+            3
+          ],
+          "model": "NVIDIA GB300"
+        },
+        "torch": "2.10.0+cu130",
+        "triton": "3.6.0",
+        "evaluator": "sol-execbench 1.0.2 (a9fa080)",
+        "reference_rounds_per_workload": 10,
+        "timing_failures": 0
       }
     },
     "paired_screen_v1": {
@@ -67,6 +90,96 @@
       "cloned_inputs": true,
       "preallocated_outputs": true,
       "method": "CUPTI first-to-last activity"
+    },
+    "paired_screen_v2": {
+      "evaluator": "sol-execbench 1.0.2 CUPTI and tolerance helpers",
+      "reference_rounds": 1,
+      "reference": "FP32 batched matmul with the official causal rule and tolerances",
+      "all_workloads_paired": 30,
+      "gpu": {
+        "physical_index": 0,
+        "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+        "sm_count": 152,
+        "sm_mhz": 1500,
+        "memory_mhz": 3996,
+        "capability": [
+          10,
+          3
+        ],
+        "model": "NVIDIA GB300"
+      },
+      "triton": "3.6.0",
+      "torch": "2.10.0+cu130",
+      "baseline": {
+        "passed": 30,
+        "median_latency_us": 34.0485,
+        "cold_first_calls_total_s": 5.9507,
+        "cold_first_calls_max_s": 0.9361
+      },
+      "packed_sparse_v1": {
+        "passed": 30,
+        "median_latency_us": 16.496000000000002,
+        "cold_first_calls_total_s": 13.9452,
+        "cold_first_calls_max_s": 1.0037,
+        "geomean_speedup_vs_baseline": 1.7316695904895574
+      },
+      "packed_sparse_v2": {
+        "passed": 30,
+        "median_latency_us": 13.984,
+        "cold_first_calls_total_s": 11.2483,
+        "cold_first_calls_max_s": 1.1469,
+        "geomean_speedup_vs_baseline": 2.074263756060224
+      }
+    },
+    "synthetic": {
+      "scope": "Independent FP32 reference and explicit output/LSE checks",
+      "versions": [
+        "v1",
+        "v2"
+      ],
+      "cases": [
+        {
+          "name": "no keys and empty requests",
+          "passed": 3
+        },
+        {
+          "name": "single key with masked queries",
+          "passed": 3
+        },
+        {
+          "name": "under- and over-aligned rows plus empty requests",
+          "passed": 3
+        },
+        {
+          "name": "two-key and one-key rows",
+          "passed": 3
+        },
+        {
+          "name": "positive delta and repeated shuffled pages",
+          "passed": 3
+        },
+        {
+          "name": "single query with shuffled repeated pages",
+          "passed": 3
+        },
+        {
+          "name": "mixed long and short requests",
+          "passed": 3
+        },
+        {
+          "name": "multiple requests with one small visible prefix in each",
+          "passed": 3
+        }
+      ]
+    },
+    "b200_private": {
+      "evaluation_stack_requested": "v1.1",
+      "submitted_candidate_sha256": {
+        "v1": "e21dc318b4a65344e72e36ff173c1dcc9d4ded8b57d042ca07cb20cc0fb7a8e6",
+        "v2": "c5784c0db482f4cfa5e4c13ec370e317d2a411fd31b4ddf38975f8a0f656b1e1"
+      },
+      "status": "HTTP 429 during upload",
+      "submission_id": null
     }
   },
   "experiments": [
@@ -86,10 +199,62 @@
       "details": "Incorrect output and LSE with unmasked padding. Plain gather passed."
     },
     {
+      "outcome": "numerical_failure",
+      "case": "Gluon warp-specialized experiment",
+      "details": "The shared-probability variant failed correctness before timing."
+    },
+    {
       "outcome": "submission_rate_limited",
       "gpu": "B200",
       "timestamp_utc": "2026-11-26T17:40:00Z",
-      "detail": "HTTP 429 during upload. No submission ID."
+      "details": "Upload returned HTTP 429 before receiving a submission ID."
+    },
+    {
+      "outcome": "submission_rate_limited",
+      "gpu": "B200",
+      "timestamp_utc": "2026-11-26T17:43:50Z",
+      "details": "Upload returned HTTP 429 before receiving a submission ID."
+    },
+    {
+      "outcome": "submission_rate_limited",
+      "gpu": "B200",
+      "timestamp_utc": "2026-11-26T17:50:26Z",
+      "details": "Upload returned HTTP 429 before receiving a submission ID."
+    },
+    {
+      "outcome": "build_or_runtime_error",
+      "case": "multi-CTA Triton TMA",
+      "details": "Triton CTA planning failed. One CTA per tile passed."
+    },
+    {
+      "outcome": "numerical_failure",
+      "case": "Gluon warp-specialized experiment",
+      "details": "The shared-probability variant failed correctness before timing."
     }
-  ]
+  ],
+  "selected_candidate": {
+    "version": "v1",
+    "scope": "GB300 only",
+    "sha256": "e21dc318b4a65344e72e36ff173c1dcc9d4ded8b57d042ca07cb20cc0fb7a8e6",
+    "official_workloads_passed": 30,
+    "median_latency_us": 16.5205,
+    "result_timestamp_utc": "2026-11-26T17:49:52.837727Z",
+    "gpu": {
+      "physical_index": 2,
+      "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+      "sm_count": 152,
+      "sm_mhz": 1500,
+      "memory_mhz": 3996,
+      "capability": [
+        10,
+        3
+      ],
+      "model": "NVIDIA GB300"
+    },
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "evaluator": "sol-execbench 1.0.2 (a9fa080)",
+    "reference_rounds_per_workload": 10,
+    "timing_failures": 0
+  }
 }

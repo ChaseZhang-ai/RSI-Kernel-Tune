@@ -256,7 +256,7 @@ def _launch_chunked(q, k_cache, v_cache, kv_indptr, kv_indices, sm_scale, output
         num_warps=warps, num_stages=stages, launch_pdl=True,
     )
     _chunked_merge[(8, batch)](
-        kv_indptr, partial, partial_lse, output, lse, chunk, 4, 8, True, num_warps=4, launch_pdl=True,
+        kv_indptr, partial, partial_lse, output, lse, chunk, 4, 16, True, num_warps=2, launch_pdl=True,
     )
 
 

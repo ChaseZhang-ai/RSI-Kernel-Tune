@@ -99,3 +99,28 @@ Materialization preserved the official axes, reference and per-workload toleranc
 The DPS adaptation of the AKO4X seed passed the full standalone evaluator rerun, including correctness and CUPTI timing for all 48 workloads. This run used physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, capability 10.3, 152 queried SMs and 1500/3996 MHz. [Standalone seed results](gb300-seed-official.jsonl)
 
 The v4 candidate passed two-stream tests for B=16 and B=64 with dependent-launch query producers and output consumers on each stream. These tests used physical GB300 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, at 1500/3996 MHz. [Stream dependency checks](gb300-v4-stream-dependencies.jsonl)
+
+## GB300 paired and standalone trial v5
+
+The selected artifact keeps four query heads per merge CTA and increases its row-partial tile from 8 to 16 slots with two warps. A paired retest improved the geometric mean against v4 on the same physical GPU.
+
+The AKO4X seed, v1, and the new candidate each passed 48/48 paired checks and timings. The exact bundled DPS source passed 48/48 in the standalone evaluator, including all ten numerical rounds and CUPTI timing. All 22 synthetic invocations passed separately for output and base-2 LSE.
+
+| Batch | AKO4X seed | v1 | New candidate |
+| ---: | ---: | ---: | ---: |
+| 1 | 6.339 µs | 5.990 µs | 5.630 µs |
+| 16 | 35.265 µs | 19.314 µs | 13.506 µs |
+| 64 | 69.378 µs | 68.954 µs | 58.268 µs |
+| All | 24.939 µs | 19.981 µs | 16.424 µs |
+
+Geometric means are from cold-L2 CUPTI first-to-last kernel timing with 10 warmups, 50 timed calls, cloned inputs at shifted addresses, and preallocated outputs. All runs in this trial used physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, capability 10.3, 152 queried SMs, 1500/3996 MHz, SOL-ExecBench 1.0.2, Torch 2.10.0+cu130, and Triton 3.6.0.
+
+The fresh Triton cache trial took 1.875 seconds summed across synchronized candidate first calls, with a maximum of 0.512 seconds per call. The maximum paired absolute errors were 0.0078125 for BF16 output and 1.90735e-06 for base-2 LSE. The submission SHA-256 is `c46e52f4c079774cfaa1a938d1387c693aed5d991535315e05683eef82bdab02`.
+
+[Paired timings](gb300-v5-paired.jsonl) · [Official evaluator timings](gb300-v5-official.jsonl) · [Synthetic checks](gb300-v5-edge-cases.jsonl)
+
+The paired v4 retest measured 16.687 µs overall. v5 improved on that by 1.6% and on the paired AKO4X seed by 34.1%. An earlier v4 run on GPU 2 measured 16.270 µs overall. The v5 selection used the same-GPU comparison.
+
+The exact v5 DPS bundle also passed 48/48 in the alternate Torch 2.9.0+cu130 and Triton 3.5.0 stack with the CUDA 13.1 assembler on physical GB300 2, UUID `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, capability 10.3, 152 queried SMs and 1500/3996 MHz. [Alternate stack workload results](gb300-v5-torch29-triton35.jsonl)
+
+A separate run with an empty Triton cache and only the selected candidate measured 4.539 seconds summed across all 48 synchronized first calls. The longest first call took 0.988 seconds. It used physical GB300 1, UUID `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, capability 10.3, 152 queried SMs and 1500/3996 MHz. [Cold compilation record](gb300-v5-cold-compile.json)

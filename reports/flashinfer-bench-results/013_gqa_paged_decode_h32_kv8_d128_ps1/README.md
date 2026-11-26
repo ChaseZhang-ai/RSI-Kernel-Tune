@@ -128,3 +128,5 @@ A separate run with an empty Triton cache and only the selected candidate measur
 ## Private B200 submission 105886
 
 The board accepted the exact v5 artifact on 2026-11-26 at 18:09 UTC. It reported evaluation stack v1.1 and began running. The shared account had four visible pending submissions before upload against a five-submission limit. [Submission receipt](b200-105886.json)
+
+The B200 worker finished at 18:10:52 UTC. The pending payload reported missing CUPTI activity on eight workloads, including single-launch B=1 and split B=16/64 paths. It marked the other 40 workload rows as failed without a detailed diagnostic. The pending payload confirmed zero completed passes and the board scheduled the final payload for 19:10:52 UTC. This timing failure leaves the source provisional on GB300. [Pending workload diagnostics](b200-105886-pending-workloads.jsonl)

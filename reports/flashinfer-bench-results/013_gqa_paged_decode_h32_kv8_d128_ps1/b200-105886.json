@@ -10,13 +10,16 @@
     "estimated_delay_minutes": 0
   },
   "id": 105886,
-  "status": "RUNNING",
+  "status": "PENDING_RESULT",
   "gpu_type": "B200",
   "submitted_at": "2026-11-26T18:09:39.679959",
   "evaluation_stack_version": "v1.1",
-  "result_available_at": null,
+  "result_available_at": "2026-11-26T19:10:52.191481",
   "is_correct": null,
   "is_disqualified": false,
   "sol_score": null,
-  "latency_ms": null
+  "latency_ms": null,
+  "finished_at": "2026-11-26T18:10:52.191473",
+  "confirmed_workloads_passed": 0,
+  "missing_cupti_activity_workloads": 8
 }

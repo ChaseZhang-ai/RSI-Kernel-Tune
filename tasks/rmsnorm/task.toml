@@ -10,6 +10,5 @@ arch     = "sm100"                   # sm90 for Hopper
 run    = "reference/run.py:run"      # the callable timed beside the kernel
 source = "reference"                 # the teacher may read it (source mode)
 
-[budget]
-hours    = 2
-max_meta = 1
+[budget]                              # explicitly unbounded: the loop stops only when
+hours    = 0                          # the target is actually met

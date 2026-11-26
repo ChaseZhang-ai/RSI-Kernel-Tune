@@ -55,7 +55,7 @@ def test_minimal_task_takes_every_default(tmp_path):
     assert t.teacher.backend == "codex" and t.teacher.model == "sol6.2"
     assert t.student.backend == "codex" and t.student.model == "sol6.2"
     assert t.student.effort == "high"
-    assert (t.budget.hours, t.budget.max_meta, t.budget.reference_hours) == (4.0, 3, 8.0)
+    assert (t.budget.hours, t.budget.max_meta, t.budget.reference_hours) == (0.0, 0, 0.0)
     assert [s.name for s in t.shapes] == ["small", "large"]
     assert all(s.groups_to_add == 3 for s in t.shapes)
     assert any("no [reference]" in n for n in t.notes)
@@ -72,7 +72,7 @@ def test_the_task_overrides_global_config_key_by_key(tmp_path):
     assert (t.student.model, t.student.effort, t.student.timeout_s) == ("claude-fable-5-1",
                                                                          "low", 600)
     assert t.teacher.provider == t.student.provider == "native"
-    assert (t.budget.hours, t.budget.max_meta) == (1.0, 3)
+    assert (t.budget.hours, t.budget.max_meta) == (1.0, 0)
 
 
 def test_a_provider_must_be_declared_and_its_key_set(tmp_path, monkeypatch):
@@ -162,8 +162,10 @@ def test_every_problem_is_reported_at_once(tmp_path):
     with pytest.raises(TaskError) as e:
         load_task(_task(tmp_path, toml, shapes=False, description=None), kb_root=_kb(tmp_path))
     text = "\n".join(e.value.problems)
+    # NOTE: hours = 0 is legal now (0 = unbounded), so it must NOT appear in the problems.
+    assert "hours must be" not in text and "must be a positive number of hours" not in text
     for needle in ("language must be one of", "arch must name", "both ratio and ms",
-                   "timing must be one of", "hours must be a positive", "max_meta must be",
+                   "timing must be one of", "max_meta must be",
                    "backend must be one of", "unknown table [extra]",
                    "description.md is missing", "shapes.json is missing"):
         assert needle in text, needle

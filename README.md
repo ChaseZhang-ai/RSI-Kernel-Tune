@@ -244,10 +244,22 @@ A task writes only what differs from `global_config/`, the bottom layer every ta
 onto, as in ForgeTrain: `models.toml` sets `[agent]` (`backend`, `provider`, `model`, `effort`,
 `timeout_s`; `[agent.teacher]` / `[agent.student]` for one agent), `loop.toml` sets `[target]`
 and `[budget]`, and `backends.toml` lists the API endpoints a `provider` other than `native`
-can name, with the key read from `local.env`. The defaults are a 1.2× target in device time,
-4 hours of loop, 3 teacher rounds, and **Codex for both roles** (`sol6.2`, reasoning
-effort `high`) unless a task overrides one of them (e.g. Claude when hook enforcement or
-a /goal session is needed).
+can name, with the key read from `local.env`.
+
+**One objective: get faster — the destination is #1 on this kernel's SOL-ExecBench board.**
+Everything is built around that. There are no wall-clock or round-count budgets by default
+(`[budget]` is 0 = unbounded; a run stops when it actually meets the target, never when a
+clock runs out). All references are open by default — the reference implementation, prior
+kernels, the KB, and the web are there to be read and reused; there is no sealed lane and no
+anti-"cheating" stance. `forge board submit` has no confirmation and no score threshold —
+a kernel that looks good, or that you simply want to measure, is submitted immediately; the
+board's own evaluation is the authority. Dev hardware raises specific divergences on the
+graded machine (`target/B200.json`): FP4 ~1.5x faster on the development GPU (15 vs 10
+PFLOPS), SFU ~2.1x (10.7 vs 5.0 TeraExp/s), SM count 148 vs up-to-160, and cubins aren't
+binary-compatible between the two — submission sources must derive their gencode from the
+device and never name an architecture. **Codex for both roles** (`sol6.2`, reasoning
+effort `high`) unless a task overrides one of them (e.g. Claude when a /goal session is
+needed).
 
 ## Self-Evolution
 

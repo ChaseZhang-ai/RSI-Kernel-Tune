@@ -16,7 +16,7 @@ def test_the_example_task_loads():
     assert task.mode == "source" and task.language == "cutedsl"
     assert [s.name for s in task.shapes] == ["prefill", "decode"]
     assert (ROOT / "tasks" / "rmsnorm" / "reference" / "run.py").is_file()
-    assert (task.budget.hours, task.budget.max_meta) == (2.0, 1)
+    assert (task.budget.hours, task.budget.max_meta) == (0.0, 0)
 
 
 def test_the_task_template_is_a_valid_task_but_for_its_name():

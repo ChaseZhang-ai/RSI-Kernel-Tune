@@ -2230,7 +2230,10 @@ def _main(argv: list[str] | None = None) -> int:
     p.add_argument("--kb-arch", default=None,
                    help="which hw_kb/<language>/<arch>/ tree the run reads and files recipes into "
                         "(default: loop.toml [loop].kb_arch, else sm90)")
-    p.add_argument("--hours", type=float, default=4.0, help="inner-loop wall-clock budget")
+    p.add_argument("--hours", type=float, default=0.0,
+                   help="inner-loop wall-clock budget (default 0 = run until the "
+                        "milestone/target is actually met; hours and meta rounds are "
+                        "not gates — improvement is the only stop)")
     p.add_argument("--target-ms", type=float, default=None,
                    help="stop threshold; default: derived from the archived ref "
                         "baseline via --equivalence-ratio")
@@ -2270,7 +2273,9 @@ def _main(argv: list[str] | None = None) -> int:
                    help="while an agent turn runs, print a progress line every N seconds "
                         "(a watchdog may read run-log silence as a stall; default 600, "
                         "0 disables)")
-    p.add_argument("--max-meta", type=int, default=3)
+    p.add_argument("--max-meta", type=int, default=None,
+                   help="teacher rounds that may revise the milestone; unset = unbounded "
+                        "(rounds stop only when the target is met, never by count)")
     p.add_argument("--kb-tripwire-rounds", type=int, default=6,
                    help="a student probe that needs >= this many GPU rounds before its "
                         "PASS gets an end-of-run KB write-up turn (0 disables); the "
@@ -2811,7 +2816,11 @@ def _main(argv: list[str] | None = None) -> int:
         language=language, gate_window=gate_window, kb_arch=kb_arch,
         ref_baseline=ref_baseline, arch_baseline=arch_baseline,
         window_contract=window_contract,
-        deadline_epoch=time.time() + args.hours * 3600, backend=backend, now=time.time,
+        # hours == 0 means unbounded: the wall clock is never a stop, only meeting
+        # the target is (see global_config/loop.toml [budget]).
+        deadline_epoch=(float("inf") if not args.hours
+                        else time.time() + args.hours * 3600), backend=backend,
+        now=time.time,
         decisions_dag=[],  # empty -> the driver parses the milestone §4 DAG per meta step
         oracle_path=oracle, oracle_mode=oracle_mode,
         recon_backend=recon_backend, recon_dir=recon_dir, recon_path=recon_path,
@@ -2989,7 +2998,8 @@ def _main(argv: list[str] | None = None) -> int:
         else:
             print("  ref_baseline = (none, and no [loop] ref_cmd/ref_mode declared — "
                   "a real run would refuse to distill)")
-        print(f"  budget       = {args.hours}h  (deadline {time.strftime('%H:%M:%S', time.localtime(ctx.deadline_epoch))})")
+        print(f"  budget       = {args.hours}h" + ("(unbounded)" if not args.hours else
+              f" (deadline {time.strftime('%H:%M:%S', time.localtime(ctx.deadline_epoch))})"))
         print(f"  branch_pref  = {branch_prefix}")
         print(f"  agent_cmd    = {args.agent_cmd or '(none — set --agent-cmd for a real run)'}")
         print(f"  teacher_cmd  = {args.teacher_agent_cmd or '(same as agent_cmd)'}")

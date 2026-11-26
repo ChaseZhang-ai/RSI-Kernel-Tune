@@ -5561,7 +5561,8 @@ def test_two_layer_phantom_gap_stops_as_target_without_spending_meta(tmp_path):
     # "target" with the meta budget unspent (the agent script has no meta
     # replies to consume). max_meta=0 also proves the check runs before the
     # meta_budget return: a genuinely-met target must never be recorded as
-    # meta_budget for want of budget to check the residual with.
+    # meta_budget for want of budget to check the residual with. (0 = unbounded,
+    # so the "unspent budget" case is exercised by the sibling test.)
     dag = [Decision(id="A", depends_on=[])]
     agent = [REC("A", 2.66), REC("B", 2.70), REC("C", 2.68), REC("D", 2.69)]
     gpu = [EVAL(2.66), NCU, EVAL(2.70), NCU, EVAL(2.68), NCU, EVAL(2.69), NCU,
@@ -6422,7 +6423,7 @@ def test_source_run_without_a_recon_tree_is_the_unchanged_control(tmp_path):
     ctx.oracle_mode = "source"
     ctx.oracle_path = "/ref/gemm.cu"
     ctx.milestone.unlink()
-    run_two_layer(ctx, max_meta=0)
+    run_two_layer(ctx, max_meta=0)                          # unbounded: EXHAUSTED ends it
     assert teacher.prompts[0] == render_prompt(ctx.meta_dir / "distill_prompt.md",
                                                _bindings(ctx))
     assert len(teacher.prompts) == 2                      # distill, then the student
@@ -8294,7 +8295,7 @@ def test_a_green_resume_over_an_unowned_head_resets_to_the_last_keep(tmp_path, c
         iter=0, decision_id="M0-gate", change="c", correctness=True, verdict="KEEP",
         bwd_median_ms=2.0, sha="keep0"))
     be._sha = 7                                  # HEAD sha7: unowned (the killed eval)
-    run_two_layer(ctx, max_meta=0)
+    run_two_layer(ctx, max_meta=1)
     out = capsys.readouterr().out
     assert "resume: lineage at sha7 reads green from the 1 recorded iteration(s); " \
            "rollback anchor = last KEEP keep0 (HEAD carries commits no record verified)" in out

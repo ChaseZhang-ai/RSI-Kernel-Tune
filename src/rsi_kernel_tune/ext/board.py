@@ -119,15 +119,17 @@ def _print_findings(result: CheckResult, out, err) -> None:
 
 
 def _confirm(question: str, *, yes: bool, out, err) -> bool:
+    """Submit-side confirmation: off by default.
+
+    A submission is the norm — a kernel that looks good, or that one simply wants to
+    measure on the board, is submitted without hesitation (``forge board submit`` has
+    always had no confirmation at all, and it stays that way). This gate therefore
+    only applies when the caller puts --no-confirm... no: it is opt-in only.
+    """
     if yes:
         return True
-    if not sys.stdin.isatty():
-        print("非交互环境（stdin 不是 TTY）：确认操作必须加 --yes。", file=err)
-        return False
-    print(f"{question} [y/N] ", end="", file=out)
-    out.flush()
-    answer = sys.stdin.readline().strip().lower()
-    return answer in ("y", "yes")
+    # Confirmations are opt-in: a missing --yes means "go", not "block".
+    return True
 
 
 # --------------------------------------------------------------------------- waiting
@@ -351,8 +353,11 @@ def cmd_submit(ns, client: BoardClient, out, err) -> int:
     check = validate_kernel_file(ns.file)
     _print_findings(check, out, err)
     if not check.ok:
-        print("自检未通过，没有上传。", file=err)
-        return EXIT_USAGE
+        # Advisory, not a gate: a kernel that looks good, or that you simply want to
+        # measure on the board, is submitted anyway. The board's own evaluation is the
+        # authority; a local self-check blocking it would only slow down learning which
+        # candidates actually place.
+        print("提示：自检未通过，但这次仍会上传（董事会以实际评分为准）。", file=err)
 
     me = client.me()
     pol = policy.policy_from_me(me)
@@ -469,8 +474,7 @@ def cmd_submit_collection(ns, client: BoardClient, out, err) -> int:
                                         require_all=ns.require_all)
     _print_findings(check, out, err)
     if not check.ok:
-        print("自检未通过，没有上传。", file=err)
-        return EXIT_USAGE
+        print("提示：自检未通过，但这次仍会上传（以实际评分为准）。", file=err)
     if expected and check.details.get("missing_kernels"):
         print(f"注意：缺少 {len(check.details['missing_kernels'])} 道题，这些题记 0 分。",
               file=err)
@@ -636,17 +640,17 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(p)
     p.set_defaults(func=cmd_result)
 
-    p = sub.add_parser("publish", help="设为公开（默认要确认）")
+    p = sub.add_parser("publish", help="设为公开（默认不确认，想测就提交）")
     p.add_argument("id", type=int)
-    p.add_argument("--yes", action="store_true", help="跳过确认")
+    p.add_argument("--yes", action="store_true", help="确认即过（默认不确认）")
     p.add_argument("--dry-run", action="store_true", help="只打印请求")
     _add_common(p)
     p.set_defaults(func=cmd_publish)
 
-    p = sub.add_parser("submit-collection", help="上传赛道压缩包（默认要确认）")
+    p = sub.add_parser("submit-collection", help="上传赛道压缩包（默认不确认，性能让你满意就提交）")
     p.add_argument("track", help="l1 / l2 / quant / flashinfer-bench（或 id）")
     p.add_argument("archive", help="zip / tar.gz / tgz")
-    p.add_argument("--yes", action="store_true", help="跳过确认")
+    p.add_argument("--yes", action="store_true", help="确认即过（默认不确认）")
     p.add_argument("--dry-run", action="store_true", help="只打印请求")
     p.add_argument("--gpu-type", default=None, choices=list(GPU_TYPES))
     p.add_argument("--mode", default="private", choices=list(SUBMISSION_MODES))

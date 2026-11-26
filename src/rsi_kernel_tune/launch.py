@@ -82,9 +82,9 @@ card  = "leaderboard/card"{ref_line}
 # Everything else takes its value from global_config/; write only what changes.
 # [target]
 # ratio  = 1.2                       # x the reference the card declares
-# [budget]
-# hours    = 4
-# max_meta = 3
+# [budget]                                # omitted: unbounded; the run stops at the target
+# hours    = 0                              # 0 = no wall-clock gate
+# max_meta = 0                              # 0 = unbounded teacher rounds
 """
 
 
@@ -187,13 +187,16 @@ def describe(task, machine) -> str:
     lines += [f"  target: {target}, {task.target.timing} timing",
               f"  agents: teacher {_agent_line(task.teacher)}, student "
               f"{_agent_line(task.student)} [{_online_line(task.student)}]",
-              f"  budget: {task.budget.hours:g} h, {task.budget.max_meta} teacher round(s)"
+              f"  budget: " + ("unbounded (stops at the target only)" if not task.budget.hours
+              and not task.budget.max_meta else
+              f"{task.budget.hours:g} h, {task.budget.max_meta} teacher round(s)")
               + (f", {task.budget.reference_hours:g} h to write the reference"
-                 if task.mode == MODE_GENERATE else ""),
-              f"  throughput: teacher <= {task.budget.teacher_share:g} x "
-              f"{task.budget.hours:g} h until {task.budget.min_student_iters} student "
-              f"iteration(s); <= {task.budget.max_teacher_turns_per_phase} teacher turn(s) "
-              f"per phase",
+                 if task.mode == MODE_GENERATE and task.budget.reference_hours else ""),
+              f"  throughput: teacher <= " +
+              (f"{task.budget.teacher_share:g} x {task.budget.hours:g} h "
+               f"until {task.budget.min_student_iters} student iteration(s); "
+               if task.budget.hours else "no time cap; ") +
+              f"<= {task.budget.max_teacher_turns_per_phase} teacher turn(s) per phase",
               f"  GPU: {machine.describe()}"]
     lines += [f"  note: {n}" for n in task.notes]
     return "\n".join(lines)
@@ -604,9 +607,12 @@ def run_loop(run, task, *, resuming: bool, harvest_only: bool) -> int:
     from rsi_kernel_tune.loop import cli as loop_cli
     from rsi_kernel_tune.loop import governor as governor_mod
     argv = [task.name, "--workspace", str(run.ws),
-            "--hours", f"{task.budget.hours:g}", "--max-meta", str(task.budget.max_meta),
+            "--hours", f"{task.budget.hours:g}",
             "--agent-cmd", agent_command(task.student, "student"),
             "--teacher-agent-cmd", agent_command(task.teacher, "teacher")]
+    # max_meta == 0 means unbounded: only send the flag when a cap is actually set.
+    if task.budget.max_meta:
+        argv += ["--max-meta", str(task.budget.max_meta)]
     if task.target.ms is not None:
         argv += ["--target-ms", repr(task.target.ms)]
     else:

@@ -27,6 +27,7 @@ from pathlib import Path
 
 from rsi_kernel_tune import leaderboard as lbmod
 from rsi_kernel_tune import scaffold, sealref
+from rsi_kernel_tune.loop import goal_ref
 from rsi_kernel_tune.paths import repo_root, template_dir
 
 SUITE = "rsi_kernel_tune"
@@ -389,7 +390,10 @@ def write_loop_toml(run, task, op_dir: Path, *, deny: list[str], ncu: bool = Tru
         f'language    = "{task.loop_language}"',
         f'kb_arch     = "{task.arch}"',
         f'gate_window = "{task.target.timing}"',
-        f"ref_from_goal_hours = {task.budget.reference_hours!r}",
+        # 0 is unbounded; the /goal reference writer takes a real duration:
+        # 0 falls back to the goal_ref default rather than a quarter-second wall.
+        f"ref_from_goal_hours = "
+        f"{(task.budget.reference_hours or goal_ref.DEFAULT_HOURS)!r}",
         f"ref_source_paths = {json.dumps(sorted(dict.fromkeys(deny)))}",
         f"ref_source_urls  = {json.dumps(list(task.reference.deny_urls) if task.reference else [])}",
         *context_lines(op_dir, task),

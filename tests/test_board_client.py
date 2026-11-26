@@ -428,19 +428,23 @@ def test_cli_submit_refuses_over_concurrency_limit(tmp_path):
     assert fake.submitted == []
 
 
-def test_cli_submit_refuses_bad_file(tmp_path):
+def test_cli_submit_attempts_even_when_the_self_check_is_bad(tmp_path):
+    # a bad self-check is advisory now: it warns but does not block the submission.
     f = tmp_path / "submission.py"
     f.write_text("def runner(x):\n    return x\n", encoding="utf-8")
-    code, _, err = run_cli(["submit", "069_rms_norm", str(f), "--no-wait"],
-                           client=FakeClient())
-    assert code == cli.EXIT_USAGE
-    assert "no-run" in err
+    fake = FakeClient()
+    code, _, err = run_cli(["submit", "069_rms_norm", str(f), "--no-wait",
+                            "--log", str(tmp_path / "log.jsonl")], client=fake)
+    assert code in (0, cli.EXIT_OK)
+    assert fake.submitted and "提示" in err
 
 
-def test_cli_publish_requires_yes_in_non_tty(tmp_path):
-    code, _, err = run_cli(["publish", "9"], client=FakeClient())
-    assert code == cli.EXIT_ERROR
-    assert "--yes" in err
+def test_cli_publish_needs_no_confirmation_by_default(tmp_path):
+    fake = FakeClient()
+    code, out, _ = run_cli(["publish", "9", "--log", str(tmp_path / "log.jsonl")],
+                           client=fake)
+    assert code == 0 and fake.published == [9]
+    assert "已设为公开" in out
 
 
 def test_cli_publish_yes_calls_api(tmp_path):
@@ -486,15 +490,16 @@ def test_cli_submit_collection_dry_run_after_self_check(tmp_path):
     assert fake.submitted == []
 
 
-def test_cli_submit_collection_rejects_bad_archive(tmp_path):
+def test_cli_submit_collection_uploads_even_when_the_self_check_is_bad(tmp_path):
     fake = FakeClient()
     archive = tmp_path / "l1.zip"
     with zipfile.ZipFile(archive, "w") as zf:
         zf.writestr("not_a_kernel/readme.txt", "hi")
     code, _, err = run_cli(["submit-collection", "l1", str(archive),
                             "--yes", "--dry-run"], client=fake)
-    assert code == cli.EXIT_USAGE
-    assert "自检未通过" in err
+    # a bad self-check is advisory now: the upload still happens.
+    assert code == cli.EXIT_OK
+    assert "提示" in err and "自检未通过" in err
 
 
 def test_cli_submit_collection_blocks_third_upload_of_the_day(tmp_path):

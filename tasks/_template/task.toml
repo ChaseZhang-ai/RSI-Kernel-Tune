@@ -27,6 +27,6 @@ arch     = "sm100"                   # the target GPU (sm90, sm100, ...)
 # effort = "high"
 
 # [budget]
-# hours           = 4                # the loop's wall clock: reconnaissance, distillation, student rounds
-# max_meta        = 3                # teacher rounds that revise the milestone
-# reference_hours = 8                # writing a reference when there is none
+# hours           = 0                # 0 = unbounded: the loop runs until the target is met
+# max_meta        = 0                # 0 = teacher rounds until the milestone stops improving
+# reference_hours = 0                # 0 = unbounded reference writing

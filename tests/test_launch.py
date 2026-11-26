@@ -247,7 +247,7 @@ def test_loop_toml_per_mode(repo):
     op2 = taskcard.write_card(run2, task2, check2, load_machine(repo, environ={}))
     cfg2 = tomllib.loads(taskcard.write_loop_toml(run2, task2, op2, deny=[]).read_text())["loop"]
     assert cfg2["ref_from_goal"] == "auto" and cfg2["recon_op"] == ""
-    assert cfg2["ref_from_goal_hours"] == 8.0 and "oracle" not in cfg2
+    assert cfg2["ref_from_goal_hours"] == 2.0 and "oracle" not in cfg2   # goal_ref.DEFAULT_HOURS
 
 
 def test_other_runs_are_denied(repo):
@@ -625,8 +625,9 @@ def _ledger(d: Path, rows: list[dict]) -> Path:
 def test_describe_shows_the_throughput_policy(repo):
     run, task, _ = _run_with_check(repo)
     text = launch.describe(task, load_machine(repo, environ={}))
-    assert ("throughput: teacher <= 0.5 x 4 h until 5 student iteration(s); "
-            "<= 12 teacher turn(s) per phase") in text
+    # budget is unbounded by default: the throughput line carries no time share,
+    # only the turn-count rule and the "no time cap" note.
+    assert "throughput: teacher <= no time cap; <= 12 teacher turn(s) per phase" in text
 
 
 def test_status_text_reports_the_governor_turns_and_rules(repo):

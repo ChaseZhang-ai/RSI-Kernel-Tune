@@ -36,10 +36,11 @@
     timeout_s = 7200                # one turn's wall clock
     online    = true                # the student may use the network (see below)
 
-    [budget]
-    hours           = 4             # inner-loop wall clock
-    max_meta        = 3             # outer (teacher patch) rounds
-    reference_hours = 8             # generating a reference when there is none
+    [budget]                        # all three are 0 = unbounded by default: the run
+                                    # stops only when the target is actually met
+    hours           = 0             # 0 = no wall-clock gate
+    max_meta        = 0             # 0 = teacher rounds until the milestone stops improving
+    reference_hours = 0             # 0 = unbounded reference writing
     # the throughput governor (loop/governor.py); no token key exists on purpose
     teacher_share   = 0.5           # teacher wall clock cap while the student is short
     min_student_iters = 5           # ...of this many iterations
@@ -762,12 +763,15 @@ def _read_agent(agents: dict, role: str, problems: list[str], *,
 
 def _read_budget(cfg: dict, problems: list[str]) -> Budget:
     b = cfg.get("budget", {}) if isinstance(cfg.get("budget", {}), dict) else {}
-    hours = b.get("hours")
-    ref_hours = b.get("reference_hours")
-    max_meta = b.get("max_meta")
+    # 0 is the unbounded sentinel: the loop stops only when the target is met, so
+    # hours/reference_hours/max_meta each accept 0 (or absence) without a problem.
+    hours = b.get("hours", 0.0)
+    ref_hours = b.get("reference_hours", 0.0)
+    max_meta = b.get("max_meta", 0)
     for key, v in (("hours", hours), ("reference_hours", ref_hours)):
-        if not _positive(v):
-            problems.append(f"[budget] {key} must be a positive number of hours, got {v!r}")
+        if v != 0 and not _positive(v):
+            problems.append(f"[budget] {key} must be a positive number of hours "
+                            f"(0 means unbounded), got {v!r}")
     if not isinstance(max_meta, int) or isinstance(max_meta, bool) or max_meta < 0:
         problems.append(f"[budget] max_meta must be a non-negative integer, got {max_meta!r}")
         max_meta = 0

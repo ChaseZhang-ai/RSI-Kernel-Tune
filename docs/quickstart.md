@@ -11,6 +11,7 @@ own `--help` is the reference.
 |---|---|
 | Control machine (runs `forge`) | Linux or macOS, Python ≥ 3.11, git |
 | GPU machine (same machine, or an ssh host) | an NVIDIA Hopper (`sm90`) or Blackwell (`sm100`/`sm103`) GPU, a CUDA build of PyTorch there; `nvcc` for the target compile checks; Nsight Compute (`ncu`) recommended |
+| The target | **rank #1 on this kernel's SOL-ExecBench board** — no wall-clock/round budgets (`[budget]` is 0 = unbounded), all references open by default, and `forge board submit` has no confirmation or score gate (submit whenever a kernel looks good or needs measuring). Dev hardware (B300) vs the graded B200 divergence is spelled out in `target/B200.json` (FP4 ~1.5x, SFU ~2.1x, SM count, no cubin compatibility) |
 | A model | the **Codex CLI** (logged in, or `OPENAI_API_KEY` / `CODEX_API_KEY` in `local.env`); teacher and student both default to Codex (`sol6.2`, reasoning effort `high`). Use Claude only when a task needs hook enforcement or a /goal session. |
 | Only for board submissions | `SOL_EXECBENCH_TOKEN` in the environment (never in a file), and the SOL-ExecBench dataset (§4) |
 

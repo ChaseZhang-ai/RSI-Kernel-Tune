@@ -5,14 +5,16 @@ ratio  = 1.2                # x the reference's speed
 timing = "device"           # device | e2e
 
 [budget]
-hours           = 4         # the loop's wall clock: reconnaissance, distillation and the student's rounds
-max_meta        = 3         # teacher rounds that revise the milestone
-reference_hours = 8         # writing a reference when the task has none
-# The throughput governor (loop/governor.py, docs/throughput.md). While the student has
-# fewer than min_student_iters iterations, a teacher turn is soft-braked once the
-# teacher's cumulative wall clock reaches hours x teacher_share and refused at 1.25x.
-# A phase may run max_teacher_turns_per_phase consecutive teacher turns before the soft
-# brake, and four more before the refusal. FK_GOVERNOR=off turns the governor off.
+hours           = 0         # 0 = unbounded: the loop runs until the target is actually met.
+                            # A wall clock is never a stop; only meeting the target is.
+max_meta        = 0         # 0 = unbounded: teacher rounds until the milestone stops improving
+reference_hours = 0         # 0 = unbounded: writing a reference when the task has none
+# The throughput governor (loop/governor.py): while the student has fewer than
+# min_student_iters iterations, teacher turns get a soft brake once the teacher's
+# cumulative wall clock reaches hours x teacher_share and are refused at 1.25x that.
+# Nothing here is a hard stop, and `hours = 0` disables the share computation entirely
+# (teachers are only throttled by the turn-count rule below). FK_GOVERNOR=off also
+# turns the governor off.
 teacher_share   = 0.5       # fraction of hours the teacher may spend before the student has its iterations
 min_student_iters = 5       # the student's iterations that lift the share rule
 max_teacher_turns_per_phase = 12  # consecutive teacher turns (no student turn between) before a soft brake

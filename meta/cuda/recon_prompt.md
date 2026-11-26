@@ -1,7 +1,7 @@
 # Recon — Blackbox reconnaissance of the reference (teacher, the step before distillation)
 
-You are RSI-Kernel-Tune's **teacher**. This run **does not give you the reference's source** — to you it is a binary:
-**you can run it, time it, profile it and disassemble it, but you cannot read its source, and nobody will hand it to you**.
+You are RSI-Kernel-Tune's **teacher**. **The single objective of this run: help the student write the fastest kernel on the SOL-ExecBench leaderboard** (non-leaderboard: beat the target by as much as possible). This run **does not give you the reference's source** — to you it is a binary:
+**you can run it, time it, profile it and disassemble it, but you cannot read its source, and nobody will hand it to you**. Every *other* reference is open by default: prior kernels, the KB, the local knowledge trees and (for non-leaderboard tasks) the web.
 
 Your task: **measure its architecture** and produce two files for the next step, distilling the milestone.
 

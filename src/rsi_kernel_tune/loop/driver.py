@@ -11440,8 +11440,11 @@ def run_distill_step(ctx: LoopContext) -> "MetaResult":
     return MetaResult(out, "author", [], None, [], certified=None, milestone_violations=violations)
 
 
-def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
-    """Inner loop -> (plateau / stuck / exhausted) -> meta patch -> resume, bounded by max_meta.
+def run_two_layer(ctx: LoopContext, max_meta: int | None = None) -> dict:
+    """Inner loop -> (plateau / stuck / exhausted) -> meta patch -> resume.
+
+    max_meta is None = unbounded (no meta budget); a non-negative int caps the
+    meta layer at that many teacher rounds (for harness tests and hard caps).
 
     Milestone patches are transactional: after a patch's inner segment runs, the patch
     is attributed (best-before vs best-after). A patch that produced no gain is rolled
@@ -11552,7 +11555,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
             # was cut short at first green, and judging a rebuild patch at M0 is
             # predetermined (best_after < best_before) — it would revert correct
             # foundations for running out of runway, not for being wrong.
-            if meta_steps >= max_meta:
+            if max_meta is not None and meta_steps >= max_meta:
                 _log("meta/m0-audit: meta budget exhausted -> skipping audit")
                 seg_green = True
                 start_iter = len(load_records(ctx.status_path))
@@ -11665,7 +11668,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
         if reanchored is not None:
             return {"stop": "target", "meta_steps": meta_steps,
                     "reanchor": reanchored}
-        if meta_steps >= max_meta:
+        if max_meta is not None and meta_steps >= max_meta:
             return {"stop": "meta_budget", "meta_steps": meta_steps}
         # The note (if a re-anchor confirmed the gap) rides every diagnosis of
         # this meta entry — the malformed-patch retry below re-runs the diagnosis
@@ -11687,7 +11690,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
                 # nothing landed and nothing to judge: the refusal is now in the
                 # reflection, so retry the META step (not the segment — resuming
                 # the same plateaued state is predetermined), budget permitting
-                if meta_steps >= max_meta:
+                if max_meta is not None and meta_steps >= max_meta:
                     return {"stop": "meta_budget", "meta_steps": meta_steps}
                 _log("meta: UNPRICED_REOPEN — reopen refused for want of a measured "
                      "price -> retrying the meta step on the same state"
@@ -11698,7 +11701,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
             if meta.patch_class == "infeasible-refused":
                 # same shape: the refused stop request is in the reflection,
                 # nothing landed — re-diagnose the same state, budget permitting
-                if meta_steps >= max_meta:
+                if max_meta is not None and meta_steps >= max_meta:
                     return {"stop": "meta_budget", "meta_steps": meta_steps}
                 _log("meta: INFEASIBLE_REFUSED — stop request refused by the reachability "
                      "check -> retrying the meta step on the same state")
@@ -11726,7 +11729,7 @@ def run_two_layer(ctx: LoopContext, max_meta: int = 3) -> dict:
                 update_last_outcome(ctx.meta_status_path, outcome="REVERT_PATCH")
             _log("meta: patch REVERT_PATCH (malformed milestone, never landed) "
                  "-> retrying the meta step on the restored state")
-            if meta_steps >= max_meta:
+            if max_meta is not None and meta_steps >= max_meta:
                 return {"stop": "meta_budget", "meta_steps": meta_steps}
         resume_ref, reopened = _resolve_resume_in_place(ctx, meta, records, baseline_ref)
         ctx.backend.reset(resume_ref)

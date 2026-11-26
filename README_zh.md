@@ -220,7 +220,12 @@ forge run .artifacts/rmsnorm_<id>                       # 中断后续跑
 `models.toml` 定 `[agent]`（`backend`、`provider`、`model`、`effort`、`timeout_s`；`[agent.teacher]` /
 `[agent.student]` 只改一个 agent），`loop.toml` 定 `[target]` 与 `[budget]`，`backends.toml` 列出
 `provider` 不是 `native` 时可以指定的 API 端点，key 从 `local.env` 读。默认目标是 device 时间达到参照的
-1.2 倍，内层循环 4 小时，teacher 3 轮，**默认 teacher、student 都用 Codex**（`sol6.2`，思考深度 `high`）
+**唯一目标：把这个 kernel 冲到 SOL 榜第一**——没有墙钟、教师轮次这种预算（`[budget]` 默认写
+0 即无上限，停的唯一条件就是达到目标）；**所有参考都开着**（参考源码、prior、KB、网络随便读、随便
+复用，没有「黑盒」那一说也没有「反作弊」这一套）；**想测就提交**——`forge board submit` 没有确认框、
+没有分数门限，性能不错或想在榜单上实测一下，都直接提交。**B300/B200 的差异是具象的编号**：开发机
+FP4 约 1.5 倍（15 vs 10 PFLOPS）、SFU 约 2.1 倍（10.7 vs 5.0 TeraExp/s）、SM 数 148 vs 可达 160，两边
+cubin 不能互跑——提交源码不能念死架构名。**默认 teacher、student 都用 Codex**（`sol6.2`，思考深度 `high`）
 （`claude-opus-5-5`），任务可以再覆盖。
 
 ## 自进化

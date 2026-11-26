@@ -1,8 +1,27 @@
 # 001_fused_add_rmsnorm_h2048
 
+## 2026-11-26 17:54 UTC · Packed CUDA with partial warp reductions
+
+The selected archive entry passed 7/7 workloads and timed CUPTI records in the open evaluator. The small path publishes four FP32 partial sums per warp and completes the reduction after the CTA barrier. The large path retains the two-row tile with reusable weight loads. The exact file passed aligned native and unaligned Triton fallback checks on a non-default stream, changed-input tests, input preservation, and near cancellation.
+
+- Official local trace and first paired comparison on physical GB300 GPU 0, `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, 152 SMs, CUDA capability 10.3. Reordered repeats on GPU 3, `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, also 152 SMs. SM locked at 1500 MHz and memory observed at its sole supported 3996 MHz for both devices. Both runs held their host GPU lock and monitored other compute jobs.
+- SOL-ExecBench 1.0.2 commit `a9fa080`, v1.1 timing methodology, PyTorch 2.9.0+cu130, Triton 3.5.0, CUDA bindings 13.1.1, CUPTI Python 13.5.0. Cold NVRTC compilation, module load and first launch took 0.013 s.
+- Geometric-mean speedups over the previous packed CUDA variant were 1.0050×, 1.0065×, and 1.0108× in the three paired runs. Each used 10 warmups and 50 cold-L2 CUPTI iterations with cloned inputs and preallocated outputs. Persistent large tiles were slower on both large workloads.
+- Candidate SHA-256 `e8cdfd8fd54725feb46ea6ad91cf93308ad89851a3657ba5dd1fee3ca252e44d`. Verification scope is GB300. The exact file is staged for a private B200 trial when the shared account has capacity. [Archive entry](../../../flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)
+
+| Batch | Workload UUID | GB300 status | Previous packed (µs) | Selected packed (µs) | Official CLI (µs) |
+|---:|---|---|---:|---:|---:|
+| 6 | `906efdc6-aa3b-4b4f-a291-3a2be509d354` | PASSED | 2.144 | 2.208 | 2.208 |
+| 1 | `1526086b-0c06-41a1-b7b9-47b5cfc830d7` | PASSED | 2.208 | 2.192 | 2.160 |
+| 34 | `78c9b621-e151-4fb2-9162-f1b39afe573a` | PASSED | 2.688 | 2.624 | 2.656 |
+| 79 | `7fd454c3-9611-4376-a920-3d1c30639790` | PASSED | 2.784 | 2.720 | 2.768 |
+| 16254 | `724a6dfa-06ff-45b7-9972-d174a0e23737` | PASSED | 28.928 | 28.833 | 29.024 |
+| 12383 | `5ede385e-9b04-4b49-903f-375a5180d815` | PASSED | 22.337 | 22.336 | 22.817 |
+| 64 | `1602b8db-16e2-4d3f-b63d-68d4ee32e2cc` | PASSED | 2.705 | 2.688 | 2.752 |
+
 ## 2026-11-26 17:42 UTC · Packed CUDA candidate on GB300
 
-The exact standalone Python file passed all seven workloads, including CUPTI timing, via the open SOL-ExecBench CLI. The candidate loads and stores 32-byte BF16 vectors, adds in FP32, uses packed FP32 square accumulation, and rounds after the final multiply. Small batches replicate the reduction across CTAs with disjoint stores. The large path reuses the loaded weight for two rows per CTA. [Archive entry](../../../flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)
+The exact standalone Python file passed all seven workloads, including CUPTI timing, via the open SOL-ExecBench CLI. The candidate loads and stores 32-byte BF16 vectors, adds in FP32, uses packed FP32 square accumulation, and rounds after the final multiply. Small batches replicate the reduction across CTAs with disjoint stores. The large path reuses the loaded weight for two rows per CTA. [Archive entry at this trial](https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/7c4f84be36cd20e7645b5a26436361447d8c4a15/flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)
 
 - Physical GPU 1, `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, 152 SMs, CUDA capability 10.3. The GPU was pinned by UUID. SM locked to 1500 MHz and memory measured at its only supported 3996 MHz. The GPU lock and contention monitoring covered correctness and timing.
 - SOL-ExecBench 1.0.2 commit `a9fa080`, v1.1 timing methodology, PyTorch 2.9.0+cu130, Triton 3.5.0, CUDA bindings 13.1.1, CUPTI Python 13.5.0. NVRTC built the loaded cubin for the capability returned by PyTorch.
@@ -29,7 +48,7 @@ Private B200 attempt 105846 exposed a runtime compiler error in the five Gluon s
 - Physical GPU 3, `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, 152 SMs, CUDA capability 10.3. SM clock locked to 1500 MHz and memory observed at its sole supported 3996 MHz. The lock was held throughout correctness and timing, with compute-job monitoring.
 - SOL-ExecBench 1.0.2 commit `a9fa080` and its v1.1 timing methodology. PyTorch 2.9.0+cu130, Triton 3.5.0, CUDA toolkit 13.1 PTX assembler for GB300, CUPTI Python 13.5.0. Warmup and timing used 10 and 50 iterations with cold L2, cloned inputs, and preallocated outputs.
 - Cold JIT and first launch took 0.643 s in a fresh Triton cache across the specialized kernels. The paired baseline and candidate below ran on the same physical GPU.
-- Candidate SHA-256 `1015bbfd8395cebabf28c26cbef55d402f265c32ad9d1944972b40883396f097`. [Archive entry](../../../flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)
+- Candidate SHA-256 `1015bbfd8395cebabf28c26cbef55d402f265c32ad9d1944972b40883396f097`. [Archive entry at this trial](https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/9bbf3dfffa4f515027241c0ac29f6d74341f481d/flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)
 
 | Batch | Workload UUID | GB300 status | Paired baseline (µs) | Paired candidate (µs) | Official CLI candidate (µs) |
 |---:|---|---|---:|---:|---:|
@@ -67,7 +86,7 @@ The direct-launch Triton baseline and the exact collection candidate each passed
 - SM locked to 1500 MHz. Memory measured 3996 MHz and was the only supported memory clock. The device reported a 3996 MHz deferred setting.
 - SOL-ExecBench 1.0.2 commit `a9fa080` with the v1.1 timing methodology, PyTorch 2.10.0+cu130, Triton 3.6.0, CUPTI Python 13.5.0. The evaluator and paired test used 10 warmups, 50 timed iterations, cold L2, cloned inputs, preallocated outputs and CUPTI first-to-last activity timing.
 - Cold JIT plus first launch, in a fresh Triton cache, took about 0.518 s across the three candidate kernels. Baseline cold initialization, JIT and first launch took 0.690 s.
-- Candidate SHA-256 `62947c0265d697eca4176f4faf2f70bfabd46ed39c8238454fa05599524b4689`. [Archive entry](../../../flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)
+- Candidate SHA-256 `62947c0265d697eca4176f4faf2f70bfabd46ed39c8238454fa05599524b4689`. [Archive entry at this trial](https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/1149f6b9aede9ffbdd653ba54d94e198a12dc42c/flashinfer-bench/001_fused_add_rmsnorm_h2048/submission.py)
 - Basis for the candidate's tiling and split reductions. [Triton starting point](../../../kernel_library/kernels/sol-example-triton-rmsnorm/kernel.py) · [CompoundingKernel Explorer](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/main/kernels/FlashInfer/001_fused_add_rmsnorm_h2048)
 
 All latencies below are in microseconds. The CLI timed shifted pointers. The paired test used identical preallocated buffers for both implementations and also checked correctness with changed inputs and pointers. The input row in the official Parquet references generated tensors for all seven workloads.

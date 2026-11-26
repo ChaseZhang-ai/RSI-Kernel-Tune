@@ -156,20 +156,34 @@ void small(const unsigned short* h, const unsigned short* r, const unsigned shor
     const U64 keep = keep_policy();
     const U64 stream = stream_policy();
 
-    Vec hv = load_vec<false>(h + offset, stream);
-    Vec rv = load_vec<false>(r + offset, stream);
     U64 weights[8];
     if (lane < span)
         widen_weights(load_vec<true>(w + col, keep), weights);
+    U64 input_policy = log_parts >= 3 ? keep : stream;
+    Vec hv = load_vec<false>(h + offset, input_policy);
+    Vec rv = load_vec<false>(r + offset, input_policy);
 
     U64 x[8];
-    float stat = warp_sum(sum_squares(hv, rv, x));
-    __shared__ float partials[4];
-    if ((lane & 31) == 0)
-        partials[lane >> 5] = stat;
+    float stat = sum_squares(hv, rv, x);
+    #pragma unroll
+    for (int delta = 16; delta >= 4; delta >>= 1)
+        stat += __shfl_xor_sync(0xffffffffu, stat, delta);
+    __shared__ __align__(16) float partials[16];
+    if ((lane & 31) < 4)
+        partials[(lane >> 5) * 4 + (lane & 31)] = stat;
     __syncthreads();
     if (lane < span) {
-        float total = (partials[0] + partials[1]) + (partials[2] + partials[3]);
+        float sum[16];
+        #pragma unroll
+        for (int i = 0; i < 16; ++i)
+            sum[i] = partials[i];
+        #pragma unroll
+        for (int stride = 8; stride > 0; stride >>= 1) {
+            #pragma unroll
+            for (int i = 0; i < stride; ++i)
+                sum[i] += sum[i + stride];
+        }
+        float total = sum[0];
         float inv = rsqrtf(total * (1.0f / 2048) + 1.0e-6f);
         store_vec(out + offset, normalize(x, weights, inv), keep);
     }

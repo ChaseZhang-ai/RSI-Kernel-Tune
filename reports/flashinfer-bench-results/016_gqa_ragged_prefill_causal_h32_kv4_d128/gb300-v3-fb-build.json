@@ -1,0 +1,202 @@
+{
+  "verification_scope": "GB300 only, local SOL-ExecBench evaluator",
+  "device": {
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "physical_index": 0,
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta"
+  },
+  "evaluator_version": "sol-execbench 1.0.2",
+  "timing": {
+    "warmups": 10,
+    "iterations": 50,
+    "method": "CUPTI first-to-last user kernel",
+    "cache": "cold L2",
+    "inputs": "cloned",
+    "outputs": "preallocated"
+  },
+  "source_sha256": "cdab801e0877baeb77231ac8aafcafca98beddc9584333bb176d7a77ecaff25c",
+  "workloads": [
+    {
+      "uuid": "ebf7188b-4b31-4746-b57b-fa25b53f5e3e",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 6,
+        "total_kv": 6
+      },
+      "status": "PASSED",
+      "latency_us": 2.928,
+      "evaluated_utc": "2026-11-26T18:06:05.174369Z"
+    },
+    {
+      "uuid": "9350509c-c2da-4d5e-9585-dec9aff01725",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 1,
+        "total_kv": 1
+      },
+      "status": "PASSED",
+      "latency_us": 2.576,
+      "evaluated_utc": "2026-11-26T18:06:05.499389Z"
+    },
+    {
+      "uuid": "3ca7457e-e4b1-42a4-b6c7-c0b37c461054",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "status": "PASSED",
+      "latency_us": 4.288,
+      "evaluated_utc": "2026-11-26T18:06:05.945617Z"
+    },
+    {
+      "uuid": "1f97930e-1a06-4e84-9875-09a22fff8a7c",
+      "axes": {
+        "len_indptr": 4,
+        "total_q": 172,
+        "total_kv": 172
+      },
+      "status": "PASSED",
+      "latency_us": 9.584,
+      "evaluated_utc": "2026-11-26T18:06:06.527797Z"
+    },
+    {
+      "uuid": "007ddabb-3c8c-48a1-a693-c0618d32243c",
+      "axes": {
+        "len_indptr": 34,
+        "total_q": 16294,
+        "total_kv": 16294
+      },
+      "status": "BUILD_FAILURE",
+      "latency_us": null,
+      "evaluated_utc": "2026-11-26T18:06:07.509994Z",
+      "error_summary": "Gluon vector metadata load emitted an incompatible block type on fbtriton."
+    },
+    {
+      "uuid": "5c51d2e8-4c3e-42db-8f9c-73c09ab81e29",
+      "axes": {
+        "len_indptr": 28,
+        "total_q": 12251,
+        "total_kv": 12251
+      },
+      "status": "BUILD_FAILURE",
+      "latency_us": null,
+      "evaluated_utc": "2026-11-26T18:06:08.795932Z",
+      "error_summary": "Gluon vector metadata load emitted an incompatible block type on fbtriton."
+    },
+    {
+      "uuid": "bc3eb7f5-4695-4087-9683-146d3864843a",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 6,
+        "total_kv": 6
+      },
+      "status": "PASSED",
+      "latency_us": 2.7520000000000002,
+      "evaluated_utc": "2026-11-26T18:06:09.678123Z"
+    },
+    {
+      "uuid": "3860876f-aa97-4b4c-8016-592689ef76ef",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 1,
+        "total_kv": 1
+      },
+      "status": "PASSED",
+      "latency_us": 2.368,
+      "evaluated_utc": "2026-11-26T18:06:10.063880Z"
+    },
+    {
+      "uuid": "1cf13773-8521-47d9-a8e6-5652c5b77d47",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "status": "PASSED",
+      "latency_us": 4.096,
+      "evaluated_utc": "2026-11-26T18:06:10.443887Z"
+    },
+    {
+      "uuid": "3f33d63c-822e-410e-802e-615126af8cf5",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "status": "PASSED",
+      "latency_us": 4.144,
+      "evaluated_utc": "2026-11-26T18:06:10.787145Z"
+    },
+    {
+      "uuid": "53aaac2c-44a8-478e-ad97-96cb90372730",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 6,
+        "total_kv": 6
+      },
+      "status": "PASSED",
+      "latency_us": 2.784,
+      "evaluated_utc": "2026-11-26T18:06:11.074023Z"
+    },
+    {
+      "uuid": "121a7fdc-3a6a-4c84-8481-233af59214d6",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 1,
+        "total_kv": 1
+      },
+      "status": "PASSED",
+      "latency_us": 2.544,
+      "evaluated_utc": "2026-11-26T18:06:11.417955Z"
+    },
+    {
+      "uuid": "221384a1-1d62-48aa-b062-cc91b0f949fc",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "status": "PASSED",
+      "latency_us": 4.192,
+      "evaluated_utc": "2026-11-26T18:06:11.635507Z"
+    },
+    {
+      "uuid": "9200effe-dc13-4348-a484-6fdaf015f175",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "status": "PASSED",
+      "latency_us": 4.240000000000001,
+      "evaluated_utc": "2026-11-26T18:06:11.835916Z"
+    },
+    {
+      "uuid": "b3445888-8668-4721-9359-9da119ab9f34",
+      "axes": {
+        "len_indptr": 16,
+        "total_q": 969,
+        "total_kv": 969
+      },
+      "status": "BUILD_FAILURE",
+      "latency_us": null,
+      "evaluated_utc": "2026-11-26T18:06:12.057631Z",
+      "error_summary": "Gluon vector metadata load emitted an incompatible block type on fbtriton."
+    }
+  ],
+  "passed": 12,
+  "cold_compile": "First-call wall times are recorded in the paired trial results."
+}

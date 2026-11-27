@@ -1,0 +1,491 @@
+{
+  "verification_scope": "GB300 only, paired direct launches using SOL-ExecBench reference, tolerance and timer",
+  "device": {
+    "physical_index": 1,
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ]
+  },
+  "evaluator_version": "sol-execbench 1.0.2",
+  "timing": {
+    "warmups": 10,
+    "iterations": 50,
+    "method": "CUPTI first-to-last user kernel",
+    "cache": "cold L2",
+    "inputs": "cloned",
+    "outputs": "preallocated"
+  },
+  "workloads": [
+    {
+      "uuid": "ebf7188b-4b31-4746-b57b-fa25b53f5e3e",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 6,
+        "total_kv": 6
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 0.764195648021996,
+          "max_abs_errors": [
+            0.015625,
+            4.76837158203125e-07
+          ],
+          "status": "passed",
+          "latency_us": 3.648
+        },
+        "candidate-v5": {
+          "first_call_s": 0.27129239588975906,
+          "max_abs_errors": [
+            4.76837158203125e-07,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 3.104
+        }
+      }
+    },
+    {
+      "uuid": "9350509c-c2da-4d5e-9585-dec9aff01725",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 1,
+        "total_kv": 1
+      },
+      "trials": {
+        "candidate-v5": {
+          "first_call_s": 0.19315188517794013,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.7520000000000002
+        },
+        "baseline": {
+          "first_call_s": 0.1969363261014223,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.736
+        }
+      }
+    },
+    {
+      "uuid": "3ca7457e-e4b1-42a4-b6c7-c0b37c461054",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 0.1793867712840438,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.192
+        },
+        "candidate-v5": {
+          "first_call_s": 0.33850595401600003,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.352
+        }
+      }
+    },
+    {
+      "uuid": "1f97930e-1a06-4e84-9875-09a22fff8a7c",
+      "axes": {
+        "len_indptr": 4,
+        "total_q": 172,
+        "total_kv": 172
+      },
+      "trials": {
+        "candidate-v5": {
+          "first_call_s": 0.4460455998778343,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 9.4085
+        },
+        "baseline": {
+          "first_call_s": 1.0831990069709718,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.272
+        }
+      }
+    },
+    {
+      "uuid": "007ddabb-3c8c-48a1-a693-c0618d32243c",
+      "axes": {
+        "len_indptr": 34,
+        "total_q": 16294,
+        "total_kv": 16294
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 1.4414048297330737,
+          "max_abs_errors": [
+            0.03125,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 684.98
+        },
+        "candidate-v5": {
+          "first_call_s": 0.7834886000491679,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 604.4525000000001
+        }
+      }
+    },
+    {
+      "uuid": "5c51d2e8-4c3e-42db-8f9c-73c09ab81e29",
+      "axes": {
+        "len_indptr": 28,
+        "total_q": 12251,
+        "total_kv": 12251
+      },
+      "trials": {
+        "candidate-v5": {
+          "first_call_s": 0.6011106739751995,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 420.4985
+        },
+        "baseline": {
+          "first_call_s": 1.3851575460284948,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 480.451
+        }
+      }
+    },
+    {
+      "uuid": "bc3eb7f5-4695-4087-9683-146d3864843a",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 6,
+        "total_kv": 6
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 8.22087749838829e-05,
+          "max_abs_errors": [
+            0.015625,
+            4.76837158203125e-07
+          ],
+          "status": "passed",
+          "latency_us": 3.648
+        },
+        "candidate-v5": {
+          "first_call_s": 6.403261795639992e-05,
+          "max_abs_errors": [
+            1.9073486328125e-06,
+            7.152557373046875e-07
+          ],
+          "status": "passed",
+          "latency_us": 3.072
+        }
+      }
+    },
+    {
+      "uuid": "3860876f-aa97-4b4c-8016-592689ef76ef",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 1,
+        "total_kv": 1
+      },
+      "trials": {
+        "candidate-v5": {
+          "first_call_s": 7.331278175115585e-05,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.7520000000000002
+        },
+        "baseline": {
+          "first_call_s": 6.752088665962219e-05,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.912
+        }
+      }
+    },
+    {
+      "uuid": "1cf13773-8521-47d9-a8e6-5652c5b77d47",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 7.404899224638939e-05,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.159999999999999
+        },
+        "candidate-v5": {
+          "first_call_s": 6.617605686187744e-05,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.32
+        }
+      }
+    },
+    {
+      "uuid": "3f33d63c-822e-410e-802e-615126af8cf5",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "trials": {
+        "candidate-v5": {
+          "first_call_s": 5.798414349555969e-05,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.352
+        },
+        "baseline": {
+          "first_call_s": 7.087970152497292e-05,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.192
+        }
+      }
+    },
+    {
+      "uuid": "53aaac2c-44a8-478e-ad97-96cb90372730",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 6,
+        "total_kv": 6
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 6.758421659469604e-05,
+          "max_abs_errors": [
+            0.015625,
+            7.152557373046875e-07
+          ],
+          "status": "passed",
+          "latency_us": 3.648
+        },
+        "candidate-v5": {
+          "first_call_s": 5.7023949921131134e-05,
+          "max_abs_errors": [
+            0.0009765625,
+            7.152557373046875e-07
+          ],
+          "status": "passed",
+          "latency_us": 3.2005000000000003
+        }
+      }
+    },
+    {
+      "uuid": "121a7fdc-3a6a-4c84-8481-233af59214d6",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 1,
+        "total_kv": 1
+      },
+      "trials": {
+        "candidate-v5": {
+          "first_call_s": 5.5489130318164825e-05,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.7520000000000002
+        },
+        "baseline": {
+          "first_call_s": 6.070500239729881e-05,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.7525
+        }
+      }
+    },
+    {
+      "uuid": "221384a1-1d62-48aa-b062-cc91b0f949fc",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 7.129693403840065e-05,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.159999999999999
+        },
+        "candidate-v5": {
+          "first_call_s": 6.239954382181168e-05,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.352
+        }
+      }
+    },
+    {
+      "uuid": "9200effe-dc13-4348-a484-6fdaf015f175",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "trials": {
+        "candidate-v5": {
+          "first_call_s": 6.223982200026512e-05,
+          "max_abs_errors": [
+            0.0078125,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.32
+        },
+        "baseline": {
+          "first_call_s": 7.292814552783966e-05,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.128
+        }
+      }
+    },
+    {
+      "uuid": "b3445888-8668-4721-9359-9da119ab9f34",
+      "axes": {
+        "len_indptr": 16,
+        "total_q": 969,
+        "total_kv": 969
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 1.1277632238343358,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 26.160000000000004
+        },
+        "candidate-v5": {
+          "first_call_s": 0.5063026919960976,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 21.935999999999996
+        }
+      }
+    }
+  ],
+  "source_sha256": "09f4ce9659ad79abb8e80fb7e6272f0ddaf5233460906e894970374396ecfc14",
+  "paired_geometric_mean_us": {
+    "baseline": 8.673063539769485,
+    "candidate-v5": 8.203949472331422
+  },
+  "cold_compile": {
+    "method": "Sum of cold Triton compilation listener durations across all official workload specializations",
+    "kernel_compiles": [
+      {
+        "kernel": "_tiny",
+        "compiler_seconds": 0.113069
+      },
+      {
+        "kernel": "_one_key",
+        "compiler_seconds": 0.036868
+      },
+      {
+        "kernel": "_single_sequence",
+        "compiler_seconds": 0.183699
+      },
+      {
+        "kernel": "_packed",
+        "compiler_seconds": 0.270445
+      },
+      {
+        "kernel": "_gluon_long",
+        "compiler_seconds": 0.60781
+      },
+      {
+        "kernel": "_gluon_long",
+        "compiler_seconds": 0.598587
+      },
+      {
+        "kernel": "_gluon_long",
+        "compiler_seconds": 0.504595
+      }
+    ],
+    "total_seconds": 2.315073,
+    "slowest_seconds": 0.60781
+  }
+}

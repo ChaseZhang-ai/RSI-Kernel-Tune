@@ -15,8 +15,9 @@ def _blocked(hidden_states, weight, output, batch_size, ROWS: gl.constexpr, WARP
     cols = gl.arange(0, 512, layout=SliceLayout(0, layout))
     offsets = rows[:, None] * 512 + cols[None, :]
     valid = rows[:, None] < batch_size
-    x = gl.load(hidden_states + offsets, valid, 0).to(gl.float32)
-    w = gl.load(weight + cols, eviction_policy="evict_last").to(gl.float32)
+    # Keep the distributed layout explicit after global loads for fbtriton.
+    x = gl.permute(gl.load(hidden_states + offsets, valid, 0), (0, 1)).to(gl.float32)
+    w = gl.permute(gl.load(weight + cols, eviction_policy="evict_last"), (0,)).to(gl.float32)
     inv_rms = gl.rsqrt(gl.sum(x * x, axis=1) * (1.0 / 512) + 1.0e-6)
     result = ((x * inv_rms[:, None]) * w[None, :]).to(gl.bfloat16)
     gl.store(output + offsets, result, valid)

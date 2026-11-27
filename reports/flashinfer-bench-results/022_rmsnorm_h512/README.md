@@ -1,6 +1,31 @@
 # 022_rmsnorm_h512
 
-## Selected candidate · Provisional GB300 only
+## B200 follow-up · Gluon layout compatibility
+
+The archived source and the previous tracked source had SHA-256 `44e86693583ca1a0d2852277fe262ae5fbff8fd905157d608851a4a8d47fdb27`. The released B200 v1.1 collection child 106091 reported runtime errors on batches 1, 7, 18, 32, and 64, all on the single-row Gluon route. Its packed route timed all three remaining batches. The standalone repeat 106231 timed 3/8 and had no verified SOL. The standalone summary gives only the count, so its individual failure reasons and workload IDs are unknown. [Collection child](https://research.nvidia.com/benchmarks/sol-execbench/submission/106091)
+
+Re-running the exact archive under fbtriton 3.7.1 reproduced that five-workload pattern with the same UUIDs. The evaluator reported the errors as `RUNTIME_ERROR` and the logs identify a JIT compilation failure at `x * x`. The Gluon load had a plain block type where the compiler required a distributed type. The two packed specializations compiled and timed, and the compiler check reproduced the Gluon failure for SM 10.0 and 10.3, including the unaligned fallback specialization. This establishes a route-specific source compatibility issue. [Route diagnostics](b200-followup.json)
+
+The revised source inserts identity permutations after the two Gluon loads to preserve their distributed types. The repair is confined to the two load results. Each route still performs the FP32 RMS normalization in one direct launch. On local fbtriton the exact DPS source passed **8/8** with complete CUPTI timing and a **3.347 µs** geometric mean. The fbtriton cold compile for all four specializations took **0.598 s** for SM 10.3 and **0.608 s** for SM 10.0. The latter is a compiler check. [Exact CLI trace](gb300-fb-layout-fix.jsonl)
+
+| Batch | Official UUID | Archive B200 collection (µs) | Archive paired (µs) | Fixed paired (µs) | Standard Triton hybrid paired (µs) | Fixed fbtriton CLI (µs) |
+|---:|---|---:|---:|---:|---:|---:|
+| 1 | `69d9dba5-9d8f-4f6f-901f-43b5ae58b151` | Runtime error | 2.656 | 2.656 | 3.296 | 2.592 |
+| 7 | `e0fe7cd7-226c-45dd-af09-45463cc10d39` | Runtime error | 2.560 | 2.528 | 2.848 | 2.528 |
+| 18 | `4b5050f5-d6ab-4b20-bb9c-409c073f4d37` | Runtime error | 2.560 | 2.560 | 2.848 | 2.528 |
+| 32 | `0315f2ba-9254-4de4-854e-7aafe6460edc` | Runtime error | 2.560 | 2.560 | 2.864 | 2.528 |
+| 64 | `eee1d057-c1a3-42c1-bb57-71223bc091ee` | Runtime error | 2.624 | 2.592 | 2.880 | 2.592 |
+| 539 | `625f29dc-a8de-48ba-afdb-96727b2a7feb` | 3.104 | 2.976 | 2.944 | 2.976 | 2.960 |
+| 11,949 | `6a4a7810-cc7b-4641-9152-91112a15e489` | 7.024 | 6.592 | 6.544 | 6.576 | 6.624 |
+| 14,521 | `0581e118-09fa-4f5f-9910-d1b4a7573353` | 7.904 | 7.488 | 7.456 | 7.473 | 7.408 |
+
+The paired GB300 run used stock Triton 3.6.0 so both the exact archive and the fix could run every shape. The archive and fix measured **3.383** and **3.364 µs** geometric means. The standard Triton hybrid used the same packed kernels for the three larger workloads and a two-warp vectorized row reduction for the five small workloads. It measured **3.661 µs** overall. The original direct Triton baseline measured **4.007 µs**. All four passed all eight workloads plus the near-zero, non-uniform weight, changed-pointer and unaligned-input checks. The layout repair retains the faster small-batch path and qualifies on compatibility. [Paired trace](gb300-layout-fix-pair.jsonl)
+
+The archived fbtriton CLI used GPU 0 (`GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`). The fixed fbtriton CLI used GPU 1 (`GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`). The stock pair used GPU 2 (`GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`). Each was a UUID-pinned GB300 at **1500/3996 MHz**, capability 10.3, and **152 queried SMs**, held under its fleet lock. SOL-ExecBench 1.0.2 used 10 warmups and 50 cold-L2 first-to-last CUPTI timings with cloned inputs and preallocated destinations at shifted addresses. Each comparison released its lock before the next job.
+
+Revised SHA-256 `42cf95e21eedaf29141412ba6caf7a7e98d02559da6feb8de7d12576e54baea8`. The public v1.1 B200 leader in the 2026-11-27 04:17:53 UTC snapshot was **0.818143 SOL**. The revision is provisional GB300 evidence and ready for the coordinator's B200 evaluation. [Archive entry](../../../flashinfer-bench/022_rmsnorm_h512/submission.py) · [Public board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/231/B200)
+
+## Previous packed candidate · GB300 verification
 
 The exact archive file passed **8/8 official workloads** with a **3.183 µs** geometric mean in the SOL-ExecBench CLI. The paired comparison on a second GB300 measured **1.205×** speedup over the direct Triton baseline (4.049 to 3.361 µs). [Submission](../../../flashinfer-bench/022_rmsnorm_h512/submission.py) · [Run metadata](record.json) · [CLI trace](gb300-final-cli.jsonl) · [Paired trace](gb300-final-pair.jsonl)
 

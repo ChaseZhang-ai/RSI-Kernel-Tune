@@ -1,0 +1,74 @@
+{
+  "operator": "008_gemm_n4096_k14336",
+  "verification_scope": "GB300 only",
+  "reason": "compatibility",
+  "sha256": "da009679c98dac2fcd039887936af33a697313021af00a5b6dc0ae009e3aed99",
+  "released_sha256": "880169a983300e288e9a08676e9e6afbc56b36afbce2465e954ecb48e44c99dc",
+  "results_jsonl": "reports/flashinfer-bench-results/008_gemm_n4096_k14336/followup/portable-fb-gb300.jsonl",
+  "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+  "evaluator_version": "1.0.2",
+  "evaluator": {
+    "released_fbtriton": {
+      "passed": 43,
+      "total": 43,
+      "latency_geomean_us": 50.10059815498123,
+      "file": "released-gb300.jsonl",
+      "environment": {
+        "hardware": "NVIDIA GB300",
+        "libs": {
+          "torch": "2.10.0+cu130",
+          "triton": "3.7.0+fb.beta",
+          "cuda": "13.0"
+        }
+      }
+    },
+    "portable_fbtriton": {
+      "passed": 43,
+      "total": 43,
+      "latency_geomean_us": 50.7579433943686,
+      "file": "portable-fb-gb300.jsonl",
+      "environment": {
+        "hardware": "NVIDIA GB300",
+        "libs": {
+          "torch": "2.10.0+cu130",
+          "triton": "3.7.0+fb.beta",
+          "cuda": "13.0"
+        }
+      }
+    },
+    "portable_stock36": {
+      "passed": 43,
+      "total": 43,
+      "latency_geomean_us": 49.982478091575345,
+      "file": "portable-stock36-gb300.jsonl",
+      "environment": {
+        "hardware": "NVIDIA GB300",
+        "libs": {
+          "torch": "2.10.0+cu130",
+          "triton": "3.6.0",
+          "cuda": "13.0"
+        }
+      }
+    }
+  },
+  "paired_baseline_us": 50.03578537178558,
+  "paired_candidate_us": 50.058254510290126,
+  "paired_trials": [
+    {
+      "trial": 0,
+      "baseline_us": 50.08996886297368,
+      "candidate_us": 50.088808710600524
+    },
+    {
+      "trial": 1,
+      "baseline_us": 49.98166049214753,
+      "candidate_us": 50.02771894805839
+    }
+  ],
+  "paired_measurements_passed": 172,
+  "warmups": 10,
+  "timed_iterations": 50,
+  "cold_compile_and_first_calls_seconds": 1.0862831338308752,
+  "peak_pytorch_allocated_bytes": 1300365312,
+  "extra_correctness_checks_passed": 16
+}

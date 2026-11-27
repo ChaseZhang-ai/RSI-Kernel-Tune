@@ -1,0 +1,63 @@
+{
+  "operator": "008_gemm_n4096_k14336",
+  "verification_scope": "provisional GB300 only",
+  "source_sha256": "880169a983300e288e9a08676e9e6afbc56b36afbce2465e954ecb48e44c99dc",
+  "evaluator": {
+    "name": "SOL-ExecBench",
+    "version": "1.0.2",
+    "git_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+    "timing": "CUPTI cold L2 first-to-last activity",
+    "warmups": 10,
+    "timed_iterations": 50,
+    "cloned_inputs": true,
+    "preallocated_outputs": true
+  },
+  "official": {
+    "axes": {
+      "N": 4096,
+      "K": 14336
+    },
+    "passed": 43,
+    "total": 43,
+    "geometric_mean_us": 50.652595,
+    "results": "refined-gb300.jsonl",
+    "physical_gpu_index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "queried_sms": 152,
+    "compute_capability": [
+      10,
+      3
+    ]
+  },
+  "paired": {
+    "results": "refined-pair.jsonl",
+    "physical_gpu_index": 3,
+    "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+    "measured_arms_passed": 172,
+    "build_errors": 0,
+    "numerical_failures": 0,
+    "timing_failures": 0,
+    "trials": [
+      {
+        "trial": 0,
+        "first_tma_geomean_us": 53.215423,
+        "submission_geomean_us": 51.562398,
+        "speedup": 1.032059
+      },
+      {
+        "trial": 1,
+        "first_tma_geomean_us": 53.192973,
+        "submission_geomean_us": 51.518073,
+        "speedup": 1.032511
+      }
+    ],
+    "cold_compile_and_first_calls_seconds": 1.2019941019825637,
+    "peak_pytorch_allocated_bytes": 1300365312
+  },
+  "extra_checks": {
+    "passed": 16,
+    "total": 16,
+    "results": "verification.json"
+  },
+  "public_b200_board": "public-board-verified.json"
+}

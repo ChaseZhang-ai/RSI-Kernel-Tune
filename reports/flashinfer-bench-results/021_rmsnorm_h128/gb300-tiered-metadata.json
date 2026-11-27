@@ -1,0 +1,37 @@
+{
+  "scope": "provisional GB300 only",
+  "physical_gpu_index": 3,
+  "gpu_uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+  "sm_mhz": 1500,
+  "memory_mhz": 3996,
+  "evaluator_version": "1.0.2",
+  "evaluator_revision": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+  "cold_compile_seconds": 0.634617,
+  "warmups": 10,
+  "timed_iterations": 50,
+  "l2": "cold",
+  "timing": "CUPTI first-to-last GPU kernel",
+  "input_storage": "copies at evaluator-shifted pointers",
+  "outputs": "preallocated DPS tensors",
+  "passed": 14,
+  "workloads": 14,
+  "latency_geomean_us": 4.777869013328765,
+  "submission_sha256": "860414a82c95c7b13baaf9c2a2e4909a7900884f9eec47a0e7ad5fe1b927a50e",
+  "public_b200": {
+    "stack": "v1.1",
+    "leader_sol": 0.79982,
+    "read_utc": "2026-11-26T18:37:20Z"
+  },
+  "cold_compile_device": {
+    "index": 1,
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "sm_mhz": 1500,
+    "memory_mhz": 3996
+  },
+  "cold_compile_specializations": 5
+}

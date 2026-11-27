@@ -1,0 +1,10 @@
+NVRTC (12, 9) sm_100a 66696 bytes 0.6435089968144894 seconds
+gemv_direct_2 static=112 dynamic=0 combined=112 spill=('0', '0')
+mma_8_16_7_8_swap static=576 dynamic=6144 combined=6720 spill=('0', '0')
+mma_16_8_7_8_normal static=576 dynamic=8192 combined=8768 spill=('0', '0')
+mma_16_16_7_8_normal static=1136 dynamic=12288 combined=13424 spill=('0', '0')
+mma_32_16_7_8_normal static=2144 dynamic=24576 combined=26720 spill=('0', '0')
+mma_32_32_8_7_normal static=4112 dynamic=35840 combined=39952 spill=('0', '0')
+Triton 3.5.0 sm_100a 32 64 128 116 45320 bytes 0.3602202287875116 seconds; shared bytes 102448
+Triton 3.5.0 sm_100a 128 256 64 94 173456 bytes 0.41566556924954057 seconds; shared bytes 196656
+Triton 3.5.0 sm_100a 128 256 64 111 173456 bytes 0.4358881660737097 seconds; shared bytes 196656

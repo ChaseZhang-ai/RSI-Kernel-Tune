@@ -1,0 +1,222 @@
+{
+  "submission_sha256": "0c573ad8ea0216e79f847f7639922fa163df4ba2085404086f32b3c12ab05865",
+  "cache_at_start": "empty; exact submission only",
+  "sum_first_call_and_sync_seconds": 3.1650157645344734,
+  "cases": [
+    {
+      "uuid": "280860e6-08f0-427c-b7c5-9cffcfab1a10",
+      "M": 256,
+      "first_call_seconds": 1.418651944026351
+    },
+    {
+      "uuid": "2e90109a-282e-484f-b94b-61f49e72fde2",
+      "M": 248,
+      "first_call_seconds": 0.00031514186412096024
+    },
+    {
+      "uuid": "e7c939ae-2083-4b6f-a51a-8c76ffd08926",
+      "M": 240,
+      "first_call_seconds": 0.0001315223053097725
+    },
+    {
+      "uuid": "3ab6479f-c1d0-4743-b2d4-1a46b01f9db7",
+      "M": 232,
+      "first_call_seconds": 0.0001274258829653263
+    },
+    {
+      "uuid": "29581017-6470-4d78-9d02-554adecd9822",
+      "M": 224,
+      "first_call_seconds": 0.00010739406570792198
+    },
+    {
+      "uuid": "e97cc8b3-9a2f-4d0d-aaa9-7522413c78da",
+      "M": 216,
+      "first_call_seconds": 0.00010275375097990036
+    },
+    {
+      "uuid": "c69f1da6-7c62-46f5-867e-3cf5ed3aac04",
+      "M": 208,
+      "first_call_seconds": 0.0001012817956507206
+    },
+    {
+      "uuid": "38a98eb2-3a86-41ce-994c-b6a2cec932a6",
+      "M": 200,
+      "first_call_seconds": 9.945826604962349e-05
+    },
+    {
+      "uuid": "62f7844c-b1f5-4e08-a057-70e55f092931",
+      "M": 192,
+      "first_call_seconds": 0.14871192909777164
+    },
+    {
+      "uuid": "1342c570-b505-4ccf-9fc2-b377d25b397e",
+      "M": 184,
+      "first_call_seconds": 0.0002845488488674164
+    },
+    {
+      "uuid": "beb5da20-954c-44ef-8f1b-35a5dd848b06",
+      "M": 176,
+      "first_call_seconds": 0.00013721873983740807
+    },
+    {
+      "uuid": "c8c9178e-65f2-4124-a322-e66987aa1b34",
+      "M": 168,
+      "first_call_seconds": 0.00012003490701317787
+    },
+    {
+      "uuid": "c103a7db-34d0-4bc0-abb0-2833c2458c50",
+      "M": 160,
+      "first_call_seconds": 0.00010915333405137062
+    },
+    {
+      "uuid": "ed0bbc00-57e9-46e0-af02-249a64a46fa0",
+      "M": 152,
+      "first_call_seconds": 0.00010563433170318604
+    },
+    {
+      "uuid": "83deae78-6557-46e9-b3ef-2ed254192d13",
+      "M": 144,
+      "first_call_seconds": 0.00010377820581197739
+    },
+    {
+      "uuid": "76fde2b6-3f6e-484f-bcd4-fca79272a690",
+      "M": 136,
+      "first_call_seconds": 0.00010265735909342766
+    },
+    {
+      "uuid": "29ebd771-0f1c-4894-8532-7265275a02b1",
+      "M": 128,
+      "first_call_seconds": 0.1393848517909646
+    },
+    {
+      "uuid": "73dd121d-72c7-4dda-9b6e-37d55c6ed867",
+      "M": 120,
+      "first_call_seconds": 0.0003460859879851341
+    },
+    {
+      "uuid": "27fa4c34-6e08-459a-a8c4-f37b7cdb037b",
+      "M": 112,
+      "first_call_seconds": 0.00012633809819817543
+    },
+    {
+      "uuid": "faac134d-36e3-4f99-809c-9e544ea5216f",
+      "M": 104,
+      "first_call_seconds": 0.00011417781934142113
+    },
+    {
+      "uuid": "1948bb55-6253-4b9c-aa17-4fb13ffef7d0",
+      "M": 96,
+      "first_call_seconds": 0.00010617729276418686
+    },
+    {
+      "uuid": "3a7e6db4-4127-45c1-9e54-c8c7cc25d632",
+      "M": 88,
+      "first_call_seconds": 0.00011244975030422211
+    },
+    {
+      "uuid": "dcb04a7e-2faa-4858-a495-71c658b299ad",
+      "M": 80,
+      "first_call_seconds": 0.00010566599667072296
+    },
+    {
+      "uuid": "ef996a93-b3b6-4702-aae2-f28fdbcfdd48",
+      "M": 72,
+      "first_call_seconds": 9.715277701616287e-05
+    },
+    {
+      "uuid": "67d4c8f3-2ff5-4838-8f07-d5d16f602eb3",
+      "M": 64,
+      "first_call_seconds": 0.15849245293065906
+    },
+    {
+      "uuid": "54d34708-309d-462b-829a-74c90243093c",
+      "M": 56,
+      "first_call_seconds": 0.0003400379791855812
+    },
+    {
+      "uuid": "59ca23f5-a523-4cc4-9c1f-db510753d3f4",
+      "M": 48,
+      "first_call_seconds": 0.00013465899974107742
+    },
+    {
+      "uuid": "54062a8b-a9ca-47d8-b5ef-7f6f0325ef39",
+      "M": 40,
+      "first_call_seconds": 0.00011869007721543312
+    },
+    {
+      "uuid": "5230e6ed-48b8-4765-bc9f-a7cdaabed615",
+      "M": 32,
+      "first_call_seconds": 0.14597879210487008
+    },
+    {
+      "uuid": "73212638-6584-476b-848d-2cb8ce0b829c",
+      "M": 24,
+      "first_call_seconds": 0.00030919024720788
+    },
+    {
+      "uuid": "404d21b1-2237-4e3c-b3ff-9b68878e5d70",
+      "M": 16,
+      "first_call_seconds": 0.251072992105037
+    },
+    {
+      "uuid": "4cdab8cd-cb6b-4e73-8fe0-75b55fd784b5",
+      "M": 8,
+      "first_call_seconds": 0.2547426507808268
+    },
+    {
+      "uuid": "f439da26-2483-406c-977b-be185901207f",
+      "M": 4,
+      "first_call_seconds": 0.00010668905451893806
+    },
+    {
+      "uuid": "6c2f4ba8-94d3-4e8f-997f-b7454242695a",
+      "M": 2,
+      "first_call_seconds": 4.7489069402217865e-05
+    },
+    {
+      "uuid": "e39649a6-6f42-4a1b-9731-b45a9a87f7a5",
+      "M": 1,
+      "first_call_seconds": 0.12068237597122788
+    },
+    {
+      "uuid": "094ef833-829f-4efa-925d-d5bae9d6a116",
+      "M": 7,
+      "first_call_seconds": 0.0001057288609445095
+    },
+    {
+      "uuid": "4c6bdefd-dd94-48b6-be3e-7eb25658eefd",
+      "M": 35,
+      "first_call_seconds": 0.00030714087188243866
+    },
+    {
+      "uuid": "da2a2234-f5e9-4332-b62d-39865128153c",
+      "M": 972,
+      "first_call_seconds": 0.29868105612695217
+    },
+    {
+      "uuid": "897b6544-56c2-4d96-98fd-453ae3418e4b",
+      "M": 70,
+      "first_call_seconds": 0.0002897651866078377
+    },
+    {
+      "uuid": "8a8311fa-8bb6-487d-8a36-7378e9680df8",
+      "M": 2053,
+      "first_call_seconds": 0.22311054402962327
+    },
+    {
+      "uuid": "b626104c-94cc-436b-9d2c-1d31432c1a87",
+      "M": 8192,
+      "first_call_seconds": 0.000526792835444212
+    },
+    {
+      "uuid": "547e0ce5-e484-4e0c-8b38-f153fb7ce6d4",
+      "M": 2379,
+      "first_call_seconds": 0.00017933081835508347
+    },
+    {
+      "uuid": "339de815-896d-4d4c-8060-07208d559276",
+      "M": 15,
+      "first_call_seconds": 8.461019024252892e-05
+    }
+  ]
+}

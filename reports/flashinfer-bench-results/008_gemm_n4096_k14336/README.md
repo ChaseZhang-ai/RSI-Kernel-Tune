@@ -1,5 +1,7 @@
 # 008_gemm_n4096_k14336
 
+The follow-up widened compiler compatibility and verified the revised archive entry on two Triton versions. [Follow-up evidence](followup/README.md)
+
 ## Collection candidate
 
 The exact archive candidate passed all **43/43** official evaluator workloads and CUPTI timing at **50.653 µs** geometric mean. The 972, 2,053, 2,379 and 8,192 row workloads measured 98.082, 182.774, 185.781 and 613.233 µs. The evaluator ran on physical GB300 0 with 152 SMs, CUDA capability 10.3 and 1500/3996 MHz sampled clocks. The DPS solution bundle embeds the archived Python source verbatim. [Official refined workload traces](refined-gb300.jsonl) · [Device attributes](refined-evaluator-device.json) · [Clock record](refined-gpu.json)

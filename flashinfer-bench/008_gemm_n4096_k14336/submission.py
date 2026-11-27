@@ -14,6 +14,13 @@ from triton.experimental.gluon.language.nvidia.blackwell import (
 from triton.experimental.gluon.language.nvidia.hopper import fence_async_shared, mbarrier, tma
 from triton.experimental.gluon.nvidia.hopper import TensorDescriptor
 
+try:
+    from triton.experimental.gluon.language.nvidia.blackwell import get_tmem_reg_layout
+except ImportError:
+    get_tmem_reg_layout = None
+
+_EXPLICIT_TMEM_LAYOUT = gl.constexpr(get_tmem_reg_layout is not None)
+
 
 # The explicit pipeline is adapted from RSI-Kernel-Tune’s neighboring 010 GEMM.
 # It follows the producer/MMA/epilogue partitioning in the Triton Gluon tutorial.
@@ -52,7 +59,8 @@ def _read_tiles(a, b, a_ring, b_ring, load_free, load_ready,
             phase = step // STAGES & 1
             mbarrier.wait(load_free.index(index), phase ^ 1)
             ready = load_ready.index(index)
-            mbarrier.expect(ready, a.nbytes_per_cta + b.nbytes_per_cta)
+            # Each TMA copy fills its whole FP16 tile, including padded rows.
+            mbarrier.expect(ready, (TM + TN) * TK * 2)
             k_offset = (gl.program_id(1) * (14336 // SPLITS)) + k * TK
             tma.async_copy_global_to_shared(a, [row, k_offset], ready, a_ring.index(index))
             tma.async_copy_global_to_shared(b, [col, k_offset], ready, b_ring.index(index))
@@ -89,6 +97,16 @@ def _multiply_tiles(m, a_ring, b_ring, load_free, load_ready, acc, acc_free, acc
 
 
 @gluon.jit
+def _load_accumulator(slot):
+    if _EXPLICIT_TMEM_LAYOUT:
+        # Triton 3.6 requires the epilogue's tensor-memory load layout explicitly.
+        layout: gl.constexpr = get_tmem_reg_layout(gl.float32, slot.shape, slot.layout, 4)
+        return slot.load(layout)
+    else:
+        return slot.load()
+
+
+@gluon.jit
 def _write_tiles(c, m, acc, acc_free, acc_ready, TM: gl.constexpr, TN: gl.constexpr,
                  WORKERS, SWAP: gl.constexpr, ACC_STAGES: gl.constexpr,
                  GROUP: gl.constexpr, SPLITS: gl.constexpr, EN: gl.constexpr):
@@ -104,19 +122,19 @@ def _write_tiles(c, m, acc, acc_free, acc_ready, TM: gl.constexpr, TN: gl.conste
         mbarrier.wait(acc_ready.index(acc_index), acc_phase)
         slot = acc.index(acc_index)
         if SWAP:
-            values = slot.load().to(c.dtype)
+            values = _load_accumulator(slot).to(c.dtype)
             tma.store_wait(pendings=0)
             temp.store(values.permute((1, 0)))
             fence_async_shared()
             tma.async_copy_shared_to_global(c, [row, col], temp)
         else:
             for sub in gl.static_range(TN // EN):
-                values = slot.slice(sub * EN, EN).load().to(c.dtype)
+                values = _load_accumulator(slot.slice(sub * EN, EN)).to(c.dtype)
                 tma.store_wait(pendings=0)
                 temp.store(values)
                 fence_async_shared()
                 tma.async_copy_shared_to_global(c, [row, col + sub * EN], temp)
-        mbarrier.arrive(acc_free.index(acc_index), count=1)
+        mbarrier.arrive(acc_free.index(acc_index))
         wave += 1
     tma.store_wait(pendings=0)
 
@@ -129,10 +147,12 @@ def _matmul(a, b, c, TM: gl.constexpr, TN: gl.constexpr, TK: gl.constexpr,
     workers = gl.num_programs(0)
     a_ring = gl.allocate_shared_memory(gl.float16, [STAGES, TM, TK], a.layout)
     b_ring = gl.allocate_shared_memory(gl.float16, [STAGES, TN, TK], b.layout)
-    load_free = mbarrier.allocate_mbarrier(batch=STAGES)
-    load_ready = mbarrier.allocate_mbarrier(batch=STAGES)
-    acc_free = mbarrier.allocate_mbarrier(batch=ACC_STAGES)
-    acc_ready = mbarrier.allocate_mbarrier(batch=ACC_STAGES)
+    # One CTA owns each ring, so every barrier occupies one local 64-bit slot.
+    barrier_layout: gl.constexpr = mbarrier.MBarrierLayout()
+    load_free = gl.allocate_shared_memory(gl.int64, [STAGES, 1], barrier_layout)
+    load_ready = gl.allocate_shared_memory(gl.int64, [STAGES, 1], barrier_layout)
+    acc_free = gl.allocate_shared_memory(gl.int64, [ACC_STAGES, 1], barrier_layout)
+    acc_ready = gl.allocate_shared_memory(gl.int64, [ACC_STAGES, 1], barrier_layout)
     for i in gl.static_range(STAGES):
         mbarrier.init(load_free.index(i), count=1)
         mbarrier.init(load_ready.index(i), count=1)

@@ -1,0 +1,205 @@
+{
+  "scope": "provisional GB300 only",
+  "candidate_sha256": "97b9609b438be1a8a48a5409257842b0eddb9fc772b53041b1bf8e243f577cf3",
+  "official_device": {
+    "physical_gpu_index": 1,
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta",
+    "evaluator": "1.0.2"
+  },
+  "paired_device": {
+    "index": 1,
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "sm_mhz": 1500,
+    "memory_mhz": 3996,
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta",
+    "evaluator": "1.0.2",
+    "candidate_sha256": "97b9609b438be1a8a48a5409257842b0eddb9fc772b53041b1bf8e243f577cf3"
+  },
+  "sm_clock_mhz": 1500,
+  "memory_clock_mhz": 3996,
+  "cold_jit_seconds": 0.31071,
+  "cold_jit_specializations": 4,
+  "warmup_runs": 10,
+  "timed_iterations": 50,
+  "cache": "cold L2",
+  "timing": "CUPTI first-to-last kernel, median",
+  "baseline": "ako4x tiered direct DPS",
+  "input_storage": "cloned inputs shifted at evaluator-aligned pointers",
+  "outputs": "preallocated destination tensors",
+  "local_evaluator_revision": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+  "public_board": {
+    "gpu": "B200",
+    "stack": "v1.1",
+    "kernel_id": 230,
+    "leader_sol": 0.79982,
+    "leader_submission_id": 104768,
+    "read_utc": "2026-11-26T18:57:36Z",
+    "url": "https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/230/B200"
+  },
+  "b200_verification": "pending coordinator",
+  "passed": 14,
+  "workloads": 14,
+  "latency_geomean_us": {
+    "evaluator_latency_us": 4.504040407536723,
+    "paired_candidate_us": 4.5018955752169765,
+    "paired_tiered_us": 4.6505157181660595
+  },
+  "paired_latency_reduction_percent": 3.19577767189424,
+  "tuning_outcomes": {
+    "screen": {
+      "passed": 355
+    },
+    "pdl": {
+      "passed": 59
+    },
+    "wide": {
+      "status": "skipped during fleet contention"
+    }
+  },
+  "per_workload": [
+    {
+      "batch_size": 4,
+      "hidden_size": 128,
+      "workload_id": "e971e0cc-d914-424e-a3ea-187e9cec413f",
+      "status": "passed",
+      "evaluator_latency_us": 2.528,
+      "paired_candidate_us": 2.56,
+      "paired_tiered_us": 2.848
+    },
+    {
+      "batch_size": 24,
+      "hidden_size": 128,
+      "workload_id": "6abd9329-a1de-4704-9378-d7d70388cbfd",
+      "status": "passed",
+      "evaluator_latency_us": 2.592,
+      "paired_candidate_us": 2.608,
+      "paired_tiered_us": 2.7520000000000002
+    },
+    {
+      "batch_size": 32,
+      "hidden_size": 128,
+      "workload_id": "52688c58-7dd4-4ce5-8ed7-bc8aabac4d7b",
+      "status": "passed",
+      "evaluator_latency_us": 2.528,
+      "paired_candidate_us": 2.496,
+      "paired_tiered_us": 2.736
+    },
+    {
+      "batch_size": 136,
+      "hidden_size": 128,
+      "workload_id": "ae6aa520-b8be-4e28-b3c4-fa484a2c17c2",
+      "status": "passed",
+      "evaluator_latency_us": 2.512,
+      "paired_candidate_us": 2.528,
+      "paired_tiered_us": 2.7680000000000002
+    },
+    {
+      "batch_size": 192,
+      "hidden_size": 128,
+      "workload_id": "4b7f0d02-8404-4eb4-be5c-64b0fd639684",
+      "status": "passed",
+      "evaluator_latency_us": 2.624,
+      "paired_candidate_us": 2.592,
+      "paired_tiered_us": 2.6879999999999997
+    },
+    {
+      "batch_size": 256,
+      "hidden_size": 128,
+      "workload_id": "d48fe9d2-1e43-418c-835c-0948ee76535b",
+      "status": "passed",
+      "evaluator_latency_us": 2.592,
+      "paired_candidate_us": 2.592,
+      "paired_tiered_us": 2.72
+    },
+    {
+      "batch_size": 316,
+      "hidden_size": 128,
+      "workload_id": "a978e7eb-89fa-444f-96b1-ceb4cbb02f4c",
+      "status": "passed",
+      "evaluator_latency_us": 2.56,
+      "paired_candidate_us": 2.6245000000000003,
+      "paired_tiered_us": 2.784
+    },
+    {
+      "batch_size": 1088,
+      "hidden_size": 128,
+      "workload_id": "3b02c1b8-29dc-4c13-86a0-b7834daad8a1",
+      "status": "passed",
+      "evaluator_latency_us": 2.7520000000000002,
+      "paired_candidate_us": 2.7520000000000002,
+      "paired_tiered_us": 2.8960000000000004
+    },
+    {
+      "batch_size": 2048,
+      "hidden_size": 128,
+      "workload_id": "1a7fa8e1-ba96-443e-b697-6f2436a130d6",
+      "status": "passed",
+      "evaluator_latency_us": 2.848,
+      "paired_candidate_us": 2.816,
+      "paired_tiered_us": 2.8800000000000003
+    },
+    {
+      "batch_size": 2528,
+      "hidden_size": 128,
+      "workload_id": "1e5d6f59-edbc-4d45-8edf-5599001cc270",
+      "status": "passed",
+      "evaluator_latency_us": 2.912,
+      "paired_candidate_us": 2.8800000000000003,
+      "paired_tiered_us": 2.9605
+    },
+    {
+      "batch_size": 49532,
+      "hidden_size": 128,
+      "workload_id": "d5201e02-7338-405c-9c4d-ff95a03a00cc",
+      "status": "passed",
+      "evaluator_latency_us": 6.912,
+      "paired_candidate_us": 6.944,
+      "paired_tiered_us": 6.752,
+      "effective_bandwidth_tb_s": 3.669074074074074
+    },
+    {
+      "batch_size": 65016,
+      "hidden_size": 128,
+      "workload_id": "16ce2b65-3a33-4e46-8924-57859152abf0",
+      "status": "passed",
+      "evaluator_latency_us": 9.344999999999999,
+      "paired_candidate_us": 9.312000000000001,
+      "paired_tiered_us": 8.3845,
+      "effective_bandwidth_tb_s": 3.562166720171215
+    },
+    {
+      "batch_size": 396256,
+      "hidden_size": 128,
+      "workload_id": "a11c12ed-feb2-4b09-a091-5964a86b6b17",
+      "status": "passed",
+      "evaluator_latency_us": 32.432500000000005,
+      "paired_candidate_us": 31.936,
+      "paired_tiered_us": 32.0805,
+      "effective_bandwidth_tb_s": 6.25555624759115
+    },
+    {
+      "batch_size": 520128,
+      "hidden_size": 128,
+      "workload_id": "f2872f89-5d8d-403a-9603-5918541cb9e0",
+      "status": "passed",
+      "evaluator_latency_us": 40.817,
+      "paired_candidate_us": 41.024499999999996,
+      "paired_tiered_us": 40.848,
+      "effective_bandwidth_tb_s": 6.524384251659848
+    }
+  ]
+}

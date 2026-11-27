@@ -27,6 +27,7 @@ SOL Bench reported the following scores with incomplete workload coverage.
 | --- | ---: | ---: | ---: |
 | 010 | 0.363842 | 40/43 | 107660 |
 | 016 | 0.722770 | 12/15 | 107645 |
+| 008 | 0.333145 | 40/43 | 107640 |
 | 002 | 0.709944 | 12/14 | 107636 |
 | 006 | 0.445785 | 28/29 | 107629 |
 | 016 | 0.670567 | 11/15 | 107625 |
@@ -109,3 +110,7 @@ SOL Bench reported the following scores with incomplete workload coverage.
 | 025 | 0.640813 | 12/14 | 106673 |
 | 024 | 0.574485 | 6/7 | 106672 |
 | 001 | 0.456552 | 6/7 | 106670 |
+
+## Official collection results
+
+- Submission 107101 scored 0.084839 (partial coverage).

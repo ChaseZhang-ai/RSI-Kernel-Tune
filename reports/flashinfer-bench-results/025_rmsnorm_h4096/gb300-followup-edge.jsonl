@@ -1,0 +1,22 @@
+{"physical_gpu": 0, "gpu_uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d", "device": "NVIDIA GB300", "sm_count": 152, "capability": [10, 3], "torch": "2.9.0+cu130", "triton": "3.5.0", "evaluator": "1.0.2", "cupti": "13.5.0", "sha256": "c45c57f6c95110a27682af23920e69d94ec86c71a517af08fe461cb8a181ef85", "native_resource_usage": {"archived": {"one_row": {"registers_per_thread": 40, "local_bytes_per_thread": 0}, "split_row": {"registers_per_thread": 40, "local_bytes_per_thread": 0}}, "revised": {"one_row": {"registers_per_thread": 40, "local_bytes_per_thread": 0}, "split_row": {"registers_per_thread": 40, "local_bytes_per_thread": 0}, "split_half": {"registers_per_thread": 24, "local_bytes_per_thread": 0}, "wide_row": {"registers_per_thread": 58, "local_bytes_per_thread": 0}}}}
+{"batch": 0, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 1, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 2, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 7, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 16, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 79, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 80, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 170, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 255, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 256, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 257, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 4095, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 4096, "layout": "dense", "calls": 3, "status": "PASSED"}
+{"batch": 1, "layout": "unaligned", "calls": 3, "status": "PASSED"}
+{"batch": 1, "layout": "strided", "calls": 3, "status": "PASSED"}
+{"batch": 16, "layout": "unaligned", "calls": 3, "status": "PASSED"}
+{"batch": 16, "layout": "strided", "calls": 3, "status": "PASSED"}
+{"batch": 170, "layout": "unaligned", "calls": 3, "status": "PASSED"}
+{"batch": 170, "layout": "strided", "calls": 3, "status": "PASSED"}
+{"batch": 4096, "layout": "unaligned", "calls": 3, "status": "PASSED"}
+{"batch": 4096, "layout": "strided", "calls": 3, "status": "PASSED"}

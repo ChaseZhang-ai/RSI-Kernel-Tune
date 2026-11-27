@@ -6,6 +6,7 @@ the best individual RSI result for each operator.
 
 | Operator | SOL | Timed workloads | Submission |
 | --- | ---: | ---: | ---: |
+| 001 | 0.538098 | 7/7 | 107478 |
 | 002 | 0.798396 | 14/14 | 107423 |
 | 008 | 0.303160 | 43/43 | 107453 |
 | 020 | 0.932883 | 19/19 | 106686 |

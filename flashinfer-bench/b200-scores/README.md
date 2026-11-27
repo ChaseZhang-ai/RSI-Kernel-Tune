@@ -26,6 +26,7 @@ SOL Bench reported the following scores with incomplete workload coverage.
 | Operator | Reported SOL | Timed workloads | Submission |
 | --- | ---: | ---: | ---: |
 | 010 | 0.363842 | 40/43 | 107660 |
+| 026 | 0.685127 | 7/8 | 107657 |
 | 017 | 0.852834 | 20/21 | 107655 |
 | 016 | 0.722770 | 12/15 | 107645 |
 | 008 | 0.333145 | 40/43 | 107640 |

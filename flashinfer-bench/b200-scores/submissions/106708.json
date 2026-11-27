@@ -1,0 +1,10 @@
+{
+  "id": 106708,
+  "worker": 23,
+  "kernel_id": 232,
+  "timed": 8,
+  "expected": 8,
+  "verified_sol": 0.813159,
+  "checked_at": "2026-11-27T06:51:46.197937+00:00",
+  "collection": null
+}

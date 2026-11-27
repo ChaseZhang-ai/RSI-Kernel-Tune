@@ -51,7 +51,7 @@ Hybrid v2 also passed all **47** official CLI workloads on physical GPU 1 at 150
 
 An offline Triton 3.5.0 check caught a compiler error in v2's direct kernel when broadcasting scalar constants in the empty-row epilogue. The fix gives those constants explicit distributed layouts. The v1 source stayed staged while the compatibility fix was evaluated.
 
-## Selected submission · Hybrid v3 · GB300 only
+## Archived hybrid v3 · GB300 verification
 
 **47/47 official workloads passed correctness and CUPTI timing, with a 20.880 µs geomean and a 6.176–69.665 µs range.** The exact artifact also passed all 28 synthetic calls. The 8-, 108- and 2,708-reference single-row cases took 6.176, 9.920 and 17.440 µs, respectively. [Per-workload results](gb300-v3-evaluator.jsonl) · [Synthetic results](gb300-v3-edge.json) · [Device, timing and compile record](gb300-v3-summary.json)
 
@@ -69,3 +69,25 @@ An offline Triton 3.5.0 check caught a compiler error in v2's direct kernel when
 - At 2026-11-26 19:01:56 UTC, the public v1.1 B200 leaders were 0.994987 SOL for kernel 227 and 0.940633 SOL for collection 4. The candidate is provisional GB300 only, with B200 evaluation pending coordinator submission. [Board check](public-b200-v1.1.json) · [Kernel board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/227/B200)
 
 The H100 seed and CompoundingKernel Explorer's FlashInfer 018 source informed tile reuse, length-based routing and asynchronous staging. [H100 seed](../../../kernels/attention/mla_paged_decode/h100/kernel.py) · [CompoundingKernel archive](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/resolve/main/kernels/FlashInfer/018_mla_paged_decode_h16_ckv512_kpe64_ps1/README.md)
+
+## B200 follow-up and portable Triton candidate · 2026-11-27
+
+The released collection child `106087` timed **1/47** workloads. Its eight-page SIMT workload took 7.200 µs. The other **46** carried the `RUNTIME_ERROR` label. These comprise the 108-page single-launch TMA route and all 45 split-KV routes. The standalone repeat `106238` independently timed **1/47** and produced no qualifying SOL score. The standalone archive and the previously tracked hybrid are byte-identical. The released records lack exception or profiler detail, so the B200 runtime cause remains unconfirmed. The public v1.1 leader was **0.994987 SOL** in the released snapshot. [Released evidence](b200-archived-hybrid.json) · [B200 board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/227/B200)
+
+The failed collection routes share Gluon's TCGEN05 tensor-memory lowering. The 108-page failure occurs with a single launch, which argues against the split merge or the presence of two kernels as a common explanation. The archived file reproduced a fatal Triton 3.5.0 LLVM compiler error on the local SM 10.3 target, `Cannot select: intrinsic %llvm.nvvm.tcgen05.wait.ld`. The earlier offline SM 10.0 compilation passed. This demonstrates a compiler portability issue in the archive. It leaves the cause of the B200 results open.
+
+The replacement uses standard Triton BF16 `tl.dot` with `mma.sync` lowering. It keeps FP32 score accumulation, online softmax and merge, and writes FP32 base-2 LSE. The short single-batch route runs directly on the current stream. Longer rows use 32-page inner tiles, 64- or 128-page splits, and one CKV tile for both matrix products. Batched partial values use BF16 storage and a 512-wide FP32 merge, with about 10.25 MiB of scratch at the largest official shape. The bounded screen also tried whole-split tiles, merging 16 tiles per step, and a single-split write-through. These produced mixed results and the selected configuration retained the simpler merge. [Initial paired screen](gb300-portable-screen.jsonl) · [Merge screen](gb300-portable-merge-screen.jsonl)
+
+| Same-GPU comparison | Workloads | Geomean (µs) |
+|---|---:|---:|
+| Earlier direct single-stream baseline, initial screen | 7/7 | 68.586 |
+| Earlier split-KV v1, initial screen | 7/7 | 24.006 |
+| Archived hybrid, initial screen | 7/7 | 17.452 |
+| Portable candidate, initial screen | 7/7 | 19.263 |
+| Archived hybrid, full pair | 47/47 | 20.675 |
+| Portable candidate, full pair | 47/47 | 22.940 |
+| Portable candidate, official CLI with Triton 3.5.0 | 47/47 | 23.270 |
+
+The full pair used physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, with 152 SMs, CUDA capability 10.3, and clocks locked to 1500/3996 MHz. The archive remained faster overall on Triton 3.6.0. The portable candidate improved the longest official workload from 69.745 to 66.368 µs. Both sides used 10 warmups, 50 timed iterations, cold L2, cloned inputs, preallocated destinations, and CUPTI first-to-last activity timing. [Full paired timings](gb300-portable-paired.jsonl)
+
+The exact DPS bundle also passed **47/47** workloads with timing on the same physical GB300 in a separate locked SOL-ExecBench 1.0.2 CLI run using Triton 3.5.0 and PyTorch 2.9.0+cu130. Twenty-eight synthetic calls passed on each Triton version, including empty rows, random and repeated page indices, changed input and output pointers, and independent positional changes. Cold compilation of the nine official specializations with Triton 3.5.0 took 2.822 s targeting SM 10.3 and 2.939 s targeting SM 10.0. The exact source SHA-256 is `d6f5e6bf1b317fce4c1d7a9c3b33a83b3511a0e1ce1e9d374f154974fa16e264`. This is a GB300-verified compatibility candidate for coordinator B200 evaluation. [Complete evaluator JSONL](gb300-portable-evaluator.jsonl) · [Synthetic checks](gb300-portable-edge.json) · [Run and compile summary](gb300-portable-summary.json)

@@ -50,7 +50,7 @@ Both the baseline and tuned candidate passed all 38 official workloads with 50 v
 
 ## Exact candidate, official GB300 evaluator
 
-The exact collection file passed 38/38 official workloads, with valid CUPTI timings, on 2026-11-26 at 19:07:23 UTC. The geometric mean was **43.939 µs**. The 19 short-query workloads measured 11.751 µs geometric mean, and the five long-query workloads measured 2,582.775 µs geometric mean. The long-prefix short case took 53.713 µs. The largest single-request case took 14.718 ms. GPU 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, was pinned and monitored under the host lock with 1500/3996 MHz SM/memory clocks, 152 queried SMs and CUDA capability 10.3. It used the same evaluator, 10 warmups and 50 timed iterations as the baseline. Maximum split-KV scratch across the official workloads was 22.043 MiB. [Official per-workload CLI results](gb300-tuned-evaluator.jsonl) · [Exact collection source](../../../flashinfer-bench/019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1/submission.py)
+The exact collection file passed 38/38 official workloads, with valid CUPTI timings, on 2026-11-26 at 19:07:23 UTC. The geometric mean was **43.939 µs**. The 19 short-query workloads measured 11.751 µs geometric mean, and the five long-query workloads measured 2,582.775 µs geometric mean. The long-prefix short case took 53.713 µs. The largest single-request case took 14.718 ms. GPU 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, was pinned and monitored under the host lock with 1500/3996 MHz SM/memory clocks, 152 queried SMs and CUDA capability 10.3. It used the same evaluator, 10 warmups and 50 timed iterations as the baseline. Maximum split-KV scratch across the official workloads was 22.043 MiB. [Official per-workload CLI results](gb300-tuned-evaluator.jsonl) · [Exact archived comparator](https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/30b39ff6515c05ecd885c09aab7085467173a48d/flashinfer-bench/019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1/submission.py)
 
 The DPS bundle embeds the exact Python bytes under `sources[0].path = "submission.py"`, with `entry_point = "submission.py::run"` and `destination_passing_style = true`. Materialize the named Parquet row into `definition.json` and `workload.jsonl`, resolve the version 1.0 trace metadata with `FLASHINFER_TRACE_DIR`. Then run the evaluator with the local bundle.
 
@@ -61,3 +61,41 @@ sol-execbench "$problem_dir" --solution solution.json --output results.jsonl
 An offline Triton 3.5.0 cross-compilation from the exact source generated all 25 SM100 specializations in 15.047 s using CUDA 13.2 PTXAS. The Triton 3.5.0 SM103 compiler check failed while lowering `llvm.nvvm.tcgen05.wait.ld`. The GB300 runtime verification used Triton 3.6.0, and the SM100 check covered code generation only. [SM100 code-generation measurements](sm100-triton35-codegen.jsonl)
 
 The B200 v1.1 board showed June in first place at **0.998735 SOL**, submission 104795, checked 2026-11-26 19:08:38 UTC. This candidate is provisional GB300 only. The coordinator owns B200 evaluation. [B200 v1.1 kernel leaderboard](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/228/B200)
+
+## B200 compatibility follow-up
+
+The collection child 106088 and standalone repeat 106246 used the exact archived SHA-256 `c64fc642f781aee4d09b888fa5163536cc996f69b28b3cdb725ee07575a95a0c`. The collection timed 21/38 workloads and recorded 17 runtime errors. The standalone timed 20/38, and the staged standalone summary contains only the count. Neither run verified a B200 SOL score. June led the supplied v1.1 board snapshot at **0.998735 SOL** as recorded on 2026-11-27 at 04:17:52 UTC. [B200 board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/228/B200)
+
+| Archived dispatch route | B200 collection timed | B200 collection runtime errors |
+|---|---:|---:|
+| Short scalar | 5/5 | 0 |
+| Short tensor core | 15/15 | 0 |
+| Split-KV | 1/1 | 0 |
+| Gluon `tcgen05` prefill | 0/17 | 17 |
+
+Both prior GB300 runs passed all 38. All 17 collection runtime errors align with the archived Gluon route, spanning 138–16,384 queries and including the five largest query workloads. The 22-query workload with 17,759 referenced pages used split-KV and timed on B200. The collection labels identify the failing route. The supplied records contain no runtime error messages and give no workload-level attribution for the standalone timing difference. [UUID-aligned B200 and GB300 evidence](b200-archive-coverage.jsonl)
+
+The revised file uses a direct Triton `mma.sync` prefill for the affected workloads. A two-query tile reuses CKV across heads and the value multiplication, computes the positional dot separately and scales the combined logits, and schedules from the current GPU indptr and page IDs. The short and split-KV kernels and launch configurations are byte-identical to the archive. The bounded 35-comparison screen selected a 32-key, two-stage tile. Its shared memory use is 75,776 bytes per CTA versus 229,392–229,520 bytes on the affected archived path. [Paired schedule screen](gb300-portable-screen.jsonl)
+
+The archived `tcgen05` specialization reproduced the Triton 3.5.0 LLVM lowering failure on SM103 at `llvm.nvvm.tcgen05.wait.ld`. Under the same compiler the revised file generated all 24 specializations on both SM103 and SM100. All eleven replacement specializations on each target emitted `mma.sync` and used 75,776 bytes of shared memory. SM100 was a compiler-only check. [Legacy compiler results](portable-legacy-codegen.jsonl)
+
+### Paired runtime on GB300
+
+Both the exact archive and revised file passed all 38 official workloads and recorded 50 valid CUPTI timings per workload under Triton 3.6.0. Physical GB300 GPU 2, UUID `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, reported 152 SMs and CUDA capability 10.3 at 1500/3996 MHz SM/memory. SOL-ExecBench 1.0.2 used 10 warmups, cold L2, cloned inputs, preallocated outputs, and first-to-last CUPTI timing. [Paired old/new results](gb300-portable-paired.jsonl)
+
+| Workloads | Count | Archive geomean | Revised geomean |
+|---|---:|---:|---:|
+| All | 38 | 43.971 µs | 55.390 µs |
+| Affected prefill route | 17 | 210.140 µs | 353.119 µs |
+| Short and split-KV routes | 21 | 12.394 µs | 12.365 µs |
+| 8,987–16,384 queries | 5 | 2,573.015 µs | 5,130.646 µs |
+
+The portable candidate trades GB300 throughput for compatibility. The largest 16,384-query workload measured 28.482 ms in the new pair, compared with 14.678 ms for the archive and 59.018 ms in the original direct CLI run. The 22-query long-prefix workload measured 53.456 µs, close to the archive's 53.328 µs. Cold compilation of the revised file took 15.126 s for 24 specializations, with a 0.943 s maximum. [Paired cold compilation](gb300-portable-cold-compile.jsonl)
+
+Eighteen synthetic calls verified BF16 output and FP32 LSE. They include a case with 199 queries and 5,183 page references that moved a 4,000-plus-page prefix between requests while retaining the same indptr addresses and then repeated the check with new input and output pointers. The suite exercised uneven and empty requests, fully masked queries, repeated and permuted pages, unused NaN pages, and nondefault scales. [Synthetic results](gb300-portable-synthetic.jsonl)
+
+### Exact portable candidate with the legacy compiler
+
+The official SOL-ExecBench CLI passed **38/38** with a **55.962 µs** geometric mean on 2026-11-27 at 04:30:52 UTC. The 16,384-query workload measured 28.287 ms and the 22-query long-prefix workload measured 52.481 µs. The exact DPS bundle contained SHA-256 `16ba8ca30f4cd86a41027fc1c92a452cba9de0c805bc64730681fa6515f3e1c7`. Physical GB300 GPU 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`, reported 152 SMs and capability 10.3. The run used 1500/3996 MHz SM/memory clocks, SOL-ExecBench 1.0.2, PyTorch 2.10.0+cu130, Triton 3.5.0 and the installed CUDA 13.2 PTXAS for SM103. [Exact evaluator JSONL](gb300-portable-evaluator.jsonl) · [Revised source](../../../flashinfer-bench/019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1/submission.py)
+
+The coordinator will evaluate the revised candidate on B200. The result above is provisional GB300 evidence for compatibility.

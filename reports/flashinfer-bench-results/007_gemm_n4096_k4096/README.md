@@ -1,5 +1,28 @@
 # FlashInfer 007 FP16 GEMM
 
+## Follow-up after the released B200 trials
+
+The revision passed **43/43** official workloads in the exact standalone GB300 evaluator bundle at **18.63 µs** geometric mean. Two same-device trials against the exact released source measured **18.600 and 18.614 µs**, compared with **19.227 and 19.238 µs** for the released source. This is a **3.25%** reduction over all 43 workload IDs. The selected device was physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, with 152 queried SMs, CUDA capability 10.3, and active clocks of 1500/3996 MHz. The exact cold first-call envelope was **4.13 s** across all workloads. [Official evaluator traces](followup-gb300.jsonl) · [Paired workloads](followup-paired-gb300.csv) · [Device and source digests](followup-summary.json) · [Cold compile](followup-cold-compile.json)
+
+Stock Triton 3.6.0 requires a register layout argument for tensor-memory loads. The revision selects the installed compiler's layout API at module import. This also keeps the grader JIT's dependency scanner away from symbols available only on stock Triton. The same file passed **43/43** on stock Triton at **18.68 µs** and on fbtriton 3.7.1. [Stock evaluator traces](followup-gb300-stock.jsonl) · [Compiler probes](followup-compiler.json)
+
+B200 collection child **106076** timed **39/43** on the released source. Its missing-activity rows were M=35, 56, 136, and 240. Independent standalone **106244**, using the same source digest, timed **37/43**. Its supplied summary records the count only. The collection's affected shapes share their single-kernel routes with neighboring timed workloads. The available results leave the cause of the missing timings unresolved and both runs incomplete for scoring. The supplied 2026-11-27 UTC v1.1 snapshot has a public leader of **1.000000 SOL** for kernel 216. [Released B200 evidence](followup-b200-released.json) · [Public B200 leaderboard](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/216/B200)
+
+The one-row GEMV stays in place. The M=2–16 path uses a single 16×16 weight-first Tensor Core launch and reduces four K slices in FP32 inside the CTA. The M=17–256 routes use weight-first MMA and masked register-to-output stores. At M=144, 192, and 256, the 64×128 weight-first tile with direct stores measured 18.86, 19.14, and 19.46 µs. Its TMA-store counterparts measured 19.11, 19.54, and 19.81 µs on the same GPU. Both paths write each FP16 output element once. [Epilogue and tile screen](followup-screens-gb300.csv)
+
+The large route segments the 128×256 tile into 32-column TMA stores. This reduces shared memory from 213,236 to 205,044 bytes while adding a fourth operand stage and keeping two FP32 accumulator slots. At M=8192 the isolated screen measured 194.46 µs for the four-stage direct-store variant, 185.34 µs with 128-column TMA segments, and 181.94 µs with 32-column segments. In the M=2379 diagnostic on GB300, the 148-worker grid proxy increased the released-layout latency from 69.57 to 91.62 µs, consistent with 304 tiles requiring three waves at 148 workers. The revised four-stage variant with 128-column segments took 81.62 µs at that proxy. Production dispatch queries the active SM count. [Timed variants and grid proxy](followup-screens-gb300.csv)
+
+| M | Released paired (µs) | Revised paired (µs) | Revised exact evaluator (µs) |
+|---:|---:|---:|---:|
+| 972 | 39.824 | 34.480 | 34.528 |
+| 2053 | 68.264 | 60.152 | 60.064 |
+| 2379 | 70.456 | 61.368 | 61.440 |
+| 8192 | 204.809 | 183.808 | 183.281 |
+
+Paired verification used physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, at 1500/3996 MHz. Both arms passed both trials using SOL-ExecBench 1.0.2 with 10 warmups, 50 CUPTI spans, cold L2, shifted cloned inputs, and preallocated outputs. Two fresh integer-input and destination-guard checks per workload passed, along with the unaligned strided fallback. Peak reserved GPU memory was 1.31 GiB. [Fresh allocations](followup-fresh-allocations.json)
+
+## Prior local tuning
+
 The archive candidate passed all 43 official workloads in the standalone evaluator at **19.30 µs** geometric mean. Two same-device trials reproduced **19.20 µs**, **2.31×** faster than the direct baseline. The exact submission took **3.17 s** for the sum of first synchronized calls across the 43 workloads from an isolated empty Triton cache. The candidate is provisional GB300 only and ready for the coordinator's B200 evaluation. [Official evaluator traces](final-gb300.jsonl) · [Device, source digest and measurement summary](final-gb300-summary.json) · [Cold compile measurements](final-cold-compile.json)
 
 The standalone evaluator used physical GB300 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`, with 152 queried SMs and CUDA capability 10.3. Active SM and memory clocks measured 1500/3996 MHz. The driver accepted a deferred memory-clock setting at the sole supported memory frequency. The Triton JIT targeted the queried GB300 architecture on fbtriton 3.7.1. The persistent schedule uses the active device's SM count.

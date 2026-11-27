@@ -1,10 +1,11 @@
-"""Destination-passing FP16 GEMM using Blackwell tensor cores."""
+"""Destination-passing FP16 GEMM with FP32 accumulation on Blackwell."""
 
 import torch
 import triton
 import triton.language as tl
 from triton.experimental import gluon
 from triton.experimental.gluon import language as gl
+from triton.experimental.gluon.language.nvidia import blackwell
 from triton.experimental.gluon.language.nvidia.blackwell import (
     TensorMemoryLayout,
     allocate_tensor_memory,
@@ -85,36 +86,65 @@ def _multiply_tiles(m, a_ring, b_ring, load_free, load_ready, acc, acc_free, acc
         wave += 1
 
 
+# Triton 3.6 requires a register layout. Select the API at module load so
+# the JIT only resolves symbols provided by the installed compiler.
+if hasattr(blackwell, "get_tmem_reg_layout"):
+    _get_tmem_reg_layout = blackwell.get_tmem_reg_layout
+
+    @gluon.jit
+    def _load_output(tile):
+        layout: gl.constexpr = _get_tmem_reg_layout(tile.dtype, tile.shape, tile.layout, gl.num_warps())
+        return tile.load(layout).to(gl.float16)
+
+else:
+    @gluon.jit
+    def _load_output(tile):
+        return tile.load().to(gl.float16)
+
+
+# Direct stores retain the weight-first TMEM layout. Segmenting the large
+# epilogue leaves room for four K stages and two accumulator slots.
 @gluon.jit
-def _write_tiles(c, acc, acc_free, acc_ready, TM: gl.constexpr, TN: gl.constexpr,
+def _write_tiles(c, out, m, acc, acc_free, acc_ready, TM: gl.constexpr, TN: gl.constexpr,
                  WORKERS: gl.constexpr, SWAP: gl.constexpr, ACC_STAGES: gl.constexpr,
-                 GROUP: gl.constexpr):
-    tiles_n: gl.constexpr = 4096 // TN
-    total = gl.cdiv(c.shape[0], TM) * tiles_n
-    temp = gl.allocate_shared_memory(gl.float16, [TM, TN], c.layout)
+                 GROUP: gl.constexpr, EPI: gl.constexpr):
+    total = gl.cdiv(m, TM) * (4096 // TN)
+    if EPI != 0:
+        temp = gl.allocate_shared_memory(gl.float16, [TM, EPI], c.layout)
     wave = 0
     for tile in range(gl.program_id(0), total, WORKERS):
-        row, col = _tile_origin(tile, c.shape[0], TM, TN, GROUP)
+        row, col = _tile_origin(tile, m, TM, TN, GROUP)
         acc_index = wave % ACC_STAGES
         acc_phase = wave // ACC_STAGES & 1
         mbarrier.wait(acc_ready.index(acc_index), acc_phase)
-        values = acc.index(acc_index).load().to(gl.float16)
-        tma.store_wait(pendings=0)
-        if SWAP:
-            temp.store(values.permute((1, 0)))
+        slot = acc.index(acc_index)
+        if EPI == 0:
+            values = _load_output(slot)
+            if SWAP:
+                values = values.permute((1, 0))
+            mbarrier.arrive(acc_free.index(acc_index), count=1)
+            layout: gl.constexpr = values.type.layout
+            rows = row + gl.arange(0, TM, layout=gl.SliceLayout(1, layout))
+            cols = col + gl.arange(0, TN, layout=gl.SliceLayout(0, layout))
+            gl.store(out + rows[:, None] * 4096 + cols[None, :], values, rows[:, None] < m)
         else:
-            temp.store(values)
-        mbarrier.arrive(acc_free.index(acc_index), count=1)
-        fence_async_shared()
-        tma.async_copy_shared_to_global(c, [row, col], temp)
+            for segment in gl.static_range(TN // EPI):
+                values = _load_output(slot.slice(segment * EPI, EPI))
+                tma.store_wait(pendings=0)
+                temp.store(values)
+                if segment == TN // EPI - 1:
+                    mbarrier.arrive(acc_free.index(acc_index), count=1)
+                fence_async_shared()
+                tma.async_copy_shared_to_global(c, [row, col + segment * EPI], temp)
         wave += 1
-    tma.store_wait(pendings=0)
+    if EPI != 0:
+        tma.store_wait(pendings=0)
 
 
 @gluon.jit
-def _matmul(a, b, c, TM: gl.constexpr, TN: gl.constexpr, TK: gl.constexpr,
+def _matmul(a, b, c, out, m, TM: gl.constexpr, TN: gl.constexpr, TK: gl.constexpr,
             STAGES: gl.constexpr, WORKERS: gl.constexpr, SWAP: gl.constexpr,
-            ACC_STAGES: gl.constexpr, GROUP: gl.constexpr):
+            ACC_STAGES: gl.constexpr, GROUP: gl.constexpr, EPI: gl.constexpr):
     a_ring = gl.allocate_shared_memory(gl.float16, [STAGES, TM, TK], a.layout)
     b_ring = gl.allocate_shared_memory(gl.float16, [STAGES, TN, TK], b.layout)
     load_free = gl.allocate_shared_memory(gl.int64, [STAGES, 1], mbarrier.MBarrierLayout())
@@ -132,7 +162,7 @@ def _matmul(a, b, c, TM: gl.constexpr, TN: gl.constexpr, TK: gl.constexpr,
     layout: gl.constexpr = TensorMemoryLayout([mm, nn], col_stride=1)
     acc = allocate_tensor_memory(gl.float32, [ACC_STAGES, mm, nn], layout)
     gl.warp_specialize([
-        (_write_tiles, (c, acc, acc_free, acc_ready, TM, TN, WORKERS, SWAP, ACC_STAGES, GROUP)),
+        (_write_tiles, (c, out, m, acc, acc_free, acc_ready, TM, TN, WORKERS, SWAP, ACC_STAGES, GROUP, EPI)),
         (_read_tiles, (a, b, a_ring, b_ring, load_free, load_ready, TM, TN, TK, STAGES, WORKERS, GROUP)),
         (_multiply_tiles, (a.shape[0], a_ring, b_ring, load_free, load_ready,
                            acc, acc_free, acc_ready, TM, TN, TK, STAGES, WORKERS, SWAP, ACC_STAGES)),
@@ -145,12 +175,15 @@ def _desc(tensor, rows, cols):
     return TensorDescriptor.from_tensor(tensor, shape, layout)
 
 
-def _launch(A, B, C, tm, tn, tk, stages, swap, acc_stages=2, group=1):
-    properties = torch.cuda.get_device_properties(A.device)
-    tiles = triton.cdiv(A.shape[0], tm) * (4096 // tn)
-    workers = min(tiles, properties.multi_processor_count)
-    _matmul[(workers,)](_desc(A, tm, tk), _desc(B, tn, tk), _desc(C, tm, tn),
-                       tm, tn, tk, stages, workers, swap, acc_stages, group, num_warps=4)
+def _launch(A, B, C, tm, tn, tk, stages, swap, acc_stages, group, epi):
+    sm_count = torch.cuda.get_device_properties(A.device).multi_processor_count
+    m = A.shape[0]
+    workers = min(triton.cdiv(m, tm) * (4096 // tn), sm_count)
+    descriptor = _desc(C, tm, epi) if epi else None
+    _matmul[(workers,)](
+        _desc(A, tm, tk), _desc(B, tn, tk), descriptor, C, m,
+        tm, tn, tk, stages, workers, swap, acc_stages, group, epi, num_warps=4,
+    )
 
 
 @triton.jit
@@ -167,7 +200,7 @@ def _gemv(A, B, C):
 @triton.jit
 def _thin_gemm(A, B, C, M):
     TM: tl.constexpr = 16
-    TN: tl.constexpr = 32
+    TN: tl.constexpr = 16
     TK: tl.constexpr = 128
     PARTS: tl.constexpr = 4
     rows = tl.program_id(0) * TM + tl.arange(0, TM)
@@ -176,12 +209,12 @@ def _thin_gemm(A, B, C, M):
     k = part[:, None] * TK + tl.arange(0, TK)[None, :]
     a = A + rows[None, :, None] * 4096 + k[:, None, :]
     b = B + cols[None, :, None] * 4096 + k[:, None, :]
-    acc = tl.full((PARTS, TM, TN), 0, tl.float32)
+    acc = tl.full((PARTS, TN, TM), 0, tl.float32)
     for step in range(4096 // (TK * PARTS)):
         av = tl.load(a + step * TK * PARTS, rows[None, :, None] < M, 0)
         bv = tl.load(b + step * TK * PARTS)
-        acc = tl.dot(av, tl.permute(bv, (0, 2, 1)), acc)
-    tl.store(C + rows[:, None] * 4096 + cols[None, :], tl.sum(acc, axis=0),
+        acc = tl.dot(bv, tl.permute(av, (0, 2, 1)), acc)
+    tl.store(C + rows[:, None] * 4096 + cols[None, :], tl.trans(tl.sum(acc, axis=0)),
              rows[:, None] < M)
 
 
@@ -215,14 +248,13 @@ def run(A, B, C):
         return
 
     if m <= 16:
-        _thin_gemm[(1, 4096 // 32)](A, B, C, m, num_warps=4, num_stages=3)
+        _thin_gemm[(1, 4096 // 16)](A, B, C, m, num_warps=4, num_stages=3)
         return
-    if m <= 64:
-        tm = triton.next_power_of_2(m)
-        _launch(A, B, C, tm, 64, 256, 3, True, acc_stages=1)
-    elif m <= 128:
-        _launch(A, B, C, 64, 64, 256, 3, True, acc_stages=1)
+
+    if m <= 128:
+        tm = min(64, triton.next_power_of_2(m))
+        _launch(A, B, C, tm, 64, 256, 3, True, acc_stages=1, group=1, epi=0)
     elif m <= 256:
-        _launch(A, B, C, 64, 128, 128, 4, False)
+        _launch(A, B, C, 64, 128, 128, 4, True, acc_stages=1, group=1, epi=0)
     else:
-        _launch(A, B, C, 128, 256, 64, 3, False, group=4 if m > 1024 else 1)
+        _launch(A, B, C, 128, 256, 64, 4, False, acc_stages=2, group=4 if m > 1024 else 1, epi=32)

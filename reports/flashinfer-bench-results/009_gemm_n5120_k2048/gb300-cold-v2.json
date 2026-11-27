@@ -1,0 +1,143 @@
+{
+  "device": "NVIDIA GB300",
+  "physical_index": 3,
+  "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+  "capability": [
+    10,
+    3
+  ],
+  "queried_sms": 152,
+  "ptx_targets": {
+    "sm_103a": 14
+  },
+  "source_sha256": "124ae55fb8697dcfb2c167e33300ba54f02d2dde5f982308f8f253613652759d",
+  "first_call_and_sync_s": 3.8623565272428095,
+  "workloads": [
+    {
+      "id": "b0a78c88-11ee-4f4e-a818-184c13c6f2e5",
+      "M": 6,
+      "first_call_and_sync_s": 1.435639319010079
+    },
+    {
+      "id": "107f3ae3-6c78-43c6-acd3-5e080208f536",
+      "M": 1,
+      "first_call_and_sync_s": 0.06733029102906585
+    },
+    {
+      "id": "22298d10-a6b5-4f90-9130-11335cb6b6ec",
+      "M": 34,
+      "first_call_and_sync_s": 0.18720617704093456
+    },
+    {
+      "id": "7b579664-05e4-4b3d-8a3c-9512309ed30a",
+      "M": 17,
+      "first_call_and_sync_s": 0.12229487719014287
+    },
+    {
+      "id": "e23cf1f3-9437-4a46-8fce-f4e286db5178",
+      "M": 952,
+      "first_call_and_sync_s": 0.24600282916799188
+    },
+    {
+      "id": "d27ef156-426c-4866-b670-55a7ae9d1d64",
+      "M": 16,
+      "first_call_and_sync_s": 0.12366597075015306
+    },
+    {
+      "id": "f1f0557b-06ca-4d5d-ad0d-c8bb33cd708b",
+      "M": 172,
+      "first_call_and_sync_s": 0.19514184072613716
+    },
+    {
+      "id": "a9e6fb35-fd26-4eb6-a963-42f5b0021d06",
+      "M": 16294,
+      "first_call_and_sync_s": 0.3602136140689254
+    },
+    {
+      "id": "451a49fc-9c9d-4ecb-a0a0-f41406df708f",
+      "M": 12251,
+      "first_call_and_sync_s": 0.00033024558797478676
+    },
+    {
+      "id": "1d7f3a89-3639-413c-b8e6-4007c90b320c",
+      "M": 64,
+      "first_call_and_sync_s": 0.19391122413799167
+    },
+    {
+      "id": "c7b9632f-de06-427b-b979-9ada3a011fa0",
+      "M": 63,
+      "first_call_and_sync_s": 0.00014326674863696098
+    },
+    {
+      "id": "02922cc8-6ba6-4653-b56b-b82c6fac3859",
+      "M": 2,
+      "first_call_and_sync_s": 0.14036528812721372
+    },
+    {
+      "id": "c7d685c6-bd5a-4198-9df4-b282fd976e02",
+      "M": 93,
+      "first_call_and_sync_s": 0.18761490983888507
+    },
+    {
+      "id": "a31da9a2-850c-4c98-a13a-a7fab92bc21b",
+      "M": 4,
+      "first_call_and_sync_s": 0.0001033940352499485
+    },
+    {
+      "id": "34442751-7a39-4c04-b644-51d59670281b",
+      "M": 289,
+      "first_call_and_sync_s": 0.2163185211829841
+    },
+    {
+      "id": "c024ea6f-609d-43fd-b2f3-373a23f6377a",
+      "M": 5,
+      "first_call_and_sync_s": 0.00012672226876020432
+    },
+    {
+      "id": "36e150b3-eda5-44b1-b967-c76f2874b300",
+      "M": 25,
+      "first_call_and_sync_s": 0.00013609789311885834
+    },
+    {
+      "id": "ad06a472-befb-404d-8989-d1aac9cfea8f",
+      "M": 8,
+      "first_call_and_sync_s": 5.936110392212868e-05
+    },
+    {
+      "id": "289bfc8a-6705-40fc-a686-863d3e8366e9",
+      "M": 492,
+      "first_call_and_sync_s": 8.796993643045425e-05
+    },
+    {
+      "id": "bc2ff685-f855-40e2-9890-991117e88b29",
+      "M": 14915,
+      "first_call_and_sync_s": 0.0003235260955989361
+    },
+    {
+      "id": "2f13c3b2-f64b-4c09-bb2d-39efd1fb809b",
+      "M": 32,
+      "first_call_and_sync_s": 0.15007654204964638
+    },
+    {
+      "id": "7e8ab916-0ca2-4efa-a460-1704a3c2a0dd",
+      "M": 12853,
+      "first_call_and_sync_s": 0.0003320709802210331
+    },
+    {
+      "id": "e2492f59-04ad-46ad-a9c1-6d3afefcc5db",
+      "M": 11006,
+      "first_call_and_sync_s": 0.00024182768538594246
+    },
+    {
+      "id": "046247e6-9df1-4575-88f9-52948a88bdbd",
+      "M": 8828,
+      "first_call_and_sync_s": 0.00020349165424704552
+    },
+    {
+      "id": "21b49277-3af2-4580-bbe0-1fdf52f8a427",
+      "M": 128,
+      "first_call_and_sync_s": 0.23448714893311262
+    }
+  ],
+  "finished_utc": "2026-11-26T18:55:49.028341+00:00"
+}

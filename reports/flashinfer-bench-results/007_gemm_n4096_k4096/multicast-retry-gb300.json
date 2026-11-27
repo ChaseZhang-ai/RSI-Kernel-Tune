@@ -1,0 +1,69 @@
+{
+  "device": {
+    "physical_index": 2,
+    "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+    "initial_query": "2, GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+    "sm_lock": [
+      1500,
+      1500
+    ],
+    "memory_lock": null,
+    "supported_memory_clocks_mhz": [
+      3996
+    ],
+    "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000018:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+    "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+    "samples": [
+      "1500 MHz, 3996 MHz"
+    ]
+  },
+  "outcome": "First 4-CTA launch timed out in a 45 s job; no qualifying cluster timing",
+  "results": [
+    {
+      "uuid": "5230e6ed-48b8-4765-bc9f-a7cdaabed615",
+      "axes": {
+        "M": 32
+      },
+      "route": "baseline",
+      "params": [],
+      "seed": 200,
+      "first_call_seconds": 0.5099337440915406,
+      "status": "PASSED",
+      "us": 37.1205,
+      "p10_us": 36.897,
+      "p90_us": 37.4945
+    },
+    {
+      "uuid": "5230e6ed-48b8-4765-bc9f-a7cdaabed615",
+      "axes": {
+        "M": 32
+      },
+      "route": "one_cta",
+      "params": [],
+      "seed": 200,
+      "first_call_seconds": 0.1433413657359779,
+      "status": "PASSED",
+      "us": 14.48,
+      "p10_us": 14.2401,
+      "p90_us": 14.751999999999997
+    },
+    {
+      "uuid": "5230e6ed-48b8-4765-bc9f-a7cdaabed615",
+      "axes": {
+        "M": 32
+      },
+      "route": "four_cta_multicast",
+      "params": [
+        32,
+        256,
+        128,
+        true
+      ],
+      "status": "LAUNCH_TIMEOUT",
+      "verified_workloads": 0,
+      "timeout_s": 45,
+      "ptx_contains_two_cta_mma": true,
+      "ptx_contains_tma_multicast": false
+    }
+  ]
+}

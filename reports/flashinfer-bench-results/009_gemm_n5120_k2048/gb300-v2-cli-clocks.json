@@ -1,0 +1,18 @@
+{
+  "physical_index": 3,
+  "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+  "initial_query": "3, GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+  "sm_lock": [
+    1500,
+    1500
+  ],
+  "memory_lock": null,
+  "supported_memory_clocks_mhz": [
+    3996
+  ],
+  "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000019:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+  "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+  "samples": [
+    "1500 MHz, 3996 MHz"
+  ]
+}

@@ -1,0 +1,381 @@
+{
+  "sha256": "d6f5e6bf1b317fce4c1d7a9c3b33a83b3511a0e1ce1e9d374f154974fa16e264",
+  "archive_sha256": "6f737fd76f1dc0bde6fdd8d59a1f62123b320dbfbed144bafea5b66537f928a4",
+  "decision": "compatibility",
+  "cli_passed": 47,
+  "synthetic_passes": {
+    "stock": 28,
+    "older": 28
+  },
+  "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+  "protocol": {
+    "warmups": 10,
+    "timed_iterations": 50,
+    "method": "CUPTI first-to-last kernel median",
+    "cold_l2": true,
+    "cloned_inputs": true,
+    "preallocated_destinations": true
+  },
+  "device_pair": {
+    "start_utc": "2026-11-27T04:23:02.233361+00:00",
+    "index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "compute_capability": [
+      10,
+      3
+    ],
+    "memory_bytes": 297013411840,
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "evaluator": "1.0.2",
+    "end_utc": "2026-11-27T04:23:54.081613+00:00",
+    "clocks_mhz": "1500, 3996"
+  },
+  "device_cli": {
+    "start_utc": "2026-11-27T04:23:55.089299+00:00",
+    "index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "compute_capability": [
+      10,
+      3
+    ],
+    "memory_bytes": 297013411840,
+    "torch": "2.9.0+cu130",
+    "triton": "3.5.0",
+    "evaluator": "1.0.2",
+    "end_utc": "2026-11-27T04:26:58.009778+00:00",
+    "clocks_mhz": "1500, 3996"
+  },
+  "screen_devices": {
+    "initial": {
+      "start_utc": "2026-11-27T04:20:32.220839+00:00",
+      "index": 1,
+      "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+      "locked_sm_mhz": 1500,
+      "observed_mem_mhz": 3996,
+      "supported_mem_mhz": [
+        3996
+      ],
+      "name": "NVIDIA GB300",
+      "sm_count": 152,
+      "compute_capability": [
+        10,
+        3
+      ],
+      "memory_bytes": 297013411840,
+      "torch": "2.10.0+cu130",
+      "triton": "3.6.0",
+      "evaluator": "1.0.2",
+      "end_utc": "2026-11-27T04:21:02.563708+00:00",
+      "clocks_mhz": "1500, 3996"
+    },
+    "merge": {
+      "start_utc": "2026-11-27T04:21:51.174891+00:00",
+      "index": 3,
+      "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+      "locked_sm_mhz": 1500,
+      "observed_mem_mhz": 3996,
+      "supported_mem_mhz": [
+        3996
+      ],
+      "name": "NVIDIA GB300",
+      "sm_count": 152,
+      "compute_capability": [
+        10,
+        3
+      ],
+      "memory_bytes": 297013411840,
+      "torch": "2.10.0+cu130",
+      "triton": "3.6.0",
+      "evaluator": "1.0.2",
+      "end_utc": "2026-11-27T04:22:11.762472+00:00",
+      "clocks_mhz": "1500, 3996"
+    }
+  },
+  "stats": {
+    "1": {
+      "workloads": 15,
+      "cli_geomean_us": 14.061256962994845,
+      "cli_min_us": 6.096000000000001,
+      "cli_max_us": 19.215999999999998,
+      "paired_archive_us": 12.040155030284241,
+      "paired_candidate_us": 14.048940743456132
+    },
+    "16": {
+      "workloads": 16,
+      "cli_geomean_us": 20.00356843063333,
+      "cli_min_us": 14.176,
+      "cli_max_us": 40.88,
+      "paired_archive_us": 16.662552832871274,
+      "paired_candidate_us": 19.2260370525242
+    },
+    "64": {
+      "workloads": 16,
+      "cli_geomean_us": 43.40874321452795,
+      "cli_min_us": 26.9765,
+      "cli_max_us": 66.19200000000001,
+      "paired_archive_us": 42.58971194742362,
+      "paired_candidate_us": 43.344580880227596
+    },
+    "all": {
+      "workloads": 47,
+      "cli_geomean_us": 23.269871374513727,
+      "cli_min_us": 6.096000000000001,
+      "cli_max_us": 66.19200000000001,
+      "paired_archive_us": 20.67528533760825,
+      "paired_candidate_us": 22.93995122325145
+    }
+  },
+  "compatibility_reproduction": {
+    "archived_triton": "3.5.0",
+    "archived_target": "sm103",
+    "exit_code": 134,
+    "message": "LLVM ERROR: Cannot select: intrinsic %llvm.nvvm.tcgen05.wait.ld",
+    "portable_compiles": [
+      {
+        "triton": "3.5.0",
+        "target": "sm100",
+        "sha256": "d6f5e6bf1b317fce4c1d7a9c3b33a83b3511a0e1ce1e9d374f154974fa16e264",
+        "cold_wall_s": 2.9394601420499384,
+        "specializations": [
+          {
+            "kernel": "_small",
+            "constants": {
+              "T": 8,
+              "N": 8
+            },
+            "compile_s": 0.4958947370760143,
+            "cubin_bytes": 62800,
+            "mma_sync": false,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 1,
+              "CHUNK": 0,
+              "N": 32
+            },
+            "compile_s": 0.4149621748365462,
+            "cubin_bytes": 140040,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 1,
+              "CHUNK": 64,
+              "N": 32
+            },
+            "compile_s": 0.39260289864614606,
+            "cubin_bytes": 123352,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 16,
+              "CHUNK": 64,
+              "N": 32
+            },
+            "compile_s": 0.40246366895735264,
+            "cubin_bytes": 126304,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 16,
+              "CHUNK": 128,
+              "N": 32
+            },
+            "compile_s": 0.41540662478655577,
+            "cubin_bytes": 126304,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 64,
+              "CHUNK": 128,
+              "N": 32
+            },
+            "compile_s": 0.40726262936368585,
+            "cubin_bytes": 128144,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_merge",
+            "constants": {
+              "CHUNK": 64,
+              "M": 8,
+              "D": 128
+            },
+            "compile_s": 0.12366861198097467,
+            "cubin_bytes": 27040,
+            "mma_sync": false,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_merge",
+            "constants": {
+              "CHUNK": 64,
+              "M": 8,
+              "D": 512
+            },
+            "compile_s": 0.14177919970825315,
+            "cubin_bytes": 35784,
+            "mma_sync": false,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_merge",
+            "constants": {
+              "CHUNK": 128,
+              "M": 8,
+              "D": 512
+            },
+            "compile_s": 0.14450272964313626,
+            "cubin_bytes": 35784,
+            "mma_sync": false,
+            "tcgen05": false
+          }
+        ]
+      },
+      {
+        "triton": "3.5.0",
+        "target": "sm103",
+        "sha256": "d6f5e6bf1b317fce4c1d7a9c3b33a83b3511a0e1ce1e9d374f154974fa16e264",
+        "cold_wall_s": 2.82168082986027,
+        "specializations": [
+          {
+            "kernel": "_small",
+            "constants": {
+              "T": 8,
+              "N": 8
+            },
+            "compile_s": 0.43825847702100873,
+            "cubin_bytes": 62800,
+            "mma_sync": false,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 1,
+              "CHUNK": 0,
+              "N": 32
+            },
+            "compile_s": 0.4065501461736858,
+            "cubin_bytes": 140048,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 1,
+              "CHUNK": 64,
+              "N": 32
+            },
+            "compile_s": 0.38076708326116204,
+            "cubin_bytes": 123368,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 16,
+              "CHUNK": 64,
+              "N": 32
+            },
+            "compile_s": 0.39297262812033296,
+            "cubin_bytes": 126312,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 16,
+              "CHUNK": 128,
+              "N": 32
+            },
+            "compile_s": 0.4096824452280998,
+            "cubin_bytes": 126312,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_decode",
+            "constants": {
+              "B": 64,
+              "CHUNK": 128,
+              "N": 32
+            },
+            "compile_s": 0.4039753219112754,
+            "cubin_bytes": 128152,
+            "mma_sync": true,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_merge",
+            "constants": {
+              "CHUNK": 64,
+              "M": 8,
+              "D": 128
+            },
+            "compile_s": 0.11762699112296104,
+            "cubin_bytes": 27024,
+            "mma_sync": false,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_merge",
+            "constants": {
+              "CHUNK": 64,
+              "M": 8,
+              "D": 512
+            },
+            "compile_s": 0.1331199067644775,
+            "cubin_bytes": 35376,
+            "mma_sync": false,
+            "tcgen05": false
+          },
+          {
+            "kernel": "_merge",
+            "constants": {
+              "CHUNK": 128,
+              "M": 8,
+              "D": 512
+            },
+            "compile_s": 0.13798962021246552,
+            "cubin_bytes": 35376,
+            "mma_sync": false,
+            "tcgen05": false
+          }
+        ]
+      }
+    ]
+  }
+}

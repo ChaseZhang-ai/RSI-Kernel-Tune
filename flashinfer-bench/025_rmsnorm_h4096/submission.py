@@ -1,6 +1,6 @@
 """Standalone BF16 RMSNorm with FP32 arithmetic and a DPS entry point."""
 
-from ctypes import c_void_p
+from ctypes import c_int, c_void_p
 from functools import lru_cache
 
 import torch
@@ -11,7 +11,7 @@ from cuda.bindings import driver, nvrtc
 
 # Packed FP32 operations and wide memory accesses build on RSI-Kernel-Tune's
 # 001_fused_add_rmsnorm_h2048 candidate. CompoundingKernel-Explorer's FlashInfer
-# 025 kernel inspired the replicated single-row reduction.
+# 025 kernel inspired output partitions and the look-ahead L2 prefetch.
 _CUDA = r"""
 using U32 = unsigned int;
 using U64 = unsigned long long;
@@ -140,6 +140,151 @@ extern "C" __global__ __launch_bounds__(256) void split_row(
     const unsigned short* x, const unsigned short* w, unsigned short* y) {
     normalize<8>(x, w, y);
 }
+
+template<int WORDS, int POLICY>
+__device__ __forceinline__ Packed tuned_load(const unsigned short* address) {
+    Packed v;
+    if constexpr (WORDS == 8 && POLICY == 2) {
+        asm volatile("ld.global.nc.L1::no_allocate.L2::evict_first.v8.u32 "
+                     "{%0,%1,%2,%3,%4,%5,%6,%7}, [%8];"
+                     : "=r"(v.word[0]), "=r"(v.word[1]), "=r"(v.word[2]), "=r"(v.word[3]),
+                       "=r"(v.word[4]), "=r"(v.word[5]), "=r"(v.word[6]), "=r"(v.word[7])
+                     : "l"(address));
+    } else if constexpr (WORDS == 8) {
+        v = load<POLICY == 1>(address);
+    } else {
+        asm volatile("ld.global.nc.L2::128B.v4.u32 {%0,%1,%2,%3}, [%4];"
+                     : "=r"(v.word[0]), "=r"(v.word[1]), "=r"(v.word[2]), "=r"(v.word[3])
+                     : "l"(address));
+    }
+    return v;
+}
+
+template<int WORDS, bool KEEP>
+__device__ __forceinline__ void tuned_store(unsigned short* address, const Packed& v) {
+    if constexpr (WORDS == 8 && KEEP) {
+        asm volatile("st.global.L1::no_allocate.L2::evict_last.v8.u32 "
+                     "[%0], {%1,%2,%3,%4,%5,%6,%7,%8};"
+                     :: "l"(address), "r"(v.word[0]), "r"(v.word[1]), "r"(v.word[2]),
+                        "r"(v.word[3]), "r"(v.word[4]), "r"(v.word[5]), "r"(v.word[6]),
+                        "r"(v.word[7]) : "memory");
+    } else if constexpr (WORDS == 8) {
+        store(address, v);
+    } else {
+        asm volatile("st.global.v4.u32 [%0], {%1,%2,%3,%4};"
+                     :: "l"(address), "r"(v.word[0]), "r"(v.word[1]), "r"(v.word[2]),
+                        "r"(v.word[3]) : "memory");
+    }
+}
+
+__device__ __forceinline__ float accumulate_square(float acc, U32 word) {
+    asm("{ .reg .b16 lo, hi;"
+        " mov.b32 {lo, hi}, %1;"
+        " fma.rn.f32.bf16 %0, lo, lo, %0;"
+        " fma.rn.f32.bf16 %0, hi, hi, %0; }"
+        : "+f"(acc) : "r"(word));
+    return acc;
+}
+
+template<int THREADS, bool PARTIAL>
+__device__ __forceinline__ float inverse_rms(float sum) {
+    constexpr int WARPS = THREADS / 32;
+    constexpr int LANES = PARTIAL ? 4 : 1;
+    constexpr int COUNT = WARPS * LANES;
+    const int lane = threadIdx.x % 32;
+    const int warp = threadIdx.x / 32;
+    __shared__ float sums[COUNT];
+
+    #pragma unroll
+    for (int delta = 16; delta >= LANES; delta /= 2) {
+        sum += __shfl_xor_sync(0xffffffff, sum, delta);
+    }
+    if (lane < LANES) {
+        sums[warp * LANES + lane] = sum;
+    }
+    __syncthreads();
+
+    sum = sums[lane % COUNT];
+    if constexpr (COUNT > 32) {
+        sum += sums[lane + 32];
+    }
+    #pragma unroll
+    for (int delta = (COUNT < 32 ? COUNT : 32) / 2; delta > 0; delta /= 2) {
+        sum += __shfl_xor_sync(0xffffffff, sum, delta);
+    }
+    return rsqrtf(sum * (1.0f / 4096.0f) + 1e-5f);
+}
+
+template<int THREADS, int PARTITIONS, bool PREFETCH>
+__device__ __forceinline__ void tuned_row(const unsigned short* x, const unsigned short* w,
+                                          unsigned short* y, int batch) {
+    constexpr int WORDS = THREADS == 512 ? 4 : 8;
+    constexpr int STRIPE = THREADS * WORDS * 2;
+    constexpr int REPEATS = 4096 / STRIPE;
+    const int column = threadIdx.x * WORDS * 2;
+    const int row = blockIdx.x;
+    const int partition = blockIdx.y;
+    float accum[4] = {};
+    Packed x_packed[REPEATS];
+    Packed w_packed[REPEATS];
+
+    #pragma unroll
+    for (int k = 0; k < REPEATS; ++k) {
+        const int col = column + k * STRIPE;
+        if constexpr (PARTITIONS > 1) {
+            if (PARTITIONS == 1 || (col * PARTITIONS) / 4096 == partition) {
+                w_packed[k] = tuned_load<WORDS, 1>(w + col);
+            }
+        }
+        x_packed[k] = tuned_load<WORDS, PREFETCH ? 2 : 0>(x + row * 4096 + col);
+    }
+    if constexpr (PREFETCH) {
+        const int future = row + 768;
+        if (threadIdx.x == 0 && future < batch) {
+            asm volatile("cp.async.bulk.prefetch.L2.global [%0], %1;"
+                         :: "l"(x + future * 4096), "r"(8192) : "memory");
+        }
+    }
+
+    #pragma unroll
+    for (int k = 0; k < REPEATS; ++k) {
+        #pragma unroll
+        for (int j = 0; j < WORDS; ++j) {
+            accum[j % 4] = accumulate_square(accum[j % 4], x_packed[k].word[j]);
+        }
+    }
+    float inv = inverse_rms<THREADS, (PARTITIONS > 1)>((accum[0] + accum[1]) + (accum[2] + accum[3]));
+    const U64 scale = join(__float_as_uint(inv), __float_as_uint(inv));
+
+    #pragma unroll
+    for (int k = 0; k < REPEATS; ++k) {
+        const int col = column + k * STRIPE;
+        if (PARTITIONS == 1 || (col * PARTITIONS) / 4096 == partition) {
+            if constexpr (PARTITIONS == 1) {
+                w_packed[k] = tuned_load<WORDS, 1>(w + col);
+            }
+            Packed result;
+            #pragma unroll
+            for (int j = 0; j < WORDS; ++j) {
+                U64 scaled = multiply(widen(x_packed[k].word[j]), scale);
+                result.word[j] = narrow(multiply(scaled, widen(w_packed[k].word[j])));
+            }
+            tuned_store<WORDS, PREFETCH>(y + row * 4096 + col, result);
+        }
+    }
+}
+
+// Each CTA reduces a full row and writes the requested half.
+extern "C" __global__ __launch_bounds__(512, 2) void split_half(
+    const unsigned short* x, const unsigned short* w, unsigned short* y, int batch) {
+    tuned_row<512, 2, false>(x, w, y, batch);
+}
+
+// Four warps keep two 256-bit stripes of each row and prefetch a later row to L2.
+extern "C" __global__ __launch_bounds__(128, 8) void wide_row(
+    const unsigned short* x, const unsigned short* w, unsigned short* y, int batch) {
+    tuned_row<128, 1, true>(x, w, y, batch);
+}
 """
 
 def _checked(result):
@@ -165,7 +310,9 @@ def _compile(major, minor, context):
     module = _checked(driver.cuModuleLoadData(cubin))
     one_row = _checked(driver.cuModuleGetFunction(module, b"one_row"))
     split_row = _checked(driver.cuModuleGetFunction(module, b"split_row"))
-    return module, one_row, split_row
+    split_half = _checked(driver.cuModuleGetFunction(module, b"split_half"))
+    wide_row = _checked(driver.cuModuleGetFunction(module, b"wide_row"))
+    return module, one_row, split_row, split_half, wide_row
 
 
 # Adapted from kernel_library/kernels/sol-example-triton-rmsnorm/kernel.py.
@@ -189,7 +336,7 @@ def run(hidden_states, weight, output):
     tensors = (hidden_states, weight, output)
     capability = torch.cuda.get_device_capability(device)
     pointers = tuple(t.data_ptr() for t in tensors)
-    if (batch > 256 or capability[0] != 10 or any(p % 32 for p in pointers)
+    if (256 < batch < 4096 or capability[0] != 10 or any(p % 32 for p in pointers)
             or not all(t.is_contiguous() for t in tensors)):
         _rmsnorm[(batch,)](*tensors, *hidden_states.stride(), weight.stride(0),
                            *output.stride(), num_warps=4)
@@ -198,8 +345,15 @@ def run(hidden_states, weight, output):
     with torch.cuda.device(device):
         stream = torch.cuda.current_stream(device).cuda_stream
         context = _checked(driver.cuCtxGetCurrent())
-        _, one_row, split_row = _compile(*capability, int(context))
-        kernel, partitions = (split_row, 8) if batch == 1 else (one_row, 1)
-        args = (pointers, (c_void_p, c_void_p, c_void_p))
-        _checked(driver.cuLaunchKernel(kernel, batch, partitions, 1, 256, 1, 1, 0,
+        _, one_row, split_row, split_half, wide_row = _compile(*capability, int(context))
+        if batch >= 4096:
+            kernel, threads, partitions = wide_row, 128, 1
+            args = ((*pointers, batch), (c_void_p, c_void_p, c_void_p, c_int))
+        elif 1 < batch <= 79:
+            kernel, threads, partitions = split_half, 512, 2
+            args = ((*pointers, batch), (c_void_p, c_void_p, c_void_p, c_int))
+        else:
+            kernel, threads, partitions = (split_row, 256, 8) if batch == 1 else (one_row, 256, 1)
+            args = (pointers, (c_void_p, c_void_p, c_void_p))
+        _checked(driver.cuLaunchKernel(kernel, batch, partitions, 1, threads, 1, 1, 0,
                                        stream, args, 0))

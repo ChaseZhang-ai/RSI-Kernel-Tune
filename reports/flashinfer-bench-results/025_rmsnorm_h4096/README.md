@@ -1,8 +1,26 @@
 # 025_rmsnorm_h4096
 
-## GB300 candidate for the coordinator
+## 2026-11-27 B200 follow-up
 
-The exact standalone DPS bundle passed **14/14 official workloads**, including CUPTI timing, at **7.190 µs** geometric mean in SOL-ExecBench. Official B200 verification is pending. [Submission source](../../../flashinfer-bench/025_rmsnorm_h4096/submission.py) · [Evaluator results with official UUIDs and tolerances](gb300-final-evaluator.jsonl)
+The revised single-file candidate passed 14/14 through the standalone evaluator at 6.702 µs geomean. It measured 6.901 µs versus 7.187 µs in the full pair, a 4.0% latency reduction. This source is provisional on GB300. [Standalone evaluator](gb300-followup-evaluator.jsonl) · [Full pair](gb300-followup-pair.jsonl)
+
+The archived source and the previous tracked file had the same SHA-256 `2686d9d2a4cf13114fd6f47d63c36952398dbeed2ecde12d55e12f742fdfbd00`. Its independent B200 v1.1 run timed 14/14 at **0.715703 SOL**, **+0.188357** behind June's **0.904060 SOL**. Public rank is **Unranked (private)**. The public leader was refreshed at 2026-11-27 04:25:11 UTC. [Standalone B200 result](https://research.nvidia.com/benchmarks/sol-execbench/submission/106242) · [Public board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/234/B200)
+
+The released collection child had 13 timed workloads and one missing CUPTI activity at B=16. B=16 shares the archived one-row CUDA launch with the other aligned batches from B=2 through 256. Both fresh SOL-ExecBench processes on GB300 3 timed all 14, including B=16 at 3.072 and 3.008 µs. The timed small B200 workloads were 2.976–3.584 µs. Large ones measured 28.096–41.728 µs, equivalent to 5.13–5.72 TB/s for one input read and one output write. [Released collection child](https://research.nvidia.com/benchmarks/sol-execbench/submission/106094) · [Archive repeat 1](gb300-archived-repeat-1.jsonl) · [Archive repeat 2](gb300-archived-repeat-2.jsonl)
+
+| Workloads | Archived (µs geomean) | Revised (µs geomean) |
+|---|---:|---:|
+| B=1–79 | 3.027 | 2.893 |
+| B=170 | 3.393 | 3.424 |
+| B=8,804–14,509 | 33.316 | 31.907 |
+
+The revision dispatches two 512-thread CTAs with 128-bit vectors for the small multi-row path. The aligned large path uses 128-thread CTAs, two 256-bit stripes held in registers per thread, late weight loads, and L2 look-ahead prefetch. The B=1 kernel uses eight disjoint output partitions. B=170 uses one 256-thread CTA per row. The strided and unaligned paths use the existing Triton kernel. The new split and wide kernels use 24 and 58 registers per thread respectively on GB300. The screen records six optional Triton cache-policy compilation failures. The first integration build had an unparenthesized C++ template comparison. The corrected artifact passed every paired timing. [Seven-workload paired screen](gb300-followup-screen.jsonl)
+
+The pair ran on physical GB300 1 (`GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`). The standalone evaluator and 63 supplemental correctness calls ran on physical GB300 0 (`GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`). Both reported 152 SMs, CUDA capability 10.3, and sampled 1500/3996 MHz clocks. The driver denied changes to the host clock settings. SOL-ExecBench 1.0.2 at `a9fa0804c793d438e70850c33fe34426e66d53dd`, PyTorch 2.9.0+cu130, Triton 3.5.0, CUDA 13.2 NVRTC and PTXAS, and CUPTI Python 13.5.0 used the original 10-warmup/50-timing cold-L2 protocol. The revised cold native first call took 0.106 s including JIT and launch. Exact candidate SHA-256 `c45c57f6c95110a27682af23920e69d94ec86c71a517af08fe461cb8a181ef85`. [Supplemental checks and CUDA resources](gb300-followup-edge.jsonl)
+
+## Previous GB300 candidate archived for B200
+
+The exact standalone DPS bundle passed **14/14 official workloads**, including CUPTI timing, at **7.190 µs** geometric mean in SOL-ExecBench. This was the source of the archived B200 run. [Submission source](../../../flashinfer-bench/025_rmsnorm_h4096/submission.py) · [Evaluator results with official UUIDs and tolerances](gb300-final-evaluator.jsonl)
 
 - Standalone check on physical GB300 2, `GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`, with 152 queried SMs and CUDA capability 10.3. The driver denied unprivileged clock changes and sampled clocks stayed at 1500/3996 MHz. The memory clock was the sole supported setting.
 - SOL-ExecBench 1.0.2 (`a9fa0804c793d438e70850c33fe34426e66d53dd`), PyTorch 2.9.0+cu130, Triton 3.5.0, CUDA 13.2 NVRTC and PTXAS, and CUPTI Python 13.5.0. CUDA compilation targets the active device's queried capability.

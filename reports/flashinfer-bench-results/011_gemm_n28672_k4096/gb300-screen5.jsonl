@@ -1,0 +1,68 @@
+{"physical_index": 1, "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12", "graphics_target_mhz": 1500, "memory_target_mhz": 3996}
+{"device": "NVIDIA GB300", "sm_count": 152, "capability": [10, 3], "clocks": "1500 MHz, 3996 MHz"}
+{"variant": "manual", "M": 136, "status": "passed", "first_ms": 864.403102081269, "median_us": 72.256, "registers": null, "spills": null, "shared_bytes": null, "sample_count": 50}
+{"variant": "cluster_256_128_64_3_8_1_0_4_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_1_0_4_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_1_0_4_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_4_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_5_8_1_0_4_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_0_0_4_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_128_3_8_0_0_4_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_16_1_0_4_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_0_0_8_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_8_2", "M": 136, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "manual", "M": 256, "status": "passed", "first_ms": 1.5384689904749393, "median_us": 73.3765, "registers": null, "spills": null, "shared_bytes": null, "sample_count": 50}
+{"variant": "cluster_256_128_64_3_8_1_0_4_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_1_0_4_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_1_0_4_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_4_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_5_8_1_0_4_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_0_0_4_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_128_3_8_0_0_4_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_16_1_0_4_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_0_0_8_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_8_2", "M": 256, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "manual", "M": 972, "status": "passed", "first_ms": 4.189612343907356, "median_us": 173.185, "registers": null, "spills": null, "shared_bytes": null, "sample_count": 50}
+{"variant": "cluster_256_128_64_3_8_1_0_4_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_1_0_4_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_1_0_4_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_4_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_5_8_1_0_4_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_0_0_4_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_128_3_8_0_0_4_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_16_1_0_4_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_0_0_8_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_8_2", "M": 972, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "manual", "M": 2053, "status": "passed", "first_ms": 238.3298808708787, "median_us": 347.105, "registers": null, "spills": null, "shared_bytes": null, "sample_count": 50}
+{"variant": "cluster_256_128_64_3_8_1_0_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_1_0_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_1_0_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_5_8_1_0_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_0_0_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_128_3_8_0_0_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_16_1_0_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_0_0_8_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_8_2", "M": 2053, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "manual", "M": 2379, "status": "passed", "first_ms": 2.025765832513571, "median_us": 379.985, "registers": null, "spills": null, "shared_bytes": null, "sample_count": 50}
+{"variant": "cluster_256_128_64_3_8_1_0_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_1_0_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_1_0_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_5_8_1_0_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_0_0_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_128_3_8_0_0_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_16_1_0_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_0_0_8_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_8_2", "M": 2379, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "manual", "M": 8192, "status": "passed", "first_ms": 251.6525429673493, "median_us": 1213.8749999999998, "registers": null, "spills": null, "shared_bytes": null, "sample_count": 50}
+{"variant": "cluster_256_128_64_3_8_1_0_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_1_0_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_1_0_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_5_8_1_0_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_3_8_0_0_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_128_3_8_0_0_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_16_1_0_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_128_64_4_8_0_0_8_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}
+{"variant": "cluster_256_256_64_4_8_1_0_8_2", "M": 8192, "status": "RuntimeError", "failure_category": "build_or_launch_resources"}

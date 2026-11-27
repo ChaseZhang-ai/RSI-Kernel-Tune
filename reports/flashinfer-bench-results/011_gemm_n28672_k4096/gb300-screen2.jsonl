@@ -1,0 +1,248 @@
+{"physical_index": 0, "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d", "graphics_target_mhz": 1500, "memory_target_mhz": 3996}
+{"device": "NVIDIA GB300", "sm_count": 152, "capability": [10, 3], "clocks": "1500 MHz, 3996 MHz"}
+{"variant": "incumbent", "M": 1, "status": "passed", "first_ms": 742.080754134804, "median_us": 48.864, "registers": 50, "spills": 0, "shared_bytes": 64, "sample_count": 50}
+{"variant": "gemv_1", "M": 1, "status": "passed", "first_ms": 46.64275236427784, "median_us": 50.3525, "registers": 34, "spills": 0, "shared_bytes": 16, "sample_count": 50}
+{"variant": "gemv_2", "M": 1, "status": "passed", "first_ms": 56.58809095621109, "median_us": 49.6005, "registers": 36, "spills": 0, "shared_bytes": 32, "sample_count": 50}
+{"variant": "gemv_8", "M": 1, "status": "passed", "first_ms": 109.54282898455858, "median_us": 50.08, "registers": 56, "spills": 4, "shared_bytes": 128, "sample_count": 50}
+{"variant": "gemv_16", "M": 1, "status": "passed", "first_ms": 186.5556468255818, "median_us": 50.336, "registers": 96, "spills": 0, "shared_bytes": 256, "sample_count": 50}
+{"variant": "w_16_64_128_2_1_4_1", "M": 1, "status": "passed", "first_ms": 268.93760124221444, "median_us": 71.456, "registers": 255, "spills": 0, "shared_bytes": 41148, "sample_count": 50}
+{"variant": "w_16_64_64_4_1_4_1", "M": 1, "status": "passed", "first_ms": 118.79389407113194, "median_us": 71.36049999999999, "registers": 255, "spills": 0, "shared_bytes": 41180, "sample_count": 50}
+{"variant": "w_16_64_64_3_0_4_1", "M": 1, "status": "passed", "first_ms": 106.04512179270387, "median_us": 57.216, "registers": 20, "spills": 0, "shared_bytes": 30768, "sample_count": 50}
+{"variant": "w_16_64_64_2_0_4_1", "M": 1, "status": "passed", "first_ms": 99.78324919939041, "median_us": 78.592, "registers": 20, "spills": 0, "shared_bytes": 20512, "sample_count": 50}
+{"variant": "w_16_32_128_4_0_4_1", "M": 1, "status": "passed", "first_ms": 72.52391101792455, "median_us": 56.208, "registers": 29, "spills": 0, "shared_bytes": 36888, "sample_count": 50}
+{"variant": "w_16_128_64_3_1_4_1", "M": 1, "status": "passed", "first_ms": 107.20739793032408, "median_us": 66.5445, "registers": 255, "spills": 0, "shared_bytes": 55516, "sample_count": 50}
+{"variant": "w_16_128_64_3_1_4_2", "M": 1, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_16_64_64_3_1_4_2", "M": 1, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_16_64_128_4_0_4_1", "M": 1, "status": "passed", "first_ms": 112.56715701892972, "median_us": 52.256, "registers": 20, "spills": 0, "shared_bytes": 81968, "sample_count": 50}
+{"variant": "w_16_64_256_2_0_4_1", "M": 1, "status": "passed", "first_ms": 113.58907911926508, "median_us": 59.744, "registers": 20, "spills": 0, "shared_bytes": 81952, "sample_count": 50}
+{"variant": "w_16_32_256_3_0_4_1", "M": 1, "status": "passed", "first_ms": 75.04564616829157, "median_us": 53.648, "registers": 29, "spills": 0, "shared_bytes": 49168, "sample_count": 50}
+{"variant": "w_16_64_128_3_0_8_1", "M": 1, "status": "passed", "first_ms": 101.68818291276693, "median_us": 50.6885, "registers": 16, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 1, "status": "passed", "first_ms": 0.0942721962928772, "median_us": 48.76800000000001, "registers": 50, "spills": 0, "shared_bytes": 64, "sample_count": 50}
+{"variant": "incumbent", "M": 2, "status": "passed", "first_ms": 249.0111473016441, "median_us": 50.448, "registers": 20, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "w_16_64_128_2_1_4_1", "M": 2, "status": "passed", "first_ms": 123.50078718736768, "median_us": 71.568, "registers": 255, "spills": 0, "shared_bytes": 41148, "sample_count": 50}
+{"variant": "w_16_64_64_4_1_4_1", "M": 2, "status": "passed", "first_ms": 118.21433994919062, "median_us": 71.4405, "registers": 255, "spills": 0, "shared_bytes": 41180, "sample_count": 50}
+{"variant": "w_16_64_64_3_0_4_1", "M": 2, "status": "passed", "first_ms": 106.79610120132565, "median_us": 57.2, "registers": 20, "spills": 0, "shared_bytes": 30768, "sample_count": 50}
+{"variant": "w_16_64_64_2_0_4_1", "M": 2, "status": "passed", "first_ms": 103.42185199260712, "median_us": 78.5925, "registers": 20, "spills": 0, "shared_bytes": 20512, "sample_count": 50}
+{"variant": "w_16_32_128_4_0_4_1", "M": 2, "status": "passed", "first_ms": 71.60422811284661, "median_us": 56.495999999999995, "registers": 29, "spills": 0, "shared_bytes": 36888, "sample_count": 50}
+{"variant": "w_16_128_64_3_1_4_1", "M": 2, "status": "passed", "first_ms": 108.27261721715331, "median_us": 66.6405, "registers": 255, "spills": 0, "shared_bytes": 55516, "sample_count": 50}
+{"variant": "w_16_128_64_3_1_4_2", "M": 2, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_16_64_64_3_1_4_2", "M": 2, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_16_64_128_4_0_4_1", "M": 2, "status": "passed", "first_ms": 113.86514408513904, "median_us": 52.1765, "registers": 20, "spills": 0, "shared_bytes": 81968, "sample_count": 50}
+{"variant": "w_16_64_256_2_0_4_1", "M": 2, "status": "passed", "first_ms": 111.63525097072124, "median_us": 59.6485, "registers": 20, "spills": 0, "shared_bytes": 81952, "sample_count": 50}
+{"variant": "w_16_32_256_3_0_4_1", "M": 2, "status": "passed", "first_ms": 75.14315005391836, "median_us": 54.4165, "registers": 29, "spills": 0, "shared_bytes": 49168, "sample_count": 50}
+{"variant": "w_16_64_128_3_0_8_1", "M": 2, "status": "passed", "first_ms": 106.53174808248878, "median_us": 50.576, "registers": 16, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 2, "status": "passed", "first_ms": 0.11379318311810493, "median_us": 50.512, "registers": 20, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "incumbent", "M": 8, "status": "passed", "first_ms": 0.09923195466399193, "median_us": 50.431999999999995, "registers": 20, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "w_16_64_128_2_1_4_1", "M": 8, "status": "passed", "first_ms": 0.138208270072937, "median_us": 71.77600000000001, "registers": 255, "spills": 0, "shared_bytes": 41148, "sample_count": 50}
+{"variant": "w_16_64_64_4_1_4_1", "M": 8, "status": "passed", "first_ms": 0.13116886839270592, "median_us": 71.552, "registers": 255, "spills": 0, "shared_bytes": 41180, "sample_count": 50}
+{"variant": "w_16_64_64_3_0_4_1", "M": 8, "status": "passed", "first_ms": 0.11779181659221649, "median_us": 57.02400000000001, "registers": 20, "spills": 0, "shared_bytes": 30768, "sample_count": 50}
+{"variant": "w_16_64_64_2_0_4_1", "M": 8, "status": "passed", "first_ms": 0.1517757773399353, "median_us": 78.688, "registers": 20, "spills": 0, "shared_bytes": 20512, "sample_count": 50}
+{"variant": "w_16_32_128_4_0_4_1", "M": 8, "status": "passed", "first_ms": 0.10937592014670372, "median_us": 52.16, "registers": 29, "spills": 0, "shared_bytes": 36888, "sample_count": 50}
+{"variant": "w_16_128_64_3_1_4_1", "M": 8, "status": "passed", "first_ms": 0.12911995872855186, "median_us": 66.656, "registers": 255, "spills": 0, "shared_bytes": 55516, "sample_count": 50}
+{"variant": "w_16_128_64_3_1_4_2", "M": 8, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_16_64_64_3_1_4_2", "M": 8, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_16_64_128_4_0_4_1", "M": 8, "status": "passed", "first_ms": 0.13904087245464325, "median_us": 52.224, "registers": 20, "spills": 0, "shared_bytes": 81968, "sample_count": 50}
+{"variant": "w_16_64_256_2_0_4_1", "M": 8, "status": "passed", "first_ms": 0.1216973178088665, "median_us": 59.7445, "registers": 20, "spills": 0, "shared_bytes": 81952, "sample_count": 50}
+{"variant": "w_16_32_256_3_0_4_1", "M": 8, "status": "passed", "first_ms": 0.1234239898622036, "median_us": 52.608000000000004, "registers": 29, "spills": 0, "shared_bytes": 49168, "sample_count": 50}
+{"variant": "w_16_64_128_3_0_8_1", "M": 8, "status": "passed", "first_ms": 0.119808129966259, "median_us": 50.687999999999995, "registers": 16, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 8, "status": "passed", "first_ms": 0.11651171371340752, "median_us": 50.544, "registers": 20, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "incumbent", "M": 16, "status": "passed", "first_ms": 117.44713922962546, "median_us": 50.56, "registers": 20, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "w_16_64_128_2_1_4_1", "M": 16, "status": "passed", "first_ms": 121.96923093870282, "median_us": 71.6155, "registers": 255, "spills": 0, "shared_bytes": 41148, "sample_count": 50}
+{"variant": "w_16_64_64_4_1_4_1", "M": 16, "status": "passed", "first_ms": 115.25666806846857, "median_us": 71.536, "registers": 255, "spills": 0, "shared_bytes": 41180, "sample_count": 50}
+{"variant": "w_16_64_64_3_0_4_1", "M": 16, "status": "passed", "first_ms": 104.66691106557846, "median_us": 57.071999999999996, "registers": 20, "spills": 0, "shared_bytes": 30768, "sample_count": 50}
+{"variant": "w_16_64_64_2_0_4_1", "M": 16, "status": "passed", "first_ms": 100.7875413633883, "median_us": 78.86399999999999, "registers": 20, "spills": 0, "shared_bytes": 20512, "sample_count": 50}
+{"variant": "w_16_32_128_4_0_4_1", "M": 16, "status": "passed", "first_ms": 82.76675501838326, "median_us": 49.888000000000005, "registers": 29, "spills": 0, "shared_bytes": 36888, "sample_count": 50}
+{"variant": "w_16_128_64_3_1_4_1", "M": 16, "status": "passed", "first_ms": 117.97318793833256, "median_us": 66.64, "registers": 255, "spills": 0, "shared_bytes": 55516, "sample_count": 50}
+{"variant": "w_16_128_64_3_1_4_2", "M": 16, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_16_64_64_3_1_4_2", "M": 16, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_16_64_128_4_0_4_1", "M": 16, "status": "passed", "first_ms": 110.40785536170006, "median_us": 52.32000000000001, "registers": 20, "spills": 0, "shared_bytes": 81968, "sample_count": 50}
+{"variant": "w_16_64_256_2_0_4_1", "M": 16, "status": "passed", "first_ms": 114.21925807371736, "median_us": 59.983999999999995, "registers": 20, "spills": 0, "shared_bytes": 81952, "sample_count": 50}
+{"variant": "w_16_32_256_3_0_4_1", "M": 16, "status": "passed", "first_ms": 74.90263786166906, "median_us": 52.704, "registers": 29, "spills": 0, "shared_bytes": 49168, "sample_count": 50}
+{"variant": "w_16_64_128_3_0_8_1", "M": 16, "status": "passed", "first_ms": 119.86717721447349, "median_us": 50.624, "registers": 16, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "w_16_32_128_4_0_4_1_repeat", "M": 16, "status": "passed", "first_ms": 0.1383996568620205, "median_us": 50.0, "registers": 29, "spills": 0, "shared_bytes": 36888, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 16, "status": "passed", "first_ms": 0.11564791202545166, "median_us": 50.384, "registers": 20, "spills": 0, "shared_bytes": 61488, "sample_count": 50}
+{"variant": "incumbent", "M": 35, "status": "passed", "first_ms": 123.78085171803832, "median_us": 53.6965, "registers": 39, "spills": 0, "shared_bytes": 65584, "sample_count": 50}
+{"variant": "w_64_64_128_2_1_4_1", "M": 35, "status": "passed", "first_ms": 129.87968418747187, "median_us": 75.2645, "registers": 255, "spills": 0, "shared_bytes": 65724, "sample_count": 50}
+{"variant": "w_64_64_64_4_1_4_1", "M": 35, "status": "passed", "first_ms": 127.2881249897182, "median_us": 73.473, "registers": 255, "spills": 0, "shared_bytes": 65756, "sample_count": 50}
+{"variant": "w_64_64_64_3_0_4_1", "M": 35, "status": "passed", "first_ms": 113.39967092499137, "median_us": 57.552, "registers": 39, "spills": 0, "shared_bytes": 49200, "sample_count": 50}
+{"variant": "w_64_64_64_2_0_4_1", "M": 35, "status": "passed", "first_ms": 123.95365303382277, "median_us": 79.009, "registers": 39, "spills": 0, "shared_bytes": 32800, "sample_count": 50}
+{"variant": "w_64_32_128_4_0_4_1", "M": 35, "status": "passed", "first_ms": 87.56862487643957, "median_us": 66.44800000000001, "registers": 48, "spills": 0, "shared_bytes": 73752, "sample_count": 50}
+{"variant": "w_64_128_64_3_1_4_1", "M": 35, "status": "passed", "first_ms": 136.95762399584055, "median_us": 68.592, "registers": 255, "spills": 0, "shared_bytes": 73948, "sample_count": 50}
+{"variant": "w_64_128_64_3_1_4_2", "M": 35, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_64_64_64_3_1_4_2", "M": 35, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_64_64_128_4_0_4_1", "M": 35, "status": "passed", "first_ms": 118.12253203243017, "median_us": 62.46450000000001, "registers": 39, "spills": 0, "shared_bytes": 131120, "sample_count": 50}
+{"variant": "w_64_64_256_2_0_4_1", "M": 35, "status": "passed", "first_ms": 120.50711503252387, "median_us": 92.4645, "registers": 39, "spills": 0, "shared_bytes": 131104, "sample_count": 50}
+{"variant": "w_64_32_256_3_0_4_1", "M": 35, "status": "passed", "first_ms": 111.20728077366948, "median_us": 72.28800000000001, "registers": 39, "spills": 0, "shared_bytes": 98320, "sample_count": 50}
+{"variant": "w_64_64_128_3_0_8_1", "M": 35, "status": "passed", "first_ms": 131.73949718475342, "median_us": 59.007999999999996, "registers": 32, "spills": 0, "shared_bytes": 98352, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 35, "status": "passed", "first_ms": 0.10979175567626953, "median_us": 53.80799999999999, "registers": 39, "spills": 0, "shared_bytes": 65584, "sample_count": 50}
+{"variant": "incumbent", "M": 64, "status": "passed", "first_ms": 135.75496478006244, "median_us": 53.888, "registers": 39, "spills": 0, "shared_bytes": 65584, "sample_count": 50}
+{"variant": "w_64_64_128_2_1_4_1", "M": 64, "status": "passed", "first_ms": 132.14602693915367, "median_us": 78.736, "registers": 255, "spills": 0, "shared_bytes": 65724, "sample_count": 50}
+{"variant": "w_64_64_64_4_1_4_1", "M": 64, "status": "passed", "first_ms": 127.11154902353883, "median_us": 74.2565, "registers": 255, "spills": 0, "shared_bytes": 65756, "sample_count": 50}
+{"variant": "w_64_64_64_3_0_4_1", "M": 64, "status": "passed", "first_ms": 113.35647106170654, "median_us": 57.8725, "registers": 39, "spills": 0, "shared_bytes": 49200, "sample_count": 50}
+{"variant": "w_64_64_64_2_0_4_1", "M": 64, "status": "passed", "first_ms": 122.62190505862236, "median_us": 79.08850000000001, "registers": 39, "spills": 0, "shared_bytes": 32800, "sample_count": 50}
+{"variant": "w_64_32_128_4_0_4_1", "M": 64, "status": "passed", "first_ms": 93.77011423930526, "median_us": 67.024, "registers": 48, "spills": 0, "shared_bytes": 73752, "sample_count": 50}
+{"variant": "w_64_128_64_3_1_4_1", "M": 64, "status": "passed", "first_ms": 138.88899004086852, "median_us": 69.104, "registers": 255, "spills": 0, "shared_bytes": 73948, "sample_count": 50}
+{"variant": "w_64_128_64_3_1_4_2", "M": 64, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_64_64_64_3_1_4_2", "M": 64, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_64_64_128_4_0_4_1", "M": 64, "status": "passed", "first_ms": 118.46310878172517, "median_us": 63.82450000000001, "registers": 39, "spills": 0, "shared_bytes": 131120, "sample_count": 50}
+{"variant": "w_64_64_256_2_0_4_1", "M": 64, "status": "passed", "first_ms": 119.48378384113312, "median_us": 99.69600000000001, "registers": 39, "spills": 0, "shared_bytes": 131104, "sample_count": 50}
+{"variant": "w_64_32_256_3_0_4_1", "M": 64, "status": "passed", "first_ms": 113.32972021773458, "median_us": 72.88, "registers": 39, "spills": 0, "shared_bytes": 98320, "sample_count": 50}
+{"variant": "w_64_64_128_3_0_8_1", "M": 64, "status": "passed", "first_ms": 139.5185273140669, "median_us": 59.424, "registers": 32, "spills": 0, "shared_bytes": 98352, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 64, "status": "passed", "first_ms": 0.11651311069726944, "median_us": 53.839999999999996, "registers": 39, "spills": 0, "shared_bytes": 65584, "sample_count": 50}
+{"variant": "incumbent", "M": 70, "status": "passed", "first_ms": 391.7666133493185, "median_us": 59.696, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "w_128_64_128_2_1_4_1", "M": 70, "status": "passed", "first_ms": 155.3451307117939, "median_us": 86.20800000000001, "registers": 255, "spills": 0, "shared_bytes": 98492, "sample_count": 50}
+{"variant": "w_128_64_64_4_1_4_1", "M": 70, "status": "passed", "first_ms": 166.79655387997627, "median_us": 78.3045, "registers": 255, "spills": 0, "shared_bytes": 98524, "sample_count": 50}
+{"variant": "w_128_64_64_3_0_4_1", "M": 70, "status": "passed", "first_ms": 146.53672324493527, "median_us": 58.512499999999996, "registers": 71, "spills": 0, "shared_bytes": 73776, "sample_count": 50}
+{"variant": "w_128_64_64_2_0_4_1", "M": 70, "status": "passed", "first_ms": 155.2797551266849, "median_us": 79.168, "registers": 71, "spills": 0, "shared_bytes": 49184, "sample_count": 50}
+{"variant": "w_128_32_128_4_0_4_1", "M": 70, "status": "passed", "first_ms": 110.64225621521473, "median_us": 128.89600000000002, "registers": 72, "spills": 0, "shared_bytes": 122904, "sample_count": 50}
+{"variant": "w_128_128_64_3_1_4_1", "M": 70, "status": "passed", "first_ms": 180.23060681298375, "median_us": 72.32, "registers": 255, "spills": 0, "shared_bytes": 98524, "sample_count": 50}
+{"variant": "w_128_128_64_3_1_4_2", "M": 70, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_128_64_64_3_1_4_2", "M": 70, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_3_8_1_1_4_2", "M": 70, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_1_1_4_2", "M": 70, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_4_8_1_1_4_2", "M": 70, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_4_8_1_1_4_2", "M": 70, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_0_1_8_2", "M": 70, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_128_128_128_2_8_0_1_4_1", "M": 70, "status": "passed", "first_ms": 176.45389307290316, "median_us": 69.50399999999999, "registers": 255, "spills": 0, "shared_bytes": 163908, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1", "M": 70, "status": "passed", "first_ms": 266.0554191097617, "median_us": 56.304, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "p_128_256_64_3_16_1_1_4_1", "M": 70, "status": "passed", "first_ms": 267.2136309556663, "median_us": 59.647999999999996, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_24_1_1_4_1", "M": 70, "status": "passed", "first_ms": 266.8447648175061, "median_us": 59.839999999999996, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_32_1_1_4_1", "M": 70, "status": "passed", "first_ms": 247.55178531631827, "median_us": 59.791999999999994, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1_repeat", "M": 70, "status": "passed", "first_ms": 3.156200982630253, "median_us": 56.096, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 70, "status": "passed", "first_ms": 2.682151272892952, "median_us": 59.7605, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "incumbent", "M": 120, "status": "passed", "first_ms": 1.8477169796824455, "median_us": 60.2885, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "w_128_64_128_2_1_4_1", "M": 120, "status": "passed", "first_ms": 0.17833709716796875, "median_us": 91.82399999999998, "registers": 255, "spills": 0, "shared_bytes": 98492, "sample_count": 50}
+{"variant": "w_128_64_64_4_1_4_1", "M": 120, "status": "passed", "first_ms": 0.14006393030285835, "median_us": 80.9445, "registers": 255, "spills": 0, "shared_bytes": 98524, "sample_count": 50}
+{"variant": "w_128_64_64_3_0_4_1", "M": 120, "status": "passed", "first_ms": 0.11990498751401901, "median_us": 59.456, "registers": 71, "spills": 0, "shared_bytes": 73776, "sample_count": 50}
+{"variant": "w_128_64_64_2_0_4_1", "M": 120, "status": "passed", "first_ms": 0.1467522233724594, "median_us": 81.63199999999999, "registers": 71, "spills": 0, "shared_bytes": 49184, "sample_count": 50}
+{"variant": "w_128_32_128_4_0_4_1", "M": 120, "status": "passed", "first_ms": 0.202912837266922, "median_us": 129.889, "registers": 72, "spills": 0, "shared_bytes": 122904, "sample_count": 50}
+{"variant": "w_128_128_64_3_1_4_1", "M": 120, "status": "passed", "first_ms": 0.13884902000427246, "median_us": 75.72800000000001, "registers": 255, "spills": 0, "shared_bytes": 98524, "sample_count": 50}
+{"variant": "w_128_128_64_3_1_4_2", "M": 120, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_128_64_64_3_1_4_2", "M": 120, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_3_8_1_1_4_2", "M": 120, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_1_1_4_2", "M": 120, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_4_8_1_1_4_2", "M": 120, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_4_8_1_1_4_2", "M": 120, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_0_1_8_2", "M": 120, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_128_128_128_2_8_0_1_4_1", "M": 120, "status": "passed", "first_ms": 1.6276529058814049, "median_us": 69.904, "registers": 255, "spills": 0, "shared_bytes": 163908, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1", "M": 120, "status": "passed", "first_ms": 2.07837438210845, "median_us": 56.672, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "p_128_256_64_3_16_1_1_4_1", "M": 120, "status": "passed", "first_ms": 2.485607285052538, "median_us": 60.303999999999995, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_24_1_1_4_1", "M": 120, "status": "passed", "first_ms": 1.798916608095169, "median_us": 60.305, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_32_1_1_4_1", "M": 120, "status": "passed", "first_ms": 1.4699562452733517, "median_us": 60.336, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1_repeat", "M": 120, "status": "passed", "first_ms": 2.41386191919446, "median_us": 56.7205, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 120, "status": "passed", "first_ms": 3.7905708886682987, "median_us": 60.384499999999996, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "incumbent", "M": 136, "status": "passed", "first_ms": 193.61301325261593, "median_us": 81.1365, "registers": 255, "spills": 0, "shared_bytes": 163940, "sample_count": 50}
+{"variant": "w_256_64_128_2_1_4_1", "M": 136, "status": "passed", "first_ms": 218.54703268036246, "median_us": 105.952, "registers": 255, "spills": 0, "shared_bytes": 164028, "sample_count": 50}
+{"variant": "w_256_64_64_4_1_4_1", "M": 136, "status": "passed", "first_ms": 200.12231077998877, "median_us": 91.3605, "registers": 255, "spills": 0, "shared_bytes": 164060, "sample_count": 50}
+{"variant": "w_256_64_64_3_0_4_1", "M": 136, "status": "passed", "first_ms": 191.0815490409732, "median_us": 118.9915, "registers": 144, "spills": 0, "shared_bytes": 122928, "sample_count": 50}
+{"variant": "w_256_64_64_2_0_4_1", "M": 136, "status": "passed", "first_ms": 201.359658036381, "median_us": 147.92100000000002, "registers": 144, "spills": 0, "shared_bytes": 81952, "sample_count": 50}
+{"variant": "w_256_32_128_4_0_4_1", "M": 136, "status": "passed", "first_ms": 156.79479902610183, "median_us": 204.929, "registers": 132, "spills": 0, "shared_bytes": 221208, "sample_count": 50}
+{"variant": "w_256_128_64_3_1_4_1", "M": 136, "status": "passed", "first_ms": 270.1845201663673, "median_us": 82.448, "registers": 255, "spills": 0, "shared_bytes": 147676, "sample_count": 50}
+{"variant": "w_256_128_64_3_1_4_2", "M": 136, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_256_64_64_3_1_4_2", "M": 136, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_3_8_1_1_4_2", "M": 136, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_1_1_4_2", "M": 136, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_4_8_1_1_4_2", "M": 136, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_4_8_1_1_4_2", "M": 136, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_0_1_8_2", "M": 136, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_128_128_128_2_8_0_1_4_1", "M": 136, "status": "passed", "first_ms": 2.4318471550941467, "median_us": 94.08, "registers": 255, "spills": 0, "shared_bytes": 163908, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1", "M": 136, "status": "passed", "first_ms": 255.53343864157796, "median_us": 72.848, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "p_128_256_64_3_16_1_1_4_1", "M": 136, "status": "passed", "first_ms": 265.53737139329314, "median_us": 85.7765, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_24_1_1_4_1", "M": 136, "status": "passed", "first_ms": 269.0245797857642, "median_us": 85.696, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_32_1_1_4_1", "M": 136, "status": "passed", "first_ms": 256.2121609225869, "median_us": 85.824, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1_repeat", "M": 136, "status": "passed", "first_ms": 1.3798438012599945, "median_us": 73.03999999999999, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 136, "status": "passed", "first_ms": 1.5141163021326065, "median_us": 81.328, "registers": 255, "spills": 0, "shared_bytes": 163940, "sample_count": 50}
+{"variant": "incumbent", "M": 192, "status": "passed", "first_ms": 202.11447589099407, "median_us": 81.664, "registers": 255, "spills": 0, "shared_bytes": 163940, "sample_count": 50}
+{"variant": "w_256_64_128_2_1_4_1", "M": 192, "status": "passed", "first_ms": 208.69049383327365, "median_us": 112.225, "registers": 255, "spills": 0, "shared_bytes": 164028, "sample_count": 50}
+{"variant": "w_256_64_64_4_1_4_1", "M": 192, "status": "passed", "first_ms": 219.39657209441066, "median_us": 94.06400000000001, "registers": 255, "spills": 0, "shared_bytes": 164060, "sample_count": 50}
+{"variant": "w_256_64_64_3_0_4_1", "M": 192, "status": "passed", "first_ms": 190.66010788083076, "median_us": 127.61600000000001, "registers": 144, "spills": 0, "shared_bytes": 122928, "sample_count": 50}
+{"variant": "w_256_64_64_2_0_4_1", "M": 192, "status": "passed", "first_ms": 174.87225821241736, "median_us": 155.44000000000003, "registers": 144, "spills": 0, "shared_bytes": 81952, "sample_count": 50}
+{"variant": "w_256_32_128_4_0_4_1", "M": 192, "status": "passed", "first_ms": 150.61823884025216, "median_us": 205.72899999999998, "registers": 132, "spills": 0, "shared_bytes": 221208, "sample_count": 50}
+{"variant": "w_256_128_64_3_1_4_1", "M": 192, "status": "passed", "first_ms": 285.0118251517415, "median_us": 86.94399999999999, "registers": 255, "spills": 0, "shared_bytes": 147676, "sample_count": 50}
+{"variant": "w_256_128_64_3_1_4_2", "M": 192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_256_64_64_3_1_4_2", "M": 192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_3_8_1_1_4_2", "M": 192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_1_1_4_2", "M": 192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_4_8_1_1_4_2", "M": 192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_4_8_1_1_4_2", "M": 192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_0_1_8_2", "M": 192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_128_128_128_2_8_0_1_4_1", "M": 192, "status": "passed", "first_ms": 190.71553321555257, "median_us": 94.384, "registers": 255, "spills": 0, "shared_bytes": 163908, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1", "M": 192, "status": "passed", "first_ms": 244.9869466945529, "median_us": 73.536, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "p_128_256_64_3_16_1_1_4_1", "M": 192, "status": "passed", "first_ms": 277.5752288289368, "median_us": 86.22399999999999, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_24_1_1_4_1", "M": 192, "status": "passed", "first_ms": 256.90918788313866, "median_us": 86.24000000000001, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_32_1_1_4_1", "M": 192, "status": "passed", "first_ms": 263.0492690950632, "median_us": 86.22399999999999, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1_repeat", "M": 192, "status": "passed", "first_ms": 1.6635251231491566, "median_us": 73.504, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 192, "status": "passed", "first_ms": 1.943781040608883, "median_us": 81.776, "registers": 255, "spills": 0, "shared_bytes": 163940, "sample_count": 50}
+{"variant": "incumbent", "M": 256, "status": "passed", "first_ms": 5.239118821918964, "median_us": 82.176, "registers": 255, "spills": 0, "shared_bytes": 163940, "sample_count": 50}
+{"variant": "w_256_64_128_2_1_4_1", "M": 256, "status": "passed", "first_ms": 0.20019197836518288, "median_us": 114.86399999999999, "registers": 255, "spills": 0, "shared_bytes": 164028, "sample_count": 50}
+{"variant": "w_256_64_64_4_1_4_1", "M": 256, "status": "passed", "first_ms": 0.16287993639707565, "median_us": 95.856, "registers": 255, "spills": 0, "shared_bytes": 164060, "sample_count": 50}
+{"variant": "w_256_64_64_3_0_4_1", "M": 256, "status": "passed", "first_ms": 0.19654398784041405, "median_us": 130.3365, "registers": 144, "spills": 0, "shared_bytes": 122928, "sample_count": 50}
+{"variant": "w_256_64_64_2_0_4_1", "M": 256, "status": "passed", "first_ms": 0.2238089218735695, "median_us": 162.688, "registers": 144, "spills": 0, "shared_bytes": 81952, "sample_count": 50}
+{"variant": "w_256_32_128_4_0_4_1", "M": 256, "status": "passed", "first_ms": 0.284064095467329, "median_us": 207.0725, "registers": 132, "spills": 0, "shared_bytes": 221208, "sample_count": 50}
+{"variant": "w_256_128_64_3_1_4_1", "M": 256, "status": "passed", "first_ms": 0.1608971506357193, "median_us": 89.601, "registers": 255, "spills": 0, "shared_bytes": 147676, "sample_count": 50}
+{"variant": "w_256_128_64_3_1_4_2", "M": 256, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "w_256_64_64_3_1_4_2", "M": 256, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_3_8_1_1_4_2", "M": 256, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_1_1_4_2", "M": 256, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_4_8_1_1_4_2", "M": 256, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_4_8_1_1_4_2", "M": 256, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_0_1_8_2", "M": 256, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_128_128_128_2_8_0_1_4_1", "M": 256, "status": "passed", "first_ms": 1.8642609938979149, "median_us": 94.67200000000001, "registers": 255, "spills": 0, "shared_bytes": 163908, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1", "M": 256, "status": "passed", "first_ms": 2.6143109425902367, "median_us": 74.288, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "p_128_256_64_3_16_1_1_4_1", "M": 256, "status": "passed", "first_ms": 12.89779506623745, "median_us": 87.024, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_24_1_1_4_1", "M": 256, "status": "passed", "first_ms": 1.6921968199312687, "median_us": 86.9925, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_32_1_1_4_1", "M": 256, "status": "passed", "first_ms": 1.4908518642187119, "median_us": 86.912, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1_repeat", "M": 256, "status": "passed", "first_ms": 1.7454130575060844, "median_us": 74.3525, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 256, "status": "passed", "first_ms": 2.5665671564638615, "median_us": 82.24000000000001, "registers": 255, "spills": 0, "shared_bytes": 163940, "sample_count": 50}
+{"variant": "incumbent", "M": 972, "status": "passed", "first_ms": 268.61718902364373, "median_us": 216.4485, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_256_128_64_3_8_1_1_4_2", "M": 972, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_1_1_4_2", "M": 972, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_4_8_1_1_4_2", "M": 972, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_4_8_1_1_4_2", "M": 972, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_0_1_8_2", "M": 972, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_128_128_128_2_8_0_1_4_1", "M": 972, "status": "passed", "first_ms": 2.0941169932484627, "median_us": 313.56899999999996, "registers": 255, "spills": 0, "shared_bytes": 163908, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1", "M": 972, "status": "passed", "first_ms": 2.4066301994025707, "median_us": 176.5445, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "p_128_256_64_3_16_1_1_4_1", "M": 972, "status": "passed", "first_ms": 5.900271702557802, "median_us": 216.625, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_24_1_1_4_1", "M": 972, "status": "passed", "first_ms": 2.100517973303795, "median_us": 216.5125, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_32_1_1_4_1", "M": 972, "status": "passed", "first_ms": 1.9157822243869305, "median_us": 216.4485, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1_repeat", "M": 972, "status": "passed", "first_ms": 2.3024710826575756, "median_us": 176.16049999999998, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 972, "status": "passed", "first_ms": 1.8810611218214035, "median_us": 216.4005, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "incumbent", "M": 2053, "status": "passed", "first_ms": 1.9796541891992092, "median_us": 464.161, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_256_128_64_3_8_1_1_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_1_1_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_4_8_1_1_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_4_8_1_1_4_2", "M": 2053, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_0_1_8_2", "M": 2053, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_128_128_128_2_8_0_1_4_1", "M": 2053, "status": "passed", "first_ms": 7.462484296411276, "median_us": 653.906, "registers": 255, "spills": 0, "shared_bytes": 163908, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1", "M": 2053, "status": "passed", "first_ms": 2.422246616333723, "median_us": 380.385, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "p_128_256_64_3_16_1_1_4_1", "M": 2053, "status": "passed", "first_ms": 1.8785018473863602, "median_us": 442.3855, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_24_1_1_4_1", "M": 2053, "status": "passed", "first_ms": 5.402381997555494, "median_us": 428.96099999999996, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_32_1_1_4_1", "M": 2053, "status": "passed", "first_ms": 2.1715257316827774, "median_us": 428.7375, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1_repeat", "M": 2053, "status": "passed", "first_ms": 1.9517499022185802, "median_us": 379.969, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 2053, "status": "passed", "first_ms": 9.024185128509998, "median_us": 463.649, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "incumbent", "M": 2379, "status": "passed", "first_ms": 1.8821167759597301, "median_us": 497.298, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_256_128_64_3_8_1_1_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_1_1_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_4_8_1_1_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_4_8_1_1_4_2", "M": 2379, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_0_1_8_2", "M": 2379, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_128_128_128_2_8_0_1_4_1", "M": 2379, "status": "passed", "first_ms": 6.4828661270439625, "median_us": 717.554, "registers": 255, "spills": 0, "shared_bytes": 163908, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1", "M": 2379, "status": "passed", "first_ms": 2.4987272918224335, "median_us": 407.76199999999994, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "p_128_256_64_3_16_1_1_4_1", "M": 2379, "status": "passed", "first_ms": 1.9518136978149414, "median_us": 481.713, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_24_1_1_4_1", "M": 2379, "status": "passed", "first_ms": 1.9210297614336014, "median_us": 482.09749999999997, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_32_1_1_4_1", "M": 2379, "status": "passed", "first_ms": 1.734469085931778, "median_us": 481.937, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1_repeat", "M": 2379, "status": "passed", "first_ms": 2.093798015266657, "median_us": 407.40900000000005, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 2379, "status": "passed", "first_ms": 2.1771579049527645, "median_us": 496.09700000000004, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "incumbent", "M": 8192, "status": "passed", "first_ms": 259.63566079735756, "median_us": 1613.8124999999998, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_256_128_64_3_8_1_1_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_1_1_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_128_64_4_8_1_1_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_4_8_1_1_4_2", "M": 8192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_256_256_64_3_8_0_1_8_2", "M": 8192, "status": "RuntimeError", "failure_category": "execution_failure"}
+{"variant": "p_128_128_128_2_8_0_1_4_1", "M": 8192, "status": "passed", "first_ms": 4.129291977733374, "median_us": 2367.75, "registers": 255, "spills": 0, "shared_bytes": 163908, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1", "M": 8192, "status": "passed", "first_ms": 4.640909377485514, "median_us": 1299.8114999999998, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "p_128_256_64_3_16_1_1_4_1", "M": 8192, "status": "passed", "first_ms": 3.0974801629781723, "median_us": 1508.0845, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_24_1_1_4_1", "M": 8192, "status": "passed", "first_ms": 5.20743802189827, "median_us": 1460.387, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_3_32_1_1_4_1", "M": 8192, "status": "passed", "first_ms": 3.0941851437091827, "median_us": 1479.7324999999998, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}
+{"variant": "p_128_256_64_4_8_1_1_4_1_repeat", "M": 8192, "status": "passed", "first_ms": 3.2805530354380608, "median_us": 1299.3315, "registers": 255, "spills": 0, "shared_bytes": 229476, "sample_count": 50}
+{"variant": "incumbent_repeat", "M": 8192, "status": "passed", "first_ms": 3.9088749326765537, "median_us": 1614.261, "registers": 255, "spills": 0, "shared_bytes": 180324, "sample_count": 50}

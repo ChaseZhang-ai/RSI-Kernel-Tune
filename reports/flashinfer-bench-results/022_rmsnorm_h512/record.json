@@ -1,0 +1,144 @@
+{
+  "operator": "022_rmsnorm_h512",
+  "sha256": "44e86693583ca1a0d2852277fe262ae5fbff8fd905157d608851a4a8d47fdb27",
+  "target_status": "Provisional GB300 only",
+  "official_local": {
+    "device": {
+      "name": "NVIDIA GB300",
+      "physical_index": 0,
+      "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+      "sm_count": 152,
+      "capability": [
+        10,
+        3
+      ],
+      "clocks_mhz": [
+        1500,
+        3996
+      ]
+    },
+    "evaluator": "1.0.2",
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "cupti": "13.5.0",
+    "passed": 8,
+    "total": 8,
+    "median_latency_geomean_us": 3.1828445284160782
+  },
+  "paired_direct": {
+    "device": {
+      "kind": "device",
+      "name": "NVIDIA GB300",
+      "sm_count": 152,
+      "capability": [
+        10,
+        3
+      ],
+      "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+      "physical_index": 2,
+      "clocks_mhz": [
+        1500,
+        3996
+      ],
+      "torch": "2.10.0+cu130",
+      "triton": "3.6.0",
+      "evaluator": "1.0.2",
+      "cupti": "13.5.0",
+      "l2_bytes": 135528448,
+      "memory_bytes": 297013411840
+    },
+    "baseline_geomean_us": 4.049130898922044,
+    "candidate_geomean_us": 3.360954188815399,
+    "speedup": 1.2047563493714861
+  },
+  "offline_cold_compile": {
+    "103": [
+      {
+        "kernel": "_blocked",
+        "seconds": 0.36775007331743836,
+        "target": 103,
+        "shared_bytes": 8,
+        "rows": 1
+      },
+      {
+        "kernel": "_blocked",
+        "seconds": 0.0645188088528812,
+        "target": 103,
+        "shared_bytes": 0,
+        "rows": 4
+      },
+      {
+        "kernel": "_packed",
+        "seconds": 0.06445781700313091,
+        "target": 103,
+        "shared_bytes": 0,
+        "rows": 4
+      },
+      {
+        "kernel": "_packed",
+        "seconds": 0.067925785202533,
+        "target": 103,
+        "shared_bytes": 0,
+        "rows": 8
+      }
+    ],
+    "100": [
+      {
+        "kernel": "_blocked",
+        "seconds": 0.36751474533230066,
+        "target": 100,
+        "shared_bytes": 8,
+        "rows": 1
+      },
+      {
+        "kernel": "_blocked",
+        "seconds": 0.06452127266675234,
+        "target": 100,
+        "shared_bytes": 0,
+        "rows": 4
+      },
+      {
+        "kernel": "_packed",
+        "seconds": 0.06672085681930184,
+        "target": 100,
+        "shared_bytes": 0,
+        "rows": 4
+      },
+      {
+        "kernel": "_packed",
+        "seconds": 0.0691404091194272,
+        "target": 100,
+        "shared_bytes": 0,
+        "rows": 8
+      }
+    ]
+  },
+  "public_b200_board": {
+    "checked_at_utc": "2026-11-26 18:48:33 UTC",
+    "stack": "v1.1",
+    "kernel": {
+      "username": "June",
+      "submission_id": 104772,
+      "sol_score": 0.818143
+    },
+    "collection": {
+      "username": "June",
+      "submission_id": 104799,
+      "sol_score": 0.940633
+    }
+  },
+  "timing": {
+    "warmups": 10,
+    "iterations": 50,
+    "activity": "CUPTI first-to-last kernel",
+    "cold_l2": true,
+    "unique_input_output_pointers": true,
+    "cuda_graphs": false
+  },
+  "exact_pair_outcomes": {
+    "numerical_failures": 0,
+    "timing_failures": 0,
+    "build_errors": 0,
+    "stress_cases_per_workload_per_candidate": 3
+  }
+}

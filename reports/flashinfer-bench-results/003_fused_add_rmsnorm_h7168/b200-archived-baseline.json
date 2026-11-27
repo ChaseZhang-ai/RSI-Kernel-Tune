@@ -1,0 +1,197 @@
+{
+  "timestamp_utc": "2026-11-27T04:17:52.102336+00:00",
+  "operator": 3,
+  "kernel_id": 212,
+  "standalone": {
+    "id": 106235,
+    "kernel_id": 212,
+    "status": "COMPLETED",
+    "result_available_at": null,
+    "is_correct": true,
+    "is_disqualified": false,
+    "timed": 8,
+    "expected": 8,
+    "verified_sol": 0.651831,
+    "sha256": "c04baf5492ac7df7a6caa905aad12bd7bb92a18ff00a16ebed49c8c8b787f918",
+    "checked_at": "2026-11-26T22:43:22.857908+00:00"
+  },
+  "public_leader": {
+    "username": "June",
+    "sol_score": 0.863498,
+    "submission_id": 104626
+  },
+  "collection_child": {
+    "id": 106072,
+    "status": "COMPLETED",
+    "is_correct": false,
+    "is_disqualified": false,
+    "sol_score": 0.497427,
+    "latency_ms": 0.005559
+  },
+  "collection_workloads": [
+    {
+      "workload_uuid": "38786469-9a12-4525-b284-865d5a37f856",
+      "workload_axes": {
+        "batch_size": 539
+      },
+      "latency_ms": null,
+      "baseline_latency_ms": null,
+      "sol_score": 0.0,
+      "outcome": "timing activity missing"
+    },
+    {
+      "workload_uuid": "ac1479c4-cfb0-4f86-a92d-47e7ad8e21cb",
+      "workload_axes": {
+        "batch_size": 11949
+      },
+      "latency_ms": null,
+      "baseline_latency_ms": null,
+      "sol_score": 0.0,
+      "outcome": "timing activity missing"
+    },
+    {
+      "workload_uuid": "c4831914-583d-4dbf-a185-e246bf426098",
+      "workload_axes": {
+        "batch_size": 7
+      },
+      "latency_ms": 0.003008,
+      "baseline_latency_ms": 0.004992,
+      "sol_score": 0.637778,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "d8b7a476-6877-429c-821d-35c779c56087",
+      "workload_axes": {
+        "batch_size": 1
+      },
+      "latency_ms": 0.002992,
+      "baseline_latency_ms": 0.004608,
+      "sol_score": 0.618824,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "042aaf83-e452-482a-844f-0267918beaf2",
+      "workload_axes": {
+        "batch_size": 32
+      },
+      "latency_ms": 0.003201,
+      "baseline_latency_ms": 0.004928,
+      "sol_score": 0.624621,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "37a25eac-6754-4c33-b5ca-37775bd5acc9",
+      "workload_axes": {
+        "batch_size": 18
+      },
+      "latency_ms": 0.003073,
+      "baseline_latency_ms": 0.005056,
+      "sol_score": 0.639054,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "d9c27791-1f27-4feb-adb6-aa8a8c20556f",
+      "workload_axes": {
+        "batch_size": 14521
+      },
+      "latency_ms": 0.094687,
+      "baseline_latency_ms": 0.156384,
+      "sol_score": 0.853479,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "f0fa41df-088a-4c01-935d-1e4813d0a955",
+      "workload_axes": {
+        "batch_size": 64
+      },
+      "latency_ms": 0.003519,
+      "baseline_latency_ms": 0.004976,
+      "sol_score": 0.605656,
+      "outcome": "timed"
+    }
+  ],
+  "standalone_workloads": [
+    {
+      "workload_uuid": "c4831914-583d-4dbf-a185-e246bf426098",
+      "workload_axes": {
+        "batch_size": 7
+      },
+      "latency_ms": 0.0032,
+      "baseline_latency_ms": 0.004992,
+      "sol_score": 0.621212,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "d8b7a476-6877-429c-821d-35c779c56087",
+      "workload_axes": {
+        "batch_size": 1
+      },
+      "latency_ms": 0.00323,
+      "baseline_latency_ms": 0.004608,
+      "sol_score": 0.597897,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "042aaf83-e452-482a-844f-0267918beaf2",
+      "workload_axes": {
+        "batch_size": 32
+      },
+      "latency_ms": 0.003472,
+      "baseline_latency_ms": 0.004928,
+      "sol_score": 0.601111,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "37a25eac-6754-4c33-b5ca-37775bd5acc9",
+      "workload_axes": {
+        "batch_size": 18
+      },
+      "latency_ms": 0.003456,
+      "baseline_latency_ms": 0.005056,
+      "sol_score": 0.60647,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "38786469-9a12-4525-b284-865d5a37f856",
+      "workload_axes": {
+        "batch_size": 539
+      },
+      "latency_ms": 0.007398,
+      "baseline_latency_ms": 0.007584,
+      "sol_score": 0.511366,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "d9c27791-1f27-4feb-adb6-aa8a8c20556f",
+      "workload_axes": {
+        "batch_size": 14521
+      },
+      "latency_ms": 0.095103,
+      "baseline_latency_ms": 0.156384,
+      "sol_score": 0.849426,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "ac1479c4-cfb0-4f86-a92d-47e7ad8e21cb",
+      "workload_axes": {
+        "batch_size": 11949
+      },
+      "latency_ms": 0.079744,
+      "baseline_latency_ms": 0.129905,
+      "sol_score": 0.83508,
+      "outcome": "timed"
+    },
+    {
+      "workload_uuid": "f0fa41df-088a-4c01-935d-1e4813d0a955",
+      "workload_axes": {
+        "batch_size": 64
+      },
+      "latency_ms": 0.003677,
+      "baseline_latency_ms": 0.004976,
+      "sol_score": 0.592088,
+      "outcome": "timed"
+    }
+  ],
+  "standalone_latency_ms": 0.008433,
+  "standalone_reported_sol": 0.651831
+}

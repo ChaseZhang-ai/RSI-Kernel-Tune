@@ -1,0 +1,12 @@
+{
+  "checked_utc": "2026-11-26T18:57:42+00:00",
+  "kernel_id": 218,
+  "kernel_name": "009_gemm_n5120_k2048",
+  "gpu": "B200",
+  "evaluation_stack_version": "v1.1",
+  "public_leader_rank": 1,
+  "public_leader_submission_id": 104667,
+  "public_leader_sol": 1.0,
+  "board_url": "https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/218/B200",
+  "candidate_verification_scope": "GB300 only"
+}

@@ -1,0 +1,17 @@
+{
+  "device": "NVIDIA GB300",
+  "capability": [
+    10,
+    3
+  ],
+  "multiprocessor_count": 152,
+  "torch": "2.10.0+cu130",
+  "cuda": "13.0",
+  "source_sha256": "da009679c98dac2fcd039887936af33a697313021af00a5b6dc0ae009e3aed99",
+  "paired_reference_source_sha256": "880169a983300e288e9a08676e9e6afbc56b36afbce2465e954ecb48e44c99dc",
+  "sum_of_first_call_and_sync_seconds_from_empty_triton_cache": {
+    "released": 2.406535567715764,
+    "submission": 1.0862831338308752
+  },
+  "peak_allocated_bytes": 1300365312
+}

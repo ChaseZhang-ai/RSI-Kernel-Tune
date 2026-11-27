@@ -5,6 +5,10 @@
   "timed": 19,
   "expected": 19,
   "verified_sol": 0.932883,
-  "checked_at": "2026-11-27T06:30:28.019393+00:00",
-  "collection": null
+  "checked_at": "2026-11-27T16:30:40.522851+00:00",
+  "collection": null,
+  "workload_status_counts": {
+    "None": 19
+  },
+  "official_sol": 0.932883
 }

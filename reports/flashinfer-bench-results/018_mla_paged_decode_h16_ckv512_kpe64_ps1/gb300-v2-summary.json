@@ -1,0 +1,56 @@
+{
+  "passed": 47,
+  "workloads": 47,
+  "statuses": {
+    "PASSED": 47
+  },
+  "sha256": "2b627c2155bdab7853d162ad1b9ac2d9cad509ae0cf386b8c3eb58178f873622",
+  "stats": {
+    "1": {
+      "count": 15,
+      "geomean_us": 13.02955806840784,
+      "min_us": 6.128,
+      "max_us": 35.184
+    },
+    "16": {
+      "count": 16,
+      "geomean_us": 16.76972699477479,
+      "min_us": 12.416,
+      "max_us": 21.456500000000002
+    },
+    "64": {
+      "count": 16,
+      "geomean_us": 42.59204597512641,
+      "min_us": 21.9365,
+      "max_us": 69.825
+    },
+    "all": {
+      "count": 47,
+      "geomean_us": 21.24973691596192,
+      "min_us": 6.128,
+      "max_us": 69.825
+    }
+  },
+  "device": {
+    "start_utc": "2026-11-26T18:56:53.102802+00:00",
+    "index": 1,
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "compute_capability": [
+      10,
+      3
+    ],
+    "memory_bytes": 297013411840,
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "evaluator": "1.0.2",
+    "end_utc": "2026-11-26T18:59:21.103209+00:00",
+    "clocks_mhz": "1500, 3996"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "device": "NVIDIA GB300",
+  "compute_capability": [
+    10,
+    3
+  ],
+  "sm_count": 152,
+  "gpu_memory_bytes": 297013411840,
+  "torch_l2_bytes": 135528448
+}

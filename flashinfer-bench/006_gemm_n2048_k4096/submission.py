@@ -5,6 +5,7 @@ import triton
 import triton.language as tl
 from triton.experimental import gluon
 from triton.experimental.gluon import language as gl
+from triton.experimental.gluon.language.nvidia import blackwell
 from triton.experimental.gluon.language.nvidia.blackwell import (
     TensorMemoryLayout,
     allocate_tensor_memory,
@@ -13,6 +14,9 @@ from triton.experimental.gluon.language.nvidia.blackwell import (
 )
 from triton.experimental.gluon.language.nvidia.hopper import fence_async_shared, mbarrier, tma
 from triton.experimental.gluon.nvidia.hopper import TensorDescriptor
+
+
+_EXPLICIT_TMEM_LAYOUT = gl.constexpr(hasattr(blackwell, "get_tmem_reg_layout"))
 
 
 # The producer, MMA consumer, and store warps adapt this repository's FlashInfer
@@ -84,9 +88,18 @@ def _multiply_tiles(m, a_ring, b_ring, load_free, load_ready, acc, acc_free, acc
 
 
 @gluon.jit
+def _load_fp16(acc, REGISTER_LAYOUT: gl.constexpr):
+    if _EXPLICIT_TMEM_LAYOUT:
+        values = acc.load(REGISTER_LAYOUT)
+    else:
+        values = acc.load()
+    return values.to(gl.float16)
+
+
+@gluon.jit
 def _write_tiles(c, acc, acc_free, acc_ready, TM: gl.constexpr, TN: gl.constexpr,
                  GROUP: gl.constexpr, ACC_STAGES: gl.constexpr,
-                 EPILOGUE: gl.constexpr):
+                 EPILOGUE: gl.constexpr, REGISTER_LAYOUT: gl.constexpr):
     tiles_n: gl.constexpr = 2048 // TN
     tiles_m = gl.cdiv(c.shape[0], TM)
     total = tiles_m * tiles_n
@@ -101,7 +114,7 @@ def _write_tiles(c, acc, acc_free, acc_ready, TM: gl.constexpr, TN: gl.constexpr
         mbarrier.wait(acc_ready.index(acc_index), acc_phase)
         output = acc.index(acc_index)
         if EPILOGUE == TN:
-            values = output.load().to(gl.float16)
+            values = _load_fp16(output, REGISTER_LAYOUT)
             tma.store_wait(pendings=0)
             temp.store(values)
             mbarrier.arrive(acc_free.index(acc_index), count=1)
@@ -109,7 +122,7 @@ def _write_tiles(c, acc, acc_free, acc_ready, TM: gl.constexpr, TN: gl.constexpr
             tma.async_copy_shared_to_global(c, [row, col], temp)
         else:
             for part in gl.static_range(TN // EPILOGUE):
-                values = output.slice(part * EPILOGUE, EPILOGUE).load().to(gl.float16)
+                values = _load_fp16(output.slice(part * EPILOGUE, EPILOGUE), REGISTER_LAYOUT)
                 tma.store_wait(pendings=0)
                 temp.store(values)
                 fence_async_shared()
@@ -121,7 +134,7 @@ def _write_tiles(c, acc, acc_free, acc_ready, TM: gl.constexpr, TN: gl.constexpr
 
 @gluon.jit
 def _matmul(a, b, c, TM: gl.constexpr, TN: gl.constexpr, TK: gl.constexpr,
-            STAGES: gl.constexpr, GROUP: gl.constexpr, ACC_STAGES: gl.constexpr, EPILOGUE: gl.constexpr):
+            STAGES: gl.constexpr, GROUP: gl.constexpr, ACC_STAGES: gl.constexpr, EPILOGUE: gl.constexpr, REGISTER_LAYOUT: gl.constexpr):
     a_ring = gl.allocate_shared_memory(gl.float16, [STAGES, TM, TK], a.layout)
     b_ring = gl.allocate_shared_memory(gl.float16, [STAGES, TN, TK], b.layout)
     load_free = gl.allocate_shared_memory(gl.int64, [STAGES, 1], mbarrier.MBarrierLayout())
@@ -137,7 +150,7 @@ def _matmul(a, b, c, TM: gl.constexpr, TN: gl.constexpr, TK: gl.constexpr,
     layout: gl.constexpr = TensorMemoryLayout([TM, TN], col_stride=1)
     acc = allocate_tensor_memory(gl.float32, [ACC_STAGES, TM, TN], layout)
     gl.warp_specialize([
-        (_write_tiles, (c, acc, acc_free, acc_ready, TM, TN, GROUP, ACC_STAGES, EPILOGUE)),
+        (_write_tiles, (c, acc, acc_free, acc_ready, TM, TN, GROUP, ACC_STAGES, EPILOGUE, REGISTER_LAYOUT)),
         (_read_tiles, (a, b, a_ring, b_ring, load_free, load_ready, TM, TN, TK, STAGES, GROUP)),
         (_multiply_tiles, (a.shape[0], a_ring, b_ring, load_free, load_ready,
                            acc, acc_free, acc_ready, TM, TN, TK, STAGES, GROUP, ACC_STAGES)),
@@ -156,8 +169,14 @@ def _launch_tma(A, B, C, tm, tn, tk, stages, acc_stages=2, persistent=True, grou
     if persistent:
         workers = min(tiles, torch.cuda.get_device_properties(A.device).multi_processor_count)
     part = tn if part is None else part
+    register_layout = None
+    # Triton 3.6 requires an explicit layout for accumulator loads.
+    if hasattr(blackwell, "get_tmem_reg_layout"):
+        register_layout = blackwell.get_tmem_reg_layout(
+            gl.float32, [tm, part], TensorMemoryLayout([tm, part], col_stride=1), 4,
+        )
     _matmul[(workers,)](_desc(A, tm, tk), _desc(B, tn, tk), _desc(C, tm, part),
-                       tm, tn, tk, stages, group, acc_stages, part, num_warps=4)
+                       tm, tn, tk, stages, group, acc_stages, part, register_layout, num_warps=4)
 
 
 @triton.jit
@@ -180,40 +199,49 @@ def _vector_gemm(A, B, C, M, BN: tl.constexpr, ROWS: tl.constexpr):
 
 
 @triton.jit
-def _gemm(A, B, C, M, AM, AK, BN, BK, CM, CN,
-          TM: tl.constexpr, TN: tl.constexpr, TK: tl.constexpr, SPLIT: tl.constexpr):
-    rows = tl.program_id(0) * TM + tl.arange(0, TM)
-    cols = tl.program_id(1) * TN + tl.arange(0, TN)
-    part = tl.program_id(2)
-    kk = part * (4096 // SPLIT) + tl.arange(0, TK)
-    a = A + rows[:, None] * AM + kk[None, :] * AK
-    b = B + cols[:, None] * BN + kk[None, :] * BK
-    acc = tl.full((TM, TN), 0, tl.float32)
-    for step in range(4096 // (TK * SPLIT)):
-        av = tl.load(a + step * TK * AK, rows[:, None] < M, 0)
-        bv = tl.load(b + step * TK * BK)
-        acc = tl.dot(av, tl.trans(bv), acc)
-    tl.store(C + part * M * CM + rows[:, None] * CM + cols[None, :] * CN,
-             acc, rows[:, None] < M)
+def _strided_gemm(A, B, C, M, AM, AK, BN, BK, CM, CN):
+    rows = tl.program_id(0) * 32 + tl.arange(0, 32)
+    cols = tl.program_id(1) * 64 + tl.arange(0, 64)
+    k = tl.arange(0, 64)
+    a_ptr = A + rows[:, None] * AM + k[None, :] * AK
+    b_ptr = B + cols[:, None] * BN + k[None, :] * BK
+    acc = tl.full((32, 64), 0, tl.float32)
+    for step in range(4096 // 64):
+        a = tl.load(a_ptr + step * 64 * AK, rows[:, None] < M, 0)
+        b = tl.load(b_ptr + step * 64 * BK)
+        acc = tl.dot(a, b.T, acc)
+    tl.store(C + rows[:, None] * CM + cols[None, :] * CN,
+             acc.to(tl.float16), rows[:, None] < M)
 
 
 @triton.jit
-def _merge(P, C, M, BLOCK: tl.constexpr, SPLIT: tl.constexpr):
-    index = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-    parts = tl.arange(0, SPLIT)
-    v = tl.load(P + parts[:, None] * M * 2048 + index[None, :], index[None, :] < M * 2048, 0)
-    tl.store(C + index, tl.sum(v, 0), index < M * 2048)
-
-
-def _launch_gemm(A, B, C, tm, tn, tk, split, warps=4, stages=3):
-    m = A.shape[0]
-    dest = C if split == 1 else torch.empty((split, m, 2048), device=A.device, dtype=torch.float32)
-    _gemm[(triton.cdiv(m, tm), 2048 // tn, split)](
-        A, B, dest, m, *A.stride(), *B.stride(), *dest.stride()[-2:],
-        tm, tn, tk, split, num_warps=warps, num_stages=stages,
-    )
-    if split > 1:
-        _merge[(triton.cdiv(m * 2048, 512),)](dest, C, m, 512, split, num_warps=4)
+def _small_gemm(A, B, C, M, BM: tl.constexpr, WEIGHTS_FIRST: tl.constexpr):
+    # The batched dot assigns eight disjoint K ranges to work within one CTA.
+    # Reduce in FP32 before the sole FP16 store to the destination.
+    BN: tl.constexpr = 16
+    BK: tl.constexpr = 128
+    PARTS: tl.constexpr = 8
+    rows = tl.program_id(0) * BM + tl.arange(0, BM)
+    cols = tl.program_id(1) * BN + tl.arange(0, BN)
+    ks = tl.arange(0, PARTS)[:, None] * (4096 // PARTS) + tl.arange(0, BK)[None, :]
+    a_ptr = A + rows[None, :, None] * 4096 + ks[:, None, :]
+    b_ptr = B + cols[None, :, None] * 4096 + ks[:, None, :]
+    if WEIGHTS_FIRST:
+        acc = tl.full((PARTS, BN, BM), 0, tl.float32)
+    else:
+        acc = tl.full((PARTS, BM, BN), 0, tl.float32)
+    for step in range(4096 // (BK * PARTS)):
+        a = tl.load(a_ptr + BK * step, rows[None, :, None] < M, 0)
+        b = tl.load(b_ptr + BK * step)
+        if WEIGHTS_FIRST:
+            acc = tl.dot(b, a.permute(0, 2, 1), acc)
+        else:
+            acc = tl.dot(a, b.permute(0, 2, 1), acc)
+    value = tl.sum(acc, axis=0)
+    if WEIGHTS_FIRST:
+        value = value.T
+    tl.store(C + rows[:, None] * 2048 + cols[None, :],
+             value.to(tl.float16), rows[:, None] < M)
 
 
 def run(A, B, C):
@@ -221,15 +249,18 @@ def run(A, B, C):
     if m == 0:
         return
     if any(not tensor.is_contiguous() or tensor.data_ptr() % 16 for tensor in (A, B, C)):
-        _launch_gemm(A, B, C, 32, 64, 64, 1)
+        _strided_gemm[(triton.cdiv(m, 32), 2048 // 64)](
+            A, B, C, m, *A.stride(), *B.stride(), *C.stride(),
+            num_warps=4, num_stages=3,
+        )
     elif m == 1:
         _gemv[(2048 // 4,)](A, B, C, 4, num_warps=8)
     elif m == 2:
         _vector_gemm[(2048 // 2,)](A, B, C, m, 2, 2, num_warps=4)
-    elif m <= 4:
-        _vector_gemm[(2048 // 4,)](A, B, C, m, 4, 4, num_warps=8)
     elif m <= 16:
-        _launch_gemm(A, B, C, 16, 32, 128, 4, 2, 4)
+        _small_gemm[(1, 2048 // 16)](A, B, C, m, 16, True, num_warps=4, num_stages=3)
+    elif m <= 32:
+        _small_gemm[(1, 2048 // 16)](A, B, C, m, 32, False, num_warps=8, num_stages=3)
     elif m <= 192:
         _launch_tma(A, B, C, 64, 64, 128, 5, acc_stages=1, persistent=False)
     elif m <= 512:

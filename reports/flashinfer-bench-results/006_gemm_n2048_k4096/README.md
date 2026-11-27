@@ -1,6 +1,10 @@
 # 006_gemm_n2048_k4096
 
-The archive candidate passed **29/29** official workloads with CUPTI timing at a **25.472 µs** geometric mean on GB300. Two paired trials gave **25.246** and **25.116 µs**, a **1.777×** geometric-mean speedup over the direct-launch seed. The exact archive file had **2.905 s** of synchronized first-call time across all 29 workloads from an empty Triton cache. That includes JIT compilation and one launch per workload. This candidate is provisional GB300 only. [Official traces](gb300-grouped-tma.jsonl) · [Paired results](gb300-paired.json) · [Cold compile and correctness](gb300-cold.json)
+The November 27 revision and B200 diagnostics are documented in the follow-up record. [Follow-up](followup/README.md)
+
+## November 26 grouped TMA candidate
+
+The November 26 archive candidate passed **29/29** official workloads with CUPTI timing at a **25.472 µs** geometric mean on GB300. Two paired trials gave **25.246** and **25.116 µs**, a **1.777×** geometric-mean speedup over the direct-launch seed. The exact archive file had **2.905 s** of synchronized first-call time across all 29 workloads from an empty Triton cache. That includes JIT compilation and one launch per workload. This candidate is provisional GB300 only. [Official traces](gb300-grouped-tma.jsonl) · [Paired results](gb300-paired.json) · [Cold compile and correctness](gb300-cold.json)
 
 The candidate uses direct FP32 vector reductions through M=4 and tensor-core split-K with an FP32 merge through M=16. It uses an ordinary TMA/MMA launch through M=192, followed by persistent CTAs. Large tiles have separate TMA, MMA and store partitions, two accumulator slots, and a 32-column FP16 TMA epilogue. The input descriptors use the physical `B[N,K]` layout and multiply by its logical transpose. [H100 staging and scheduling](https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/main/kernels/gemm/gemm_fp16/h100/kernel.py) · [CompoundingKernel Explorer](https://huggingface.co/spaces/QianQu/CompoundingKernel-Explorer/tree/main/kernels/FlashInfer/006_gemm_n2048_k4096)
 

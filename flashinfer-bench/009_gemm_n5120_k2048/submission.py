@@ -1,8 +1,15 @@
 """Destination-passing FP16 GEMM for N=5120 and K=2048."""
 
+import inspect
+
 import torch
 import triton
 import triton.language as tl
+from triton.experimental import gluon
+from triton.experimental.gluon import language as gl
+from triton.experimental.gluon.language.nvidia import blackwell as bw
+from triton.experimental.gluon.language.nvidia.hopper import fence_async_shared, mbarrier, tma
+from triton.experimental.gluon.nvidia.hopper import TensorDescriptor as GluonDescriptor
 from triton.tools.tensor_descriptor import TensorDescriptor
 
 
@@ -79,24 +86,6 @@ def _raster_gemm(A, B, C, M, TM: tl.constexpr, TN: tl.constexpr, TK: tl.constexp
     tl.store(C + m[:, None] * 5120 + n[None, :], acc, m[:, None] < M)
 
 
-# The resident CTA schedule and staged, output-stationary accumulation draw
-# on RSI-Kernel-Tune's H100 GEMM, with K-contiguous FP16 inputs for Blackwell.
-# https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/main/kernels/gemm/gemm_fp16/h100/kernel.py
-@triton.jit
-def _persistent_gemm(A, B, C, M, WORKERS: tl.constexpr, TK: tl.constexpr,
-                     GROUP: tl.constexpr):
-    m_tiles = tl.cdiv(M, 128)
-    for tile in tl.range(tl.program_id(0), m_tiles * (5120 // 256), WORKERS, flatten=True):
-        mi, ni = _tile_coords(tile, m_tiles, 5120 // 256, GROUP)
-        row = mi * 128
-        col = ni * 256
-        acc = _accumulate(A, B, row, col, 128, 256, TK, False)
-        halves = tl.reshape(acc.to(tl.float16), (128, 2, 128))
-        left, right = tl.split(tl.permute(halves, (0, 2, 1)))
-        C.store([row, col], left)
-        C.store([row, col + 128], right)
-
-
 def _descriptor(tensor, rows, columns):
     return TensorDescriptor(tensor, tensor.shape, tensor.stride(), [rows, columns])
 
@@ -115,12 +104,139 @@ def _raster_config(m):
     if m <= 32:
         return 32, 32, 256, 3, True, 4
     if m <= 64:
-        return 64, 64, 256, 3, True, 4
+        return 64, 64, 128, 4, True, 4
     if m <= 128:
         return 128, 64, 128, 4, True, 4
-    if m <= 192:
-        return 64, 64, 128, 3, True, 4
-    return 128, 128, 64, 3, False, 4
+    return 64, 64, 128, 3, True, 4
+
+
+# Explicit TMA/MMA warp partitions adapted from RSI's FlashInfer 011 and
+# Triton's Gluon warp-specialization tutorial. The persistent schedule uses
+# row-major FP16 A[M,K], B[N,K], and a grouped M raster.
+# https://github.com/triton-lang/triton/blob/main/python/tutorials/gluon/08-warp-specialization.py
+_LIST_WARP_SPECIALIZE = gl.constexpr("functions_and_args" in inspect.signature(gl.warp_specialize).parameters)
+_COL_STRIDE_LAYOUT = gl.constexpr("col_stride" in inspect.signature(bw.TensorMemoryLayout).parameters)
+
+
+@gluon.jit
+def _persistent_coords(tile, m_tiles, n_tiles: gl.constexpr, group):
+    group_start = tile // (group * n_tiles) * group
+    within_group = tile % (group * n_tiles)
+    rows = gl.minimum(m_tiles - group_start, group)
+    return group_start + within_group % rows, within_group // rows
+
+
+@gluon.jit
+def _load_tiles(args, group):
+    A, B, C, sa, sb, ready, freed, acc, done, released = args
+    m_tiles = gl.cdiv(C.shape[0], 128)
+    BN: gl.constexpr = B.block_type.shape[0]
+    STAGES: gl.constexpr = sa.shape[0]
+    n_tiles: gl.constexpr = 5120 // BN
+    # Load and MMA warps advance the staging ring across output tiles.
+    sequence = 0
+    for tile in range(gl.program_id(0), m_tiles * n_tiles, gl.num_programs(0)):
+        m, n = _persistent_coords(tile, m_tiles, n_tiles, group)
+        for step in range(2048 // 64):
+            stage = sequence % STAGES
+            wrap = (sequence // STAGES) & 1
+            mbarrier.wait(freed.index(stage), wrap ^ 1)
+            barrier = ready.index(stage)
+            mbarrier.expect(barrier, (128 + BN) * 64 * 2)
+            tma.async_copy_global_to_shared(A, [m * 128, step * 64], barrier, sa.index(stage))
+            tma.async_copy_global_to_shared(B, [n * BN, step * 64], barrier, sb.index(stage))
+            sequence += 1
+
+
+@gluon.jit
+def _accumulate_tiles(args, group):
+    A, B, C, sa, sb, ready, freed, acc, done, released = args
+    m_tiles = gl.cdiv(C.shape[0], 128)
+    BN: gl.constexpr = B.block_type.shape[0]
+    STAGES: gl.constexpr = sa.shape[0]
+    n_tiles: gl.constexpr = 5120 // BN
+    sequence = 0
+    ordinal = 0
+    for tile in range(gl.program_id(0), m_tiles * n_tiles, gl.num_programs(0)):
+        slot = ordinal & 1
+        phase = (ordinal // 2) & 1
+        mbarrier.wait(released.index(slot), phase ^ 1)
+        dst = acc.index(slot)
+        for step in range(2048 // 64):
+            stage = sequence % STAGES
+            wrap = (sequence // STAGES) & 1
+            mbarrier.wait(ready.index(stage), wrap)
+            bw.tcgen05_mma(sa.index(stage), sb.index(stage).permute((1, 0)), dst, use_acc=step != 0)
+            bw.tcgen05_commit(freed.index(stage))
+            sequence += 1
+        bw.tcgen05_commit(done.index(slot))
+        ordinal += 1
+
+
+@gluon.jit
+def _store_tiles(args, group):
+    A, B, C, sa, sb, ready, freed, acc, done, released = args
+    m_tiles = gl.cdiv(C.shape[0], 128)
+    BN: gl.constexpr = B.block_type.shape[0]
+    PART: gl.constexpr = C.block_type.shape[1]
+    n_tiles: gl.constexpr = 5120 // BN
+    smem = gl.allocate_shared_memory(gl.float16, [128, PART], C.layout)
+    layout: gl.constexpr = gl.BlockedLayout([1, 1], [32, 1], [4, 1], [0, 1])
+    ordinal = 0
+    for tile in range(gl.program_id(0), m_tiles * n_tiles, gl.num_programs(0)):
+        m, n = _persistent_coords(tile, m_tiles, n_tiles, group)
+        slot = ordinal & 1
+        mbarrier.wait(done.index(slot), (ordinal // 2) & 1)
+        src = acc.index(slot)
+        for sub in gl.static_range(BN // PART):
+            fp16 = src.slice(sub * PART, PART).load(layout).to(gl.float16)
+            tma.store_wait(pendings=0)
+            smem.store(fp16)
+            fence_async_shared()
+            tma.async_copy_shared_to_global(C, [m * 128, n * BN + sub * PART], smem)
+        mbarrier.arrive(released.index(slot), count=1)
+        ordinal += 1
+    tma.store_wait(pendings=0)
+
+
+@gluon.jit
+def _init_barriers(COUNT: gl.constexpr):
+    bars = gl.allocate_shared_memory(gl.int64, [COUNT, 1], mbarrier.MBarrierLayout())
+    for i in gl.static_range(COUNT):
+        mbarrier.init(bars.index(i), count=1)
+    return bars
+
+
+@gluon.jit
+def _persistent_tcgen(A, B, C, GROUP: gl.constexpr, BN: gl.constexpr, STAGES: gl.constexpr):
+    sa = gl.allocate_shared_memory(gl.float16, [STAGES, 128, 64], A.layout)
+    sb = gl.allocate_shared_memory(gl.float16, [STAGES, BN, 64], B.layout)
+    if _COL_STRIDE_LAYOUT:
+        layout: gl.constexpr = bw.TensorMemoryLayout([128, BN], col_stride=1)
+    else:
+        layout: gl.constexpr = bw.TensorMemoryLayout([128, BN], unpacked=True)
+    acc = bw.allocate_tensor_memory(gl.float32, [2, 128, BN], layout)
+    # Two TMEM slots let the MMA warp advance while the epilogue drains.
+    args = (A, B, C, sa, sb, _init_barriers(STAGES), _init_barriers(STAGES), acc, _init_barriers(2), _init_barriers(2))
+    config = (args, gl.to_tensor(GROUP))
+    if _LIST_WARP_SPECIALIZE:
+        gl.warp_specialize([(_store_tiles, config), (_load_tiles, config), (_accumulate_tiles, config)], [1, 1], [24, 24])
+    else:
+        gl.warp_specialize(default_args=config, default_partition=_store_tiles, worker_args=config,
+                           worker_partitions=[_load_tiles, _accumulate_tiles], worker_num_warps=[1, 1], worker_num_regs=[24, 24])
+
+
+def _launch_tcgen(A, B, C, bn, stages, part):
+    def descriptor(tensor, tile):
+        layout = gl.NVMMASharedLayout.get_default_for(tile, gl.float16)
+        return GluonDescriptor.from_tensor(tensor, tile, layout)
+
+    a = descriptor(A, [128, 64])
+    b = descriptor(B, [bn, 64])
+    c = descriptor(C, [128, part])
+    sms = torch.cuda.get_device_properties(A.device).multi_processor_count
+    grid = min(sms, triton.cdiv(A.shape[0], 128) * (5120 // bn))
+    return _persistent_tcgen[(grid,)](a, b, c, 4, bn, stages, num_warps=4)
 
 
 def run(A, B, C):
@@ -133,19 +249,15 @@ def run(A, B, C):
         _gemv[(N // 4,)](A, B, C, m, num_warps=8 if m == 1 else 4)
     elif m <= 8:
         _launch_pointer(A, B, C, 16, 16, 128, warps=2, stages=4)
-    elif 192 < m <= 320:
-        _launch_pointer(A, B, C, 64, 128, 64)
-    elif m <= 1024:
+    elif m <= 192:
         tm, tn, tk, stages, swap, warps = _raster_config(m)
         _raster_gemm[(triton.cdiv(m, tm) * (N // tn),)](
             _descriptor(A, tm, tk), _descriptor(B, tn, tk), C,
             m, tm, tn, tk, swap, num_warps=warps, num_stages=stages,
         )
+    elif m <= 384 or 768 < m <= 1024:
+        _launch_tcgen(A, B, C, bn=128, stages=5, part=64)
+    elif m <= 768:
+        _launch_tcgen(A, B, C, bn=256, stages=4, part=128)
     else:
-        workers = torch.cuda.get_device_properties(A.device).multi_processor_count
-        tk, stages, group = 64, 4, 4
-        grid = min(workers, triton.cdiv(m, 128) * (N // 256))
-        _persistent_gemm[(grid,)](
-            _descriptor(A, 128, tk), _descriptor(B, 256, tk), _descriptor(C, 128, 128),
-            m, workers, tk, group, num_warps=4, num_stages=stages,
-        )
+        _launch_tcgen(A, B, C, bn=256, stages=4, part=32)

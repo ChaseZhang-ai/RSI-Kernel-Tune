@@ -1,5 +1,7 @@
 # FlashInfer 009 FP16 GEMM
 
+The B200 follow-up records the verified archived score and the revised candidate's full GB300 results. [Follow-up report](b200-followup.md)
+
 The archive candidate passed **25/25** official workloads through the SOL-ExecBench CLI at **23.971 µs geomean**. Three paired trials measured **23.976 µs** versus **24.433 µs** for the preceding tuned dispatch. This is a provisional GB300 result. The coordinator has the exact source for B200 evaluation. [Candidate](../../../flashinfer-bench/009_gemm_n5120_k2048/submission.py) · [Exact CLI traces](gb300-v2-cli.jsonl) · [Paired traces](gb300-pair-v2.jsonl)
 
 The direct-launch Triton baseline passed **25/25** official workloads with a **58.049 µs** geometric mean latency on GB300. It uses a 32 × 128 output tile and accumulates FP16 products in FP32 before writing the supplied FP16 destination. The candidate is provisional GB300 only. [Evaluator traces](gb300-baseline-cli.jsonl)

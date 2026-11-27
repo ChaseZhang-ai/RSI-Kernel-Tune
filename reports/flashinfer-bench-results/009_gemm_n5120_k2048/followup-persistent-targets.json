@@ -1,0 +1,200 @@
+{
+  "triton": "3.7.0+fb.beta",
+  "mode": "compile-only",
+  "records": [
+    {
+      "entry": "_persistent_gemm",
+      "arch": 100,
+      "constants": {
+        "WORKERS": 148,
+        "TK": 64,
+        "GROUP": 4
+      },
+      "signature": {
+        "A": "tensordesc<fp16[128, 64]>",
+        "B": "tensordesc<fp16[256, 64]>",
+        "C": "tensordesc<fp16[128, 128]>",
+        "M": "i32",
+        "WORKERS": "constexpr",
+        "TK": "constexpr",
+        "GROUP": "constexpr"
+      },
+      "status": "COMPILED",
+      "ptx_target": "sm_100a",
+      "shared_bytes": 229424,
+      "tcgen05_mma": 8,
+      "tma_stores": 4,
+      "binary_sha256": "53673fe1079667ccafde522c84181f3823b4695d01e1d29bc8b13e7564487a56",
+      "compile_wall_s": 1.5478751617483795
+    },
+    {
+      "entry": "_persistent_gemm",
+      "arch": 103,
+      "constants": {
+        "WORKERS": 152,
+        "TK": 64,
+        "GROUP": 4
+      },
+      "signature": {
+        "A": "tensordesc<fp16[128, 64]>",
+        "B": "tensordesc<fp16[256, 64]>",
+        "C": "tensordesc<fp16[128, 128]>",
+        "M": "i32",
+        "WORKERS": "constexpr",
+        "TK": "constexpr",
+        "GROUP": "constexpr"
+      },
+      "status": "COMPILED",
+      "ptx_target": "sm_103a",
+      "shared_bytes": 229424,
+      "tcgen05_mma": 8,
+      "tma_stores": 4,
+      "binary_sha256": "2179e5d1453f098e88ab6800ab04712a0b9f01d0e1c02c3818ee7c889b81b0ac",
+      "compile_wall_s": 0.8330443911254406
+    },
+    {
+      "entry": "_persistent_tcgen",
+      "arch": 100,
+      "constants": {
+        "GROUP": 4,
+        "BN": 256,
+        "STAGES": 4
+      },
+      "signature": {
+        "A": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "B": "tensordesc<fp16[256, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "C": "tensordesc<fp16[128, 128],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "GROUP": "constexpr",
+        "BN": "constexpr",
+        "STAGES": "constexpr"
+      },
+      "status": "COMPILED",
+      "ptx_target": "sm_100a",
+      "shared_bytes": 229620,
+      "tcgen05_mma": 4,
+      "tma_stores": 2,
+      "binary_sha256": "7ddab52a276c7d79292f99b4aa44887ebf222890a68bac580891ce53a889dd91",
+      "compile_wall_s": 0.25001804111525416
+    },
+    {
+      "entry": "_persistent_tcgen",
+      "arch": 103,
+      "constants": {
+        "GROUP": 4,
+        "BN": 256,
+        "STAGES": 4
+      },
+      "signature": {
+        "A": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "B": "tensordesc<fp16[256, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "C": "tensordesc<fp16[128, 128],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "GROUP": "constexpr",
+        "BN": "constexpr",
+        "STAGES": "constexpr"
+      },
+      "status": "COMPILED",
+      "ptx_target": "sm_103a",
+      "shared_bytes": 229620,
+      "tcgen05_mma": 4,
+      "tma_stores": 2,
+      "binary_sha256": "c0dc6f5e89b5d84f98e172427e864b934ca0057697644103c3bd3ccd3b6ccf58",
+      "compile_wall_s": 0.23595965700224042
+    },
+    {
+      "entry": "_persistent_tcgen",
+      "arch": 100,
+      "constants": {
+        "GROUP": 4,
+        "BN": 128,
+        "STAGES": 5
+      },
+      "signature": {
+        "A": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "B": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "C": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "GROUP": "constexpr",
+        "BN": "constexpr",
+        "STAGES": "constexpr"
+      },
+      "status": "COMPILED",
+      "ptx_target": "sm_100a",
+      "shared_bytes": 180500,
+      "tcgen05_mma": 4,
+      "tma_stores": 2,
+      "binary_sha256": "6cb343068181bc8b02e57e6b9e49a8f0b8b25a1b8a9853b023c9256f825e340e",
+      "compile_wall_s": 0.18039834685623646
+    },
+    {
+      "entry": "_persistent_tcgen",
+      "arch": 103,
+      "constants": {
+        "GROUP": 4,
+        "BN": 128,
+        "STAGES": 5
+      },
+      "signature": {
+        "A": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "B": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "C": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "GROUP": "constexpr",
+        "BN": "constexpr",
+        "STAGES": "constexpr"
+      },
+      "status": "COMPILED",
+      "ptx_target": "sm_103a",
+      "shared_bytes": 180500,
+      "tcgen05_mma": 4,
+      "tma_stores": 2,
+      "binary_sha256": "08fd2ee0f38b86476ab82ee02132d73de353d7de61f88f914f5dac4ec54a2252",
+      "compile_wall_s": 0.17013523867353797
+    },
+    {
+      "entry": "_persistent_tcgen",
+      "arch": 100,
+      "constants": {
+        "GROUP": 4,
+        "BN": 256,
+        "STAGES": 4
+      },
+      "signature": {
+        "A": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "B": "tensordesc<fp16[256, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "C": "tensordesc<fp16[128, 32],NVMMASharedLayout(swizzle_byte_width=64, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "GROUP": "constexpr",
+        "BN": "constexpr",
+        "STAGES": "constexpr"
+      },
+      "status": "COMPILED",
+      "ptx_target": "sm_100a",
+      "shared_bytes": 205044,
+      "tcgen05_mma": 4,
+      "tma_stores": 8,
+      "binary_sha256": "3358e87be16cab1c6c56f44abe7a9ff1a3eb9660ee533c05c68b8b348c9e1366",
+      "compile_wall_s": 0.2481233780272305
+    },
+    {
+      "entry": "_persistent_tcgen",
+      "arch": 103,
+      "constants": {
+        "GROUP": 4,
+        "BN": 256,
+        "STAGES": 4
+      },
+      "signature": {
+        "A": "tensordesc<fp16[128, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "B": "tensordesc<fp16[256, 64],NVMMASharedLayout(swizzle_byte_width=128, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "C": "tensordesc<fp16[128, 32],NVMMASharedLayout(swizzle_byte_width=64, element_bitwidth=16, rank=2, transposed=False, fp4_padded=False, cga_layout=[])>",
+        "GROUP": "constexpr",
+        "BN": "constexpr",
+        "STAGES": "constexpr"
+      },
+      "status": "COMPILED",
+      "ptx_target": "sm_103a",
+      "shared_bytes": 205044,
+      "tcgen05_mma": 4,
+      "tma_stores": 8,
+      "binary_sha256": "d195455f3aa30141c3411654a901bd08ff518a1b2d8d62133cf47bb1f695073d",
+      "compile_wall_s": 0.3381033665500581
+    }
+  ]
+}

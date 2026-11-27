@@ -1,0 +1,15 @@
+{
+  "id": 107507,
+  "worker": 13,
+  "kernel_id": 222,
+  "timed": 38,
+  "expected": 48,
+  "verified_sol": null,
+  "checked_at": "2026-11-27T20:25:19.228949+00:00",
+  "collection": null,
+  "workload_status_counts": {
+    "RUNTIME_ERROR": 10,
+    "None": 38
+  },
+  "official_sol": 0.701691
+}

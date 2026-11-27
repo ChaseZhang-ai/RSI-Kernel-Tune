@@ -49,3 +49,27 @@ sol-execbench <problem_dir> --solution solution.json --output results.jsonl
 ```
 
 The public B200 v1.1 leader was **0.894803 SOL**, rank 1, at 2026-11-26 18:55:21 UTC. This candidate is provisional GB300 only and ready for the coordinator's B200 validation. [Public B200 board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/213/B200)
+
+## B200 follow-up on 2026-11-27
+
+The released collection child `106073` reports missing CUPTI activity at **M=16,294** (workload `c49c96bd-bee4-479b-8000-3e6bf297aef1`). The standalone repeat `106254` timed 24/25, and its available summary provides the aggregate count. Both results used archived SHA-256 `c520e227ac7516c2d637834a7c0ad0284dadbd35e1b3bc524dbeb25637a4c59a`, which matched the previous tracked candidate byte-for-byte. The public v1.1 leader was **0.894803 SOL** at 2026-11-27 04:25:15 UTC. [B200 operator board](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/213/B200)
+
+The exact archive again passed 25/25 through the evaluator on physical GB300 GPU 0 (`GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`), 152 queried SMs, CUDA 10.3. Five separate paired timing trials at M=16,294 on physical GB300 GPU 0 (`GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`), 152 queried SMs, CUDA 10.3 all produced CUPTI timings between 19.808 and 19.936 µs. The launch uses 128 CTAs for 128 M tiles and fits within one wave. The final tile has 38 valid rows, with TMA zero-fill on the input tail and a masked output store. The missing activity did not reproduce on GB300. M=16,294 uses the archived six-stage TMA kernel and launch configuration in the revised source. [Archived CLI results](gb300-followup-archived.jsonl) · [Repeated timings and tuning screen](gb300-followup-screen.jsonl)
+
+The screen covered all 25 official workload IDs, with 116 timed trials. The 32-byte vector access trials did not improve tiny M consistently, so the revision keeps the archived vector GEMV. At M=16–64 the revised native MMA shares each output pair's FP32 warp-partial reduction across four lanes. At M=172–492 it uses a 16×16 output tile with 16 warps, and at M=952 it uses a 16×32 tile. The 64×128×128 TMA tile at M=8,828 launches 138 CTAs into one wave, up from 69 CTAs. The other large-M variants offered little improvement, including at M=16,294. Every route writes the provided FP16 output in one launch after FP32 accumulation. [Per-workload screen](gb300-followup-screen.jsonl)
+
+The exact pair ran on physical GB300 GPU 2 (`GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`), 152 queried SMs, CUDA 10.3. Both sources passed 25/25. The table shows latency geomeans. [Paired results](gb300-followup-pair.jsonl)
+
+| M | Archived (µs) | Revised (µs) |
+|---|---:|---:|
+| 1–8 | 2.932 | 2.922 |
+| 16–64 | 3.542 | 3.483 |
+| 93–128 | 4.095 | 4.080 |
+| 172–952 | 6.423 | 5.754 |
+| 8,828 | 15.520 | 13.504 |
+| 11,006–16,294 | 17.996 | 18.020 |
+| All 25 | 5.531 | 5.374 |
+
+The revised candidate reduced paired latency geomean by **2.8%**. The exact revised DPS bundle passed **25/25 official workloads** with a **5.368 µs geomean** on physical GB300 GPU 2 (`GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0`), 152 queried SMs, CUDA 10.3. The same file passed 76 bit-exact checks of B layout, cancellation, M tails, CTA reuse, changed pointers and guarded output writes. Its summed cold first-call time was 2.225 s, including compilation, execution and synchronization. The slowest cold first call was 1.216 s. [Revised evaluator trace](gb300-followup-evaluator.jsonl) · [Synthetic checks](gb300-followup-edge.json)
+
+Both CLI runs and the paired trials used SOL-ExecBench 1.0.2 at `a9fa0804c793d438e70850c33fe34426e66d53dd`, PyTorch 2.10.0+cu130, Triton 3.6.0, and 1500/3996 MHz SM/memory clocks. Each trial used 10 warmups and 50 timed iterations, with cold L2, cloned pointer-shifted inputs, preallocated outputs and the evaluator's first-to-last CUPTI timing. The revised source SHA-256 is `6e48da7cde42d44e01ad71c6d3ec82075a64f42bdbdfed7f6b08ab5f65ad62d1`. The exact local bundle SHA-256 is `adfe2dfd9d7a60d7cd2e1838128c56554dd47ffd06f1bced27ded84bbc3047a0`. Verification of the revision is provisional GB300 only.

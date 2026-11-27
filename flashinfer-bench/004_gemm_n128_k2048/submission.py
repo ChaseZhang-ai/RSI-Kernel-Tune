@@ -53,7 +53,7 @@ __device__ __forceinline__ void add_to(float4& a, float4 b) {
     a.w += b.w;
 }
 
-template<int BM, int W, int BN>
+template<int BM, int W, int BN, bool Parallel = false>
 __global__ void register_mma(const __half* __restrict__ A, const __half* __restrict__ B,
                              __half* __restrict__ C, int m) {
     constexpr int CHUNKS = 64 / W;
@@ -90,26 +90,49 @@ __global__ void register_mma(const __half* __restrict__ A, const __half* __restr
     __shared__ float4 partial[W][32];
     partial[warp][lane] = acc;
     __syncthreads();
-    if (warp == 0) {
-        #pragma unroll
-        for (int i = 1; i < W; ++i) add_to(acc, partial[i][lane]);
-    }
+    if constexpr (Parallel) {
+        // Four lanes share the warp-partial reduction of each output pair.
+        const int pair = threadIdx.x / 4;
+        const int part = threadIdx.x % 4;
+        if (pair < BM * (BN / 2)) {
+            const int r = pair / (BN / 2);
+            const int n = pair % (BN / 2);
+            const int owner = (r % 8) * 4 + n;
+            float4 sum = partial[part][owner];
+            #pragma unroll
+            for (int w = 4; w < W; w += 4) add_to(sum, partial[part + w][owner]);
+            float x = r < 8 ? sum.x : sum.z;
+            float y = r < 8 ? sum.y : sum.w;
+            #pragma unroll
+            for (int delta = 2; delta > 0; delta /= 2) {
+                x += __shfl_xor_sync(0xffffffffu, x, delta, 4);
+                y += __shfl_xor_sync(0xffffffffu, y, delta, 4);
+            }
+            if (part == 0 && mr + r < m)
+                *reinterpret_cast<__half2*>(C + (mr + r) * 128 + nc + 2 * n) = __floats2half2_rn(x, y);
+        }
+    } else {
+        if (warp == 0) {
+            #pragma unroll
+            for (int i = 1; i < W; ++i) add_to(acc, partial[i][lane]);
+        }
 
-    if (warp == 0 && 2 * t < BN) {
-        const int n = nc + 2 * t;
-        if (row < m)
-            *reinterpret_cast<__half2*>(C + row * 128 + n) = __floats2half2_rn(acc.x, acc.y);
-        if constexpr (BM > 8) {
-            if (row + 8 < m)
-                *reinterpret_cast<__half2*>(C + (row + 8) * 128 + n) = __floats2half2_rn(acc.z, acc.w);
+        if (warp == 0 && 2 * t < BN) {
+            const int n = nc + 2 * t;
+            if (row < m)
+                *reinterpret_cast<__half2*>(C + row * 128 + n) = __floats2half2_rn(acc.x, acc.y);
+            if constexpr (BM > 8) {
+                if (row + 8 < m)
+                    *reinterpret_cast<__half2*>(C + (row + 8) * 128 + n) = __floats2half2_rn(acc.z, acc.w);
+            }
         }
     }
 }
 
-template<int BM, int W, int BN = 8>
+template<int BM, int W, int BN = 8, bool Parallel = false>
 cudaError_t launch(const __half* a, const __half* b, __half* c, int m, cudaStream_t stream) {
     const dim3 grid(128 / BN, (m + BM - 1) / BM);
-    register_mma<BM, W, BN><<<grid, W * 32, 0, stream>>>(a, b, c, m);
+    register_mma<BM, W, BN, Parallel><<<grid, W * 32, 0, stream>>>(a, b, c, m);
     return cudaGetLastError();
 }
 
@@ -220,15 +243,16 @@ cudaError_t launch_wide(const __half* a, const __half* b, __half* c, int m, cuda
     return cudaGetLastError();
 }
 
+
 extern "C" int dispatch(const __half* a, const __half* b, __half* c, int m,
                         cudaStream_t stream, int variant) {
     switch (variant) {
-        case 8: return launch<8, 16>(a, b, c, m, stream);
         case 9: return launch<16, 16>(a, b, c, m, stream);
-        case 13: return launch<8, 16, 4>(a, b, c, m, stream);
         case 15: return launch_vector<1>(a, b, c, m, stream);
         case 16: return launch_vector<2>(a, b, c, m, stream);
-        case 18: return launch_wide<16, 16, 8>(a, b, c, m, stream);
+        case 25: return launch<8, 16, 8, true>(a, b, c, m, stream);
+        case 27: return launch_wide<16, 16, 16>(a, b, c, m, stream);
+        case 28: return launch_wide<16, 32, 8>(a, b, c, m, stream);
     }
     return cudaErrorInvalidValue;
 }
@@ -377,9 +401,11 @@ def _staged_launch(A, B, C):
         return GluonDescriptor.from_tensor(tensor, shape, layout)
 
     m = A.shape[0]
-    tiles = triton.cdiv(m, 128)
+    # Where 64-row blocks fit in one wave, use the smaller M tile for occupancy.
+    bm, bk, stages = (64, 128, 4) if m <= 9216 else (128, 64, 6)
+    tiles = triton.cdiv(m, bm)
     _staged[(min(148, tiles),)](
-        descriptor(A, [128, 64]), descriptor(B, [128, 64]), C, m, 6, num_warps=4)
+        descriptor(A, [bm, bk]), descriptor(B, [128, bk]), C, m, stages, num_warps=4)
 
 
 def run(A, B, C):
@@ -390,13 +416,13 @@ def run(A, B, C):
     if m <= 8:
         # Each block reuses one B column for one or two activation rows.
         _native(A, B, C, 15 if m == 2 else 16)
-    elif m <= 32:
-        _native(A, B, C, 13)
     elif m <= 64:
-        _native(A, B, C, 8)
-    elif m <= 289:
+        _native(A, B, C, 25)
+    elif m <= 128:
         _native(A, B, C, 9)
+    elif m <= 512:
+        _native(A, B, C, 27)
     elif m < 2048:
-        _native(A, B, C, 18)
+        _native(A, B, C, 28)
     else:
         _staged_launch(A, B, C)

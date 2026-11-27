@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "count": 43,
+  "calls_per_workload": 2,
+  "compared_columns": 28672,
+  "changed_input_contents": true,
+  "input_output_addresses_changed": true,
+  "guards_fp16_values_each_side": 128,
+  "physical_index": 2,
+  "gpu_uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+  "source_sha256": "998a8ec92d38c625102ab1f56fc5d2bd604007c351fd343352944c048bca4651",
+  "scope": "Structured integer patterns at K=0 and K=4095, direct launches"
+}

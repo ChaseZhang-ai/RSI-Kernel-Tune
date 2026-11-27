@@ -1,0 +1,17 @@
+{"physical_gpu": 2, "gpu_uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0", "device": "NVIDIA GB300", "sm_count": 152, "capability": [10, 3], "torch": "2.9.0+cu130", "triton": "3.5.0", "evaluator": "1.0.2", "cupti": "13.5.0"}
+{"batch": 0, "layout": "dense", "expected_route": "empty", "calls": 3, "status": "PASSED"}
+{"batch": 1, "layout": "dense", "expected_route": "cuda_split8", "calls": 3, "status": "PASSED"}
+{"batch": 2, "layout": "dense", "expected_route": "cuda_one_row", "calls": 3, "status": "PASSED"}
+{"batch": 78, "layout": "dense", "expected_route": "cuda_one_row", "calls": 3, "status": "PASSED"}
+{"batch": 79, "layout": "dense", "expected_route": "cuda_one_row", "calls": 3, "status": "PASSED"}
+{"batch": 80, "layout": "dense", "expected_route": "cuda_one_row", "calls": 3, "status": "PASSED"}
+{"batch": 169, "layout": "dense", "expected_route": "cuda_one_row", "calls": 3, "status": "PASSED"}
+{"batch": 170, "layout": "dense", "expected_route": "cuda_one_row", "calls": 3, "status": "PASSED"}
+{"batch": 171, "layout": "dense", "expected_route": "cuda_one_row", "calls": 3, "status": "PASSED"}
+{"batch": 255, "layout": "dense", "expected_route": "cuda_one_row", "calls": 3, "status": "PASSED"}
+{"batch": 256, "layout": "dense", "expected_route": "cuda_one_row", "calls": 3, "status": "PASSED"}
+{"batch": 257, "layout": "dense", "expected_route": "triton", "calls": 3, "status": "PASSED"}
+{"batch": 1, "layout": "unaligned", "expected_route": "triton", "calls": 3, "status": "PASSED"}
+{"batch": 170, "layout": "unaligned", "expected_route": "triton", "calls": 3, "status": "PASSED"}
+{"batch": 1, "layout": "strided", "expected_route": "triton", "calls": 3, "status": "PASSED"}
+{"batch": 257, "layout": "strided", "expected_route": "triton", "calls": 3, "status": "PASSED"}

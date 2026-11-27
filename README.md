@@ -66,7 +66,7 @@ Contributors should push their **best candidate so far** to `flashinfer-bench/<o
 | [023_rmsnorm_h1536](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/232/B200) | 0.929768 | — | — | — | GB300 only · 8/8 evaluator pass · 3.822 µs geomean · [evidence](reports/flashinfer-bench-results/023_rmsnorm_h1536/README.md) | [Provisional](flashinfer-bench/023_rmsnorm_h1536/submission.py) |
 | [024_rmsnorm_h2048](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/233/B200) | 0.815575 | — | — | — | GB300 revised CLI passed 7/7 · 4.640 µs geomean · B200 archived #106229 timed 6/7 · [evidence](reports/flashinfer-bench-results/024_rmsnorm_h2048/followup.md) | [Provisional GB300 only](flashinfer-bench/024_rmsnorm_h2048/submission.py) |
 | [025_rmsnorm_h4096](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/234/B200) | 0.904060 | 0.715703 | Unranked (private) | +0.188357 | GB300 follow-up CLI 14/14 at 6.702 µs · [evidence](reports/flashinfer-bench-results/025_rmsnorm_h4096/) | [Provisional GB300 revision](flashinfer-bench/025_rmsnorm_h4096/submission.py) |
-| [026_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/235/B200) | 0.937995 | — | — | — | Pending | — |
+| [026_rmsnorm_h7168](https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/235/B200) | 0.937995 | — | — | — | GB300 Triton v1 8/8 passed with CUPTI timing · 7.067 µs paired geomean · edge checks passed · [evidence](reports/flashinfer-bench-results/026_rmsnorm_h7168/README.md) | [Provisional GB300 only](flashinfer-bench/026_rmsnorm_h7168/submission.py) |
 
 ## News
 

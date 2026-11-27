@@ -1,0 +1,56 @@
+{
+  "status": "compiled",
+  "verification_scope": "Offline compilation",
+  "triton": "3.6.0",
+  "candidate_sha256": "af64ac654c0a531ce5c063159c40061e61f335edfdc5e6747c17f648bd21b27d",
+  "configurations": [
+    {
+      "kernel": "_small",
+      "span": 512,
+      "warps": 16,
+      "status": "compiled",
+      "ptx_target": "sm_100a",
+      "ms": 346.33804485201836
+    },
+    {
+      "kernel": "_small",
+      "span": 1024,
+      "warps": 16,
+      "status": "compiled",
+      "ptx_target": "sm_100a",
+      "ms": 64.01171907782555
+    },
+    {
+      "kernel": "_small",
+      "span": 1792,
+      "warps": 16,
+      "status": "compiled",
+      "ptx_target": "sm_100a",
+      "ms": 65.33576035872102
+    },
+    {
+      "kernel": "_small",
+      "span": 3584,
+      "warps": 16,
+      "status": "compiled",
+      "ptx_target": "sm_100a",
+      "ms": 64.2408449202776
+    },
+    {
+      "kernel": "_medium",
+      "span": null,
+      "warps": 8,
+      "status": "compiled",
+      "ptx_target": "sm_100a",
+      "ms": 70.07239013910294
+    },
+    {
+      "kernel": "_large",
+      "span": null,
+      "warps": 4,
+      "status": "compiled",
+      "ptx_target": "sm_100a",
+      "ms": 105.63053702935576
+    }
+  ]
+}

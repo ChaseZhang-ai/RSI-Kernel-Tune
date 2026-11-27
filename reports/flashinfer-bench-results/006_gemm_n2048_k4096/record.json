@@ -1,0 +1,395 @@
+{
+  "operator": "006_gemm_n2048_k4096",
+  "verification_scope": "Provisional GB300 only",
+  "submission_sha256": "fa2b28aa4d048843606b1928ea511006a7e4bc471e88a9e47e81d12544bf5602",
+  "parquet_sha256": "89d1feacf02b6f8c07ec8d67a9dbb2c531652251095a7f762f2bc296f6a1fe74",
+  "evaluation": {
+    "evaluator": "sol-execbench 1.0.2",
+    "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+    "package_versions": {
+      "sol-execbench": "1.0.2",
+      "torch": "2.10.0+cu130",
+      "triton": "3.7.0+fb.beta",
+      "cupti-python": "13.5.0",
+      "toolkit": "13.0",
+      "fbtriton_distribution": "3.7.1"
+    },
+    "timing": {
+      "warmup": 10,
+      "iterations": 50,
+      "cold_l2": true,
+      "method": "CUPTI first-to-last kernel activity",
+      "guard": "Shared flock, GPU UUID pinning, compute-process and clock polling",
+      "inputs": "Cloned and pointer-shifted",
+      "outputs": "Preallocated",
+      "graphs": false,
+      "seed": 200
+    }
+  },
+  "runs": [
+    {
+      "name": "direct_triton_seed",
+      "trace_count": 29,
+      "passed": 29,
+      "timed": 29,
+      "latency_geomean_us": 44.016067003725894,
+      "gpu_record": "seed-gpu.json",
+      "triton_runtime": "3.6.0"
+    },
+    {
+      "name": "explicit_tma",
+      "trace_count": 29,
+      "passed": 29,
+      "timed": 29,
+      "latency_geomean_us": 28.543511399461266,
+      "gpu_record": "first-gpu.json",
+      "triton_runtime": "3.7.0+fb.beta"
+    },
+    {
+      "name": "grouped_tma",
+      "trace_count": 29,
+      "passed": 29,
+      "timed": 29,
+      "latency_geomean_us": 25.471829756068644,
+      "gpu_record": "wide-gpu.json",
+      "triton_runtime": "3.7.0+fb.beta"
+    }
+  ],
+  "screens": {
+    "stock": {
+      "outcomes": {
+        "PASSED": 286,
+        "BUILD_OR_LAUNCH_ERROR": 119
+      },
+      "gpu_record": "screen-gpu.json"
+    },
+    "explicit_tma": {
+      "outcomes": {
+        "PASSED": 91,
+        "BUILD_OR_LAUNCH_ERROR": 38
+      },
+      "gpu_record": "screen-fb-gpu.json"
+    },
+    "direct_and_descriptors": {
+      "outcomes": {
+        "PASSED": 163,
+        "BUILD_OR_LAUNCH_ERROR": 79
+      },
+      "gpu_record": "screen-refine-gpu.json"
+    },
+    "cluster": {
+      "outcomes": {
+        "PASSED": 5,
+        "BUILD_OR_LAUNCH_ERROR": 51
+      },
+      "gpu_record": "screen-cluster-gpu.json"
+    },
+    "grouped_epilogue": {
+      "outcomes": {
+        "PASSED": 68
+      },
+      "gpu_record": "screen-pipe-gpu.json"
+    }
+  },
+  "cold_candidate_s": 2.9053928242065012,
+  "cold_previous_s": 3.285358594264835,
+  "cold_check": "All official shapes, changed contents and aligned pointers, plus eight unaligned row-strided cases",
+  "paired_geomeans_us": [
+    {
+      "seed": 44.714414744051794,
+      "previous": 25.67554331146655,
+      "candidate": 25.246060310946927
+    },
+    {
+      "candidate": 25.115670270809666,
+      "previous": 25.343075580004594,
+      "seed": 44.7753523645925
+    }
+  ],
+  "max_peak_torch_allocated_gib": 1.2235956192016602,
+  "gpus": {
+    "seed-gpu.json": {
+      "physical_index": 3,
+      "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:39:39.338443+00:00",
+      "finished_utc": "2026-11-26T18:40:00.350312+00:00"
+    },
+    "first-gpu.json": {
+      "physical_index": 1,
+      "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:49:19.243934+00:00",
+      "finished_utc": "2026-11-26T18:49:43.627650+00:00"
+    },
+    "first-cold-gpu.json": {
+      "physical_index": 0,
+      "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:51:20.768483+00:00",
+      "finished_utc": "2026-11-26T18:51:32.190812+00:00"
+    },
+    "wide-gpu.json": {
+      "physical_index": 2,
+      "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:57:54.160479+00:00",
+      "finished_utc": "2026-11-26T18:58:17.162709+00:00"
+    },
+    "wide-cold-gpu.json": {
+      "physical_index": 3,
+      "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:56:58.994136+00:00",
+      "finished_utc": "2026-11-26T18:57:09.943036+00:00"
+    },
+    "wide-pair-gpu.json": {
+      "physical_index": 0,
+      "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:55:24.022067+00:00",
+      "finished_utc": "2026-11-26T18:56:19.481966+00:00"
+    },
+    "screen-gpu.json": {
+      "physical_index": 1,
+      "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:42:06.540621+00:00",
+      "finished_utc": "2026-11-26T18:43:15.235218+00:00"
+    },
+    "screen-fb-gpu.json": {
+      "physical_index": 2,
+      "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:45:46.472021+00:00",
+      "finished_utc": "2026-11-26T18:46:25.763325+00:00"
+    },
+    "screen-refine-gpu.json": {
+      "physical_index": 0,
+      "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:52:36.295407+00:00",
+      "finished_utc": "2026-11-26T18:53:34.463155+00:00"
+    },
+    "screen-cluster-gpu.json": {
+      "physical_index": 1,
+      "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:51:44.565474+00:00",
+      "finished_utc": "2026-11-26T18:51:54.248669+00:00"
+    },
+    "screen-pipe-gpu.json": {
+      "physical_index": 2,
+      "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+      "name": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "observed_clocks_mhz": [
+        [
+          1500,
+          3996
+        ]
+      ],
+      "sm_lock_mhz": 1500,
+      "memory_lock_deferred_mhz": 3996,
+      "memory_supported_mhz": [
+        3996
+      ],
+      "foreign_contexts_observed": false,
+      "started_utc": "2026-11-26T18:51:22.009788+00:00",
+      "finished_utc": "2026-11-26T18:51:44.255880+00:00"
+    }
+  },
+  "discarded_cli_runs": [
+    {
+      "physical_index": 2,
+      "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+      "started_utc": "2026-11-26T18:56:40.494903+00:00",
+      "finished_utc": "2026-11-26T18:57:06.414796+00:00",
+      "reason": "foreign compute context observed"
+    }
+  ],
+  "public_b200_v1_1": {
+    "checked_utc": "2026-11-26T18:57:03+00:00",
+    "evaluation_stack_version": "v1.1",
+    "gpu": "B200",
+    "kernel_id": 215,
+    "public_leader_rank": 1,
+    "public_leader_sol": 1.0,
+    "public_leader_submission_id": 102864,
+    "source": "https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/215/B200"
+  }
+}

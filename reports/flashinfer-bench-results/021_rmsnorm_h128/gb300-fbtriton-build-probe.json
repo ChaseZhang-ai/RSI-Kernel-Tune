@@ -1,0 +1,111 @@
+{
+  "scope": "local GB300 compatibility probe",
+  "device": {
+    "kind": "device",
+    "index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "sm_mhz": 1500,
+    "memory_mhz": 3996,
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta",
+    "evaluator": "1.0.2",
+    "candidate_sha256": "adaea01424f30a0bcb1f3b2ae363baee37cbaafa980ba0789e1758aa42c45209"
+  },
+  "passed": 0,
+  "workloads": 14,
+  "error": "Gluon global loads yielded a plain block type on fbtriton 3.7.1, breaking distributed broadcast during JIT compilation.",
+  "warmups": 10,
+  "timed_iterations": 50,
+  "candidate_outcomes": [
+    {
+      "batch": 4,
+      "uuid": "e971e0cc-d914-424e-a3ea-187e9cec413f",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.464
+    },
+    {
+      "batch": 24,
+      "uuid": "6abd9329-a1de-4704-9378-d7d70388cbfd",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.592
+    },
+    {
+      "batch": 32,
+      "uuid": "52688c58-7dd4-4ce5-8ed7-bc8aabac4d7b",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.592
+    },
+    {
+      "batch": 136,
+      "uuid": "ae6aa520-b8be-4e28-b3c4-fa484a2c17c2",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.624
+    },
+    {
+      "batch": 192,
+      "uuid": "4b7f0d02-8404-4eb4-be5c-64b0fd639684",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.624
+    },
+    {
+      "batch": 256,
+      "uuid": "d48fe9d2-1e43-418c-835c-0948ee76535b",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.656
+    },
+    {
+      "batch": 316,
+      "uuid": "a978e7eb-89fa-444f-96b1-ceb4cbb02f4c",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.656
+    },
+    {
+      "batch": 1088,
+      "uuid": "3b02c1b8-29dc-4c13-86a0-b7834daad8a1",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.7520000000000002
+    },
+    {
+      "batch": 2048,
+      "uuid": "1a7fa8e1-ba96-443e-b697-6f2436a130d6",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.912
+    },
+    {
+      "batch": 2528,
+      "uuid": "1e5d6f59-edbc-4d45-8edf-5599001cc270",
+      "status": "build_failure",
+      "baseline_tiered_us": 2.8800000000000003
+    },
+    {
+      "batch": 49532,
+      "uuid": "d5201e02-7338-405c-9c4d-ff95a03a00cc",
+      "status": "build_failure",
+      "baseline_tiered_us": 6.736000000000001
+    },
+    {
+      "batch": 65016,
+      "uuid": "16ce2b65-3a33-4e46-8924-57859152abf0",
+      "status": "build_failure",
+      "baseline_tiered_us": 8.416500000000001
+    },
+    {
+      "batch": 396256,
+      "uuid": "a11c12ed-feb2-4b09-a091-5964a86b6b17",
+      "status": "build_failure",
+      "baseline_tiered_us": 31.921000000000006
+    },
+    {
+      "batch": 520128,
+      "uuid": "f2872f89-5d8d-403a-9603-5918541cb9e0",
+      "status": "build_failure",
+      "baseline_tiered_us": 40.8335
+    }
+  ]
+}

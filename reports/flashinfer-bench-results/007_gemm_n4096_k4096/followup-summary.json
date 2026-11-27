@@ -1,0 +1,248 @@
+{
+  "verification": "Complete exact SOL-ExecBench evaluator and paired verification on GB300",
+  "baseline_sha256": "0c573ad8ea0216e79f847f7639922fa163df4ba2085404086f32b3c12ab05865",
+  "candidate_sha256": "425efe2541b63d7b2850bb5b058284af70b0993006d3a4043b830f18ee81345a",
+  "exact": {
+    "device": {
+      "physical_index": 0,
+      "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+      "initial_query": "0, GPU-abbc4299-8500-54d7-2a37-3ccac762f30d, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+      "sm_lock": [
+        1500,
+        1500
+      ],
+      "memory_lock": null,
+      "supported_memory_clocks_mhz": [
+        3996
+      ],
+      "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000008:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+      "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+      "samples": [
+        "1500 MHz, 3996 MHz"
+      ],
+      "device": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "triton_target_arch": 103,
+      "multiprocessor_count": 152,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "triton": "3.7.0+fb.beta",
+      "fbtriton": "3.7.1",
+      "evaluator": "1.0.2",
+      "cupti_python": "13.5.0",
+      "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd"
+    },
+    "passed": 43,
+    "total": 43,
+    "statuses": {
+      "PASSED": 43
+    },
+    "geometric_mean_us": 18.627675816824368,
+    "cold_first_call_seconds": 4.134275473188609
+  },
+  "pair": {
+    "physical_index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "initial_query": "0, GPU-abbc4299-8500-54d7-2a37-3ccac762f30d, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+    "sm_lock": [
+      1500,
+      1500
+    ],
+    "memory_lock": null,
+    "supported_memory_clocks_mhz": [
+      3996
+    ],
+    "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000008:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+    "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+    "samples": [
+      "1500 MHz, 3996 MHz"
+    ],
+    "device": "NVIDIA GB300",
+    "capability": [
+      10,
+      3
+    ],
+    "triton_target_arch": 103,
+    "multiprocessor_count": 152,
+    "torch": "2.10.0+cu130",
+    "cuda": "13.0",
+    "triton": "3.7.0+fb.beta",
+    "fbtriton": "3.7.1",
+    "evaluator": "1.0.2",
+    "cupti_python": "13.5.0",
+    "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+    "baseline_sha256": "0c573ad8ea0216e79f847f7639922fa163df4ba2085404086f32b3c12ab05865",
+    "candidate_sha256": "425efe2541b63d7b2850bb5b058284af70b0993006d3a4043b830f18ee81345a",
+    "warmups": 10,
+    "timed_iterations": 50,
+    "workload_count": 43,
+    "passes": {
+      "released": [
+        43,
+        43
+      ],
+      "candidate": [
+        43,
+        43
+      ]
+    },
+    "geometric_mean_us": {
+      "released": [
+        19.22659591607014,
+        19.237924099742916
+      ],
+      "candidate": [
+        18.6002074781786,
+        18.614488797732253
+      ]
+    },
+    "peak_allocated_bytes": 1048707072,
+    "peak_reserved_bytes": 1405091840,
+    "strided_guard_check": "PASSED"
+  },
+  "paired_baseline_us": 19.232259173840827,
+  "paired_candidate_us": 18.607346767824023,
+  "paired_improvement_percent": 3.249292765702705,
+  "screens": [
+    {
+      "job": "followup-screen",
+      "gpu": {
+        "physical_index": 2,
+        "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+        "initial_query": "2, GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+        "sm_lock": [
+          1500,
+          1500
+        ],
+        "memory_lock": null,
+        "supported_memory_clocks_mhz": [
+          3996
+        ],
+        "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000018:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+        "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+        "samples": [
+          "1500 MHz, 3996 MHz"
+        ],
+        "device": "NVIDIA GB300",
+        "capability": [
+          10,
+          3
+        ],
+        "triton_target_arch": 103,
+        "multiprocessor_count": 152,
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "triton": "3.7.0+fb.beta",
+        "fbtriton": "3.7.1",
+        "evaluator": "1.0.2",
+        "cupti_python": "13.5.0",
+        "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd"
+      }
+    },
+    {
+      "job": "followup-crossover",
+      "gpu": {
+        "physical_index": 0,
+        "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+        "initial_query": "0, GPU-abbc4299-8500-54d7-2a37-3ccac762f30d, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+        "sm_lock": [
+          1500,
+          1500
+        ],
+        "memory_lock": null,
+        "supported_memory_clocks_mhz": [
+          3996
+        ],
+        "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000008:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+        "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+        "samples": [
+          "1500 MHz, 3996 MHz"
+        ],
+        "device": "NVIDIA GB300",
+        "capability": [
+          10,
+          3
+        ],
+        "triton_target_arch": 103,
+        "multiprocessor_count": 152,
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "triton": "3.7.0+fb.beta",
+        "fbtriton": "3.7.1",
+        "evaluator": "1.0.2",
+        "cupti_python": "13.5.0",
+        "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd"
+      }
+    }
+  ],
+  "stock_triton_exact": {
+    "device": {
+      "physical_index": 0,
+      "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+      "initial_query": "0, GPU-abbc4299-8500-54d7-2a37-3ccac762f30d, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+      "sm_lock": [
+        1500,
+        1500
+      ],
+      "memory_lock": null,
+      "supported_memory_clocks_mhz": [
+        3996
+      ],
+      "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000008:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+      "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+      "samples": [
+        "1500 MHz, 3996 MHz"
+      ],
+      "device": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "triton_target_arch": 103,
+      "multiprocessor_count": 152,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "triton": "3.6.0",
+      "fbtriton": null,
+      "evaluator": "1.0.2",
+      "cupti_python": "13.5.0",
+      "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd"
+    },
+    "passed": 43,
+    "total": 43,
+    "statuses": {
+      "PASSED": 43
+    },
+    "geometric_mean_us": 18.678889124987794,
+    "cold_first_call_seconds": 3.8365427157841623
+  },
+  "large_workloads": [
+    {
+      "M": 972,
+      "paired_released_us": 39.824,
+      "paired_candidate_us": 34.47996658931097,
+      "exact_candidate_us": 34.528000000000006
+    },
+    {
+      "M": 2053,
+      "paired_released_us": 68.26399953123172,
+      "paired_candidate_us": 60.151995212129066,
+      "exact_candidate_us": 60.064
+    },
+    {
+      "M": 2379,
+      "paired_released_us": 70.4559959123423,
+      "paired_candidate_us": 61.367995307000214,
+      "exact_candidate_us": 61.440000000000005
+    },
+    {
+      "M": 8192,
+      "paired_released_us": 204.80865161413476,
+      "paired_candidate_us": 183.8084981944524,
+      "exact_candidate_us": 183.28050000000002
+    }
+  ]
+}

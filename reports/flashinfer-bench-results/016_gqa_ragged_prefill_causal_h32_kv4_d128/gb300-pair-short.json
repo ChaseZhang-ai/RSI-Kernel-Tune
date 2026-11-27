@@ -1,0 +1,351 @@
+{
+  "verification_scope": "GB300 only, paired direct launches using SOL-ExecBench reference, tolerance and timer",
+  "device": {
+    "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "physical_index": 2,
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0"
+  },
+  "evaluator_version": "sol-execbench 1.0.2",
+  "timing": {
+    "warmups": 10,
+    "iterations": 50,
+    "method": "CUPTI first-to-last user kernel",
+    "cache": "cold L2",
+    "inputs": "cloned",
+    "outputs": "preallocated"
+  },
+  "workloads": [
+    {
+      "uuid": "ebf7188b-4b31-4746-b57b-fa25b53f5e3e",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 6,
+        "total_kv": 6
+      },
+      "trials": {
+        "baseline": {
+          "first_call_s": 0.7887956369668245,
+          "max_abs_errors": [
+            0.015625,
+            4.76837158203125e-07
+          ],
+          "status": "passed",
+          "latency_us": 3.712
+        },
+        "candidate-v1": {
+          "first_call_s": 0.26816858910024166,
+          "max_abs_errors": [
+            4.76837158203125e-07,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 3.072
+        },
+        "tiny-w4": {
+          "first_call_s": 0.10743024619296193,
+          "max_abs_errors": [
+            4.76837158203125e-07,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.991499999999999
+        },
+        "tiny-simd34": {
+          "first_call_s": 0.0021585808135569096,
+          "max_abs_errors": [
+            4.76837158203125e-07,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 3.088
+        },
+        "tiny-packed2": {
+          "first_call_s": 0.41021318174898624,
+          "max_abs_errors": [
+            0.015625,
+            7.152557373046875e-07
+          ],
+          "status": "passed",
+          "latency_us": 5.5360000000000005
+        },
+        "tiny-packed2w2": {
+          "first_call_s": 0.3294287580065429,
+          "max_abs_errors": [
+            0.015625,
+            7.152557373046875e-07
+          ],
+          "status": "passed",
+          "latency_us": 6.032
+        }
+      }
+    },
+    {
+      "uuid": "9350509c-c2da-4d5e-9585-dec9aff01725",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 1,
+        "total_kv": 1
+      },
+      "trials": {
+        "candidate-v1": {
+          "first_call_s": 0.1908475887030363,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.7680000000000002
+        },
+        "tiny-w4": {
+          "first_call_s": 0.0019016498699784279,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.784
+        },
+        "tiny-simd34": {
+          "first_call_s": 0.0017658090218901634,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.8960000000000004
+        },
+        "tiny-packed2": {
+          "first_call_s": 0.001913169864565134,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.7520000000000002
+        },
+        "tiny-packed2w2": {
+          "first_call_s": 0.001734033226966858,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.944
+        },
+        "baseline": {
+          "first_call_s": 0.1980995601043105,
+          "max_abs_errors": [
+            0.0,
+            2.384185791015625e-07
+          ],
+          "status": "passed",
+          "latency_us": 2.7680000000000002
+        }
+      }
+    },
+    {
+      "uuid": "3ca7457e-e4b1-42a4-b6c7-c0b37c461054",
+      "axes": {
+        "len_indptr": 2,
+        "total_q": 34,
+        "total_kv": 34
+      },
+      "trials": {
+        "tiny-w4": {
+          "first_call_s": 0.3079529316164553,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 6.4
+        },
+        "tiny-simd34": {
+          "first_call_s": 0.2848103102296591,
+          "max_abs_errors": [
+            0.001953125,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 6.144
+        },
+        "tiny-packed2": {
+          "first_call_s": 7.404899224638939e-05,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 5.760000000000001
+        },
+        "tiny-packed2w2": {
+          "first_call_s": 6.678514182567596e-05,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 6.2565
+        },
+        "baseline": {
+          "first_call_s": 0.18709311820566654,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 4.128
+        },
+        "candidate-v1": {
+          "first_call_s": 0.004014917649328709,
+          "max_abs_errors": [
+            0.015625,
+            9.5367431640625e-07
+          ],
+          "status": "passed",
+          "latency_us": 6.352
+        }
+      }
+    },
+    {
+      "uuid": "1f97930e-1a06-4e84-9875-09a22fff8a7c",
+      "axes": {
+        "len_indptr": 4,
+        "total_q": 172,
+        "total_kv": 172
+      },
+      "trials": {
+        "tiny-simd34": {
+          "first_call_s": 0.36265374068170786,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.4
+        },
+        "tiny-packed2": {
+          "first_call_s": 0.28793321596458554,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 9.376000000000001
+        },
+        "tiny-packed2w2": {
+          "first_call_s": 0.36235882388427854,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 9.8405
+        },
+        "baseline": {
+          "first_call_s": 1.1472457102499902,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.208
+        },
+        "candidate-v1": {
+          "first_call_s": 0.0016532638110220432,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.4
+        },
+        "tiny-w4": {
+          "first_call_s": 0.0014546369202435017,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 10.3685
+        }
+      }
+    },
+    {
+      "uuid": "b3445888-8668-4721-9359-9da119ab9f34",
+      "axes": {
+        "len_indptr": 16,
+        "total_q": 969,
+        "total_kv": 969
+      },
+      "trials": {
+        "tiny-packed2": {
+          "first_call_s": 0.28735291911289096,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 45.616499999999995
+        },
+        "tiny-packed2w2": {
+          "first_call_s": 0.3628915250301361,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 44.7525
+        },
+        "baseline": {
+          "first_call_s": 1.0434059486724436,
+          "max_abs_errors": [
+            0.015625,
+            1.430511474609375e-06
+          ],
+          "status": "passed",
+          "latency_us": 26.1925
+        },
+        "candidate-v1": {
+          "first_call_s": 0.3498671427369118,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 35.744
+        },
+        "tiny-w4": {
+          "first_call_s": 0.001515406183898449,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 35.409
+        },
+        "tiny-simd34": {
+          "first_call_s": 0.0015376140363514423,
+          "max_abs_errors": [
+            0.015625,
+            1.9073486328125e-06
+          ],
+          "status": "passed",
+          "latency_us": 35.456500000000005
+        }
+      }
+    }
+  ]
+}

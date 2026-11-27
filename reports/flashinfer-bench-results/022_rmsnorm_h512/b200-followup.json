@@ -1,0 +1,318 @@
+{
+  "reason": "compatibility",
+  "archive_sha256": "44e86693583ca1a0d2852277fe262ae5fbff8fd905157d608851a4a8d47fdb27",
+  "candidate_sha256": "42cf95e21eedaf29141412ba6caf7a7e98d02559da6feb8de7d12576e54baea8",
+  "issue": "fbtriton 3.7.1 loses distributed types after Gluon global loads in _blocked",
+  "fix": "Identity permutations preserve the activation and weight layouts before FP32 arithmetic",
+  "b200": {
+    "stack": "v1.1",
+    "source_snapshot_utc": "2026-11-27T04:17:53.116990+00:00",
+    "standalone": {
+      "id": 106231,
+      "status": "COMPLETED",
+      "is_correct": false,
+      "is_disqualified": false,
+      "timed": 3,
+      "expected": 8
+    },
+    "collection": {
+      "id": 106091,
+      "status": "COMPLETED",
+      "is_correct": false,
+      "is_disqualified": false
+    },
+    "public_leader": {
+      "username": "June",
+      "sol_score": 0.818143,
+      "submission_id": 104772
+    }
+  },
+  "gb300": {
+    "archived_fbtriton_cli_device": {
+      "physical_index": 0,
+      "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+      "sm_clock_mhz": 1500,
+      "memory_clock_mhz": 3996,
+      "supported_memory_clock_mhz": [
+        3996
+      ],
+      "name": "NVIDIA GB300",
+      "sm_count": 152,
+      "capability": [
+        10,
+        3
+      ]
+    },
+    "revised_fbtriton_cli_device": {
+      "physical_index": 1,
+      "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+      "sm_clock_mhz": 1500,
+      "memory_clock_mhz": 3996,
+      "supported_memory_clock_mhz": [
+        3996
+      ],
+      "name": "NVIDIA GB300",
+      "sm_count": 152,
+      "capability": [
+        10,
+        3
+      ]
+    },
+    "revised_fbtriton_cli_geomean_us": 3.34745136951819,
+    "stock_pair_device": {
+      "kind": "device",
+      "name": "NVIDIA GB300",
+      "sm_count": 152,
+      "capability": [
+        10,
+        3
+      ],
+      "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+      "physical_index": 2,
+      "clocks_mhz": [
+        1500,
+        3996
+      ],
+      "torch": "2.10.0+cu130",
+      "triton": "3.6.0",
+      "evaluator": "1.0.2",
+      "cupti": "13.5.0",
+      "l2_bytes": 135528448,
+      "memory_bytes": 297013411840
+    },
+    "stock_pair_geomean_us": {
+      "baseline": 4.0073770350443905,
+      "archive": 3.3834983562126135,
+      "layout_fixed": 3.3635731960447988,
+      "direct_hybrid": 3.660679154496359
+    },
+    "evaluator": "1.0.2",
+    "fbtriton": "3.7.1",
+    "warmups": 10,
+    "timed_iterations": 50,
+    "cold_l2": true,
+    "timing": "CUPTI first-to-last kernel"
+  },
+  "offline_fbtriton": {
+    "100": {
+      "archive_successes": [
+        {
+          "kernel": "_packed",
+          "seconds": 0.07551026390865445,
+          "target": 100,
+          "shared_bytes": 0,
+          "rows": 4
+        },
+        {
+          "kernel": "_packed",
+          "seconds": 0.07529621478170156,
+          "target": 100,
+          "shared_bytes": 0,
+          "rows": 8
+        }
+      ],
+      "archive_failures": [
+        {
+          "kernel": "_blocked",
+          "rows": 1,
+          "error": "expected broadcast left input to be a distributed_type"
+        },
+        {
+          "kernel": "_blocked",
+          "rows": 4,
+          "error": "expected broadcast left input to be a distributed_type"
+        }
+      ],
+      "candidate": [
+        {
+          "kernel": "_blocked",
+          "seconds": 0.40504661900922656,
+          "target": 100,
+          "shared_bytes": 8,
+          "rows": 1
+        },
+        {
+          "kernel": "_blocked",
+          "seconds": 0.06511413492262363,
+          "target": 100,
+          "shared_bytes": 0,
+          "rows": 4
+        },
+        {
+          "kernel": "_packed",
+          "seconds": 0.06473842170089483,
+          "target": 100,
+          "shared_bytes": 0,
+          "rows": 4
+        },
+        {
+          "kernel": "_packed",
+          "seconds": 0.07271310407668352,
+          "target": 100,
+          "shared_bytes": 0,
+          "rows": 8
+        }
+      ],
+      "candidate_cold_total_s": 0.6076122797094285
+    },
+    "103": {
+      "archive_successes": [
+        {
+          "kernel": "_packed",
+          "seconds": 0.07470866199582815,
+          "target": 103,
+          "shared_bytes": 0,
+          "rows": 4
+        },
+        {
+          "kernel": "_packed",
+          "seconds": 0.07637538621202111,
+          "target": 103,
+          "shared_bytes": 0,
+          "rows": 8
+        }
+      ],
+      "archive_failures": [
+        {
+          "kernel": "_blocked",
+          "rows": 1,
+          "error": "expected broadcast left input to be a distributed_type"
+        },
+        {
+          "kernel": "_blocked",
+          "rows": 4,
+          "error": "expected broadcast left input to be a distributed_type"
+        }
+      ],
+      "candidate": [
+        {
+          "kernel": "_blocked",
+          "seconds": 0.4008500622585416,
+          "target": 103,
+          "shared_bytes": 8,
+          "rows": 1
+        },
+        {
+          "kernel": "_blocked",
+          "seconds": 0.06291144015267491,
+          "target": 103,
+          "shared_bytes": 0,
+          "rows": 4
+        },
+        {
+          "kernel": "_packed",
+          "seconds": 0.06360030686482787,
+          "target": 103,
+          "shared_bytes": 0,
+          "rows": 4
+        },
+        {
+          "kernel": "_packed",
+          "seconds": 0.07047172077000141,
+          "target": 103,
+          "shared_bytes": 0,
+          "rows": 8
+        }
+      ],
+      "candidate_cold_total_s": 0.5978335300460458
+    }
+  },
+  "workloads": [
+    {
+      "uuid": "69d9dba5-9d8f-4f6f-901f-43b5ae58b151",
+      "batch": 1,
+      "route": "_blocked",
+      "collection_b200_outcome": "RUNTIME_ERROR",
+      "collection_b200_latency_ms": null,
+      "archived_fbtriton_cli_outcome": "RUNTIME_ERROR",
+      "archived_fbtriton_cli_error": "expected broadcast left input to be a distributed_type",
+      "archived_fbtriton_cli_latency_us": null,
+      "revised_fbtriton_cli_outcome": "PASSED",
+      "revised_fbtriton_cli_latency_us": 2.592
+    },
+    {
+      "uuid": "e0fe7cd7-226c-45dd-af09-45463cc10d39",
+      "batch": 7,
+      "route": "_blocked",
+      "collection_b200_outcome": "RUNTIME_ERROR",
+      "collection_b200_latency_ms": null,
+      "archived_fbtriton_cli_outcome": "RUNTIME_ERROR",
+      "archived_fbtriton_cli_error": "expected broadcast left input to be a distributed_type",
+      "archived_fbtriton_cli_latency_us": null,
+      "revised_fbtriton_cli_outcome": "PASSED",
+      "revised_fbtriton_cli_latency_us": 2.528
+    },
+    {
+      "uuid": "4b5050f5-d6ab-4b20-bb9c-409c073f4d37",
+      "batch": 18,
+      "route": "_blocked",
+      "collection_b200_outcome": "RUNTIME_ERROR",
+      "collection_b200_latency_ms": null,
+      "archived_fbtriton_cli_outcome": "RUNTIME_ERROR",
+      "archived_fbtriton_cli_error": "expected broadcast left input to be a distributed_type",
+      "archived_fbtriton_cli_latency_us": null,
+      "revised_fbtriton_cli_outcome": "PASSED",
+      "revised_fbtriton_cli_latency_us": 2.528
+    },
+    {
+      "uuid": "0315f2ba-9254-4de4-854e-7aafe6460edc",
+      "batch": 32,
+      "route": "_blocked",
+      "collection_b200_outcome": "RUNTIME_ERROR",
+      "collection_b200_latency_ms": null,
+      "archived_fbtriton_cli_outcome": "RUNTIME_ERROR",
+      "archived_fbtriton_cli_error": "expected broadcast left input to be a distributed_type",
+      "archived_fbtriton_cli_latency_us": null,
+      "revised_fbtriton_cli_outcome": "PASSED",
+      "revised_fbtriton_cli_latency_us": 2.528
+    },
+    {
+      "uuid": "eee1d057-c1a3-42c1-bb57-71223bc091ee",
+      "batch": 64,
+      "route": "_blocked",
+      "collection_b200_outcome": "RUNTIME_ERROR",
+      "collection_b200_latency_ms": null,
+      "archived_fbtriton_cli_outcome": "RUNTIME_ERROR",
+      "archived_fbtriton_cli_error": "expected broadcast left input to be a distributed_type",
+      "archived_fbtriton_cli_latency_us": null,
+      "revised_fbtriton_cli_outcome": "PASSED",
+      "revised_fbtriton_cli_latency_us": 2.592
+    },
+    {
+      "uuid": "625f29dc-a8de-48ba-afdb-96727b2a7feb",
+      "batch": 539,
+      "route": "_packed",
+      "collection_b200_outcome": "timed",
+      "collection_b200_latency_ms": 0.003104,
+      "archived_fbtriton_cli_outcome": "PASSED",
+      "archived_fbtriton_cli_error": null,
+      "archived_fbtriton_cli_latency_us": 2.832,
+      "revised_fbtriton_cli_outcome": "PASSED",
+      "revised_fbtriton_cli_latency_us": 2.96
+    },
+    {
+      "uuid": "6a4a7810-cc7b-4641-9152-91112a15e489",
+      "batch": 11949,
+      "route": "_packed",
+      "collection_b200_outcome": "timed",
+      "collection_b200_latency_ms": 0.007024,
+      "archived_fbtriton_cli_outcome": "PASSED",
+      "archived_fbtriton_cli_error": null,
+      "archived_fbtriton_cli_latency_us": 6.656,
+      "revised_fbtriton_cli_outcome": "PASSED",
+      "revised_fbtriton_cli_latency_us": 6.624
+    },
+    {
+      "uuid": "0581e118-09fa-4f5f-9910-d1b4a7573353",
+      "batch": 14521,
+      "route": "_packed",
+      "collection_b200_outcome": "timed",
+      "collection_b200_latency_ms": 0.007904,
+      "archived_fbtriton_cli_outcome": "PASSED",
+      "archived_fbtriton_cli_error": null,
+      "archived_fbtriton_cli_latency_us": 7.52,
+      "revised_fbtriton_cli_outcome": "PASSED",
+      "revised_fbtriton_cli_latency_us": 7.4079999999999995
+    }
+  ]
+}

@@ -174,41 +174,49 @@ void small_rows(const unsigned short* x, const unsigned short* w,
     }
 }
 
-// The two rows share one weight vector per thread.
-extern "C" __global__ __launch_bounds__(128) void pair_reuse(const unsigned short* x, const unsigned short* w,
-                                           unsigned short* y, int rows) {
-    constexpr int Rows = 2;
-    const int row0 = blockIdx.x * Rows;
-    const int tid = threadIdx.x;
-    const int col = tid * 16;
-    const auto weights = read_vec<8, 1>(w + col);
-    Vec<8> activations[Rows];
-    float sums[Rows];
-    #pragma unroll
-    for (int i = 0; i < Rows; ++i) {
-        int row = min(row0 + i, rows - 1);
-        activations[i] = read_vec<8, 0>(x + row * 2048 + col);
-    }
-    #pragma unroll
-    for (int i = 0; i < Rows; ++i) {
-        sums[i] = warp_sum(sum_squares(activations[i]));
-    }
-    __shared__ float partial[Rows][4];
-    if (tid % 32 == 0) {
-        #pragma unroll
-        for (int i = 0; i < Rows; ++i)
-            partial[i][tid / 32] = sums[i];
+__device__ __forceinline__ float inverse_rms_128(float squares) {
+    const float sum = warp_sum(squares);
+    __shared__ float partial[4];
+    if (threadIdx.x % 32 == 0) {
+        partial[threadIdx.x / 32] = sum;
     }
     __syncthreads();
-    #pragma unroll
-    for (int i = 0; i < Rows; ++i) {
-        if (row0 + i < rows) {
-            float mean = total<4>(partial[i]) * (1.0f / 2048);
-            float inv = rsqrtf(mean + 1e-6f);
-            write_vec<8, false>(y + (row0 + i) * 2048 + col,
-                                 normalize(activations[i], weights, inv));
+    return rsqrtf(total<4>(partial) * (1.0f / 2048) + 1e-6f);
+}
+
+// Each lane contributes a vector from both halves and writes its own vector.
+extern "C" __global__ __launch_bounds__(128)
+void half_rows_128_prefetch(const unsigned short* x, const unsigned short* w,
+                            unsigned short* y, int rows) {
+    const int row = blockIdx.x;
+    const int shard = blockIdx.y;
+    if (shard == 0) {
+        if (threadIdx.x == 0) {
+            asm volatile("cp.async.bulk.prefetch.L2.global [%0], 4096;"
+                         :: "l"(x + row * 2048));
+            if (row == 0) {
+                asm volatile("cp.async.bulk.prefetch.L2.global [%0], 4096;" :: "l"(w));
+            }
         }
+        return;
     }
+    const int col = threadIdx.x * 8 + (shard - 1) * 1024;
+    const auto weights = read_vec<4, 1>(w + col);
+    const auto primary = read_vec<4, 0>(x + row * 2048 + col);
+    const auto other = read_vec<4, 0>(x + row * 2048 + (col ^ 1024));
+    const float inv = inverse_rms_128(sum_squares(primary) + sum_squares(other));
+    write_vec<4, false>(y + row * 2048 + col, normalize(primary, weights, inv));
+}
+
+extern "C" __global__ __launch_bounds__(128)
+void direct_rows(const unsigned short* x, const unsigned short* w,
+                 unsigned short* y, int rows) {
+    const int col = threadIdx.x * 16;
+    const int offset = blockIdx.x * 2048 + col;
+    const auto weights = read_vec<8, 1>(w + col);
+    const auto v = read_vec<8, 0>(x + offset);
+    const float inv = inverse_rms_128(sum_squares(v));
+    write_vec<8, false>(y + offset, normalize(v, weights, inv));
 }
 
 
@@ -304,10 +312,13 @@ def run(hidden_states, weight, output):
             )
             return
 
-        if batch <= 79:
+        partitions = 1
+        if batch < 64:
             name, blocks, threads = "small_rows", 3 * batch, 256
+        elif batch <= 79:
+            name, blocks, threads, partitions = "half_rows_128_prefetch", batch, 128, 3
         elif batch < 16000:
-            name, blocks, threads = "pair_reuse", (batch + 1) // 2, 128
+            name, blocks, threads = "direct_rows", batch, 128
         else:
             name, blocks, threads = "pair_stream", (batch + 1) // 2, 256
 
@@ -317,5 +328,5 @@ def run(hidden_states, weight, output):
         kernel = _kernel(module, name)
         args = (*pointers, batch)
         types = (c_void_p, c_void_p, c_void_p, c_int)
-        _checked(driver.cuLaunchKernel(kernel, blocks, 1, 1, threads, 1, 1, 0,
+        _checked(driver.cuLaunchKernel(kernel, blocks, partitions, 1, threads, 1, 1, 0,
                                        stream, (args, types), 0))

@@ -1,8 +1,10 @@
 # 024_rmsnorm_h2048
 
+Latest exact candidate and B200 follow-up. [2026-11-27 report](followup.md)
+
 ## Selected packed CUDA candidate · 2026-11-26 18:51 UTC
 
-**Provisional GB300 only.** The exact standalone destination-passing file passed 7/7 official workloads in both orders of the paired evaluator test with a **1.272× geometric-mean speedup** over the direct Triton baseline. The same file passed **7/7** in the official local CLI at **4.801 µs** geometric mean. The candidate is ready for the coordinator's B200 trial. Candidate SHA-256 `ec39fe4165098aa669551b1f1231a05b1a82aed4d877c24ed0346dc0ffbf9d8f`. [Standalone file](../../../flashinfer-bench/024_rmsnorm_h2048/submission.py) · [Official CLI traces](gb300-evaluator.jsonl) · [Paired records](gb300-paired.jsonl)
+**Provisional GB300 only.** The exact standalone destination-passing file passed 7/7 official workloads in both orders of the paired evaluator test with a **1.272× geometric-mean speedup** over the direct Triton baseline. The same file passed **7/7** in the official local CLI at **4.801 µs** geometric mean. The candidate is ready for the coordinator's B200 trial. Candidate SHA-256 `ec39fe4165098aa669551b1f1231a05b1a82aed4d877c24ed0346dc0ffbf9d8f`. [Archived standalone file](https://github.com/ChaseZhang-ai/RSI-Kernel-Tune/blob/c7dbeb239854d9f19bb2f7784531de38da382173/flashinfer-bench/024_rmsnorm_h2048/submission.py) · [Official CLI traces](gb300-evaluator.jsonl) · [Paired records](gb300-paired.jsonl)
 
 Physical GB300 GPU 1, UUID `GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12`, 152 queried SMs, CUDA capability 10.3. The paired and CLI runs each acquired the GPU lock, pinned the UUID and monitored for foreign compute processes. The SM lock was 1500 MHz. The sole supported memory clock was 3996 MHz, matching the deferred setting and active clock sample.
 

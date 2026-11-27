@@ -1,0 +1,14 @@
+{
+  "id": 107423,
+  "worker": 2,
+  "kernel_id": 211,
+  "timed": 14,
+  "expected": 14,
+  "verified_sol": 0.798396,
+  "checked_at": "2026-11-27T18:18:55.258017+00:00",
+  "collection": null,
+  "workload_status_counts": {
+    "None": 14
+  },
+  "official_sol": 0.798396
+}

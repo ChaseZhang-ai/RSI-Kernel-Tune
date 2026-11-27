@@ -1,0 +1,26 @@
+{
+  "type": "local build and portability verification",
+  "attempts": [
+    {
+      "compiler": "Triton 3.6.0",
+      "status": "BUILD_FAILURE",
+      "detail": "tensor_memory_descriptor.load() missing 1 required positional argument: 'layout'"
+    },
+    {
+      "compiler": "Triton 3.6.0",
+      "status": "BUILD_FAILURE",
+      "detail": "ttng.tmem_load verifier rejected a register layout from the newer compiler"
+    },
+    {
+      "compiler": "fbtriton 3.7.1",
+      "status": "BUILD_FAILURE",
+      "detail": "JIT dependency scan tried to resolve a missing get_tmem_reg_layout symbol in a dead constexpr branch"
+    }
+  ],
+  "verified_fix": "Select the loader at module import. Use the stock compiler's get_tmem_reg_layout when available and automatic register layout on fbtriton.",
+  "official_local_passes": {
+    "Triton 3.6.0": 43,
+    "fbtriton 3.7.1": 43
+  },
+  "submission_sha256": "425efe2541b63d7b2850bb5b058284af70b0993006d3a4043b830f18ee81345a"
+}

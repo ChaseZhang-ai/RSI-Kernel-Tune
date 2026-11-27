@@ -1,0 +1,195 @@
+{
+  "verification": "asymmetric B, split-K cancellation, output guards and changed contents/pointers",
+  "workloads": [
+    {
+      "M": 1,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 2,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 4,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 5,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 6,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 8,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 16,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 17,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 25,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 32,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 34,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 63,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 64,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 93,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 128,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 172,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 289,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 492,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 952,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 8828,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 11006,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 12251,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 12853,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 14915,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 16294,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 3,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 9,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 18,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 33,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 65,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 129,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 173,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 290,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 493,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 953,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 2049,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 8831,
+      "status": "passed",
+      "cases": 2
+    },
+    {
+      "M": 38033,
+      "status": "passed",
+      "cases": 2
+    }
+  ]
+}

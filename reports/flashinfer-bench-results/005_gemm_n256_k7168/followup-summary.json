@@ -1,0 +1,97 @@
+{
+  "sha256": "7670abf8fd6c7ef726b8d2782c0b11c4e13f4862d1ca576a7f0396a65dcb5f51",
+  "comparator_sha256": "74d68660b4b46e123f61c63ddb601e413b9284501ed9e1fde8236c172fdfa625",
+  "workloads_passed": 17,
+  "official_geomean_us": 7.1371267477776,
+  "paired_geomean_us": {
+    "baseline": 7.31587501582738,
+    "candidate": 7.214997795709049
+  },
+  "paired_trial_geomeans_us": [
+    {
+      "baseline": 7.310606165655335,
+      "candidate": 7.206603449210574
+    },
+    {
+      "baseline": 7.3192890207166235,
+      "candidate": 7.213611795481514
+    },
+    {
+      "baseline": 7.310305680279176,
+      "candidate": 7.224654908189249
+    }
+  ],
+  "m54_paired_median_us": {
+    "baseline": 5.5040000000000004,
+    "candidate": 5.312
+  },
+  "cold_first_calls_wall_s": {
+    "baseline": 1.3561786590144038,
+    "candidate": 1.015549755655229
+  },
+  "peak_torch_allocation_bytes": 713202176,
+  "official_device": {
+    "physical_index": 2,
+    "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+    "capability": [
+      10,
+      3
+    ],
+    "sm_count": 152,
+    "total_memory": 297013411840,
+    "l2_bytes": 135528448,
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "evaluator": "1.0.2 (a9fa0804c793d438e70850c33fe34426e66d53dd)",
+    "cupti": "13.5.0"
+  },
+  "paired_device": {
+    "physical_index": 1,
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "capability": [
+      10,
+      3
+    ],
+    "sm_count": 152,
+    "total_memory": 297013411840,
+    "l2_bytes": 135528448,
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "evaluator": "1.0.2 (a9fa0804c793d438e70850c33fe34426e66d53dd)",
+    "cupti": "13.5.0"
+  },
+  "edge_device": {
+    "physical_index": 2,
+    "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+    "capability": [
+      10,
+      3
+    ],
+    "sm_count": 152,
+    "total_memory": 297013411840,
+    "l2_bytes": 135528448,
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "evaluator": "1.0.2 (a9fa0804c793d438e70850c33fe34426e66d53dd)",
+    "cupti": "13.5.0"
+  },
+  "warmups": 10,
+  "timed_iterations": 50,
+  "sm_mhz_locked": 1500,
+  "memory_mhz": 3996,
+  "sm100_offline_shared_bytes": {
+    "native_max": 39952,
+    "tma_max": 196656
+  },
+  "verification_scope": "GB300 runtime and SM100 offline compilation",
+  "b200_baseline": {
+    "standalone_id": 106249,
+    "standalone_timed": 15,
+    "collection_child_id": 106074,
+    "collection_timed": 16,
+    "collection_missing_m": 54,
+    "collection_missing_uuid": "84f0b901-a934-4f54-9ae0-23fb641d5083",
+    "public_leader_sol": 0.915728,
+    "source_timestamp_utc": "2026-11-27T04:17:51.809977+00:00"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "workload_id": "451a49fc-9c9d-4ecb-a0a0-f41406df708f",
+  "axes": {
+    "M": 12251,
+    "N": 5120,
+    "K": 2048
+  },
+  "device": "NVIDIA GB300",
+  "physical_index": 3,
+  "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+  "clocks_mhz": {
+    "sm": 1500,
+    "memory": 3996
+  },
+  "nsight_compute": "2026.1.1",
+  "cache_control": "all",
+  "profiler_launches_per_configuration": 1,
+  "metric_scope": "Whole-kernel counters include both operands and output traffic",
+  "records": [
+    {
+      "variant": "persistent-1-half",
+      "grouped_m_tiles": 1,
+      "store": "half",
+      "kernel_name": "_persistent",
+      "grid": "(152, 1, 1)",
+      "output_store_ptx_ops": [
+        "cp.async.bulk.tensor.2d.global.shared::cta.bulk_group"
+      ],
+      "counters": {
+        "dram__bytes_read.sum": 71199488,
+        "dram__bytes_write.sum": 84904192,
+        "lts__t_sectors_op_read.sum": 73737682,
+        "lts__t_sectors_op_write.sum": 5880665
+      },
+      "separate_cupti_mean_us": 193.68191
+    },
+    {
+      "variant": "persistent-4-half",
+      "grouped_m_tiles": 4,
+      "store": "half",
+      "kernel_name": "_persistent",
+      "grid": "(152, 1, 1)",
+      "output_store_ptx_ops": [
+        "cp.async.bulk.tensor.2d.global.shared::cta.bulk_group"
+      ],
+      "counters": {
+        "dram__bytes_read.sum": 71217408,
+        "dram__bytes_write.sum": 87613952,
+        "lts__t_sectors_op_read.sum": 59869534,
+        "lts__t_sectors_op_write.sum": 5882771
+      },
+      "separate_cupti_mean_us": 191.75106
+    },
+    {
+      "variant": "persistent-4-ptr",
+      "grouped_m_tiles": 4,
+      "store": "ptr",
+      "kernel_name": "_persistent",
+      "grid": "(152, 1, 1)",
+      "output_store_ptx_ops": [
+        "st.global.v4.b32"
+      ],
+      "counters": {
+        "dram__bytes_read.sum": 71260160,
+        "dram__bytes_write.sum": 88538112,
+        "lts__t_sectors_op_read.sum": 59643896,
+        "lts__t_sectors_op_write.sum": 5878801
+      },
+      "separate_cupti_mean_us": 198.49516999999997
+    },
+    {
+      "variant": "raster-4-half",
+      "grouped_m_tiles": 4,
+      "store": "half",
+      "kernel_name": "_raster",
+      "grid": "(1920, 1, 1)",
+      "output_store_ptx_ops": [
+        "cp.async.bulk.tensor.2d.global.shared::cta.bulk_group"
+      ],
+      "counters": {
+        "dram__bytes_read.sum": 72518144,
+        "dram__bytes_write.sum": 89663744,
+        "lts__t_sectors_op_read.sum": 64469426,
+        "lts__t_sectors_op_write.sum": 5875342
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "index": 2,
+  "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+  "locked_sm_mhz": 1500,
+  "observed_mem_mhz": 3996,
+  "supported_mem_mhz": [
+    3996
+  ],
+  "device": "NVIDIA GB300",
+  "physical_index": 2,
+  "sm_count": 152,
+  "capability": [
+    10,
+    3
+  ],
+  "l2_bytes": 135528448,
+  "total_memory_bytes": 297013411840,
+  "torch": "2.10.0+cu130",
+  "triton": "3.6.0",
+  "evaluator": "1.0.2",
+  "cupti": "13.5.0"
+}

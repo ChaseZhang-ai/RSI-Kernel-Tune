@@ -1,0 +1,1132 @@
+{
+  "gpu": {
+    "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ]
+  },
+  "environment": {
+    "sol-execbench": "1.0.2",
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta",
+    "cupti-python": "13.5.0",
+    "toolkit": "13.0"
+  },
+  "rows": [
+    {
+      "id": "bcc2cc41b7464e54b0c4d11e65da96d8",
+      "M": 6,
+      "correctness": {
+        "max_relative_error": 0.008392333984375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 9.968000000000002,
+            "min_us": 9.504,
+            "max_us": 57.824
+          },
+          "candidate": {
+            "median_us": 8.64,
+            "min_us": 8.416,
+            "max_us": 9.184
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 8.607999999999999,
+            "min_us": 8.384,
+            "max_us": 9.28
+          },
+          "baseline": {
+            "median_us": 10.016,
+            "min_us": 9.568,
+            "max_us": 35.872
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "ff70a7abf26848aba6424c7571f777d4",
+      "M": 1,
+      "correctness": {
+        "max_relative_error": 0.006103515625,
+        "max_absolute_error": 0.03125,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 6.800000000000001,
+            "min_us": 6.592,
+            "max_us": 7.648000000000001
+          },
+          "baseline": {
+            "median_us": 6.816,
+            "min_us": 6.592,
+            "max_us": 7.6160000000000005
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 6.816,
+            "min_us": 6.592,
+            "max_us": 7.36
+          },
+          "candidate": {
+            "median_us": 6.816,
+            "min_us": 6.56,
+            "max_us": 7.4559999999999995
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "f4513ae887ae4d42946dcf6630671c22",
+      "M": 34,
+      "correctness": {
+        "max_relative_error": 0.0125885009765625,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 13.552,
+            "min_us": 13.248,
+            "max_us": 14.048
+          },
+          "candidate": {
+            "median_us": 13.520000000000001,
+            "min_us": 13.248,
+            "max_us": 14.176
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.6,
+            "min_us": 13.185,
+            "max_us": 14.08
+          },
+          "baseline": {
+            "median_us": 13.536,
+            "min_us": 13.248,
+            "max_us": 14.016
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "e5931dc39ece4669b866483e6e2d6773",
+      "M": 969,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 20.288,
+            "min_us": 19.968,
+            "max_us": 21.152
+          },
+          "baseline": {
+            "median_us": 20.288,
+            "min_us": 20.032,
+            "max_us": 20.767999999999997
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 20.224,
+            "min_us": 20.032,
+            "max_us": 20.736
+          },
+          "candidate": {
+            "median_us": 20.256,
+            "min_us": 20.032,
+            "max_us": 21.087999999999997
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "b99854266fd7401a9f296cdf99e56e6c",
+      "M": 16,
+      "correctness": {
+        "max_relative_error": 0.011695906519889832,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 10.256000000000002,
+            "min_us": 9.472,
+            "max_us": 41.279999999999994
+          },
+          "candidate": {
+            "median_us": 8.767999999999999,
+            "min_us": 8.543999999999999,
+            "max_us": 9.28
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 8.831999999999999,
+            "min_us": 8.607999999999999,
+            "max_us": 9.376000000000001
+          },
+          "baseline": {
+            "median_us": 10.096,
+            "min_us": 9.6,
+            "max_us": 38.784
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "75f0b62d01a44f9bac44a61ec9a3f3a1",
+      "M": 15,
+      "correctness": {
+        "max_relative_error": 0.009918212890625,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 8.959999999999999,
+            "min_us": 8.671999999999999,
+            "max_us": 9.664000000000001
+          },
+          "baseline": {
+            "median_us": 10.064,
+            "min_us": 9.504,
+            "max_us": 34.624
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 10.159999999999998,
+            "min_us": 9.536,
+            "max_us": 35.552
+          },
+          "candidate": {
+            "median_us": 8.959999999999999,
+            "min_us": 8.8,
+            "max_us": 9.6
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "0d81c8cba4e0419d930c49f025bf248a",
+      "M": 15813,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 179.632,
+            "min_us": 178.24,
+            "max_us": 186.369
+          },
+          "candidate": {
+            "median_us": 179.72750000000002,
+            "min_us": 177.857,
+            "max_us": 185.792
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 179.3125,
+            "min_us": 174.56,
+            "max_us": 184.928
+          },
+          "baseline": {
+            "median_us": 179.45600000000002,
+            "min_us": 177.856,
+            "max_us": 185.50300000000001
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "bc6d8e2eb9144c24ae849d16e406d1bf",
+      "M": 11938,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 132.416,
+            "min_us": 131.488,
+            "max_us": 135.87199999999999
+          },
+          "baseline": {
+            "median_us": 132.56,
+            "min_us": 131.392,
+            "max_us": 135.83999999999997
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 132.68849999999998,
+            "min_us": 131.136,
+            "max_us": 136.001
+          },
+          "candidate": {
+            "median_us": 132.54399999999998,
+            "min_us": 131.328,
+            "max_us": 136.416
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "23b29a3363644b318e28b625442e6c07",
+      "M": 64,
+      "correctness": {
+        "max_relative_error": 0.0148773193359375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 13.664000000000001,
+            "min_us": 13.28,
+            "max_us": 14.272
+          },
+          "candidate": {
+            "median_us": 13.6,
+            "min_us": 13.312,
+            "max_us": 14.016
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.648,
+            "min_us": 13.28,
+            "max_us": 14.56
+          },
+          "baseline": {
+            "median_us": 13.616,
+            "min_us": 13.344,
+            "max_us": 14.496
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "f3fc0b3875a240289fa1cee3be00d318",
+      "M": 17,
+      "correctness": {
+        "max_relative_error": 0.0133514404296875,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 12.416,
+            "min_us": 12.288,
+            "max_us": 12.831999999999999
+          },
+          "baseline": {
+            "median_us": 13.536,
+            "min_us": 13.056,
+            "max_us": 14.08
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 13.568,
+            "min_us": 13.216000000000001,
+            "max_us": 14.016
+          },
+          "candidate": {
+            "median_us": 12.319999999999999,
+            "min_us": 12.096,
+            "max_us": 12.831999999999999
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "1a8ac05e5c784f87849356996308c0a4",
+      "M": 952,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 20.272499999999997,
+            "min_us": 20.032,
+            "max_us": 20.8
+          },
+          "candidate": {
+            "median_us": 20.256,
+            "min_us": 20.128,
+            "max_us": 20.96
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 20.32,
+            "min_us": 20.032,
+            "max_us": 20.927999999999997
+          },
+          "baseline": {
+            "median_us": 20.32,
+            "min_us": 20.064,
+            "max_us": 20.896
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "77447ed3b33945febc56a7bb29df6c96",
+      "M": 172,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 13.536,
+            "min_us": 13.312,
+            "max_us": 14.016
+          },
+          "baseline": {
+            "median_us": 13.568,
+            "min_us": 13.28,
+            "max_us": 14.239999999999998
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 13.568,
+            "min_us": 13.344,
+            "max_us": 14.239999999999998
+          },
+          "candidate": {
+            "median_us": 13.616,
+            "min_us": 13.344,
+            "max_us": 14.208
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "40e6e3afbc0e497ab37e7d1d3be26561",
+      "M": 16294,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 182.46450000000002,
+            "min_us": 181.15200000000002,
+            "max_us": 186.433
+          },
+          "candidate": {
+            "median_us": 182.56,
+            "min_us": 181.024,
+            "max_us": 186.84799999999998
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 182.0,
+            "min_us": 180.73600000000002,
+            "max_us": 187.45600000000002
+          },
+          "baseline": {
+            "median_us": 182.2565,
+            "min_us": 180.929,
+            "max_us": 186.816
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "3df32230aaa54926baede3b24a2e5497",
+      "M": 12251,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 152.35199999999998,
+            "min_us": 151.488,
+            "max_us": 154.304
+          },
+          "baseline": {
+            "median_us": 152.5125,
+            "min_us": 151.71200000000002,
+            "max_us": 154.304
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 152.4005,
+            "min_us": 151.584,
+            "max_us": 154.62400000000002
+          },
+          "candidate": {
+            "median_us": 152.384,
+            "min_us": 151.072,
+            "max_us": 154.4
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "bedb8548688b46c3966cd45f5968b909",
+      "M": 63,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 13.6,
+            "min_us": 13.312,
+            "max_us": 14.176
+          },
+          "candidate": {
+            "median_us": 13.632499999999999,
+            "min_us": 13.377,
+            "max_us": 14.112
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.632,
+            "min_us": 13.216000000000001,
+            "max_us": 14.336
+          },
+          "baseline": {
+            "median_us": 13.648,
+            "min_us": 13.312,
+            "max_us": 14.144
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "05961b272663429c878b1d87511f274f",
+      "M": 2,
+      "correctness": {
+        "max_relative_error": 0.0009718172950670123,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 7.104,
+            "min_us": 6.88,
+            "max_us": 7.52
+          },
+          "baseline": {
+            "median_us": 7.136,
+            "min_us": 6.944,
+            "max_us": 7.648000000000001
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 7.104,
+            "min_us": 6.784,
+            "max_us": 7.872000000000001
+          },
+          "candidate": {
+            "median_us": 7.136,
+            "min_us": 6.816,
+            "max_us": 7.776
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "584d85771a40498fb56ad8b57c4049a4",
+      "M": 93,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 13.328,
+            "min_us": 13.056,
+            "max_us": 13.76
+          },
+          "candidate": {
+            "median_us": 13.328,
+            "min_us": 12.992,
+            "max_us": 13.888
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.392000000000001,
+            "min_us": 13.12,
+            "max_us": 13.824
+          },
+          "baseline": {
+            "median_us": 13.344,
+            "min_us": 13.024000000000001,
+            "max_us": 13.952000000000002
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "0d36b29c950249999521ad20f21a2a86",
+      "M": 4,
+      "correctness": {
+        "max_relative_error": 0.0032071841415017843,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 8.704,
+            "min_us": 8.416,
+            "max_us": 9.440000000000001
+          },
+          "baseline": {
+            "median_us": 10.368,
+            "min_us": 10.208,
+            "max_us": 10.687999999999999
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 10.4,
+            "min_us": 10.272,
+            "max_us": 10.944
+          },
+          "candidate": {
+            "median_us": 8.751999999999999,
+            "min_us": 8.448,
+            "max_us": 9.12
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "b1b357ea7c98484491f5baed129223e1",
+      "M": 289,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 16.864,
+            "min_us": 16.544,
+            "max_us": 17.472
+          },
+          "candidate": {
+            "median_us": 16.864,
+            "min_us": 16.608,
+            "max_us": 17.28
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 16.832,
+            "min_us": 16.639999999999997,
+            "max_us": 17.472
+          },
+          "baseline": {
+            "median_us": 16.864,
+            "min_us": 16.608,
+            "max_us": 17.535999999999998
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "824df7caad214f1fbb8d06ccf92d0447",
+      "M": 5,
+      "correctness": {
+        "max_relative_error": 0.0087738037109375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 8.736,
+            "min_us": 8.48,
+            "max_us": 9.056
+          },
+          "baseline": {
+            "median_us": 14.112,
+            "min_us": 9.440000000000001,
+            "max_us": 40.32
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 12.944,
+            "min_us": 9.440000000000001,
+            "max_us": 42.88
+          },
+          "candidate": {
+            "median_us": 8.751999999999999,
+            "min_us": 8.448,
+            "max_us": 9.28
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "b5b4a32d9b4e4cca8b97cf6ca98796ff",
+      "M": 25,
+      "correctness": {
+        "max_relative_error": 0.01068115234375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 13.520000000000001,
+            "min_us": 13.248,
+            "max_us": 13.984
+          },
+          "candidate": {
+            "median_us": 12.607999999999999,
+            "min_us": 12.383999999999999,
+            "max_us": 13.376000000000001
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 12.607999999999999,
+            "min_us": 12.448,
+            "max_us": 13.056
+          },
+          "baseline": {
+            "median_us": 13.472,
+            "min_us": 13.216000000000001,
+            "max_us": 14.08
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "89eb1e6ef40743ab95e759c4a62e8b0b",
+      "M": 8,
+      "correctness": {
+        "max_relative_error": 0.004360465332865715,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 8.736,
+            "min_us": 8.384,
+            "max_us": 9.056
+          },
+          "baseline": {
+            "median_us": 12.671999999999999,
+            "min_us": 9.440000000000001,
+            "max_us": 40.032
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 11.744000000000002,
+            "min_us": 9.472,
+            "max_us": 41.728
+          },
+          "candidate": {
+            "median_us": 8.704,
+            "min_us": 8.352,
+            "max_us": 9.12
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "8c8652e5d07c4089bde9948f98842c07",
+      "M": 492,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 17.152,
+            "min_us": 16.927999999999997,
+            "max_us": 18.016000000000002
+          },
+          "candidate": {
+            "median_us": 17.184,
+            "min_us": 16.96,
+            "max_us": 18.145000000000003
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 17.248,
+            "min_us": 16.896,
+            "max_us": 17.791999999999998
+          },
+          "baseline": {
+            "median_us": 17.184,
+            "min_us": 16.959,
+            "max_us": 17.984
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "a6796f718a3a4a24ae171f7d00be7226",
+      "M": 14915,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 178.2885,
+            "min_us": 176.896,
+            "max_us": 182.91199999999998
+          },
+          "baseline": {
+            "median_us": 178.464,
+            "min_us": 177.05599999999998,
+            "max_us": 182.144
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 178.208,
+            "min_us": 177.31199999999998,
+            "max_us": 182.944
+          },
+          "candidate": {
+            "median_us": 177.93599999999998,
+            "min_us": 174.56,
+            "max_us": 183.26500000000001
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "f09b7c55ea694fafa94e94edfebc660e",
+      "M": 32,
+      "correctness": {
+        "max_relative_error": 0.010005885735154152,
+        "max_absolute_error": 0.125,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 13.536,
+            "min_us": 13.152000000000001,
+            "max_us": 14.272
+          },
+          "candidate": {
+            "median_us": 12.544,
+            "min_us": 12.383999999999999,
+            "max_us": 13.248
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 12.576,
+            "min_us": 12.383999999999999,
+            "max_us": 13.056
+          },
+          "baseline": {
+            "median_us": 13.5205,
+            "min_us": 13.12,
+            "max_us": 14.08
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "45c35ee3f5884e5389909344a2ede169",
+      "M": 12853,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 154.62400000000002,
+            "min_us": 153.792,
+            "max_us": 159.136
+          },
+          "baseline": {
+            "median_us": 154.86450000000002,
+            "min_us": 153.505,
+            "max_us": 158.752
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 154.592,
+            "min_us": 153.536,
+            "max_us": 159.00900000000001
+          },
+          "candidate": {
+            "median_us": 154.6885,
+            "min_us": 151.424,
+            "max_us": 159.488
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "5ead6f71a44e46e2968fe3da8124b6af",
+      "M": 11006,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 132.4325,
+            "min_us": 130.881,
+            "max_us": 135.744
+          },
+          "candidate": {
+            "median_us": 131.856,
+            "min_us": 128.608,
+            "max_us": 135.68
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 132.464,
+            "min_us": 131.296,
+            "max_us": 136.608
+          },
+          "baseline": {
+            "median_us": 132.39999999999998,
+            "min_us": 131.137,
+            "max_us": 135.649
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "662593cec9b947a9b79803eb3b26e11a",
+      "M": 8828,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 108.9125,
+            "min_us": 107.872,
+            "max_us": 111.136
+          },
+          "baseline": {
+            "median_us": 108.72,
+            "min_us": 108.0,
+            "max_us": 110.913
+          }
+        },
+        {
+          "baseline": {
+            "median_us": 108.57600000000001,
+            "min_us": 107.616,
+            "max_us": 111.072
+          },
+          "candidate": {
+            "median_us": 108.768,
+            "min_us": 107.84,
+            "max_us": 111.264
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "477715ab00314b1f85c0b660e32f00e0",
+      "M": 128,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "baseline": {
+            "median_us": 13.440000000000001,
+            "min_us": 13.152000000000001,
+            "max_us": 14.08
+          },
+          "candidate": {
+            "median_us": 13.408,
+            "min_us": 13.184,
+            "max_us": 13.952000000000002
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.456,
+            "min_us": 13.216000000000001,
+            "max_us": 14.016
+          },
+          "baseline": {
+            "median_us": 13.424,
+            "min_us": 13.184,
+            "max_us": 14.048
+          }
+        }
+      ],
+      "status": "PASSED"
+    }
+  ],
+  "peak_allocated_gib": 1.019439697265625,
+  "trials": [
+    {
+      "baseline": 25.208245328687862,
+      "candidate": 23.776173931642894
+    },
+    {
+      "candidate": 23.803567107349565,
+      "baseline": 25.0571002394497
+    }
+  ]
+}

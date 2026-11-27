@@ -1,0 +1,376 @@
+{
+  "definition": "017_gqa_ragged_prefill_causal_h32_kv8_d128",
+  "source_sha256": "fdf77e9f9f4fab41aa9c353872758af9b991de421029057cb5fef68f4c9ddbd2",
+  "device": {
+    "index": 3,
+    "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "name": "NVIDIA GB300",
+    "physical_index": 3,
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "bytes": 297013411840,
+    "evaluator": "1.0.2",
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta"
+  },
+  "fbtriton_package": "3.7.1",
+  "verification_scope": "Synthetic reference comparisons on GB300",
+  "scales": [
+    0.143,
+    0.61,
+    0.34
+  ],
+  "bf16_tolerance": {
+    "rtol": 0.025,
+    "atol": 0.015625
+  },
+  "lse_tolerance": {
+    "rtol": 3e-05,
+    "atol": 3e-05
+  },
+  "reference_comparisons": 33,
+  "checks": [
+    {
+      "case": "one-key",
+      "status": "passed",
+      "masked_rows": [
+        0,
+        0,
+        0
+      ],
+      "qo_indptr": [
+        0,
+        1
+      ],
+      "kv_indptr": [
+        0,
+        1
+      ],
+      "updated_qo_indptr": [
+        0,
+        1
+      ],
+      "updated_kv_indptr": [
+        0,
+        1
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "one-query-prefix",
+      "status": "passed",
+      "masked_rows": [
+        0,
+        0,
+        0
+      ],
+      "qo_indptr": [
+        0,
+        1
+      ],
+      "kv_indptr": [
+        0,
+        7
+      ],
+      "updated_qo_indptr": [
+        0,
+        1
+      ],
+      "updated_kv_indptr": [
+        0,
+        7
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "tiny-unequal",
+      "status": "passed",
+      "masked_rows": [
+        2,
+        2,
+        2
+      ],
+      "qo_indptr": [
+        0,
+        7
+      ],
+      "kv_indptr": [
+        0,
+        5
+      ],
+      "updated_qo_indptr": [
+        0,
+        7
+      ],
+      "updated_kv_indptr": [
+        0,
+        5
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "eighteen-unequal",
+      "status": "passed",
+      "masked_rows": [
+        0,
+        0,
+        0
+      ],
+      "qo_indptr": [
+        0,
+        18
+      ],
+      "kv_indptr": [
+        0,
+        23
+      ],
+      "updated_qo_indptr": [
+        0,
+        18
+      ],
+      "updated_kv_indptr": [
+        0,
+        23
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "one-tile-unequal",
+      "status": "passed",
+      "masked_rows": [
+        6,
+        6,
+        6
+      ],
+      "qo_indptr": [
+        0,
+        35
+      ],
+      "kv_indptr": [
+        0,
+        29
+      ],
+      "updated_qo_indptr": [
+        0,
+        35
+      ],
+      "updated_kv_indptr": [
+        0,
+        29
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "seventy-one-unequal",
+      "status": "passed",
+      "masked_rows": [
+        0,
+        0,
+        0
+      ],
+      "qo_indptr": [
+        0,
+        71
+      ],
+      "kv_indptr": [
+        0,
+        91
+      ],
+      "updated_qo_indptr": [
+        0,
+        71
+      ],
+      "updated_kv_indptr": [
+        0,
+        91
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "empty-kv",
+      "status": "passed",
+      "masked_rows": [
+        6,
+        6,
+        6
+      ],
+      "qo_indptr": [
+        0,
+        6
+      ],
+      "kv_indptr": [
+        0,
+        0
+      ],
+      "updated_qo_indptr": [
+        0,
+        6
+      ],
+      "updated_kv_indptr": [
+        0,
+        0
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "multi-empty-and-masked",
+      "status": "passed",
+      "masked_rows": [
+        11,
+        12,
+        12
+      ],
+      "qo_indptr": [
+        0,
+        6,
+        6,
+        18,
+        39
+      ],
+      "kv_indptr": [
+        0,
+        0,
+        8,
+        15,
+        48
+      ],
+      "updated_qo_indptr": [
+        0,
+        3,
+        19,
+        19,
+        39
+      ],
+      "updated_kv_indptr": [
+        0,
+        8,
+        12,
+        12,
+        48
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "short-ragged-tail",
+      "status": "passed",
+      "masked_rows": [
+        21,
+        6,
+        6
+      ],
+      "qo_indptr": [
+        0,
+        0,
+        21,
+        38,
+        92
+      ],
+      "kv_indptr": [
+        0,
+        1,
+        1,
+        30,
+        97
+      ],
+      "updated_qo_indptr": [
+        0,
+        14,
+        14,
+        40,
+        92
+      ],
+      "updated_kv_indptr": [
+        0,
+        8,
+        11,
+        41,
+        97
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "skewed-unequal",
+      "status": "passed",
+      "masked_rows": [
+        86,
+        549,
+        549
+      ],
+      "qo_indptr": [
+        0,
+        34,
+        34,
+        557,
+        1069
+      ],
+      "kv_indptr": [
+        0,
+        12,
+        23,
+        601,
+        1049
+      ],
+      "updated_qo_indptr": [
+        0,
+        128,
+        240,
+        240,
+        1069
+      ],
+      "updated_kv_indptr": [
+        0,
+        90,
+        90,
+        619,
+        1049
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    },
+    {
+      "case": "wide-skewed",
+      "status": "passed",
+      "masked_rows": [
+        3326,
+        3324,
+        3324
+      ],
+      "qo_indptr": [
+        0,
+        5,
+        5,
+        221,
+        4125
+      ],
+      "kv_indptr": [
+        0,
+        18,
+        18,
+        221,
+        812
+      ],
+      "updated_qo_indptr": [
+        0,
+        0,
+        1,
+        256,
+        4125
+      ],
+      "updated_kv_indptr": [
+        0,
+        7,
+        12,
+        12,
+        812
+      ],
+      "verification": "mutated contents at fixed pointers, then changed all pointers"
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 
 The replicated small-batch reduction and wide memory operations were inspired by
 QianQu's CompoundingKernel-Explorer, FlashInfer/003_fused_add_rmsnorm_h7168.
+Load-balanced CTA scheduling follows the same published implementation.
 The unaligned route adapts the Triton RMSNorm example in RSI-Kernel-Tune.
 """
 
@@ -162,9 +163,9 @@ __device__ __forceinline__ void fused(const U16* h, const U16* r, const U16* w, 
     }
 }
 
-extern "C" __global__ __launch_bounds__(224, 4)
-void split_seven(const U16* h, const U16* r, const U16* w, U16* out) {
-    fused<224, 7>(h, r, w, out);
+extern "C" __global__ __launch_bounds__(448, 2)
+void split_four(const U16* h, const U16* r, const U16* w, U16* out) {
+    fused<448, 4>(h, r, w, out);
 }
 
 extern "C" __global__ __launch_bounds__(448, 2)
@@ -202,7 +203,10 @@ def _compile(major, minor, context):
         _checked(nvrtc.nvrtcDestroyProgram(program))
 
     module = _checked(driver.cuModuleLoadData(cubin))
-    functions = {name: _checked(driver.cuModuleGetFunction(module, name.encode())) for name in ("split_seven", "split_two", "whole_row")}
+    functions = {
+        name: _checked(driver.cuModuleGetFunction(module, name.encode()))
+        for name in ("split_four", "split_two", "whole_row")
+    }
     return module, functions
 
 
@@ -218,6 +222,22 @@ def _unaligned_row(hidden, residual, weight, output):
     tl.store(output + offset, (v * inv_rms) * w, col < 7168)
 
 
+@lru_cache(maxsize=None)
+def _cluster_attrs(stripes):
+    ids = driver.CUlaunchAttributeID
+    cluster = driver.CUlaunchAttribute()
+    cluster.id = ids.CU_LAUNCH_ATTRIBUTE_CLUSTER_DIMENSION
+    cluster.value.clusterDim.x = 1
+    cluster.value.clusterDim.y = stripes
+    cluster.value.clusterDim.z = 1
+
+    policy = driver.CUlaunchAttribute()
+    policy.id = ids.CU_LAUNCH_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE
+    policy.value.clusterSchedulingPolicyPreference = (
+        driver.CUclusterSchedulingPolicy.CU_CLUSTER_SCHEDULING_POLICY_LOAD_BALANCING
+    )
+    return [cluster, policy]
+
 
 def run(hidden_states, residual, weight, output):
     batch = hidden_states.shape[0]
@@ -228,8 +248,9 @@ def run(hidden_states, residual, weight, output):
         _unaligned_row[(batch,)](hidden_states, residual, weight, output, num_warps=8)
         return
 
-    if batch <= 7:
-        kernel, threads, parts = "split_seven", 224, 7
+    # Replicate reductions only while a row per CTA leaves the GPU underfilled.
+    if batch <= 40:
+        kernel, threads, parts = "split_four", 448, 4
     elif batch <= 64:
         kernel, threads, parts = "split_two", 448, 2
     else:
@@ -241,6 +262,19 @@ def run(hidden_states, residual, weight, output):
         context = _checked(driver.cuCtxGetCurrent())
         _, functions = _compile(*torch.cuda.get_device_capability(device), int(context))
         parameters = (pointers, (c_void_p,) * 4)
-        _checked(driver.cuLaunchKernel(
-            functions[kernel], batch, parts, 1, threads, 1, 1, 0, stream, parameters, 0,
-        ))
+        if parts == 1:
+            _checked(driver.cuLaunchKernel(
+                functions[kernel], batch, 1, 1, threads, 1, 1, 0, stream, parameters, 0,
+            ))
+            return
+
+        # Co-schedule the four stripes of a row at low batch sizes to share L2 reads.
+        # At higher short-batch occupancy, let the scheduler balance CTAs individually.
+        attrs = _cluster_attrs(parts if batch <= 24 else 1)
+        config = driver.CUlaunchConfig()
+        config.gridDimX, config.gridDimY, config.gridDimZ = batch, parts, 1
+        config.blockDimX, config.blockDimY, config.blockDimZ = threads, 1, 1
+        config.hStream = stream
+        config.attrs = attrs
+        config.numAttrs = len(attrs)
+        _checked(driver.cuLaunchKernelEx(config, functions[kernel], parameters, 0))

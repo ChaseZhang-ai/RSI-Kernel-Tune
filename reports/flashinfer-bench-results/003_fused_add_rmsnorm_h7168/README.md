@@ -1,5 +1,7 @@
 # Fused add RMSNorm h7168
 
+The load-balanced CTA follow-up passed all eight workloads locally. It measured 1.059× faster than the B200-verified archive in the GB300 pair. [Follow-up evidence](followup-2026-11-27.md)
+
 ## Packed CUDA candidate · 2026-11-26T18:51:44Z
 
 The exact archive file passed **8/8 official workloads** in SOL-ExecBench with numerical checks and timed CUPTI activity. Its CLI geometric mean is **7.847 µs**. The paired run measured **1.213×** speedup over padded Triton by geometric mean (9.714 to 8.010 µs). This is provisional GB300 evidence for the coordinator's private B200 trial. [Candidate](../../../flashinfer-bench/003_fused_add_rmsnorm_h7168/submission.py) · [CLI results](gb300-packed-cli.jsonl) · [Paired results](gb300-packed-paired.jsonl) · [Machine-readable summary](record.json)

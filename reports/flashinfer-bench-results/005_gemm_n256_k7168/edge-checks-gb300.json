@@ -1,0 +1,275 @@
+[
+  {
+    "M": 0,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 1,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 2,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 4,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 7,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 8,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 9,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 13,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 14,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 16,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 17,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 31,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 32,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 33,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 52,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 53,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 63,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 64,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 65,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 79,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 80,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 81,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 127,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 128,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 129,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 900,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 901,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 902,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 1023,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 1024,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 1025,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 11948,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 14104,
+    "check": "dispatch-boundary",
+    "status": "PASSED"
+  },
+  {
+    "M": 1,
+    "check": "cancellation",
+    "status": "PASSED",
+    "max_abs_error": 0.0
+  },
+  {
+    "M": 1,
+    "check": "changed-contents-and-pointers",
+    "status": "PASSED"
+  },
+  {
+    "M": 4,
+    "check": "cancellation",
+    "status": "PASSED",
+    "max_abs_error": 0.0
+  },
+  {
+    "M": 4,
+    "check": "changed-contents-and-pointers",
+    "status": "PASSED"
+  },
+  {
+    "M": 14,
+    "check": "cancellation",
+    "status": "PASSED",
+    "max_abs_error": 0.0
+  },
+  {
+    "M": 14,
+    "check": "changed-contents-and-pointers",
+    "status": "PASSED"
+  },
+  {
+    "M": 32,
+    "check": "cancellation",
+    "status": "PASSED",
+    "max_abs_error": 0.0
+  },
+  {
+    "M": 32,
+    "check": "changed-contents-and-pointers",
+    "status": "PASSED"
+  },
+  {
+    "M": 56,
+    "check": "cancellation",
+    "status": "PASSED",
+    "max_abs_error": 0.0
+  },
+  {
+    "M": 56,
+    "check": "changed-contents-and-pointers",
+    "status": "PASSED"
+  },
+  {
+    "M": 63,
+    "check": "cancellation",
+    "status": "PASSED",
+    "max_abs_error": 0.0
+  },
+  {
+    "M": 63,
+    "check": "changed-contents-and-pointers",
+    "status": "PASSED"
+  },
+  {
+    "M": 80,
+    "check": "cancellation",
+    "status": "PASSED",
+    "max_abs_error": 0.0
+  },
+  {
+    "M": 80,
+    "check": "changed-contents-and-pointers",
+    "status": "PASSED"
+  },
+  {
+    "M": 901,
+    "check": "cancellation",
+    "status": "PASSED",
+    "max_abs_error": 0.0
+  },
+  {
+    "M": 901,
+    "check": "changed-contents-and-pointers",
+    "status": "PASSED"
+  },
+  {
+    "M": 4,
+    "check": "misaligned-and-strided",
+    "status": "PASSED"
+  },
+  {
+    "M": 56,
+    "check": "misaligned-and-strided",
+    "status": "PASSED"
+  },
+  {
+    "M": 901,
+    "check": "misaligned-and-strided",
+    "status": "PASSED"
+  },
+  {
+    "M": 1025,
+    "check": "misaligned-and-strided",
+    "status": "PASSED"
+  }
+]

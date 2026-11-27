@@ -1,0 +1,174 @@
+[
+  {
+    "M": 1,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 2,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 8,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 16,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 24,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 35,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 64,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 96,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 128,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 176,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 256,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 972,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 2053,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 2379,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 8192,
+    "status": "PASSED",
+    "checks": [
+      "early_late_k_cancellation",
+      "inputs_preserved",
+      "mutated_inputs_same_pointers",
+      "new_input_and_output_pointers",
+      "non_default_stream"
+    ]
+  },
+  {
+    "M": 7,
+    "status": "PASSED",
+    "checks": [
+      "unaligned_noncontiguous_fallback"
+    ]
+  }
+]

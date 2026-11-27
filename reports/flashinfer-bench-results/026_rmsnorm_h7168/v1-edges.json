@@ -1,0 +1,95 @@
+{
+  "device": {
+    "index": 3,
+    "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ],
+    "device": "NVIDIA GB300",
+    "physical_index": 3,
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "l2_bytes": 135528448,
+    "total_memory_bytes": 297013411840,
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "evaluator": "1.0.2",
+    "cupti": "13.5.0"
+  },
+  "sha256": "af64ac654c0a531ce5c063159c40061e61f335edfdc5e6747c17f648bd21b27d",
+  "status": "passed",
+  "cases": [
+    {
+      "batch_size": 1,
+      "uuid": "f1133b8c-5ab3-4cf5-b753-84a32d9e3661",
+      "status": "passed",
+      "seventh_segment_max_abs": 0.0,
+      "updated_pointers_max_abs": 0.0,
+      "fresh_shifted_pointers_max_abs": 0.0
+    },
+    {
+      "batch_size": 7,
+      "uuid": "98773f58-2d55-497d-a79d-df0bca20e369",
+      "status": "passed",
+      "seventh_segment_max_abs": 0.0,
+      "updated_pointers_max_abs": 0.0,
+      "fresh_shifted_pointers_max_abs": 0.0
+    },
+    {
+      "batch_size": 18,
+      "uuid": "00b8ce81-3357-41ea-b7ec-731439bc51ad",
+      "status": "passed",
+      "seventh_segment_max_abs": 0.0,
+      "updated_pointers_max_abs": 0.0,
+      "fresh_shifted_pointers_max_abs": 0.0
+    },
+    {
+      "batch_size": 32,
+      "uuid": "08ca44b8-2c3a-407d-87a7-85454ef4d748",
+      "status": "passed",
+      "seventh_segment_max_abs": 0.0,
+      "updated_pointers_max_abs": 0.0,
+      "fresh_shifted_pointers_max_abs": 0.0
+    },
+    {
+      "batch_size": 64,
+      "uuid": "d1ebd937-923e-44b2-8e4e-3e9194aa8d09",
+      "status": "passed",
+      "seventh_segment_max_abs": 0.0,
+      "updated_pointers_max_abs": 0.0,
+      "fresh_shifted_pointers_max_abs": 0.0
+    },
+    {
+      "batch_size": 539,
+      "uuid": "e8073f61-7ae6-44d0-9b13-29199e6c5595",
+      "status": "passed",
+      "seventh_segment_max_abs": 0.0,
+      "updated_pointers_max_abs": 0.0,
+      "fresh_shifted_pointers_max_abs": 0.0
+    },
+    {
+      "batch_size": 11949,
+      "uuid": "75e6d0e3-a957-47fe-84ff-d3e492f505ae",
+      "status": "passed",
+      "seventh_segment_max_abs": 0.0,
+      "updated_pointers_max_abs": 0.0,
+      "fresh_shifted_pointers_max_abs": 0.0
+    },
+    {
+      "batch_size": 14521,
+      "uuid": "5b601f70-1495-4c70-9870-e05dc771f1c1",
+      "status": "passed",
+      "seventh_segment_max_abs": 0.0,
+      "updated_pointers_max_abs": 0.0,
+      "fresh_shifted_pointers_max_abs": 0.0
+    }
+  ],
+  "near_zero_rtol": 0.008,
+  "near_zero_atol": 0,
+  "peak_allocated_bytes": 3751108096
+}

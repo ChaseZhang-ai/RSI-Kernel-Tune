@@ -1,0 +1,22 @@
+{"kernel": "_direct", "BATCH": 1, "BS": 1, "BN": 8, "arch": 103, "cold_compile_wall_s": 0.5155608169734478, "shared_bytes": 8192}
+{"kernel": "_direct", "BATCH": 1, "BS": 1, "BN": 16, "arch": 103, "cold_compile_wall_s": 0.28232430294156075, "shared_bytes": 16384}
+{"kernel": "_direct", "BATCH": 1, "BS": 1, "BN": 32, "arch": 103, "cold_compile_wall_s": 0.36833257181569934, "shared_bytes": 16384}
+{"kernel": "_direct", "BATCH": 1, "BS": 1, "BN": 64, "arch": 103, "cold_compile_wall_s": 0.49263752717524767, "shared_bytes": 16384}
+{"kernel": "_direct", "BATCH": 1, "BS": 1, "BN": 128, "arch": 103, "cold_compile_wall_s": 1.1292440667748451, "shared_bytes": 16384}
+{"kernel": "_direct", "BATCH": 2, "BS": 2, "BN": 32, "arch": 103, "cold_compile_wall_s": 0.4054473638534546, "shared_bytes": 16384}
+{"kernel": "_direct", "BATCH": 2, "BS": 2, "BN": 64, "arch": 103, "cold_compile_wall_s": 0.5486250040121377, "shared_bytes": 16384}
+{"kernel": "_direct", "BATCH": 3, "BS": 4, "BN": 128, "arch": 103, "cold_compile_wall_s": 1.2092495439574122, "shared_bytes": 16384}
+{"kernel": "_direct", "BATCH": 4, "BS": 4, "BN": 128, "arch": 103, "cold_compile_wall_s": 1.2177148181945086, "shared_bytes": 16384}
+{"kernel": "_direct", "BATCH": 6, "BS": 8, "BN": 128, "arch": 103, "cold_compile_wall_s": 1.181889072060585, "shared_bytes": 16384}
+{"kernel": "_prefill", "BATCH": 1, "BS": 1, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.46512137399986386, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 2, "BS": 2, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.4683729847893119, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 3, "BS": 4, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.4649077239446342, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 4, "BS": 4, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.48406886402517557, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 5, "BS": 8, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.4643214577808976, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 11, "BS": 16, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.49753199610859156, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 18, "BS": 32, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.48353689163923264, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 20, "BS": 32, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.46711000986397266, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 22, "BS": 32, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.46682259906083345, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 26, "BS": 32, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.46863668225705624, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 28, "BS": 32, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.47208099300041795, "shared_bytes": 102400}
+{"kernel": "_prefill", "BATCH": 56, "BS": 64, "BN": 32, "BM": 32, "arch": 103, "cold_compile_wall_s": 0.47794158570468426, "shared_bytes": 102400}

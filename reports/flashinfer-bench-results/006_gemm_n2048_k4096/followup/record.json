@@ -1,0 +1,464 @@
+{
+  "operator": "006_gemm_n2048_k4096",
+  "verification_scope": "GB300 provisional",
+  "sha256": "e03e6c0803fc672e813d93dd41dee040994b343e32bd974239c4bf5841a83b02",
+  "archived_sha256": "fa2b28aa4d048843606b1928ea511006a7e4bc471e88a9e47e81d12544bf5602",
+  "evaluator": {
+    "name": "sol-execbench 1.0.2",
+    "commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+    "cupti_python": "13.5.0",
+    "fbtriton_distribution": "3.7.1"
+  },
+  "protocol": {
+    "warmup": 10,
+    "timed_iterations": 50,
+    "cold_l2": true,
+    "timing": "CUPTI first-to-last kernel activity",
+    "inputs": "Cloned, pointer-shifted official inputs",
+    "outputs": "Preallocated",
+    "direct_launch": true,
+    "seed": 200
+  },
+  "official": {
+    "archive": {
+      "passed_and_timed": 29,
+      "latency_geomean_us": 26.88056777759946,
+      "environment": {
+        "hardware": "NVIDIA GB300",
+        "libs": {
+          "torch": "2.10.0+cu130",
+          "triton": "3.7.0+fb.beta",
+          "cuda": "13.0"
+        }
+      }
+    },
+    "candidate": {
+      "passed_and_timed": 29,
+      "latency_geomean_us": 23.913175992102992,
+      "environment": {
+        "hardware": "NVIDIA GB300",
+        "libs": {
+          "torch": "2.10.0+cu130",
+          "triton": "3.7.0+fb.beta",
+          "cuda": "13.0"
+        }
+      }
+    },
+    "stock_triton_candidate": {
+      "passed_and_timed": 29,
+      "latency_geomean_us": 24.38599896257,
+      "environment": {
+        "hardware": "NVIDIA GB300",
+        "libs": {
+          "torch": "2.10.0+cu130",
+          "triton": "3.6.0",
+          "cuda": "13.0"
+        }
+      }
+    }
+  },
+  "paired_geomeans_us": [
+    {
+      "baseline": 25.208245328687862,
+      "candidate": 23.776173931642894
+    },
+    {
+      "candidate": 23.803567107349565,
+      "baseline": 25.0571002394497
+    }
+  ],
+  "paired_baseline_us": 25.132559162599645,
+  "paired_candidate_us": 23.789866576714484,
+  "paired_speedup": 1.056439685424692,
+  "cold_compile_and_first_launch_s": 2.997169055044651,
+  "peak_torch_allocated_gib": 1.2553339004516602,
+  "board": {
+    "version": "v1.1",
+    "evidence_utc": "2026-11-27T04:17:52.085232+00:00",
+    "leader_sol": 1.0,
+    "leader_id": 102864,
+    "archived_standalone_id": 106252,
+    "archived_standalone_timed": 26,
+    "archived_standalone_total": 29,
+    "archived_standalone_verified_sol": null,
+    "archived_collection_child_id": 106075,
+    "archived_collection_workloads": [
+      {
+        "workload_uuid": "ff70a7abf26848aba6424c7571f777d4",
+        "workload_axes": {
+          "M": 1
+        },
+        "latency_ms": 0.007104,
+        "baseline_latency_ms": 0.014912,
+        "sol_score": 0.73216,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "05961b272663429c878b1d87511f274f",
+        "workload_axes": {
+          "M": 2
+        },
+        "latency_ms": 0.007424,
+        "baseline_latency_ms": 0.014912,
+        "sol_score": 0.718487,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "0d36b29c950249999521ad20f21a2a86",
+        "workload_axes": {
+          "M": 4
+        },
+        "latency_ms": 0.010752,
+        "baseline_latency_ms": 0.014944,
+        "sol_score": 0.602264,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "824df7caad214f1fbb8d06ccf92d0447",
+        "workload_axes": {
+          "M": 5
+        },
+        "latency_ms": 0.010736,
+        "baseline_latency_ms": 0.015104,
+        "sol_score": 0.605814,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "bcc2cc41b7464e54b0c4d11e65da96d8",
+        "workload_axes": {
+          "M": 6
+        },
+        "latency_ms": 0.010639,
+        "baseline_latency_ms": 0.015137,
+        "sol_score": 0.609278,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "89eb1e6ef40743ab95e759c4a62e8b0b",
+        "workload_axes": {
+          "M": 8
+        },
+        "latency_ms": 0.010737,
+        "baseline_latency_ms": 0.015136,
+        "sol_score": 0.606395,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "75f0b62d01a44f9bac44a61ec9a3f3a1",
+        "workload_axes": {
+          "M": 15
+        },
+        "latency_ms": 0.010928,
+        "baseline_latency_ms": 0.010784,
+        "sol_score": 0.495655,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "b99854266fd7401a9f296cdf99e56e6c",
+        "workload_axes": {
+          "M": 16
+        },
+        "latency_ms": 0.010927,
+        "baseline_latency_ms": 0.014944,
+        "sol_score": 0.597165,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "f3fc0b3875a240289fa1cee3be00d318",
+        "workload_axes": {
+          "M": 17
+        },
+        "latency_ms": 0.014528,
+        "baseline_latency_ms": 0.01088,
+        "sol_score": 0.409739,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "b5b4a32d9b4e4cca8b97cf6ca98796ff",
+        "workload_axes": {
+          "M": 25
+        },
+        "latency_ms": 0.01448,
+        "baseline_latency_ms": 0.010816,
+        "sol_score": 0.408838,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "f09b7c55ea694fafa94e94edfebc660e",
+        "workload_axes": {
+          "M": 32
+        },
+        "latency_ms": 0.014589,
+        "baseline_latency_ms": 0.01504,
+        "sol_score": 0.509231,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "f4513ae887ae4d42946dcf6630671c22",
+        "workload_axes": {
+          "M": 34
+        },
+        "latency_ms": null,
+        "baseline_latency_ms": null,
+        "sol_score": 0.0,
+        "outcome": "timing activity missing"
+      },
+      {
+        "workload_uuid": "bedb8548688b46c3966cd45f5968b909",
+        "workload_axes": {
+          "M": 63
+        },
+        "latency_ms": 0.014623,
+        "baseline_latency_ms": 0.011184,
+        "sol_score": 0.416557,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "23b29a3363644b318e28b625442e6c07",
+        "workload_axes": {
+          "M": 64
+        },
+        "latency_ms": 0.014624,
+        "baseline_latency_ms": 0.013248,
+        "sol_score": 0.469654,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "584d85771a40498fb56ad8b57c4049a4",
+        "workload_axes": {
+          "M": 93
+        },
+        "latency_ms": 0.014688,
+        "baseline_latency_ms": 0.011168,
+        "sol_score": 0.414781,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "477715ab00314b1f85c0b660e32f00e0",
+        "workload_axes": {
+          "M": 128
+        },
+        "latency_ms": 0.014798,
+        "baseline_latency_ms": 0.011376,
+        "sol_score": 0.417627,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "77447ed3b33945febc56a7bb29df6c96",
+        "workload_axes": {
+          "M": 172
+        },
+        "latency_ms": 0.014847,
+        "baseline_latency_ms": 0.013216,
+        "sol_score": 0.464016,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "b1b357ea7c98484491f5baed129223e1",
+        "workload_axes": {
+          "M": 289
+        },
+        "latency_ms": 0.018271,
+        "baseline_latency_ms": 0.012448,
+        "sol_score": 0.381255,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "8c8652e5d07c4089bde9948f98842c07",
+        "workload_axes": {
+          "M": 492
+        },
+        "latency_ms": 0.018753,
+        "baseline_latency_ms": 0.015552,
+        "sol_score": 0.434149,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "1a8ac05e5c784f87849356996308c0a4",
+        "workload_axes": {
+          "M": 952
+        },
+        "latency_ms": 0.022709,
+        "baseline_latency_ms": 0.021601,
+        "sol_score": 0.478618,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "e5931dc39ece4669b866483e6e2d6773",
+        "workload_axes": {
+          "M": 969
+        },
+        "latency_ms": 0.022783,
+        "baseline_latency_ms": 0.020672,
+        "sol_score": 0.45718,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "662593cec9b947a9b79803eb3b26e11a",
+        "workload_axes": {
+          "M": 8828
+        },
+        "latency_ms": 0.130678,
+        "baseline_latency_ms": 0.1116,
+        "sol_score": 0.377518,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "5ead6f71a44e46e2968fe3da8124b6af",
+        "workload_axes": {
+          "M": 11006
+        },
+        "latency_ms": 0.157111,
+        "baseline_latency_ms": 0.134321,
+        "sol_score": 0.368766,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "bc6d8e2eb9144c24ae849d16e406d1bf",
+        "workload_axes": {
+          "M": 11938
+        },
+        "latency_ms": 0.176901,
+        "baseline_latency_ms": 0.142736,
+        "sol_score": 0.325043,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "3df32230aaa54926baede3b24a2e5497",
+        "workload_axes": {
+          "M": 12251
+        },
+        "latency_ms": 0.181502,
+        "baseline_latency_ms": 0.144481,
+        "sol_score": 0.311469,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "45c35ee3f5884e5389909344a2ede169",
+        "workload_axes": {
+          "M": 12853
+        },
+        "latency_ms": 0.183518,
+        "baseline_latency_ms": 0.156561,
+        "sol_score": 0.366654,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "a6796f718a3a4a24ae171f7d00be7226",
+        "workload_axes": {
+          "M": 14915
+        },
+        "latency_ms": 0.210292,
+        "baseline_latency_ms": 0.179009,
+        "sol_score": 0.360468,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "0d81c8cba4e0419d930c49f025bf248a",
+        "workload_axes": {
+          "M": 15813
+        },
+        "latency_ms": 0.210737,
+        "baseline_latency_ms": 0.183249,
+        "sol_score": 0.362812,
+        "outcome": "timed"
+      },
+      {
+        "workload_uuid": "40e6e3afbc0e497ab37e7d1d3be26561",
+        "workload_axes": {
+          "M": 16294
+        },
+        "latency_ms": 0.211759,
+        "baseline_latency_ms": 0.186513,
+        "sol_score": 0.36806,
+        "outcome": "timed"
+      }
+    ]
+  },
+  "screen_outcomes": {
+    "PASSED": 184,
+    "BUILD_OR_LAUNCH_ERROR": 21
+  },
+  "gpus": {
+    "archive": {
+      "physical_index": 2,
+      "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+      "device": "NVIDIA GB300",
+      "observed_sm_mem_mhz": [
+        1500,
+        3996
+      ],
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "started_utc": "2026-11-27T04:19:25.957897+00:00",
+      "finished_utc": "2026-11-27T04:19:53.578647+00:00"
+    },
+    "screen": {
+      "physical_index": 3,
+      "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+      "device": "NVIDIA GB300",
+      "observed_sm_mem_mhz": [
+        1500,
+        3996
+      ],
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "started_utc": "2026-11-27T04:22:38.903052+00:00",
+      "finished_utc": "2026-11-27T04:23:30.014773+00:00"
+    },
+    "candidate": {
+      "physical_index": 1,
+      "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+      "device": "NVIDIA GB300",
+      "observed_sm_mem_mhz": [
+        1500,
+        3996
+      ],
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "started_utc": "2026-11-27T04:31:51.597859+00:00",
+      "finished_utc": "2026-11-27T04:32:17.906933+00:00"
+    },
+    "paired": {
+      "physical_index": 1,
+      "uuid": "GPU-87e04b70-e9c6-0c59-7810-a2a4a6af4f12",
+      "device": "NVIDIA GB300",
+      "observed_sm_mem_mhz": [
+        1500,
+        3996
+      ],
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "started_utc": "2026-11-27T04:32:18.940129+00:00",
+      "finished_utc": "2026-11-27T04:32:40.768611+00:00"
+    },
+    "stock_triton": {
+      "physical_index": 3,
+      "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+      "device": "NVIDIA GB300",
+      "observed_sm_mem_mhz": [
+        1500,
+        3996
+      ],
+      "capability": [
+        10,
+        3
+      ],
+      "sm_count": 152,
+      "started_utc": "2026-11-27T04:31:15.303264+00:00",
+      "finished_utc": "2026-11-27T04:31:28.274126+00:00"
+    }
+  }
+}

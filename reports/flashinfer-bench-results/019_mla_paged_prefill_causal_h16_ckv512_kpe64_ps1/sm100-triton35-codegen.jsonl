@@ -1,0 +1,25 @@
+{"kernel": "_prefill", "spec": {"BATCH": 1, "BS": 1, "BM": 16, "BN": 64, "SPLIT": 1}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.8073459737934172, "shared_bytes": 116736}
+{"kernel": "_prefill", "spec": {"BATCH": 1, "BS": 1, "BM": 16, "BN": 32, "SPLIT": 1}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.42410344118252397, "shared_bytes": 83968}
+{"kernel": "_prefill", "spec": {"BATCH": 4, "BS": 4, "BM": 16, "BN": 128, "SPLIT": 1}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.8621760900132358, "shared_bytes": 182272}
+{"kernel": "_tcgen", "spec": {"BATCH": 1, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.6214146837592125, "shared_bytes": 229392}
+{"kernel": "_direct", "spec": {"BATCH": 1, "BS": 1, "BN": 8}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.19257062813267112, "shared_bytes": 8192}
+{"kernel": "_tcgen", "spec": {"BATCH": 3, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.6256017899140716, "shared_bytes": 229392}
+{"kernel": "_direct", "spec": {"BATCH": 1, "BS": 1, "BN": 16}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.2808993891812861, "shared_bytes": 8192}
+{"kernel": "_prefill", "spec": {"BATCH": 2, "BS": 2, "BM": 16, "BN": 32, "SPLIT": 1}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.47510593524202704, "shared_bytes": 83968}
+{"kernel": "_tcgen", "spec": {"BATCH": 56, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.632671891245991, "shared_bytes": 229392}
+{"kernel": "_prefill", "spec": {"BATCH": 2, "BS": 2, "BM": 16, "BN": 64, "SPLIT": 1}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.5451593911275268, "shared_bytes": 116736}
+{"kernel": "_prefill", "spec": {"BATCH": 22, "BS": 32, "BM": 16, "BN": 32, "SPLIT": 32}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.42630436876788735, "shared_bytes": 83968}
+{"kernel": "_merge", "spec": {"BATCH": 22, "BS": 32, "SPLIT": 32}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.14592345291748643, "shared_bytes": 0}
+{"kernel": "_prefill", "spec": {"BATCH": 3, "BS": 4, "BM": 16, "BN": 128, "SPLIT": 1}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.8592147431336343, "shared_bytes": 182272}
+{"kernel": "_tcgen", "spec": {"BATCH": 28, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.6456537214107811, "shared_bytes": 229392}
+{"kernel": "_tcgen", "spec": {"BATCH": 5, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.6345899351872504, "shared_bytes": 229392}
+{"kernel": "_prefill", "spec": {"BATCH": 1, "BS": 1, "BM": 16, "BN": 128, "SPLIT": 1}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.7931147427298129, "shared_bytes": 182272}
+{"kernel": "_tcgen", "spec": {"BATCH": 11, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.632900953758508, "shared_bytes": 229392}
+{"kernel": "_tcgen", "spec": {"BATCH": 1, "LAZY_RESCALE": true}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.6303061409853399, "shared_bytes": 229520}
+{"kernel": "_prefill", "spec": {"BATCH": 6, "BS": 8, "BM": 16, "BN": 128, "SPLIT": 1}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.8139970572665334, "shared_bytes": 182272}
+{"kernel": "_tcgen", "spec": {"BATCH": 4, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.6270689531229436, "shared_bytes": 229392}
+{"kernel": "_prefill", "spec": {"BATCH": 2, "BS": 2, "BM": 16, "BN": 128, "SPLIT": 1}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.8200544440187514, "shared_bytes": 182272}
+{"kernel": "_tcgen", "spec": {"BATCH": 20, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.656045360956341, "shared_bytes": 229392}
+{"kernel": "_tcgen", "spec": {"BATCH": 18, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.6255869115702808, "shared_bytes": 229392}
+{"kernel": "_tcgen", "spec": {"BATCH": 26, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.6378951449878514, "shared_bytes": 229392}
+{"kernel": "_tcgen", "spec": {"BATCH": 2, "LAZY_RESCALE": false}, "target": 100, "triton": "3.5.0", "cold_compile_wall_s": 0.6309209335595369, "shared_bytes": 229392}

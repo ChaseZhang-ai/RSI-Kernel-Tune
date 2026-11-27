@@ -1,0 +1,27 @@
+{
+  "started_utc": "2026-11-26T18:51:48.260852+00:00",
+  "device": "NVIDIA GB300",
+  "physical_index": 2,
+  "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+  "capability": [
+    10,
+    3
+  ],
+  "queried_sms": 152,
+  "pytorch": "2.10.0+cu130",
+  "triton": "3.7.0+fb.beta",
+  "cupti_python": "13.5.0",
+  "sol_execbench": "1.0.2",
+  "candidate_sha256": "124ae55fb8697dcfb2c167e33300ba54f02d2dde5f982308f8f253613652759d",
+  "baseline_sha256": "72338999486cb56b1e815b78b58d401e2335a6f77dee2e6e49c79fb6b779cd7c",
+  "seed": 200,
+  "warmups": 10,
+  "iterations": 50,
+  "trials": 3,
+  "cold_first_calls_and_sync_s": {
+    "baseline": 3.8135083205997944,
+    "candidate": 0.7977572646923363
+  },
+  "peak_cuda_allocated_bytes": 2434443264,
+  "finished_utc": "2026-11-26T18:52:30.562825+00:00"
+}

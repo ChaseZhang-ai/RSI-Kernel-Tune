@@ -1,0 +1,1424 @@
+{
+  "gpu": {
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ]
+  },
+  "environment": {
+    "sol-execbench": "1.0.2",
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta",
+    "cupti-python": "13.5.0",
+    "toolkit": "13.0"
+  },
+  "rows": [
+    {
+      "id": "bcc2cc41b7464e54b0c4d11e65da96d8",
+      "M": 6,
+      "correctness": {
+        "max_relative_error": 0.008392333984375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 22.960500000000003,
+            "min_us": 22.433,
+            "max_us": 23.552
+          },
+          "previous": {
+            "median_us": 12.16,
+            "min_us": 9.472,
+            "max_us": 50.208999999999996
+          },
+          "candidate": {
+            "median_us": 9.744,
+            "min_us": 9.408,
+            "max_us": 38.593
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 9.7605,
+            "min_us": 9.376000000000001,
+            "max_us": 39.07299999999999
+          },
+          "previous": {
+            "median_us": 9.776,
+            "min_us": 9.376000000000001,
+            "max_us": 39.328
+          },
+          "seed": {
+            "median_us": 22.976,
+            "min_us": 22.496,
+            "max_us": 24.032999999999998
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "ff70a7abf26848aba6424c7571f777d4",
+      "M": 1,
+      "correctness": {
+        "max_relative_error": 0.006103515625,
+        "max_absolute_error": 0.03125,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 6.816,
+            "min_us": 6.56,
+            "max_us": 7.776
+          },
+          "previous": {
+            "median_us": 6.784,
+            "min_us": 6.528,
+            "max_us": 7.680000000000001
+          },
+          "seed": {
+            "median_us": 23.247999999999998,
+            "min_us": 22.816,
+            "max_us": 23.872
+          }
+        },
+        {
+          "seed": {
+            "median_us": 23.329,
+            "min_us": 22.625,
+            "max_us": 23.777
+          },
+          "previous": {
+            "median_us": 6.800000000000001,
+            "min_us": 6.56,
+            "max_us": 7.6160000000000005
+          },
+          "candidate": {
+            "median_us": 6.848,
+            "min_us": 6.592,
+            "max_us": 7.4559999999999995
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "f4513ae887ae4d42946dcf6630671c22",
+      "M": 34,
+      "correctness": {
+        "max_relative_error": 0.0125885009765625,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 25.6485,
+            "min_us": 25.057,
+            "max_us": 26.336
+          },
+          "previous": {
+            "median_us": 13.5525,
+            "min_us": 13.312,
+            "max_us": 13.984
+          },
+          "candidate": {
+            "median_us": 13.568,
+            "min_us": 13.312,
+            "max_us": 14.144
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.568,
+            "min_us": 13.280999999999999,
+            "max_us": 14.239999999999998
+          },
+          "previous": {
+            "median_us": 13.504,
+            "min_us": 13.312,
+            "max_us": 14.048
+          },
+          "seed": {
+            "median_us": 25.761,
+            "min_us": 25.28,
+            "max_us": 26.401
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "e5931dc39ece4669b866483e6e2d6773",
+      "M": 969,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 20.464000000000002,
+            "min_us": 20.001,
+            "max_us": 21.184
+          },
+          "previous": {
+            "median_us": 20.4805,
+            "min_us": 20.16,
+            "max_us": 20.961000000000002
+          },
+          "seed": {
+            "median_us": 34.6405,
+            "min_us": 34.113,
+            "max_us": 35.744
+          }
+        },
+        {
+          "seed": {
+            "median_us": 34.592999999999996,
+            "min_us": 34.08,
+            "max_us": 36.001
+          },
+          "previous": {
+            "median_us": 20.448,
+            "min_us": 20.128,
+            "max_us": 21.025
+          },
+          "candidate": {
+            "median_us": 20.448,
+            "min_us": 20.0,
+            "max_us": 21.184
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "b99854266fd7401a9f296cdf99e56e6c",
+      "M": 16,
+      "correctness": {
+        "max_relative_error": 0.00804093573242426,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 22.945,
+            "min_us": 22.529,
+            "max_us": 23.553
+          },
+          "previous": {
+            "median_us": 12.352,
+            "min_us": 9.473,
+            "max_us": 40.961
+          },
+          "candidate": {
+            "median_us": 10.064,
+            "min_us": 9.472,
+            "max_us": 41.824
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 9.952,
+            "min_us": 9.536,
+            "max_us": 41.088
+          },
+          "previous": {
+            "median_us": 9.872499999999999,
+            "min_us": 9.536,
+            "max_us": 39.329
+          },
+          "seed": {
+            "median_us": 23.072499999999998,
+            "min_us": 22.401,
+            "max_us": 23.777
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "75f0b62d01a44f9bac44a61ec9a3f3a1",
+      "M": 15,
+      "correctness": {
+        "max_relative_error": 0.01068115234375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 10.0005,
+            "min_us": 9.601,
+            "max_us": 46.400999999999996
+          },
+          "previous": {
+            "median_us": 10.8645,
+            "min_us": 9.632,
+            "max_us": 46.113
+          },
+          "seed": {
+            "median_us": 23.296999999999997,
+            "min_us": 22.753,
+            "max_us": 23.936
+          }
+        },
+        {
+          "seed": {
+            "median_us": 23.328000000000003,
+            "min_us": 22.721,
+            "max_us": 24.0
+          },
+          "previous": {
+            "median_us": 9.951999999999998,
+            "min_us": 9.664000000000001,
+            "max_us": 37.473
+          },
+          "candidate": {
+            "median_us": 9.952,
+            "min_us": 9.728,
+            "max_us": 36.961
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "0d81c8cba4e0419d930c49f025bf248a",
+      "M": 15813,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 231.34799999999998,
+            "min_us": 228.643,
+            "max_us": 240.1
+          },
+          "previous": {
+            "median_us": 193.459,
+            "min_us": 191.331,
+            "max_us": 199.20399999999998
+          },
+          "candidate": {
+            "median_us": 181.715,
+            "min_us": 178.052,
+            "max_us": 187.523
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 181.699,
+            "min_us": 180.196,
+            "max_us": 187.04299999999998
+          },
+          "previous": {
+            "median_us": 193.53949999999998,
+            "min_us": 192.06799999999998,
+            "max_us": 200.9
+          },
+          "seed": {
+            "median_us": 231.47600000000003,
+            "min_us": 229.22,
+            "max_us": 236.933
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "bc6d8e2eb9144c24ae849d16e406d1bf",
+      "M": 11938,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 134.77050000000003,
+            "min_us": 133.50699999999998,
+            "max_us": 138.787
+          },
+          "previous": {
+            "median_us": 150.147,
+            "min_us": 149.155,
+            "max_us": 152.546
+          },
+          "seed": {
+            "median_us": 172.579,
+            "min_us": 171.043,
+            "max_us": 178.435
+          }
+        },
+        {
+          "seed": {
+            "median_us": 173.027,
+            "min_us": 171.107,
+            "max_us": 179.428
+          },
+          "previous": {
+            "median_us": 150.419,
+            "min_us": 149.44299999999998,
+            "max_us": 154.755
+          },
+          "candidate": {
+            "median_us": 134.67499999999998,
+            "min_us": 133.219,
+            "max_us": 139.93900000000002
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "23b29a3363644b318e28b625442e6c07",
+      "M": 64,
+      "correctness": {
+        "max_relative_error": 0.0148773193359375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 25.76,
+            "min_us": 25.377,
+            "max_us": 26.305
+          },
+          "previous": {
+            "median_us": 13.632499999999999,
+            "min_us": 13.312,
+            "max_us": 14.08
+          },
+          "candidate": {
+            "median_us": 13.632499999999999,
+            "min_us": 13.312,
+            "max_us": 14.176
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.632,
+            "min_us": 13.409,
+            "max_us": 14.144
+          },
+          "previous": {
+            "median_us": 13.632,
+            "min_us": 13.216999999999999,
+            "max_us": 14.08
+          },
+          "seed": {
+            "median_us": 25.776,
+            "min_us": 25.345,
+            "max_us": 26.305
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "f3fc0b3875a240289fa1cee3be00d318",
+      "M": 17,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 13.5055,
+            "min_us": 13.280999999999999,
+            "max_us": 14.016
+          },
+          "previous": {
+            "median_us": 11.088000000000001,
+            "min_us": 10.848,
+            "max_us": 40.544999999999995
+          },
+          "seed": {
+            "median_us": 26.416,
+            "min_us": 26.048000000000002,
+            "max_us": 27.393
+          }
+        },
+        {
+          "seed": {
+            "median_us": 26.513,
+            "min_us": 26.176000000000002,
+            "max_us": 27.104
+          },
+          "previous": {
+            "median_us": 11.0245,
+            "min_us": 10.784,
+            "max_us": 41.44
+          },
+          "candidate": {
+            "median_us": 13.536,
+            "min_us": 13.184,
+            "max_us": 14.112
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "1a8ac05e5c784f87849356996308c0a4",
+      "M": 952,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 33.472,
+            "min_us": 32.897000000000006,
+            "max_us": 34.112
+          },
+          "previous": {
+            "median_us": 20.544,
+            "min_us": 20.096,
+            "max_us": 21.312
+          },
+          "candidate": {
+            "median_us": 20.639999999999997,
+            "min_us": 20.097,
+            "max_us": 21.217
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 20.4965,
+            "min_us": 20.096,
+            "max_us": 21.375999999999998
+          },
+          "previous": {
+            "median_us": 20.529,
+            "min_us": 20.16,
+            "max_us": 21.28
+          },
+          "seed": {
+            "median_us": 33.424499999999995,
+            "min_us": 32.993,
+            "max_us": 34.175999999999995
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "77447ed3b33945febc56a7bb29df6c96",
+      "M": 172,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 13.632,
+            "min_us": 13.184,
+            "max_us": 14.432
+          },
+          "previous": {
+            "median_us": 13.601,
+            "min_us": 13.344,
+            "max_us": 14.336
+          },
+          "seed": {
+            "median_us": 26.497,
+            "min_us": 26.081,
+            "max_us": 26.881
+          }
+        },
+        {
+          "seed": {
+            "median_us": 26.561,
+            "min_us": 26.113,
+            "max_us": 27.105
+          },
+          "previous": {
+            "median_us": 13.6805,
+            "min_us": 13.344,
+            "max_us": 14.176
+          },
+          "candidate": {
+            "median_us": 13.6805,
+            "min_us": 13.344,
+            "max_us": 14.176
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "40e6e3afbc0e497ab37e7d1d3be26561",
+      "M": 16294,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 234.356,
+            "min_us": 232.805,
+            "max_us": 241.605
+          },
+          "previous": {
+            "median_us": 201.2515,
+            "min_us": 199.428,
+            "max_us": 204.484
+          },
+          "candidate": {
+            "median_us": 182.97950000000003,
+            "min_us": 181.059,
+            "max_us": 189.443
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 182.515,
+            "min_us": 180.9,
+            "max_us": 189.571
+          },
+          "previous": {
+            "median_us": 200.9485,
+            "min_us": 199.23499999999999,
+            "max_us": 203.012
+          },
+          "seed": {
+            "median_us": 233.9405,
+            "min_us": 232.26,
+            "max_us": 242.533
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "3df32230aaa54926baede3b24a2e5497",
+      "M": 12251,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 150.051,
+            "min_us": 148.93,
+            "max_us": 153.12300000000002
+          },
+          "previous": {
+            "median_us": 155.90699999999998,
+            "min_us": 154.307,
+            "max_us": 157.892
+          },
+          "seed": {
+            "median_us": 191.492,
+            "min_us": 189.891,
+            "max_us": 193.795
+          }
+        },
+        {
+          "seed": {
+            "median_us": 190.64399999999998,
+            "min_us": 188.642,
+            "max_us": 193.28300000000002
+          },
+          "previous": {
+            "median_us": 155.7945,
+            "min_us": 154.499,
+            "max_us": 158.17899999999997
+          },
+          "candidate": {
+            "median_us": 149.923,
+            "min_us": 149.027,
+            "max_us": 152.13
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "bedb8548688b46c3966cd45f5968b909",
+      "M": 63,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 25.840500000000002,
+            "min_us": 25.28,
+            "max_us": 26.4
+          },
+          "previous": {
+            "median_us": 13.633,
+            "min_us": 13.377,
+            "max_us": 14.112
+          },
+          "candidate": {
+            "median_us": 13.664000000000001,
+            "min_us": 13.409,
+            "max_us": 14.304
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.601,
+            "min_us": 13.344,
+            "max_us": 14.017
+          },
+          "previous": {
+            "median_us": 13.6805,
+            "min_us": 13.312,
+            "max_us": 14.239999999999998
+          },
+          "seed": {
+            "median_us": 25.888,
+            "min_us": 25.281000000000002,
+            "max_us": 26.304000000000002
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "05961b272663429c878b1d87511f274f",
+      "M": 2,
+      "correctness": {
+        "max_relative_error": 0.0009718172950670123,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 7.168,
+            "min_us": 7.04,
+            "max_us": 7.745
+          },
+          "previous": {
+            "median_us": 9.424,
+            "min_us": 8.895999999999999,
+            "max_us": 42.528999999999996
+          },
+          "seed": {
+            "median_us": 22.912,
+            "min_us": 22.528,
+            "max_us": 23.488
+          }
+        },
+        {
+          "seed": {
+            "median_us": 22.880000000000003,
+            "min_us": 22.112,
+            "max_us": 23.456
+          },
+          "previous": {
+            "median_us": 9.392000000000001,
+            "min_us": 8.897,
+            "max_us": 37.024
+          },
+          "candidate": {
+            "median_us": 7.2,
+            "min_us": 7.04,
+            "max_us": 7.680000000000001
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "584d85771a40498fb56ad8b57c4049a4",
+      "M": 93,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 27.424500000000002,
+            "min_us": 27.041,
+            "max_us": 27.969
+          },
+          "previous": {
+            "median_us": 13.4085,
+            "min_us": 13.184,
+            "max_us": 13.888
+          },
+          "candidate": {
+            "median_us": 13.3605,
+            "min_us": 12.992,
+            "max_us": 14.016
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.393,
+            "min_us": 13.088000000000001,
+            "max_us": 13.985
+          },
+          "previous": {
+            "median_us": 13.344999999999999,
+            "min_us": 13.056,
+            "max_us": 13.889000000000001
+          },
+          "seed": {
+            "median_us": 27.456999999999997,
+            "min_us": 26.913,
+            "max_us": 27.969
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "0d36b29c950249999521ad20f21a2a86",
+      "M": 4,
+      "correctness": {
+        "max_relative_error": 0.0057729315012693405,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 10.48,
+            "min_us": 10.208,
+            "max_us": 10.784
+          },
+          "previous": {
+            "median_us": 9.792,
+            "min_us": 9.376000000000001,
+            "max_us": 39.296
+          },
+          "seed": {
+            "median_us": 22.784499999999998,
+            "min_us": 22.304000000000002,
+            "max_us": 23.553
+          }
+        },
+        {
+          "seed": {
+            "median_us": 22.880000000000003,
+            "min_us": 22.4,
+            "max_us": 23.616000000000003
+          },
+          "previous": {
+            "median_us": 14.64,
+            "min_us": 9.376000000000001,
+            "max_us": 41.056000000000004
+          },
+          "candidate": {
+            "median_us": 10.432,
+            "min_us": 10.272,
+            "max_us": 10.848
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "b1b357ea7c98484491f5baed129223e1",
+      "M": 289,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 26.752000000000002,
+            "min_us": 26.464000000000002,
+            "max_us": 27.328000000000003
+          },
+          "previous": {
+            "median_us": 16.8805,
+            "min_us": 16.639999999999997,
+            "max_us": 17.473
+          },
+          "candidate": {
+            "median_us": 16.929,
+            "min_us": 16.672,
+            "max_us": 17.601
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 16.927999999999997,
+            "min_us": 16.704,
+            "max_us": 17.473
+          },
+          "previous": {
+            "median_us": 16.864,
+            "min_us": 16.608999999999998,
+            "max_us": 17.503999999999998
+          },
+          "seed": {
+            "median_us": 26.784,
+            "min_us": 26.432000000000002,
+            "max_us": 27.393
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "824df7caad214f1fbb8d06ccf92d0447",
+      "M": 5,
+      "correctness": {
+        "max_relative_error": 0.0064849853515625,
+        "max_absolute_error": 0.03125,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 18.32,
+            "min_us": 10.592,
+            "max_us": 44.481
+          },
+          "previous": {
+            "median_us": 12.928,
+            "min_us": 9.6,
+            "max_us": 57.313
+          },
+          "seed": {
+            "median_us": 22.865,
+            "min_us": 22.368,
+            "max_us": 23.393
+          }
+        },
+        {
+          "seed": {
+            "median_us": 22.96,
+            "min_us": 22.304000000000002,
+            "max_us": 23.712
+          },
+          "previous": {
+            "median_us": 9.936,
+            "min_us": 9.568,
+            "max_us": 40.065000000000005
+          },
+          "candidate": {
+            "median_us": 11.136,
+            "min_us": 9.536,
+            "max_us": 45.697
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "b5b4a32d9b4e4cca8b97cf6ca98796ff",
+      "M": 25,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 26.480499999999996,
+            "min_us": 26.113,
+            "max_us": 26.880000000000003
+          },
+          "previous": {
+            "median_us": 10.9765,
+            "min_us": 10.656,
+            "max_us": 45.504000000000005
+          },
+          "candidate": {
+            "median_us": 13.5365,
+            "min_us": 13.216000000000001,
+            "max_us": 14.016
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.536,
+            "min_us": 13.248,
+            "max_us": 14.016
+          },
+          "previous": {
+            "median_us": 10.913,
+            "min_us": 10.624,
+            "max_us": 42.145
+          },
+          "seed": {
+            "median_us": 26.449,
+            "min_us": 25.951999999999998,
+            "max_us": 27.008999999999997
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "89eb1e6ef40743ab95e759c4a62e8b0b",
+      "M": 8,
+      "correctness": {
+        "max_relative_error": 0.005087209399789572,
+        "max_absolute_error": 0.03125,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 9.824,
+            "min_us": 9.504,
+            "max_us": 38.272
+          },
+          "previous": {
+            "median_us": 10.336500000000001,
+            "min_us": 9.408,
+            "max_us": 38.433
+          },
+          "seed": {
+            "median_us": 22.848,
+            "min_us": 22.401,
+            "max_us": 23.361
+          }
+        },
+        {
+          "seed": {
+            "median_us": 22.881,
+            "min_us": 22.4,
+            "max_us": 23.456
+          },
+          "previous": {
+            "median_us": 11.376000000000001,
+            "min_us": 9.472,
+            "max_us": 38.977
+          },
+          "candidate": {
+            "median_us": 14.0,
+            "min_us": 9.408,
+            "max_us": 40.353
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "8c8652e5d07c4089bde9948f98842c07",
+      "M": 492,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 27.2965,
+            "min_us": 26.848,
+            "max_us": 27.841
+          },
+          "previous": {
+            "median_us": 17.248,
+            "min_us": 16.832,
+            "max_us": 17.793
+          },
+          "candidate": {
+            "median_us": 17.296,
+            "min_us": 16.96,
+            "max_us": 18.017
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 17.248,
+            "min_us": 16.96,
+            "max_us": 17.729000000000003
+          },
+          "previous": {
+            "median_us": 17.248,
+            "min_us": 16.96,
+            "max_us": 17.984
+          },
+          "seed": {
+            "median_us": 27.296,
+            "min_us": 26.945,
+            "max_us": 27.713
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "a6796f718a3a4a24ae171f7d00be7226",
+      "M": 14915,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 177.6195,
+            "min_us": 176.547,
+            "max_us": 181.058
+          },
+          "previous": {
+            "median_us": 186.62800000000001,
+            "min_us": 183.68300000000002,
+            "max_us": 188.932
+          },
+          "seed": {
+            "median_us": 224.7245,
+            "min_us": 220.90099999999998,
+            "max_us": 227.653
+          }
+        },
+        {
+          "seed": {
+            "median_us": 224.42050000000003,
+            "min_us": 220.996,
+            "max_us": 227.61999999999998
+          },
+          "previous": {
+            "median_us": 186.803,
+            "min_us": 183.523,
+            "max_us": 190.787
+          },
+          "candidate": {
+            "median_us": 177.76350000000002,
+            "min_us": 173.79500000000002,
+            "max_us": 186.659
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "f09b7c55ea694fafa94e94edfebc660e",
+      "M": 32,
+      "correctness": {
+        "max_relative_error": 0.016021728515625,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 26.4485,
+            "min_us": 25.985,
+            "max_us": 27.2
+          },
+          "previous": {
+            "median_us": 12.719999999999999,
+            "min_us": 10.944,
+            "max_us": 42.145
+          },
+          "candidate": {
+            "median_us": 13.5205,
+            "min_us": 13.248,
+            "max_us": 14.239999999999998
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.568,
+            "min_us": 13.248,
+            "max_us": 14.048
+          },
+          "previous": {
+            "median_us": 11.904000000000002,
+            "min_us": 10.975999999999999,
+            "max_us": 42.497
+          },
+          "seed": {
+            "median_us": 26.528,
+            "min_us": 26.113,
+            "max_us": 27.105
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "45c35ee3f5884e5389909344a2ede169",
+      "M": 12853,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 154.787,
+            "min_us": 151.522,
+            "max_us": 157.73100000000002
+          },
+          "previous": {
+            "median_us": 163.61900000000003,
+            "min_us": 162.435,
+            "max_us": 168.259
+          },
+          "seed": {
+            "median_us": 194.6275,
+            "min_us": 191.524,
+            "max_us": 197.443
+          }
+        },
+        {
+          "seed": {
+            "median_us": 195.29950000000002,
+            "min_us": 193.155,
+            "max_us": 197.796
+          },
+          "previous": {
+            "median_us": 164.499,
+            "min_us": 162.947,
+            "max_us": 168.035
+          },
+          "candidate": {
+            "median_us": 155.475,
+            "min_us": 152.066,
+            "max_us": 156.92999999999998
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "5ead6f71a44e46e2968fe3da8124b6af",
+      "M": 11006,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 166.947,
+            "min_us": 164.419,
+            "max_us": 170.05100000000002
+          },
+          "previous": {
+            "median_us": 141.5385,
+            "min_us": 140.131,
+            "max_us": 143.55499999999998
+          },
+          "candidate": {
+            "median_us": 133.45800000000003,
+            "min_us": 132.482,
+            "max_us": 135.523
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 133.17000000000002,
+            "min_us": 131.81,
+            "max_us": 137.63400000000001
+          },
+          "previous": {
+            "median_us": 141.026,
+            "min_us": 138.497,
+            "max_us": 144.323
+          },
+          "seed": {
+            "median_us": 166.835,
+            "min_us": 165.251,
+            "max_us": 172.163
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "662593cec9b947a9b79803eb3b26e11a",
+      "M": 8828,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "candidate": {
+            "median_us": 108.914,
+            "min_us": 108.098,
+            "max_us": 112.066
+          },
+          "previous": {
+            "median_us": 118.83449999999999,
+            "min_us": 117.41,
+            "max_us": 120.25800000000001
+          },
+          "seed": {
+            "median_us": 135.0585,
+            "min_us": 134.21,
+            "max_us": 138.787
+          }
+        },
+        {
+          "seed": {
+            "median_us": 135.9065,
+            "min_us": 134.882,
+            "max_us": 139.875
+          },
+          "previous": {
+            "median_us": 119.042,
+            "min_us": 117.826,
+            "max_us": 120.45
+          },
+          "candidate": {
+            "median_us": 109.64999999999999,
+            "min_us": 108.898,
+            "max_us": 111.49000000000001
+          }
+        }
+      ],
+      "status": "PASSED"
+    },
+    {
+      "id": "477715ab00314b1f85c0b660e32f00e0",
+      "M": 128,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "trials": [
+        {
+          "seed": {
+            "median_us": 27.296,
+            "min_us": 26.785,
+            "max_us": 27.808
+          },
+          "previous": {
+            "median_us": 13.504,
+            "min_us": 13.152000000000001,
+            "max_us": 14.144
+          },
+          "candidate": {
+            "median_us": 13.4885,
+            "min_us": 13.216000000000001,
+            "max_us": 14.016
+          }
+        },
+        {
+          "candidate": {
+            "median_us": 13.504,
+            "min_us": 13.216999999999999,
+            "max_us": 14.145
+          },
+          "previous": {
+            "median_us": 13.4245,
+            "min_us": 13.216000000000001,
+            "max_us": 13.856
+          },
+          "seed": {
+            "median_us": 27.3285,
+            "min_us": 26.721,
+            "max_us": 27.904999999999998
+          }
+        }
+      ],
+      "status": "PASSED"
+    }
+  ],
+  "peak_allocated_gib": 1.019439697265625,
+  "trials": [
+    {
+      "seed": 44.714414744051794,
+      "previous": 25.67554331146655,
+      "candidate": 25.246060310946927
+    },
+    {
+      "candidate": 25.115670270809666,
+      "previous": 25.343075580004594,
+      "seed": 44.7753523645925
+    }
+  ]
+}

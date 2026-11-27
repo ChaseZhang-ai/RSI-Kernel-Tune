@@ -1,0 +1,366 @@
+{
+  "id": 105844,
+  "status": "COMPLETED",
+  "evaluation_stack_version": "v1.1",
+  "gpu_type": "B200",
+  "submission_mode": "private",
+  "is_correct": false,
+  "is_disqualified": false,
+  "result_available_at": null,
+  "submitted_at": "2026-11-26T17:22:58.475637",
+  "finished_at": "2026-11-26T17:23:48.238605",
+  "source_sha256": "ab7676374b30dc3cc8dcb5fdc3ddf276c8da546e53b4d7c352ea59506c3b3985",
+  "scope": "Official private SOL-ExecBench B200 trial",
+  "confirmed_passes": 42,
+  "total": 43,
+  "complete_pass": false,
+  "official_sol_score": null,
+  "board_latency_ms": null,
+  "diagnostic": "The evaluator found an empty CUPTI activity sequence during a timed iteration.",
+  "workloads": [
+    {
+      "workload_uuid": "181e4a1e-6dec-4bca-8a21-703c35d0762a",
+      "M": 256,
+      "status": "PASSED",
+      "latency_ms": 0.088143,
+      "paired_baseline_latency_ms": 0.068496,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "4723ac5c-205a-454d-9318-2ea368b0a57d",
+      "M": 248,
+      "status": "PASSED",
+      "latency_ms": 0.088047,
+      "paired_baseline_latency_ms": 0.067793,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "014b776b-dc2b-4468-b5ae-aa0d7d1491aa",
+      "M": 240,
+      "status": "PASSED",
+      "latency_ms": 0.087872,
+      "paired_baseline_latency_ms": 0.067648,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "e9dbb6fb-dcd7-4c59-a138-19f8acab3497",
+      "M": 232,
+      "status": "PASSED",
+      "latency_ms": 0.087679,
+      "paired_baseline_latency_ms": 0.072545,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "b246cb12-d35d-44c4-b52b-57cc08b837d8",
+      "M": 224,
+      "status": "PASSED",
+      "latency_ms": 0.087312,
+      "paired_baseline_latency_ms": 0.071952,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "3cb71ee9-6d8b-4870-bfb3-5ac6ed8e94f8",
+      "M": 216,
+      "status": "PASSED",
+      "latency_ms": 0.087424,
+      "paired_baseline_latency_ms": 0.065824,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "9565455d-3c4f-4cb0-ada2-7b08fcd4fb6f",
+      "M": 208,
+      "status": "PASSED",
+      "latency_ms": 0.087184,
+      "paired_baseline_latency_ms": 0.066032,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "641e402f-322a-4b01-bac9-af4d4865de6a",
+      "M": 200,
+      "status": "PASSED",
+      "latency_ms": 0.086573,
+      "paired_baseline_latency_ms": 0.06416,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "fa47c843-0516-4bd4-88fc-362c4ce5f1d1",
+      "M": 192,
+      "status": "PASSED",
+      "latency_ms": 0.086688,
+      "paired_baseline_latency_ms": 0.064159,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "3df3dc7e-f4e9-474c-9192-7b18755fc3b0",
+      "M": 184,
+      "status": "PASSED",
+      "latency_ms": 0.086427,
+      "paired_baseline_latency_ms": 0.063904,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "2f234a95-9ef4-4d59-a4ba-753a719da828",
+      "M": 176,
+      "status": "PASSED",
+      "latency_ms": 0.086259,
+      "paired_baseline_latency_ms": 0.062961,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "d28934a3-5ae0-4359-a8af-aa78f6825bd4",
+      "M": 168,
+      "status": "PASSED",
+      "latency_ms": 0.085839,
+      "paired_baseline_latency_ms": 0.062832,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "afc3f412-1263-4231-a128-3db3cc459631",
+      "M": 160,
+      "status": "PASSED",
+      "latency_ms": 0.085631,
+      "paired_baseline_latency_ms": 0.062607,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "498af316-9b62-4b8d-8870-d3e831d8bc35",
+      "M": 152,
+      "status": "PASSED",
+      "latency_ms": 0.085744,
+      "paired_baseline_latency_ms": 0.062304,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "08a36139-09d0-4091-ad63-e3d74002fa46",
+      "M": 144,
+      "status": "PASSED",
+      "latency_ms": 0.08544,
+      "paired_baseline_latency_ms": 0.058496,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "cc57db8a-c093-4d47-aac6-79d1f06d74a2",
+      "M": 136,
+      "status": "PASSED",
+      "latency_ms": 0.085678,
+      "paired_baseline_latency_ms": 0.056048,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "ac3459e6-fc10-4842-9957-a2885ba92ddd",
+      "M": 128,
+      "status": "PASSED",
+      "latency_ms": 0.092991,
+      "paired_baseline_latency_ms": 0.061344,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "a55ceb91-1f69-4502-9fd1-3b92038931d8",
+      "M": 120,
+      "status": "PASSED",
+      "latency_ms": 0.092414,
+      "paired_baseline_latency_ms": 0.06112,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "89b6dc1d-d97e-4c9d-80fc-abad9894f173",
+      "M": 112,
+      "status": "RUNTIME_ERROR",
+      "latency_ms": null,
+      "paired_baseline_latency_ms": null,
+      "failure_category": "missing_cupti_activity"
+    },
+    {
+      "workload_uuid": "293bf53a-b0e0-4767-8d3f-222bcc4c44a7",
+      "M": 104,
+      "status": "PASSED",
+      "latency_ms": 0.091551,
+      "paired_baseline_latency_ms": 0.061008,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "008975ac-5de6-49ad-b8d7-27b23050319f",
+      "M": 96,
+      "status": "PASSED",
+      "latency_ms": 0.091072,
+      "paired_baseline_latency_ms": 0.061168,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "7c60474c-51bc-4c8e-9a79-6477f4136609",
+      "M": 88,
+      "status": "PASSED",
+      "latency_ms": 0.090832,
+      "paired_baseline_latency_ms": 0.06096,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "41ef6224-1145-4c56-8e47-ac9b27d6d528",
+      "M": 80,
+      "status": "PASSED",
+      "latency_ms": 0.090304,
+      "paired_baseline_latency_ms": 0.053856,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "1342dfbf-6c83-478b-b221-fc6432fec7a3",
+      "M": 72,
+      "status": "PASSED",
+      "latency_ms": 0.090448,
+      "paired_baseline_latency_ms": 0.053792,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "995bbfe6-34a2-423d-8539-daa8bfa84483",
+      "M": 64,
+      "status": "PASSED",
+      "latency_ms": 0.072639,
+      "paired_baseline_latency_ms": 0.053632,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "7133808e-23cc-44e1-8ee8-77a53d28829e",
+      "M": 56,
+      "status": "PASSED",
+      "latency_ms": 0.072642,
+      "paired_baseline_latency_ms": 0.053632,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "aff180b9-9ebd-453a-b56a-d3ec1fd28e3b",
+      "M": 48,
+      "status": "PASSED",
+      "latency_ms": 0.072112,
+      "paired_baseline_latency_ms": 0.053312,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "a2d7f478-41fb-4bf9-9066-baa5d7059d51",
+      "M": 40,
+      "status": "PASSED",
+      "latency_ms": 0.071666,
+      "paired_baseline_latency_ms": 0.053136,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "14748fea-144e-4a8d-ab41-c9a43c970e3a",
+      "M": 32,
+      "status": "PASSED",
+      "latency_ms": 0.065296,
+      "paired_baseline_latency_ms": 0.052832,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "63685675-d12d-48c3-b9cb-3f9267730506",
+      "M": 24,
+      "status": "PASSED",
+      "latency_ms": 0.064991,
+      "paired_baseline_latency_ms": 0.052224,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "787cce2f-8971-4c13-94a7-860e15cc5f3a",
+      "M": 16,
+      "status": "PASSED",
+      "latency_ms": 0.064575,
+      "paired_baseline_latency_ms": 0.051952,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "8e4f12e6-e907-4e38-8da2-c0ec3d79a163",
+      "M": 8,
+      "status": "PASSED",
+      "latency_ms": 0.064239,
+      "paired_baseline_latency_ms": 0.059505,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "57cfab24-885a-474c-a1c8-25db5c9c482d",
+      "M": 4,
+      "status": "PASSED",
+      "latency_ms": 0.064224,
+      "paired_baseline_latency_ms": 0.059072,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "bd3fe06b-2d0d-418b-9f5b-6bc0f6663295",
+      "M": 2,
+      "status": "PASSED",
+      "latency_ms": 0.064303,
+      "paired_baseline_latency_ms": 0.058992,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "de80b1bd-7720-48ef-af97-c8e22a667ed3",
+      "M": 1,
+      "status": "PASSED",
+      "latency_ms": 0.05096,
+      "paired_baseline_latency_ms": 0.058832,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "ab620041-cf92-429e-978b-52f236566a91",
+      "M": 7,
+      "status": "PASSED",
+      "latency_ms": 0.064384,
+      "paired_baseline_latency_ms": 0.059488,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "2bf902f9-da1a-44de-b0e2-7941bef4b717",
+      "M": 35,
+      "status": "PASSED",
+      "latency_ms": 0.071583,
+      "paired_baseline_latency_ms": 0.053009,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "d7d2b46a-3430-472e-87bd-c5da54f4a024",
+      "M": 972,
+      "status": "PASSED",
+      "latency_ms": 0.241455,
+      "paired_baseline_latency_ms": 0.166225,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "4c7c227f-3c0f-44eb-8e62-6f0fd507f276",
+      "M": 70,
+      "status": "PASSED",
+      "latency_ms": 0.090176,
+      "paired_baseline_latency_ms": 0.055616,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "161e08d9-8ec9-4559-beed-a7713cb1a92f",
+      "M": 2053,
+      "status": "PASSED",
+      "latency_ms": 0.462367,
+      "paired_baseline_latency_ms": 0.316897,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "32cd2698-78a7-4446-9691-2b3e42fc68b7",
+      "M": 8192,
+      "status": "PASSED",
+      "latency_ms": 1.564002,
+      "paired_baseline_latency_ms": 1.165825,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "05c12114-0686-4973-a9f3-cb03db06d110",
+      "M": 2379,
+      "status": "PASSED",
+      "latency_ms": 0.517359,
+      "paired_baseline_latency_ms": 0.396241,
+      "failure_category": null
+    },
+    {
+      "workload_uuid": "cb7a5636-4658-4a52-b8ac-fd0c7213381b",
+      "M": 15,
+      "status": "PASSED",
+      "latency_ms": 0.06571,
+      "paired_baseline_latency_ms": 0.051664,
+      "failure_category": null
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "verification_scope": "Exact DPS file, complete SOL-ExecBench local evaluator pass. GB300 only.",
+  "passed": 43,
+  "total": 43,
+  "geometric_mean_us": 19.300693382893435,
+  "min_us": 9.8885,
+  "max_us": 216.6115,
+  "submission_sha256": "0c573ad8ea0216e79f847f7639922fa163df4ba2085404086f32b3c12ab05865",
+  "official_parquet_sha256": "89d1feacf02b6f8c07ec8d67a9dbb2c531652251095a7f762f2bc296f6a1fe74",
+  "cold_first_call_seconds": 3.1650157645344734,
+  "device": {
+    "physical_index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "initial_query": "0, GPU-abbc4299-8500-54d7-2a37-3ccac762f30d, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+    "sm_lock": [
+      1500,
+      1500
+    ],
+    "memory_lock": null,
+    "supported_memory_clocks_mhz": [
+      3996
+    ],
+    "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000008:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+    "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+    "samples": [
+      "1500 MHz, 3996 MHz"
+    ],
+    "device": "NVIDIA GB300",
+    "capability": [
+      10,
+      3
+    ],
+    "triton_target_arch": 103,
+    "multiprocessor_count": 152,
+    "torch": "2.10.0+cu130",
+    "cuda": "13.0",
+    "triton": "3.7.0+fb.beta",
+    "fbtriton": "3.7.1",
+    "evaluator": "1.0.2",
+    "cupti_python": "13.5.0",
+    "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd"
+  },
+  "large_workloads": [
+    {
+      "M": 972,
+      "us": 39.745000000000005,
+      "tiles": 128,
+      "persistent_workers": 128,
+      "tile_waves": 1,
+      "sm_tile_slot_fill_fraction": 0.8421052631578947,
+      "fp16_gemm_pflops": 0.8206040484086047
+    },
+    {
+      "M": 2053,
+      "us": 70.369,
+      "tiles": 272,
+      "persistent_workers": 152,
+      "tile_waves": 2,
+      "sm_tile_slot_fill_fraction": 0.8947368421052632,
+      "fp16_gemm_pflops": 0.9789431268882605
+    },
+    {
+      "M": 2379,
+      "us": 70.2415,
+      "tiles": 304,
+      "persistent_workers": 152,
+      "tile_waves": 2,
+      "sm_tile_slot_fill_fraction": 1.0,
+      "fp16_gemm_pflops": 1.1364505844550585
+    },
+    {
+      "M": 8192,
+      "us": 216.6115,
+      "tiles": 1024,
+      "persistent_workers": 152,
+      "tile_waves": 7,
+      "sm_tile_slot_fill_fraction": 0.9624060150375939,
+      "fp16_gemm_pflops": 1.268990367288902
+    }
+  ],
+  "warmups": 10,
+  "timed_iterations": 50,
+  "timing": "CUPTI first-to-last activity span, cold L2, cloned inputs, preallocated destination output",
+  "evaluator_command": "sol-execbench <problem_dir> --solution solution.json --output results.jsonl"
+}

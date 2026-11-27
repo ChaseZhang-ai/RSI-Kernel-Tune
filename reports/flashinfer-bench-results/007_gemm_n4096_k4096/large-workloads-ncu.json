@@ -1,0 +1,53 @@
+{
+  "device": {
+    "physical_index": 2,
+    "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+    "initial_query": "2, GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+    "sm_lock": [
+      1500,
+      1500
+    ],
+    "memory_lock": null,
+    "supported_memory_clocks_mhz": [
+      3996
+    ],
+    "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000018:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+    "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+    "samples": [
+      "1500 MHz, 3996 MHz"
+    ]
+  },
+  "version": "Version 2026.1.1.0 (build 37634170) (public-release)",
+  "method": "Nsight Compute kernel replay with cache-control all and clock-control none; clocks set by the outer lock wrapper",
+  "profile_source": "Exact archived submission.py, initialized FP16 operands, one profiled launch at each M",
+  "workloads": [
+    {
+      "M": 972,
+      "grid": "(128, 1, 1)",
+      "sm__cycles_active.avg.pct_of_peak_sustained_elapsed": 74.85,
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": 48.39,
+      "dram__bytes_read.sum": 41531648
+    },
+    {
+      "M": 2053,
+      "grid": "(152, 1, 1)",
+      "sm__cycles_active.avg.pct_of_peak_sustained_elapsed": 84.14,
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": 61.41,
+      "dram__bytes_read.sum": 50818816
+    },
+    {
+      "M": 2379,
+      "grid": "(152, 1, 1)",
+      "sm__cycles_active.avg.pct_of_peak_sustained_elapsed": 91.84,
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": 67.15,
+      "dram__bytes_read.sum": 54098944
+    },
+    {
+      "M": 8192,
+      "grid": "(152, 1, 1)",
+      "sm__cycles_active.avg.pct_of_peak_sustained_elapsed": 90.71,
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": 72.86,
+      "dram__bytes_read.sum": 108745728
+    }
+  ]
+}

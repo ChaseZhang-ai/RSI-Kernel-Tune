@@ -1,0 +1,398 @@
+{
+  "gpu": {
+    "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ]
+  },
+  "environment": {
+    "sol-execbench": "1.0.2",
+    "torch": "2.10.0+cu130",
+    "triton": "3.7.0+fb.beta",
+    "cupti-python": "13.5.0",
+    "toolkit": "13.0"
+  },
+  "rows": [
+    {
+      "id": "bcc2cc41b7464e54b0c4d11e65da96d8",
+      "M": 6,
+      "compile_and_first_launch_s": 1.569267803337425,
+      "correctness": {
+        "max_relative_error": 0.008392333984375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "ff70a7abf26848aba6424c7571f777d4",
+      "M": 1,
+      "compile_and_first_launch_s": 0.0933780069462955,
+      "correctness": {
+        "max_relative_error": 0.006103515625,
+        "max_absolute_error": 0.03125,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "f4513ae887ae4d42946dcf6630671c22",
+      "M": 34,
+      "compile_and_first_launch_s": 0.14203401328995824,
+      "correctness": {
+        "max_relative_error": 0.0125885009765625,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "e5931dc39ece4669b866483e6e2d6773",
+      "M": 969,
+      "compile_and_first_launch_s": 0.1628611427731812,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "b99854266fd7401a9f296cdf99e56e6c",
+      "M": 16,
+      "compile_and_first_launch_s": 0.21316441288217902,
+      "correctness": {
+        "max_relative_error": 0.00804093573242426,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "75f0b62d01a44f9bac44a61ec9a3f3a1",
+      "M": 15,
+      "compile_and_first_launch_s": 0.00012035388499498367,
+      "correctness": {
+        "max_relative_error": 0.01068115234375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "0d81c8cba4e0419d930c49f025bf248a",
+      "M": 15813,
+      "compile_and_first_launch_s": 0.27264236100018024,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "bc6d8e2eb9144c24ae849d16e406d1bf",
+      "M": 11938,
+      "compile_and_first_launch_s": 0.00028582895174622536,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "23b29a3363644b318e28b625442e6c07",
+      "M": 64,
+      "compile_and_first_launch_s": 0.00014800205826759338,
+      "correctness": {
+        "max_relative_error": 0.0148773193359375,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "f3fc0b3875a240289fa1cee3be00d318",
+      "M": 17,
+      "compile_and_first_launch_s": 0.0001293150708079338,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "1a8ac05e5c784f87849356996308c0a4",
+      "M": 952,
+      "compile_and_first_launch_s": 0.00016000308096408844,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "77447ed3b33945febc56a7bb29df6c96",
+      "M": 172,
+      "compile_and_first_launch_s": 0.00012905895709991455,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "40e6e3afbc0e497ab37e7d1d3be26561",
+      "M": 16294,
+      "compile_and_first_launch_s": 0.0003353008069097996,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "3df32230aaa54926baede3b24a2e5497",
+      "M": 12251,
+      "compile_and_first_launch_s": 0.0002841646783053875,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "bedb8548688b46c3966cd45f5968b909",
+      "M": 63,
+      "compile_and_first_launch_s": 0.00012976210564374924,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "05961b272663429c878b1d87511f274f",
+      "M": 2,
+      "compile_and_first_launch_s": 0.11291176499798894,
+      "correctness": {
+        "max_relative_error": 0.0009718172950670123,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "584d85771a40498fb56ad8b57c4049a4",
+      "M": 93,
+      "compile_and_first_launch_s": 0.00020746001973748207,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "0d36b29c950249999521ad20f21a2a86",
+      "M": 4,
+      "compile_and_first_launch_s": 0.19468352431431413,
+      "correctness": {
+        "max_relative_error": 0.0057729315012693405,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "b1b357ea7c98484491f5baed129223e1",
+      "M": 289,
+      "compile_and_first_launch_s": 0.14060829021036625,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "824df7caad214f1fbb8d06ccf92d0447",
+      "M": 5,
+      "compile_and_first_launch_s": 0.00013993820175528526,
+      "correctness": {
+        "max_relative_error": 0.0064849853515625,
+        "max_absolute_error": 0.03125,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "b5b4a32d9b4e4cca8b97cf6ca98796ff",
+      "M": 25,
+      "compile_and_first_launch_s": 0.00014041876420378685,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "89eb1e6ef40743ab95e759c4a62e8b0b",
+      "M": 8,
+      "compile_and_first_launch_s": 0.00011702580377459526,
+      "correctness": {
+        "max_relative_error": 0.005087209399789572,
+        "max_absolute_error": 0.03125,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "8c8652e5d07c4089bde9948f98842c07",
+      "M": 492,
+      "compile_and_first_launch_s": 0.00014605000615119934,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "a6796f718a3a4a24ae171f7d00be7226",
+      "M": 14915,
+      "compile_and_first_launch_s": 0.0003211251460015774,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "f09b7c55ea694fafa94e94edfebc660e",
+      "M": 32,
+      "compile_and_first_launch_s": 0.0001413780264556408,
+      "correctness": {
+        "max_relative_error": 0.016021728515625,
+        "max_absolute_error": 0.0625,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "45c35ee3f5884e5389909344a2ede169",
+      "M": 12853,
+      "compile_and_first_launch_s": 0.0002794279716908932,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "5ead6f71a44e46e2968fe3da8124b6af",
+      "M": 11006,
+      "compile_and_first_launch_s": 0.0002695731818675995,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "662593cec9b947a9b79803eb3b26e11a",
+      "M": 8828,
+      "compile_and_first_launch_s": 0.00023625977337360382,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    },
+    {
+      "id": "477715ab00314b1f85c0b660e32f00e0",
+      "M": 128,
+      "compile_and_first_launch_s": 0.00012105796486139297,
+      "correctness": {
+        "max_relative_error": 0.0,
+        "max_absolute_error": 0.0,
+        "has_nan": false,
+        "has_inf": false,
+        "extra": null
+      },
+      "status": "PASSED"
+    }
+  ],
+  "peak_allocated_gib": 1.2235956192016602,
+  "total_compile_and_first_launch_s": 2.9053928242065012
+}

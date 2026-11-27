@@ -1,0 +1,14 @@
+{
+  "checked_at_utc": "2026-11-26T18:54:26+00:00",
+  "kernel_id": 217,
+  "gpu": "B200",
+  "evaluation_stack": "v1.1",
+  "leader": {
+    "rank": 1,
+    "username": "June",
+    "submission_id": 104637,
+    "sol_score": 1.0
+  },
+  "sol_bound_latency_ms": 0.019706,
+  "board_url": "https://research.nvidia.com/benchmarks/sol-execbench/leaderboard/kernel/217/B200"
+}

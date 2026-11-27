@@ -1,0 +1,59 @@
+{
+  "operator": "003_fused_add_rmsnorm_h7168",
+  "hardware_scope": "GB300 only",
+  "evaluator_stack_methodology": "v1.1",
+  "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+  "evaluator_version": "1.0.2",
+  "paired_gpu": {
+    "index": 2,
+    "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "clocks_mhz": "1500, 3996",
+    "torch": "2.9.0+cu130",
+    "triton": "3.5.0",
+    "cupti": "13.5.0",
+    "evaluator": "1.0.2 a9fa0804"
+  },
+  "cli_gpu": {
+    "index": 0,
+    "uuid": "GPU-abbc4299-8500-54d7-2a37-3ccac762f30d",
+    "locked_sm_mhz": 1500,
+    "observed_mem_mhz": 3996,
+    "supported_mem_mhz": [
+      3996
+    ]
+  },
+  "nvrtc": "13.0",
+  "cuda_bindings": "13.1.1",
+  "verified_at_utc": "2026-11-26T18:51:44Z",
+  "official_workloads_passed": 8,
+  "official_workloads_total": 8,
+  "sha256": "c04baf5492ac7df7a6caa905aad12bd7bb92a18ff00a16ebed49c8c8b787f918",
+  "candidate_cli_geomean_us": 7.846948543012904,
+  "paired_speedup": 1.212648729271225,
+  "cold_build_and_first_call_s": 0.09542418085038662,
+  "aligned_candidate_first_calls_total_s": 0.09706555772572756,
+  "cancellation_and_pointer_checks_passed": 20,
+  "official_warmups": 10,
+  "official_timed_iterations": 50,
+  "cold_l2": true,
+  "timer": "CUPTI first-to-last kernel activity",
+  "b200": {
+    "candidate_score": null,
+    "rank": null,
+    "gap_to_leader": null,
+    "submission_id": null,
+    "public_v1_1_leader": {
+      "name": "June",
+      "sol": 0.863498,
+      "rank": 1,
+      "submission_id": 104626,
+      "checked_at_utc": "2026-11-26T18:51:50Z"
+    }
+  }
+}

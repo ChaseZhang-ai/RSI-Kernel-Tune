@@ -1,0 +1,223 @@
+phase,M,workload_id,index,variant,status,latency_us,detail
+initial,1,b01eaa0e-4579-4d3a-a2d5-4c32360db254,1,baseline,PASSED,4.32,
+initial,1,b01eaa0e-4579-4d3a-a2d5-4c32360db254,1,candidate,PASSED,3.744,
+initial,1,b01eaa0e-4579-4d3a-a2d5-4c32360db254,1,vector-1-split0,PASSED,3.776,
+initial,1,b01eaa0e-4579-4d3a-a2d5-4c32360db254,1,vector-1-split1,PASSED,3.8085,
+initial,1,b01eaa0e-4579-4d3a-a2d5-4c32360db254,1,vector-2-split0,PASSED,3.776,
+initial,1,b01eaa0e-4579-4d3a-a2d5-4c32360db254,1,vector-2-split1,PASSED,3.84,
+initial,1,b01eaa0e-4579-4d3a-a2d5-4c32360db254,1,vector-4-split0,PASSED,3.8405,
+initial,1,b01eaa0e-4579-4d3a-a2d5-4c32360db254,1,vector-4-split1,PASSED,3.872,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,baseline,PASSED,9.1525,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,candidate,PASSED,5.312,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_16_8_7_8_normal,PASSED,5.12,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_16_16_8_7_normal,PASSED,4.544,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_16_16_7_8_normal,PASSED,4.416,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_16_16_4_7_normal,PASSED,4.8645,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_32_16_8_7_normal,PASSED,5.312,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_32_16_7_8_normal,PASSED,5.281,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_32_16_4_7_normal,PASSED,5.6,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_32_32_8_7_normal,PASSED,5.472,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_32_32_7_8_normal,PASSED,5.536,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_64_16_8_7_normal,PASSED,6.176,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_64_16_7_8_normal,PASSED,6.56,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_64_8_8_7_normal,PASSED,5.376,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,mma_64_32_8_7_normal,PASSED,7.296,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,tma-32-32-128-3-8-False-0-False-False,PASSED,18.592,
+initial,32,5f8e8baf-eee5-4d68-b72b-685d15714e0a,1,tma-64-64-128-3-8-False-0-False-False,PASSED,14.353,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,baseline,PASSED,11.6325,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,candidate,PASSED,8.032,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,mma_32_16_8_7_normal,PASSED,8.032,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,mma_32_16_7_8_normal,PASSED,7.456,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,mma_32_16_4_7_normal,PASSED,6.4165,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,mma_32_32_8_7_normal,PASSED,6.272,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,mma_32_32_7_8_normal,PASSED,6.4,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,mma_64_16_8_7_normal,PASSED,6.624,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,mma_64_16_7_8_normal,PASSED,7.233,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,mma_64_8_8_7_normal,PASSED,8.896,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,mma_64_32_8_7_normal,PASSED,8.992,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,tma-32-32-128-3-8-False-0-False-False,PASSED,10.624,
+initial,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,1,tma-64-64-128-3-8-False-0-False-False,PASSED,14.464,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,baseline,PASSED,56.594,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,candidate,PASSED,25.665,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,tma-32-64-128-4-4-True-0-False-True,PASSED,25.473,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,tma-32-64-256-3-4-True-0-False-True,PASSED,35.137,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,tma-32-64-128-4-2-True-0-False-True,PASSED,18.784,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,tma-32-64-64-4-4-True-0-False-True,PASSED,23.745,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,tma-32-64-128-4-1-True-0-False-True,PASSED,23.1045,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,tma-16-64-128-4-4-True-0-False-True,PASSED,32.993,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,tma-32-128-128-4-4-True-0-False-True,PASSED,26.625,
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,tma-32-128-256-3-4-True-0-False-True,BUILD_FAILURE,,"out of resource: shared memory, Required: 245808, Hardware limit: 232448. Reducing block sizes or `num_stages` may help."
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,tma-32-64-128-3-4-True-0-True-True,BUILD_FAILURE,,PassManager::run failed
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,staged-16-64-128-4-True-1-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,staged-32-64-128-4-True-1-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,staged-32-64-256-4-True-1-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,901,d09b28b7-50a8-4382-a383-7aaf36de1087,1,staged-32-64-128-5-True-1-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,16,0aacc5e7-fb31-4557-bec0-ca650771c1ec,1,baseline,PASSED,9.104,
+initial,16,0aacc5e7-fb31-4557-bec0-ca650771c1ec,1,candidate,PASSED,4.192,
+initial,16,0aacc5e7-fb31-4557-bec0-ca650771c1ec,1,mma_16_8_7_8_normal,PASSED,4.1915,
+initial,16,0aacc5e7-fb31-4557-bec0-ca650771c1ec,1,mma_16_16_8_7_normal,PASSED,4.416,
+initial,16,0aacc5e7-fb31-4557-bec0-ca650771c1ec,1,mma_16_16_7_8_normal,PASSED,4.352,
+initial,16,0aacc5e7-fb31-4557-bec0-ca650771c1ec,1,mma_16_16_4_7_normal,PASSED,4.833,
+initial,16,0aacc5e7-fb31-4557-bec0-ca650771c1ec,1,tma-32-32-128-3-8-False-0-False-False,PASSED,10.384,
+initial,16,0aacc5e7-fb31-4557-bec0-ca650771c1ec,1,tma-64-64-128-3-8-False-0-False-False,PASSED,13.9365,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,baseline,PASSED,5.344,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,candidate,PASSED,3.936,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,vector-1-split0,PASSED,5.952,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,vector-1-split1,PASSED,6.048,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,vector-2-split0,PASSED,5.6965,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,vector-2-split1,PASSED,5.264,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,vector-4-split0,PASSED,4.512,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,vector-4-split1,PASSED,4.5925,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,mma_8_16_8_7_swap,PASSED,3.936,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,mma_8_16_7_8_swap,PASSED,3.872,
+initial,4,836551f9-5866-4fca-b5f7-881bc393ea80,1,mma_8_16_4_7_swap,PASSED,4.192,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,baseline,PASSED,132.852,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,candidate,PASSED,93.987,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-64-128-64-4-1-False-0-False-True,PASSED,93.9865,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-128-128-128-3-1-False-0-False-True,PASSED,97.251,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-128-256-64-3-1-False-1-False-True,PASSED,93.475,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-128-256-64-4-1-False-1-False-False,PASSED,69.474,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-128-256-64-3-1-False-0-False-True,PASSED,93.2985,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-128-256-64-3-1-False-1-True-True,BUILD_FAILURE,,PassManager::run failed
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-128-256-64-3-1-True-1-False-True,PASSED,100.243,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-128-128-128-3-1-False-1-True-True,BUILD_FAILURE,,PassManager::run failed
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-128-128-64-5-1-False-1-False-True,PASSED,81.602,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,tma-128-128-64-5-1-False-2-False-True,PASSED,82.851,
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-64-128-128-4-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-128-128-64-5-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-128-128-128-3-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-128-256-64-3-False-1-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-128-256-64-3-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-128-256-64-4-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-128-256-64-4-False-2-1-148,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-128-256-64-4-False-2-2-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-128-256-128-2-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-128-256-64-4-True-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,1,staged-64-128-64-6-False-2-2-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,baseline,PASSED,126.884,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,candidate,PASSED,90.3705,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-64-128-64-4-1-False-0-False-True,PASSED,92.275,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-128-128-128-3-1-False-0-False-True,PASSED,96.595,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-128-256-64-3-1-False-1-False-True,PASSED,90.2425,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-128-256-64-4-1-False-1-False-False,PASSED,66.786,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-128-256-64-3-1-False-0-False-True,PASSED,90.1625,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-128-256-64-3-1-False-1-True-True,BUILD_FAILURE,,PassManager::run failed
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-128-256-64-3-1-True-1-False-True,PASSED,97.203,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-128-128-128-3-1-False-1-True-True,BUILD_FAILURE,,PassManager::run failed
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-128-128-64-5-1-False-1-False-True,PASSED,80.579,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,tma-128-128-64-5-1-False-2-False-True,PASSED,81.698,
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-64-128-128-4-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-128-128-64-5-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-128-128-128-3-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-128-256-64-3-False-1-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-128-256-64-3-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-128-256-64-4-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-128-256-64-4-False-2-1-148,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-128-256-64-4-False-2-2-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-128-256-128-2-False-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-128-256-64-4-True-2-1-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,11948,a780b495-c3ed-48d1-a72a-63b76f299049,1,staged-64-128-64-6-False-2-2-None,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,baseline,PASSED,13.0245,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,candidate,PASSED,6.592,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,mma_32_16_8_7_normal,PASSED,5.568,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,mma_32_16_7_8_normal,PASSED,5.568,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,mma_32_16_4_7_normal,PASSED,5.664,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,mma_32_32_8_7_normal,PASSED,5.984,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,mma_32_32_7_8_normal,PASSED,6.176,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,mma_64_16_8_7_normal,PASSED,6.592,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,mma_64_16_7_8_normal,PASSED,7.136,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,mma_64_8_8_7_normal,PASSED,6.048,
+initial,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,1,mma_64_32_8_7_normal,PASSED,8.64,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,baseline,PASSED,10.3685,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,candidate,PASSED,6.4485,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,mma_32_16_8_7_normal,PASSED,5.568,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,mma_32_16_7_8_normal,PASSED,5.5365,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,mma_32_16_4_7_normal,PASSED,5.664,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,mma_32_32_8_7_normal,PASSED,5.984,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,mma_32_32_7_8_normal,PASSED,6.24,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,mma_64_16_8_7_normal,PASSED,6.464,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,mma_64_16_7_8_normal,PASSED,7.072,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,mma_64_8_8_7_normal,PASSED,5.92,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,mma_64_32_8_7_normal,PASSED,8.592,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,tma-32-32-128-3-8-False-0-False-False,PASSED,22.225,
+initial,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,1,tma-64-64-128-3-8-False-0-False-False,PASSED,15.088,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,baseline,PASSED,16.8485,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,candidate,PASSED,8.048,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_32_16_7_8_normal,PASSED,7.584,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_32_32_8_7_normal,PASSED,6.24,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_64_8_8_7_normal,PASSED,8.928,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_64_16_8_7_normal,PASSED,6.592,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_64_16_8_14_normal,PASSED,12.208,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_64_16_7_16_normal,PASSED,12.7205,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_64_8_8_14_normal,PASSED,14.336,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_64_32_8_14_normal,PASSED,10.7525,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_32_16_8_14_normal,PASSED,11.712,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_32_16_7_16_normal,PASSED,12.32,
+refinement,80,bb5b51a5-34df-4a8c-9f07-2d3eb3d07627,0,mma_32_32_8_14_normal,PASSED,9.1205,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,staged-32-64-256-3-True-1-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,staged-32-64-128-4-True-1-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,staged-16-64-128-4-True-1-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,tma-medium-4-128-4,PASSED,42.737,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,tma-medium-2-128-5,PASSED,28.2245,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,tma-medium-2-64-4,PASSED,34.705,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,tma-medium-2-256-3,PASSED,34.5925,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,tma-medium-2-256-2,PASSED,33.7125,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,tma-medium-2-128-4,PASSED,34.1765,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,tma-medium-2-128-3,PASSED,33.6165,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,tma-medium-1-128-4,PASSED,23.184,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,candidate,PASSED,37.009,
+refinement,901,d09b28b7-50a8-4382-a383-7aaf36de1087,0,baseline,PASSED,56.3375,
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,baseline,PASSED,133.2675,
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,candidate,PASSED,92.162,
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,tma-large-64-4-1-False,PASSED,68.978,
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,tma-large-64-3-1-False,PASSED,92.05,
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,tma-large-64-5-1-False,BUILD_FAILURE,,"out of resource: shared memory, Required: 245824, Hardware limit: 232448. Reducing block sizes or `num_stages` may help."
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,tma-large-128-2-1-False,PASSED,122.1625,
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,tma-large-64-4-2-False,PASSED,69.2655,
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,tma-large-64-4-1-True,PASSED,73.7935,
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,staged-128-128-128-3-False-2-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,staged-128-256-64-3-False-1-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,staged-128-256-64-3-False-2-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,staged-128-256-64-4-False-2-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,staged-128-256-64-4-False-2-2,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,14104,f87422e1-d9b3-4834-aa82-75b9396e5409,0,staged-128-256-128-2-False-2-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,staged-128-256-128-2-False-2-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,staged-128-256-64-4-False-2-2,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,staged-128-256-64-4-False-2-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,staged-128-256-64-3-False-2-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,staged-128-256-64-3-False-1-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,staged-128-128-128-3-False-2-1,BUILD_FAILURE,,Gluon JIT compilation rejected the warp-specialized variant
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,tma-large-64-4-1-True,PASSED,70.9775,
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,tma-large-64-4-2-False,PASSED,66.8495,
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,tma-large-128-2-1-False,PASSED,117.3945,
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,tma-large-64-5-1-False,BUILD_FAILURE,,"out of resource: shared memory, Required: 245824, Hardware limit: 232448. Reducing block sizes or `num_stages` may help."
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,tma-large-64-3-1-False,PASSED,89.682,
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,tma-large-64-4-1-False,PASSED,66.8335,
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,candidate,PASSED,89.938,
+refinement,11948,a780b495-c3ed-48d1-a72a-63b76f299049,0,baseline,PASSED,127.6345,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,baseline,PASSED,31.585,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,candidate,PASSED,6.304,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_32_16_7_8_normal,PASSED,5.536,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_32_32_8_7_normal,PASSED,5.825,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_64_8_8_7_normal,PASSED,6.112,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_64_16_8_7_normal,PASSED,6.272,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_64_16_8_14_normal,PASSED,9.5685,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_64_16_7_16_normal,PASSED,9.68,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_64_8_8_14_normal,PASSED,10.432,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_64_32_8_14_normal,PASSED,7.3445,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_32_16_8_14_normal,PASSED,9.5045,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_32_16_7_16_normal,PASSED,9.792,
+refinement,63,bd636e46-962e-4d64-a94c-aff7aad9a33a,0,mma_32_32_8_14_normal,PASSED,8.576,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_32_32_8_14_normal,PASSED,8.448,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_32_16_7_16_normal,PASSED,9.5525,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_32_16_8_14_normal,PASSED,9.089,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_64_32_8_14_normal,PASSED,6.992,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_64_8_8_14_normal,PASSED,10.08,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_64_16_7_16_normal,PASSED,9.3765,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_64_16_8_14_normal,PASSED,9.184,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_64_16_8_7_normal,PASSED,6.24,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_64_8_8_7_normal,PASSED,5.76,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_32_32_8_7_normal,PASSED,5.696,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,mma_32_16_7_8_normal,PASSED,5.409,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,candidate,PASSED,6.0325,
+refinement,56,4582d127-a98f-47f9-9003-b6dfdc82bd99,0,baseline,PASSED,28.5125,

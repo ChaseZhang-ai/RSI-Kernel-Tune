@@ -1,0 +1,76 @@
+{
+  "gpu": {
+    "physical_index": 3,
+    "uuid": "GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f",
+    "name": "NVIDIA GB300",
+    "sm_count": 152,
+    "capability": [
+      10,
+      3
+    ],
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "sm_mhz": 1500,
+    "memory_mhz": 3996
+  },
+  "source_sha256": "24a41b3ec2bfb6eed374419d6ccf08724e71ccf6c59d4cf600a29d7ca7edfea3",
+  "reference": "official definition and default workload tolerance",
+  "cases": [
+    {
+      "case": "skew_and_ties_in_local_and_remote",
+      "seq_len": 129,
+      "local_expert_offset": 96,
+      "scale": 2.5,
+      "status": "passed",
+      "max_absolute_error": 2048.0
+    },
+    {
+      "case": "all_group_and_expert_cutoffs_tied",
+      "seq_len": 129,
+      "local_expert_offset": 0,
+      "scale": 1.2,
+      "status": "passed",
+      "max_absolute_error": 2048.0
+    },
+    {
+      "case": "entirely_remote",
+      "seq_len": 129,
+      "local_expert_offset": 96,
+      "scale": 2.5,
+      "status": "passed",
+      "max_absolute_error": 0.0
+    },
+    {
+      "case": "changed_routing_activation_and_output_pointers",
+      "seq_len": 129,
+      "local_expert_offset": 192,
+      "scale": 1.75,
+      "status": "passed",
+      "max_absolute_error": 256.0
+    },
+    {
+      "case": "zero_routing_scale",
+      "seq_len": 129,
+      "local_expert_offset": 192,
+      "scale": 0.0,
+      "status": "passed",
+      "max_absolute_error": 0.0
+    },
+    {
+      "case": "sparse_dispatch_cutoff_ties",
+      "seq_len": 7,
+      "local_expert_offset": 0,
+      "scale": 2.5,
+      "status": "passed",
+      "max_absolute_error": 2048.0
+    },
+    {
+      "case": "long_dispatch_skew",
+      "seq_len": 2051,
+      "local_expert_offset": 64,
+      "scale": 2.5,
+      "status": "passed",
+      "max_absolute_error": 1024.0
+    }
+  ]
+}

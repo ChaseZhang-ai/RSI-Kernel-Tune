@@ -1,0 +1,125 @@
+{
+  "stock36": {
+    "staged_environment": {
+      "triton": "3.6.0",
+      "torch": "2.10.0+cu130",
+      "torch_cuda": "13.0",
+      "device": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "queried_sms": 152
+    },
+    "released_exact_sha256": "880169a983300e288e9a08676e9e6afbc56b36afbce2465e954ecb48e44c99dc",
+    "released_probe": [
+      {
+        "M": 256,
+        "uuid": "501f81c6-97cd-477c-b091-5068a52c385d",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 232,
+        "uuid": "c17f8b5f-b224-427f-829c-a7e65bd33697",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 176,
+        "uuid": "726e6d54-da22-468e-bc4b-b4c1b2e99d06",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 32,
+        "uuid": "7a1f5b6f-0f9d-4760-a955-62d2020170d6",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 2,
+        "uuid": "23c4524d-e615-4884-9bcf-093159f3e491",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 1,
+        "uuid": "8297b7c7-d89f-4f29-8f4b-31f9fffb0fb6",
+        "status": "PASSED"
+      },
+      {
+        "M": 70,
+        "uuid": "c1e3dcee-7b0f-4e63-b99e-1666ced4cbb2",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 2379,
+        "uuid": "917fc869-5332-4d61-8d62-ce03ed0d83b8",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      }
+    ],
+    "released_tma_error": "AttributeError: module 'triton.experimental.gluon.language.nvidia.hopper.mbarrier' has no attribute 'allocate_mbarrier'",
+    "isolated_compilation_errors": [
+      "AttributeError: 'tensor_descriptor' object has no attribute 'nbytes_per_cta'",
+      "TypeError: tensor_memory_descriptor.load() missing 1 required positional argument: 'layout'"
+    ],
+    "additional_api_difference": "Hopper mbarrier.arrive has an implicit unit arrival and accepts no count keyword",
+    "candidate_full_evaluator_trace": "portable-stock36-gb300.jsonl"
+  },
+  "stock35": {
+    "staged_environment": {
+      "triton": "3.5.0",
+      "torch": "2.9.0+cu130",
+      "torch_cuda": "13.0",
+      "device": "NVIDIA GB300",
+      "capability": [
+        10,
+        3
+      ],
+      "queried_sms": 152
+    },
+    "released_exact_sha256": "880169a983300e288e9a08676e9e6afbc56b36afbce2465e954ecb48e44c99dc",
+    "released_probe": [
+      {
+        "M": 256,
+        "uuid": "501f81c6-97cd-477c-b091-5068a52c385d",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 232,
+        "uuid": "c17f8b5f-b224-427f-829c-a7e65bd33697",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 176,
+        "uuid": "726e6d54-da22-468e-bc4b-b4c1b2e99d06",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 32,
+        "uuid": "7a1f5b6f-0f9d-4760-a955-62d2020170d6",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 2,
+        "uuid": "23c4524d-e615-4884-9bcf-093159f3e491",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 1,
+        "uuid": "8297b7c7-d89f-4f29-8f4b-31f9fffb0fb6",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 70,
+        "uuid": "c1e3dcee-7b0f-4e63-b99e-1666ced4cbb2",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      },
+      {
+        "M": 2379,
+        "uuid": "917fc869-5332-4d61-8d62-ce03ed0d83b8",
+        "status": "BUILD_OR_LAUNCH_ERROR"
+      }
+    ],
+    "released_tma_error": "AttributeError: module 'triton.experimental.gluon.language.nvidia.hopper.mbarrier' has no attribute 'allocate_mbarrier'",
+    "intermediate_patch_error": "TypeError: TensorMemoryLayout.__init__() got an unexpected keyword argument 'col_stride'",
+    "assembler_error": "ptxas fatal: Value 'sm_103a' is not defined for option 'gpu-name'",
+    "verification_scope": "legacy compiler probe only"
+  }
+}

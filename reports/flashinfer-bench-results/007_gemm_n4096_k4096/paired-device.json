@@ -1,0 +1,74 @@
+{
+  "physical_index": 2,
+  "uuid": "GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0",
+  "initial_query": "2, GPU-71efe229-bc3a-a7fe-813c-db46c77eb9a0, NVIDIA GB300, 1500 MHz, 3996 MHz, 3996 MHz",
+  "sm_lock": [
+    1500,
+    1500
+  ],
+  "memory_lock": null,
+  "supported_memory_clocks_mhz": [
+    3996
+  ],
+  "memory_deferred_lock_output": "Memory clocks set to \"(memClk 3996)\" for GPU 00000018:06:00.0\nPlease unload and reload the driver in order for changes to take effect.\nAll done.",
+  "memory_lock_output": "This option is not supported. Please use --lock-memory-clocks-deferred instead.\nAll done.",
+  "samples": [
+    "1500 MHz, 3996 MHz"
+  ],
+  "device": "NVIDIA GB300",
+  "capability": [
+    10,
+    3
+  ],
+  "triton_target_arch": 103,
+  "multiprocessor_count": 152,
+  "torch": "2.10.0+cu130",
+  "cuda": "13.0",
+  "triton": "3.7.0+fb.beta",
+  "fbtriton": "3.7.1",
+  "evaluator": "1.0.2",
+  "cupti_python": "13.5.0",
+  "evaluator_commit": "a9fa0804c793d438e70850c33fe34426e66d53dd",
+  "submission_sha256": "0c573ad8ea0216e79f847f7639922fa163df4ba2085404086f32b3c12ab05865",
+  "sum_first_call_and_sync_seconds_from_empty_triton_cache": {
+    "baseline": 1.6466232840903103,
+    "initial": 1.4175732713192701,
+    "selected": 1.814670957159251
+  },
+  "peak_allocated_bytes": 1048707072,
+  "peak_reserved_bytes": 1405091840,
+  "workload_count": 43,
+  "warmups": 10,
+  "timed_iterations": 50,
+  "passes": {
+    "baseline": [
+      43,
+      43
+    ],
+    "initial": [
+      43,
+      43
+    ],
+    "selected": [
+      43,
+      43
+    ]
+  },
+  "geometric_mean_us": {
+    "baseline": [
+      44.271402577946446,
+      44.28671605708115
+    ],
+    "initial": [
+      20.927122156705018,
+      20.93380666018171
+    ],
+    "selected": [
+      19.19657222219642,
+      19.200070213367965
+    ]
+  },
+  "strided_guard_check": "PASSED",
+  "methodology": "Same-device direct launches, official tolerance and workload IDs, cold L2, shifted cloned inputs, preallocated DPS output, CUPTI first-to-last span",
+  "first_call_measurement_scope": "One starting empty Triton cache shared by all three arms; includes execution and synchronization"
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "shared_bytes": 200940,
+    "matched": true,
+    "text_sha256": [
+      "9bdea281b01723d25e2f0cc1014c928335bd4b13f4e5ca53945a750de55b883c",
+      "9bdea281b01723d25e2f0cc1014c928335bd4b13f4e5ca53945a750de55b883c"
+    ]
+  },
+  {
+    "shared_bytes": 205036,
+    "matched": true,
+    "text_sha256": [
+      "6a82e1583965942b0d7d5f3f8d8f67c2c56653be397427f522aab44a8d86b9e4",
+      "6a82e1583965942b0d7d5f3f8d8f67c2c56653be397427f522aab44a8d86b9e4"
+    ]
+  },
+  {
+    "shared_bytes": 209164,
+    "matched": true,
+    "text_sha256": [
+      "99a57517dc118f71b993d5b71e2dac9e14d6116879c037dd0b8ca5e9a3d8c9bf",
+      "99a57517dc118f71b993d5b71e2dac9e14d6116879c037dd0b8ca5e9a3d8c9bf"
+    ]
+  },
+  {
+    "shared_bytes": 213228,
+    "matched": true,
+    "text_sha256": [
+      "c1e14c0fcfed5f44977cdc6f7db6fb49d6154ed8fc67ec6604cdbb5094cceed9",
+      "c1e14c0fcfed5f44977cdc6f7db6fb49d6154ed8fc67ec6604cdbb5094cceed9"
+    ]
+  },
+  {
+    "shared_bytes": 213236,
+    "matched": true,
+    "text_sha256": [
+      "78d0176006e320e4469b23909ac637e595c073ba4db679638177cd7193035b63",
+      "78d0176006e320e4469b23909ac637e595c073ba4db679638177cd7193035b63"
+    ]
+  },
+  {
+    "shared_bytes": 229612,
+    "matched": true,
+    "text_sha256": [
+      "a38e2dfb121abd422bc23a90a1126f5a96a782a61c1c99357f4d653728517af7",
+      "a38e2dfb121abd422bc23a90a1126f5a96a782a61c1c99357f4d653728517af7"
+    ]
+  }
+]

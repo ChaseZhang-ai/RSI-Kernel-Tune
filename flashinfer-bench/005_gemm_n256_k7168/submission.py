@@ -152,7 +152,7 @@ __device__ __forceinline__ void send4(Float4* dst, const Float4& v, U64* barrier
                     "r"(remote_addr(barrier, owner)) : "memory");
 }
 
-template <int TM, int TN, int Cluster, int Warps, bool Swap = false>
+template <int TM, int TN, int Cluster, int Warps, bool Swap = false, bool PeerReduce = false>
 __global__ __cluster_dims__(Cluster, 1, 1) __launch_bounds__(32 * Warps, Warps > 8 ? 1 : 2)
 void gemm_cluster(const Half* A, const Half* B, Half* C, int m) {
     // Pad each shared row to distribute the warp fragment stores across banks.
@@ -175,7 +175,9 @@ void gemm_cluster(const Half* A, const Half* B, Half* C, int m) {
     const int t = tid % 4;
     const int k = ((rank + group) % Cluster) * k_per_rank + warp * k_per_warp + t * 16;
     const int owner_start = rank * per_owner;
-    const int owner_end = min(owner_start + per_owner, groups);
+    const int valid_groups = PeerReduce ? min(m - m0, TM) * (TN / 4) : groups;
+    const int owner_end = min(owner_start + per_owner, valid_groups);
+    const int owner_rotation = owner_start < valid_groups ? owner_start : 0;
 
     __shared__ U64 barrier;
     extern __shared__ __align__(16) unsigned char shared[];
@@ -196,7 +198,7 @@ void gemm_cluster(const Half* A, const Half* B, Half* C, int m) {
         }
         if (step == 0) {
             if (tid == 0 && owner_start < owner_end)
-                arm(&barrier, (owner_end - owner_start) * Cluster * sizeof(Float4));
+                arm(&barrier, (owner_end - owner_start) * (Cluster - int(PeerReduce)) * sizeof(Float4));
             cluster_arrive();
         }
         #pragma unroll
@@ -228,32 +230,72 @@ void gemm_cluster(const Half* A, const Half* B, Half* C, int m) {
             }
         }
     }
-    // Each rank owns a disjoint output range and receives FP32 partials from all ranks.
     __syncthreads();
     cluster_wait();
-    for (int i = tid; i < groups; i += 32 * Warps) {
-        const int row = i / (TN / 4);
-        const int col = i % (TN / 4) * 4;
-        Float4 value{};
-        #pragma unroll
-        for (int w = 0; w < Warps; ++w)
-            value.add(*reinterpret_cast<const Float4*>(&red[w][row][col]));
-        const int owner = i / per_owner;
-        send4(&partial[rank][i % per_owner], value, &barrier, owner);
-    }
-    for (int i = owner_start + tid; i < owner_end; i += 32 * Warps) {
-        receive(&barrier);
-        Float4 value{};
-        #pragma unroll
-        for (int peer = 0; peer < Cluster; ++peer)
-            value.add(partial[peer][i - owner_start]);
-        const int row = m0 + i / (TN / 4);
-        const int col = n0 + i % (TN / 4) * 4;
-        if (row < m) {
-            const Half output[4] = {fp16(value.x), fp16(value.y), fp16(value.z), fp16(value.w)};
-            asm volatile("st.global.v4.b16 [%0], {%1,%2,%3,%4};"
-                         :: "l"(C + row * N + col), "h"(output[0]), "h"(output[1]),
-                            "h"(output[2]), "h"(output[3]) : "memory");
+    if constexpr (!PeerReduce) {
+        // Each rank owns a disjoint output range and receives FP32 partials from all ranks.
+        for (int i = tid; i < groups; i += 32 * Warps) {
+            const int row = i / (TN / 4);
+            const int col = i % (TN / 4) * 4;
+            Float4 value{};
+            #pragma unroll
+            for (int w = 0; w < Warps; ++w)
+                value.add(*reinterpret_cast<const Float4*>(&red[w][row][col]));
+            const int owner = i / per_owner;
+            send4(&partial[rank][i % per_owner], value, &barrier, owner);
+        }
+        for (int i = owner_start + tid; i < owner_end; i += 32 * Warps) {
+            receive(&barrier);
+            Float4 value{};
+            #pragma unroll
+            for (int peer = 0; peer < Cluster; ++peer)
+                value.add(partial[peer][i - owner_start]);
+            const int row = m0 + i / (TN / 4);
+            const int col = n0 + i % (TN / 4) * 4;
+            if (row < m) {
+                const Half output[4] = {fp16(value.x), fp16(value.y), fp16(value.z), fp16(value.w)};
+                asm volatile("st.global.v4.b16 [%0], {%1,%2,%3,%4};"
+                             :: "l"(C + row * N + col), "h"(output[0]), "h"(output[1]),
+                                "h"(output[2]), "h"(output[3]) : "memory");
+            }
+        }
+    } else {
+        // Rotate the FP32 output groups so the first lanes retain this
+        // rank's own contribution. Only peers transmit to the owner.
+        // Groups beyond the M tail neither send partials nor arm a receive.
+        static_assert(groups <= 32 * Warps);
+        Float4 own{};
+        if (tid < valid_groups) {
+            int i = tid + owner_rotation;
+            if (i >= valid_groups)
+                i -= valid_groups;
+            const int row = i / (TN / 4);
+            const int col = i % (TN / 4) * 4;
+            Float4 sum{};
+            #pragma unroll
+            for (int w = 0; w < Warps; ++w)
+                sum.add(*reinterpret_cast<const Float4*>(&red[w][row][col]));
+            const int owner = i / per_owner;
+            if (owner == rank)
+                own = sum;
+            else
+                send4(&partial[rank][i % per_owner], sum, &barrier, owner);
+        }
+        if (tid < owner_end - owner_start) {
+            receive(&barrier);
+            #pragma unroll
+            for (int peer = 0; peer < Cluster; ++peer) {
+                if (peer != rank)
+                    own.add(partial[peer][tid]);
+            }
+            const int i = owner_start + tid;
+            const int row = m0 + i / (TN / 4);
+            const int col = n0 + i % (TN / 4) * 4;
+            U32 lo, hi;
+            asm("cvt.rn.f16x2.f32 %0, %2, %1;" : "=r"(lo) : "f"(own.x), "f"(own.y));
+            asm("cvt.rn.f16x2.f32 %0, %2, %1;" : "=r"(hi) : "f"(own.z), "f"(own.w));
+            asm volatile("st.global.v2.b32 [%0], {%1,%2};"
+                         :: "l"(C + row * N + col), "r"(lo), "r"(hi) : "memory");
         }
     }
 }
@@ -272,7 +314,7 @@ _VARIANTS = {
     "mma_8_16_7_8_swap": "&gemm_cluster<8, 16, 7, 8, true>",
     "mma_16_8_7_8_normal": "&gemm_cluster<16, 8, 7, 8, false>",
     "mma_16_16_7_8_normal": "&gemm_cluster<16, 16, 7, 8, false>",
-    "mma_32_16_7_8_normal": "&gemm_cluster<32, 16, 7, 8, false>",
+    "mma_32_16_7_8_normal": "&gemm_cluster<32, 16, 7, 8, false, true>",
     "mma_32_32_8_7_normal": "&gemm_cluster<32, 32, 8, 7, false>",
 }
 

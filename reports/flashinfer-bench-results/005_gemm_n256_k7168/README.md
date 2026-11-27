@@ -1,5 +1,9 @@
 # 005_gemm_n256_k7168
 
+The revised candidate passed the local follow-up on GB300. [Follow-up results](FOLLOWUP.md)
+
+## Initial campaign
+
 The exact archive candidate passed **17/17** official FlashInfer workloads at **7.346 µs** geometric mean on GB300. The two paired runs measured 7.399 and 7.406 µs against the direct-launch baseline at 13.903 and 13.904 µs, for speedups of **1.879×** and **1.877×**. The candidate is provisional GB300 only and ready for the coordinator's B200 trial. [Official results](final-gb300.jsonl) · [Paired results](paired-gb300.jsonl) · [Machine-readable summary](gb300-summary.json)
 
 The official job and both paired comparisons used physical GB300 index 3, UUID `GPU-6673a73f-3dc7-93b3-b06a-88ee44cbb25f`. The synthetic suite used index 0, UUID `GPU-abbc4299-8500-54d7-2a37-3ccac762f30d`. Each queried 152 SMs and CUDA capability 10.3. The GPU lock covered each job and the process selected its GPU by UUID. The driver accepted the 1500 MHz SM lock. Memory stayed at the preconfigured deferred setting of 3996 MHz, the sole supported bin. The driver rejected an immediate memory-clock lock.
